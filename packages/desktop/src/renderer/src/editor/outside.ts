@@ -25,15 +25,22 @@ export function diffSpan(a: string, b: string): Span | null {
 const apply = (text: string, s: Span) => text.slice(0, s.from) + s.insert + text.slice(s.to);
 
 /**
+ * What a clash replaced: the overlapping lines as the person had them and as
+ * the file has them now. Around them, both texts are the same as before.
+ */
+export type Kept = { mine: string; theirs: string; before: string; after: string };
+
+/**
  * Merge `theirs` (the file now) with `mine` (the page), both grown from
  * `base` (what Anur last read or saved). `clash` means unsaved typing
- * overlapped the outside change and the file's version was taken.
+ * overlapped the outside change and the file's version was taken; `kept`
+ * then holds the person's version of those lines (2.18).
  */
 export function mergeOutside(
   base: string,
   mine: string,
   theirs: string,
-): { text: string; clash: boolean } {
+): { text: string; clash: boolean; kept?: Kept } {
   const ours = diffSpan(base, mine);
   const other = diffSpan(base, theirs);
   if (!ours || mine === theirs) return { text: theirs, clash: false };
@@ -46,5 +53,58 @@ export function mergeOutside(
   if (line(other.to) < line(ours.from)) {
     return { text: apply(apply(base, ours), other), clash: false };
   }
-  return { text: theirs, clash: true };
+  return { text: theirs, clash: true, kept: keptLines(base, mine, theirs, ours, other) };
+}
+
+/** The whole lines both changes touched, in each version. */
+function keptLines(base: string, mine: string, theirs: string, ours: Span, other: Span): Kept {
+  const start = base.lastIndexOf("\n", Math.min(ours.from, other.from) - 1) + 1;
+  const endAt = base.indexOf("\n", Math.max(ours.to, other.to));
+  const end = endAt < 0 ? base.length : endAt;
+  const tail = base.length - end;
+  return {
+    mine: mine.slice(start, mine.length - tail),
+    theirs: theirs.slice(start, theirs.length - tail),
+    before: base.slice(lineBefore(base, start), start),
+    after: base.slice(end, lineAfter(base, end)),
+  };
+}
+
+/** Where the nearest non-blank line before `pos` starts. */
+function lineBefore(text: string, pos: number): number {
+  let at = pos;
+  while (at > 0) {
+    const start = text.lastIndexOf("\n", at - 2) + 1;
+    if (text.slice(start, at).trim() !== "") return start;
+    at = start;
+  }
+  return 0;
+}
+
+/** Where the nearest non-blank line after `pos` ends. */
+function lineAfter(text: string, pos: number): number {
+  let at = pos;
+  while (at < text.length) {
+    const nl = text.indexOf("\n", at + 1);
+    const end = nl < 0 ? text.length : nl;
+    if (text.slice(at, end).trim() !== "") return end;
+    at = end;
+  }
+  return text.length;
+}
+
+/**
+ * Put the person's kept lines back in place of the file's version, if that
+ * version is still in the doc exactly once; otherwise null.
+ */
+export function putBack(doc: string, kept: Kept): Span | null {
+  const at = doc.indexOf(kept.theirs);
+  if (at < 0 || (kept.theirs !== "" && doc.indexOf(kept.theirs, at + 1) >= 0)) {
+    // Not found, or found twice: try the text around it to find the place.
+    const around = doc.indexOf(kept.before + kept.theirs + kept.after);
+    if (around < 0) return null;
+    const from = around + kept.before.length;
+    return { from, to: from + kept.theirs.length, insert: kept.mine };
+  }
+  return { from: at, to: at + kept.theirs.length, insert: kept.mine };
 }

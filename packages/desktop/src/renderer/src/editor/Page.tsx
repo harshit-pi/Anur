@@ -4,6 +4,7 @@ import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import type { SectionTree } from "@anur/core";
 import { useEffect, useRef, useState } from "react";
+import type { Response } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { CloseIcon } from "../regions/Icons.tsx";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
@@ -13,10 +14,18 @@ import { editLink, linkEditor } from "./link-editor.ts";
 import { livePreview } from "./live-preview/live-preview.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { editorFilter } from "./editor-filter.ts";
-import { diffSpan, mergeOutside } from "./outside.ts";
+import { diffSpan, mergeOutside, putBack } from "./outside.ts";
 import { settled, track } from "./pending-saves.ts";
 import { markdownSupport, sectionsOf } from "./sections.ts";
 import { pageHighlight, pageTheme } from "./theme.ts";
+
+type KeptEntry = Response<"journal:list">["entries"][number];
+
+/** The first words of kept text, for its banner. */
+const firstWords = (text: string) => {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > 120 ? `${flat.slice(0, 120)}…` : flat;
+};
 
 export type OpenDoc = {
   path: string;
@@ -61,6 +70,20 @@ export function Page({
   docsNow.current = docs;
   const previewFor = (src: boolean) => (src ? [] : [livePreview, livePreviewTheme]);
   const [notice, setNotice] = useState<{ text: string; undo: (() => void) | null } | null>(null);
+  /** Typing kept from a clash with a change made outside Anur (2.18). */
+  const [kept, setKept] = useState<KeptEntry[]>([]);
+  const dropKept = (id: string) => {
+    void anur.call("journal:drop", { id });
+    setKept((k) => k.filter((e) => e.id !== id));
+  };
+  const putKeptBack = (entry: KeptEntry) => {
+    const editor = view.current;
+    if (!editor) return;
+    const span = putBack(editor.state.doc.toString(), entry);
+    if (!span) return;
+    editor.dispatch({ changes: span, userEvent: "input.restore", scrollIntoView: true });
+    dropKept(entry.id);
+  };
 
   useEffect(() => {
     if (!host.current) return;
@@ -71,6 +94,12 @@ export function Page({
     let saver: Autosaver | null = null;
     let noticeTimer: ReturnType<typeof setTimeout> | undefined;
     setNotice(null);
+    setKept([]);
+    if (editable) {
+      void anur.call("journal:list", { path: doc.path }).then(({ entries }) => {
+        setKept(entries);
+      });
+    }
     const editor = new EditorView({
       parent: host.current,
       state: EditorState.create({
@@ -129,7 +158,7 @@ export function Page({
         saver?.rebase(hash, text);
         return;
       }
-      const { text: merged, clash } = mergeOutside(saver?.saved ?? mine, mine, text);
+      const { text: merged, kept: clashed } = mergeOutside(saver?.saved ?? mine, mine, text);
       const span = diffSpan(mine, merged);
       if (span) {
         // Not on the undo stack: ⌘Z never takes back someone else's change.
@@ -140,6 +169,19 @@ export function Page({
         });
       }
       saver?.rebase(hash, text);
+      if (clashed && editable) {
+        // The overlapping typing is kept in the journal and shown in a
+        // banner until it is put back or dismissed (2.18).
+        void anur.call("journal:keep", { path: doc.path, ...clashed }).then(({ id }) => {
+          if (!closed && id) {
+            setKept((k) => [
+              ...k,
+              { ...clashed, id, path: doc.path, at: new Date().toISOString() },
+            ]);
+          }
+        });
+        return;
+      }
       const undo = editable
         ? () => {
             const back = diffSpan(editor.state.doc.toString(), mine);
@@ -147,12 +189,7 @@ export function Page({
             setNotice(null);
           }
         : null;
-      setNotice({
-        text: clash
-          ? "This doc changed outside Anur where you were typing; it now shows that version."
-          : "This doc changed outside Anur; the change is in.",
-        undo,
-      });
+      setNotice({ text: "This doc changed outside Anur; the change is in.", undo });
       clearTimeout(noticeTimer);
       noticeTimer = setTimeout(() => {
         setNotice(null);
@@ -223,6 +260,53 @@ export function Page({
 
   return (
     <>
+      {kept.map((entry) => {
+        const canPutBack = view.current
+          ? putBack(view.current.state.doc.toString(), entry) !== null
+          : false;
+        return (
+          <div key={entry.id} className="banner kept" role="status">
+            <span>
+              This doc changed outside Anur where you were typing; your version of those lines is
+              kept: <q className="kept-text">{firstWords(entry.mine)}</q>
+            </span>
+            <span className="kept-actions">
+              <button
+                type="button"
+                className="toast-action"
+                disabled={!canPutBack}
+                title={
+                  canPutBack ? undefined : "Those lines have changed again; copy yours instead"
+                }
+                onClick={() => {
+                  putKeptBack(entry);
+                }}
+              >
+                Put yours back
+              </button>
+              <button
+                type="button"
+                className="toast-action"
+                onClick={() => {
+                  void navigator.clipboard.writeText(entry.mine);
+                }}
+              >
+                Copy yours
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Dismiss"
+                onClick={() => {
+                  dropKept(entry.id);
+                }}
+              >
+                <CloseIcon />
+              </button>
+            </span>
+          </div>
+        );
+      })}
       <div ref={host} className="page" />
       {notice ? (
         <div className="toast" role="status">

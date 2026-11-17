@@ -826,3 +826,28 @@ body.resizing * {
   background: var(--hover);
   color: var(--ink);
 }
+
+/* Typing kept from a clash with an outside change (2.18). */
+.banner.kept {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kept-text {
+  color: var(--ink);
+}
+
+.kept-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.toast-action:disabled {
+  color: var(--pencil);
+  cursor: default;
+  background: none;
+}
