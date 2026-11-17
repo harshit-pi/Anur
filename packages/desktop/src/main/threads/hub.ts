@@ -2,7 +2,10 @@ import path from "node:path";
 import { utilityProcess, type UtilityProcess } from "electron";
 import type { AgentId } from "../../shared/agents.ts";
 import type { AgentStatus } from "../../shared/ipc-contract.ts";
-import type { SessionOption, ToHost, ToMain } from "../../agent/protocol.ts";
+import type { AgentAuth, SessionOption, ToHost, ToMain } from "../../agent/protocol.ts";
+
+export type SignIn = { phase: "waiting" | "failed"; url: string | null; message: string | null };
+export type AuthEvent = { agent: AgentId; auth: AgentAuth; signIn: SignIn | null };
 
 /**
  * Main's link to the agent host (Architecture, "Processes"). The host runs
@@ -26,7 +29,26 @@ export class AgentHub {
     /** An agent's choices, read before any thread of it had a session. */
     private readonly onChoices: (agent: AgentId, options: SessionOption[]) => void = () =>
       undefined,
+    /** An agent's sign-in changed, or a sign-in moved on. */
+    private readonly onAuth: (e: AuthEvent) => void = () => undefined,
   ) {}
+
+  private readonly auths = new Map<AgentId, AgentAuth>();
+  private readonly signIns = new Map<AgentId, SignIn>();
+
+  /** Whether the agent is signed in, as last read; unknown until asked. */
+  auth(agent: AgentId): AgentAuth {
+    return this.auths.get(agent) ?? { state: "unknown", account: null, methods: [] };
+  }
+
+  signIn(agent: AgentId): SignIn | null {
+    return this.signIns.get(agent) ?? null;
+  }
+
+  /** A sign-in finished, failed or was cancelled: nothing is under way. */
+  clearSignIn(agent: AgentId): void {
+    this.signIns.delete(agent);
+  }
 
   /** Messages for this thread go to `fn` until the thread is dropped. */
   route(thread: string, fn: (m: ToMain) => void): void {
@@ -90,6 +112,19 @@ export class AgentHub {
   private receive(m: ToMain): void {
     if (m.type === "agent-options") {
       this.onChoices(m.agent, m.options);
+      return;
+    }
+    if (m.type === "auth") {
+      this.auths.set(m.agent, m.auth);
+      // Signed in: whatever sign-in was showing is over.
+      if (m.auth.state === "authenticated") this.signIns.delete(m.agent);
+      this.onAuth({ agent: m.agent, auth: m.auth, signIn: this.signIns.get(m.agent) ?? null });
+      return;
+    }
+    if (m.type === "sign-in") {
+      const now = { phase: m.phase, url: m.url, message: m.message };
+      this.signIns.set(m.agent, now);
+      this.onAuth({ agent: m.agent, auth: this.auth(m.agent), signIn: now });
       return;
     }
     if (m.type === "status") {

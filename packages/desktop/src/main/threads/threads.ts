@@ -635,7 +635,11 @@ export class Threads {
             return;
           }
         }
-        await this.endTurn(thread, live, `error: ${m.message}`);
+        const said =
+          m.message === "sign-in-required"
+            ? "The agent isn't signed in. Sign in above, then send your message again."
+            : m.message;
+        await this.endTurn(thread, live, `error: ${said}`);
         return;
       }
     }

@@ -46,6 +46,16 @@ export type ToMain =
       event: "started" | "resumed";
     }
   | { type: "options"; thread: string; options: SessionOption[] }
+  /** Whether the agent is signed in, and the sign-ins its adapter offers (3.16). */
+  | { type: "auth"; agent: AgentId; auth: AgentAuth }
+  /** A sign-in under way: the page to finish it on, once the agent prints it. */
+  | {
+      type: "sign-in";
+      agent: AgentId;
+      phase: "waiting" | "failed";
+      url: string | null;
+      message: string | null;
+    }
   /** An agent's choices, read from a throwaway session: for a thread that has none yet. */
   | { type: "agent-options"; agent: AgentId; options: SessionOption[] }
   | { type: "text"; thread: string; turn: string; text: string }
@@ -78,6 +88,9 @@ export type ToMain =
 export type ToHost =
   | { type: "connect"; agent: AgentId }
   | { type: "probe"; agent: AgentId; cwd: string }
+  | { type: "auth"; agent: AgentId }
+  | { type: "sign-in"; agent: AgentId; method: string }
+  | { type: "sign-in-cancel"; agent: AgentId }
   | { type: "prompt"; spec: SessionSpec; turn: string; text: string }
   | { type: "cancel"; thread: string }
   | { type: "permission"; request: string; option: string | null }
@@ -85,3 +98,11 @@ export type ToHost =
   | { type: "close"; thread: string };
 
 export type AgentVersions = { agent: string; adapter: string };
+
+export type AgentAuth = {
+  state: "authenticated" | "unauthenticated" | "unknown";
+  /** Who is signed in, as the agent names it, such as an email or "Claude Max". */
+  account: string | null;
+  /** The sign-ins the agent's adapter offers, each run by Anur without a terminal. */
+  methods: { id: string; name: string; description: string | null }[];
+};

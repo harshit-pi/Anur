@@ -5,7 +5,15 @@ import * as acp from "@agentclientprotocol/sdk";
 import { AGENTS, type AgentId } from "../shared/agents.ts";
 import type { AgentAdapter } from "./adapters.ts";
 import { checkedIn, hookSaw } from "./check-log.ts";
-import type { AgentVersions, SessionOption, SessionSpec, ToHost, ToMain } from "./protocol.ts";
+import type { Launch } from "./adapters.ts";
+import type {
+  AgentAuth,
+  AgentVersions,
+  SessionOption,
+  SessionSpec,
+  ToHost,
+  ToMain,
+} from "./protocol.ts";
 import { selfTest } from "./self-test.ts";
 
 /**
@@ -39,6 +47,10 @@ type Connected = {
   conn: acp.ClientConnection;
   child: ChildProcess;
   versions: AgentVersions;
+  /** How it was started, for running its sign-ins the same way. */
+  launch: Launch;
+  /** The sign-ins its adapter offered at initialize: arguments to its own command. */
+  signIns: { id: string; name: string; description: string | null; args: string[] }[];
 };
 
 type ConnectionState =
@@ -56,6 +68,8 @@ export class AgentHost {
   private readonly hookLogs = new Map<string, string>();
   /** Each thread's chosen mode and model, applied to its session whenever one starts. */
   private readonly chosen = new Map<string, Map<string, string>>();
+  /** A sign-in running for an agent. */
+  private readonly signingIn = new Map<AgentId, ChildProcess>();
 
   constructor(
     private readonly send: (m: ToMain) => void,
@@ -69,6 +83,15 @@ export class AgentHost {
         return;
       case "probe":
         void this.probe(m.agent, m.cwd);
+        return;
+      case "auth":
+        void this.auth(m.agent);
+        return;
+      case "sign-in":
+        this.signIn(m.agent, m.method);
+        return;
+      case "sign-in-cancel":
+        this.signingIn.get(m.agent)?.kill();
         return;
       case "prompt":
         void this.prompt(m.spec, m.turn, m.text);
@@ -160,18 +183,50 @@ export class AgentHost {
       })
       .onRequest(acp.methods.client.session.requestPermission, ({ params }) =>
         this.askPermission(params),
+      )
+      // ACP's auth extension is unstable, so it is called by name.
+      .onNotification(
+        "auth/status_update",
+        (raw: unknown) => raw,
+        ({ params }) => {
+          this.sendAuth(agent, params);
+        },
       );
     const conn = app.connect(stream);
     const init = await conn.agent.request(acp.methods.agent.initialize, {
       protocolVersion: acp.PROTOCOL_VERSION,
       // No client file system or terminal: the agent uses its own tools at full power.
-      clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
+      // Sign-ins are run by Anur as commands, so the adapter lists them (3.16).
+      clientCapabilities: {
+        fs: { readTextFile: false, writeTextFile: false },
+        terminal: false,
+        auth: { terminal: true },
+      },
+    });
+    const signIns = (init.authMethods ?? []).flatMap((m) => {
+      const raw = m as {
+        id?: unknown;
+        name?: unknown;
+        description?: unknown;
+        type?: unknown;
+        args?: unknown;
+      };
+      return raw.type === "terminal" && typeof raw.id === "string" && Array.isArray(raw.args)
+        ? [
+            {
+              id: raw.id,
+              name: typeof raw.name === "string" ? raw.name : raw.id,
+              description: typeof raw.description === "string" ? raw.description.trim() : null,
+              args: raw.args.filter((a): a is string => typeof a === "string"),
+            },
+          ]
+        : [];
     });
     const versions = {
       agent: launch.version ?? init.agentInfo?.version ?? "unknown",
       adapter: adapter.adapterVersion,
     };
-    this.agents.set(agent, { kind: "connected", conn, child, versions });
+    this.agents.set(agent, { kind: "connected", conn, child, versions, launch, signIns });
     this.send({ type: "status", id: agent, connected: true, reason: null, agent: versions });
     return true;
   }
@@ -210,11 +265,11 @@ export class AgentHost {
       });
       return spec.resume;
     }
-    const created = await conn.agent.request(acp.methods.agent.session.new, {
-      cwd: spec.cwd,
-      mcpServers: [],
-      _meta: meta,
-    });
+    const created = await conn.agent
+      .request(acp.methods.agent.session.new, { cwd: spec.cwd, mcpServers: [], _meta: meta })
+      .catch((e: unknown) => {
+        throw signInRequired(e) ? new SignInRequired() : e;
+      });
     await this.opened(conn, spec, created.sessionId, created.configOptions ?? null);
     this.send({
       type: "session",
@@ -277,6 +332,80 @@ export class AgentHost {
     }
   }
 
+  /** Whether the agent is signed in, with the sign-ins it offers. */
+  private async auth(agent: AgentId): Promise<void> {
+    if (!(await this.connect(agent))) return;
+    const c = this.connected(agent);
+    if (!c) return;
+    const res = await c.conn.agent.request("auth/status", {}).catch(() => ({ state: "unknown" }));
+    this.sendAuth(agent, res);
+  }
+
+  private sendAuth(agent: AgentId, raw: unknown): void {
+    const c = this.connected(agent);
+    const r = raw as { state?: unknown; accounts?: { label?: unknown; email?: unknown }[] };
+    const state =
+      r.state === "authenticated" || r.state === "unauthenticated" ? r.state : "unknown";
+    const a = r.accounts?.[0];
+    const auth: AgentAuth = {
+      state,
+      account:
+        typeof a?.email === "string" ? a.email : typeof a?.label === "string" ? a.label : null,
+      methods: (c?.signIns ?? []).map(({ id, name, description }) => ({ id, name, description })),
+    };
+    this.send({ type: "auth", agent, auth });
+  }
+
+  /**
+   * Run one of the agent's sign-ins, as its adapter describes it: its own
+   * command with the method's arguments, here without a terminal. It opens
+   * the browser; the page is passed on too, in case it doesn't open. Once it
+   * finishes, the agent restarts, so new sessions use the new sign-in.
+   */
+  private signIn(agent: AgentId, method: string): void {
+    const c = this.connected(agent);
+    const m = c?.signIns.find((x) => x.id === method);
+    if (!c || !m || this.signingIn.has(agent)) return;
+    const child = spawn(c.launch.command, [...c.launch.args, ...m.args], {
+      env: { ...process.env, ...c.launch.env },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+    this.signingIn.set(agent, child);
+    let out = "";
+    let url: string | null = null;
+    const read = (d: Buffer) => {
+      out = (out + d.toString()).slice(-8000);
+      const found = /https:\/\/\S+/.exec(out)?.[0] ?? null;
+      if (found && !url) {
+        url = found;
+        this.send({ type: "sign-in", agent, phase: "waiting", url, message: null });
+      }
+    };
+    child.stdout.on("data", read);
+    child.stderr.on("data", read);
+    this.send({ type: "sign-in", agent, phase: "waiting", url: null, message: null });
+    child.on("exit", (code) => {
+      this.signingIn.delete(agent);
+      if (code === 0) {
+        // A fresh start, so the agent and its new sessions read the new sign-in.
+        this.connected(agent)?.child.kill();
+        this.agents.delete(agent);
+        void this.auth(agent);
+        return;
+      }
+      const last = out.trim().split("\n").filter(Boolean).at(-1) ?? null;
+      this.send({
+        type: "sign-in",
+        agent,
+        phase: "failed",
+        url: null,
+        message:
+          code === null ? "Sign-in stopped." : (last ?? `Sign-in ended (exit ${String(code)}).`),
+      });
+      void this.auth(agent);
+    });
+  }
+
   /** The person picked a mode or model for the thread. */
   private async setOption(thread: string, id: string, value: string): Promise<void> {
     const mine = this.chosen.get(thread) ?? new Map<string, string>();
@@ -316,7 +445,10 @@ export class AgentHost {
     try {
       sessionId = await this.session(c, spec);
     } catch (e) {
-      if (e instanceof ResumeFailed) fail("resume-failed");
+      if (e instanceof SignInRequired) {
+        fail("sign-in-required");
+        void this.auth(spec.agent);
+      } else if (e instanceof ResumeFailed) fail("resume-failed");
       else if (e instanceof CheckFailed) {
         fail(e.message);
         this.fail(spec.agent, e.message);
@@ -345,7 +477,10 @@ export class AgentHost {
           : null,
       });
     } catch (e) {
-      fail(messageOf(e));
+      if (signInRequired(e)) {
+        fail("sign-in-required");
+        void this.auth(spec.agent);
+      } else fail(messageOf(e));
     } finally {
       this.running.delete(sessionId);
     }
@@ -433,6 +568,13 @@ export class AgentHost {
 }
 
 class ResumeFailed extends Error {}
+class SignInRequired extends Error {}
+
+/** ACP's "auth required": the agent isn't signed in. */
+const signInRequired = (e: unknown) =>
+  typeof e === "object" &&
+  e !== null &&
+  (e as { code?: unknown }).code === acp.RequestError.authRequired().code;
 class CheckFailed extends Error {}
 
 /** The mode and model choices from ACP's session config options. */
