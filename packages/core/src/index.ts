@@ -55,3 +55,22 @@ export {
   TurnLine,
 } from "./threads/index.ts";
 export { PreviewFile, PreviewPart, currentPreview, encodePreviewFile } from "./previews/index.ts";
+export {
+  ApplyResultLine,
+  HistoryLine,
+  InputLine,
+  InputRemovedLine,
+  InputSource,
+  InputsLine,
+  SettingEntry,
+  SettingsFile,
+  TombstoneLine,
+  Trust,
+  VersionCause,
+  VersionLine,
+  deletedHashes,
+  liveInputs,
+  mergeSettings,
+  trustOf,
+  withSetting,
+} from "./formats/index.ts";

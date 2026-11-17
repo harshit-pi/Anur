@@ -27,7 +27,7 @@ async function exists(p: string): Promise<boolean> {
 }
 
 /** Write a whole file so a reader never sees half of it: a temporary file, then a rename. */
-export async function writeFileAtomic(file: string, text: string): Promise<void> {
+export async function writeFileAtomic(file: string, text: string | Uint8Array): Promise<void> {
   const tmp = `${file}.${randomBytes(6).toString("hex")}.tmp`;
   await writeFile(tmp, text, { flag: "wx" });
   await rename(tmp, file);
