@@ -104,6 +104,27 @@ const outOfHidden = (hidden: [number, number][], pos: number, side: -1 | 1) => {
   return part ? (side < 0 ? part[0] : part[1]) : pos;
 };
 
+/** A range grown over any code or link it cuts into, as the editor does. */
+function wholeAtoms(state: EditorState, from: number, to: number): [number, number] {
+  const tree = ensureSyntaxTree(state, state.doc.length, 10_000) ?? syntaxTree(state);
+  let a = from;
+  let b = to;
+  tree.iterate({
+    from,
+    to,
+    enter(n) {
+      if (!["InlineCode", "Link", "WikiLink"].includes(n.name)) return;
+      if (n.from < a && n.to > a) a = n.from;
+      if (n.from < b && n.to > b) b = n.to;
+    },
+  });
+  return [a, b];
+}
+
+/** Each style letter of a character's styles: b, i, s. */
+const letters = (styles: string) =>
+  Array.from({ length: styles.length }, (_, k) => styles.charAt(k));
+
 function rng(seed: number) {
   let s = seed;
   return () => {
@@ -283,5 +304,154 @@ describe("editing the corpus with marks hidden", () => {
     }
     expect(checked).toBeGreaterThan(300);
     expect(failures.slice(0, 6)).toEqual([]);
+  }, 180_000);
+});
+describe("pasting and dragging on the corpus with marks hidden", () => {
+  /** What a snippet shows on its own: characters with their styles. */
+  const shownAlone = (md: string) => shown(make(md), 0, md.length);
+
+  it("pastes Markdown so the page shows exactly it, in place", () => {
+    const random = rng(41);
+    const failures: string[] = [];
+    let checked = 0;
+    const lost: string[] = [];
+    // Snippets: real Markdown copied out of the corpus, styles and all.
+    const snippets: string[] = [];
+    for (const text of texts.slice(0, 60)) {
+      const base = make(text);
+      for (const line of proseLines(base).slice(0, 2)) {
+        const a = line.from + Math.floor(random() * line.length);
+        const b = Math.min(line.to, a + 3 + Math.floor(random() * 30));
+        const copied = copyText(base, a, b);
+        if (copied?.trim()) snippets.push(copied);
+      }
+    }
+    snippets.push("plain words", "**bold**", "*it*", "~~gone~~", "a **b** c");
+    for (const text of texts) {
+      const base = make(text);
+      for (const line of proseLines(base).slice(0, 3)) {
+        const hidden = hiddenOn(base, line.from, line.to);
+        const snippet = snippets[Math.floor(random() * snippets.length)] ?? "x";
+        const rawA = outOfHidden(hidden, line.from + Math.floor(random() * line.length), -1);
+        const replace = random() < 0.4;
+        const rawB = replace
+          ? outOfHidden(hidden, Math.min(line.to, rawA + Math.floor(random() * 20)), 1)
+          : rawA;
+        // A selection cutting into code or a link takes it whole.
+        const [a, b] = replace ? wholeAtoms(base, rawA, rawB) : [rawA, rawA];
+        // Inside code or a link, a paste goes in as plain text.
+        const inAtom = !replace && wholeAtoms(base, rawA, rawA)[0] < rawA;
+        const before = shown(base, line.from, line.to);
+        const after = make(text, a).update({
+          changes: { from: rawA, to: rawB, insert: snippet },
+          userEvent: "input.paste",
+        }).state;
+        const newLine = after.doc.lineAt(Math.min(a, after.doc.length));
+        const got = shown(after, newLine.from, newLine.to);
+        const kept = before.filter((c) => c.pos < a || c.pos >= b);
+        const own = shownAlone(snippet);
+        const index = kept.filter((c) => c.pos < a).length;
+        const wantText = [...kept.slice(0, index), ...own, ...kept.slice(index)]
+          .map((c) => c.ch)
+          .join("");
+        checked++;
+        const where = `${JSON.stringify(snippet)} at ${String(a - line.from)}${replace ? ` over ${JSON.stringify(text.slice(a, b))}` : ""} in ${JSON.stringify(line.text.slice(0, 140))} → ${JSON.stringify(newLine.text.slice(0, 180))}`;
+        // Inside code or a link where plain text won't fit, it goes just after.
+        const atomEnd = wholeAtoms(base, rawA, rawA)[1];
+        const k = kept.filter((c) => c.pos < atomEnd).length;
+        const afterAtom = [...kept.slice(0, k), ...own, ...kept.slice(k)].map((c) => c.ch).join("");
+        const gotText = got.map((c) => c.ch).join("");
+        if (gotText !== wantText && !(inAtom && gotText === afterAtom)) {
+          failures.push(`text: ${where}`);
+          continue;
+        }
+        if (inAtom) continue;
+        const ok = got.every((c, k) => {
+          if (/[\s\p{P}\p{S}]/u.test(c.ch)) return true;
+          if (k < index) return c.styles === kept[k]?.styles;
+          if (k < index + own.length)
+            return letters(own[k - index]?.styles ?? "").every((x) => c.styles.includes(x));
+          return c.styles === kept[k - own.length]?.styles;
+        });
+        // A pasted style Markdown can't say there (a bold link right before a
+        // word) is lost: counted, and kept rare.
+        if (!ok) lost.push(where);
+      }
+    }
+    expect(checked).toBeGreaterThan(300);
+    expect(failures.slice(0, 6)).toEqual([]);
+    expect(lost.length / checked, lost.slice(0, 4).join("\n")).toBeLessThan(0.03);
+  }, 180_000);
+
+  it("drags text to another line, styles and all", () => {
+    const random = rng(53);
+    const failures: string[] = [];
+    let checked = 0;
+    const lost: string[] = [];
+    for (const text of texts) {
+      const base = make(text);
+      const lines = proseLines(base);
+      if (lines.length < 2) continue;
+      for (let k = 0; k < 3; k++) {
+        const src = lines[Math.floor(random() * lines.length)];
+        const dst = lines[Math.floor(random() * lines.length)];
+        if (!src || !dst || src.number === dst.number) continue;
+        const hiddenS = hiddenOn(base, src.from, src.to);
+        const rawA = outOfHidden(hiddenS, src.from + Math.floor(random() * src.length), -1);
+        const rawB = outOfHidden(
+          hiddenS,
+          Math.min(src.to, rawA + 1 + Math.floor(random() * 25)),
+          1,
+        );
+        // A source cutting into code or a link moves it whole.
+        const [a, b] = wholeAtoms(base, rawA, rawB);
+        const t = outOfHidden(
+          hiddenOn(base, dst.from, dst.to),
+          dst.from + Math.floor(random() * (dst.length + 1)),
+          -1,
+        );
+        if (b <= a) continue;
+        const beforeS = shown(base, src.from, src.to);
+        const beforeD = shown(base, dst.from, dst.to);
+        const moved = beforeS.filter((c) => c.pos >= a && c.pos < b);
+        const after = base.update({
+          changes: [
+            { from: rawA, to: rawB },
+            { from: t, insert: text.slice(rawA, rawB) },
+          ],
+          userEvent: "move.drop",
+        }).state;
+        // One line loses text and another gains it: both keep their numbers.
+        const newS = after.doc.line(src.number);
+        const newD = after.doc.line(dst.number);
+        const gotS = shown(after, newS.from, newS.to);
+        const gotD = shown(after, newD.from, newD.to);
+        const keptS = beforeS.filter((c) => c.pos < a || c.pos >= b);
+        const index = beforeD.filter((c) => c.pos < t).length;
+        const wantD = [...beforeD.slice(0, index), ...moved, ...beforeD.slice(index)];
+        checked++;
+        const where = `${JSON.stringify(text.slice(a, b))} to ${String(t - dst.from)} in ${JSON.stringify(dst.text.slice(0, 100))} → ${JSON.stringify(newD.text.slice(0, 160))} / ${JSON.stringify(newS.text.slice(0, 120))}`;
+        const sameText = (x: Char[], y: Char[]) =>
+          x.map((c) => c.ch).join("") === y.map((c) => c.ch).join("");
+        if (!sameText(gotS, keptS) || !sameText(gotD, wantD)) {
+          failures.push(`text: ${where}`);
+          continue;
+        }
+        // Dropped inside code or a link, the text goes in plain.
+        if (wholeAtoms(base, t, t)[0] < t) continue;
+        const movedKept = gotD.slice(index, index + moved.length).every((c, i) => {
+          const m = moved[i];
+          return (
+            m === undefined ||
+            /[\s\p{P}\p{S}]/u.test(c.ch) ||
+            letters(m.styles).every((x) => c.styles.includes(x))
+          );
+        });
+        if (!movedKept) lost.push(where);
+      }
+    }
+    expect(checked).toBeGreaterThan(150);
+    expect(failures.slice(0, 6)).toEqual([]);
+    expect(lost.length / checked, lost.slice(0, 4).join("\n")).toBeLessThan(0.03);
   }, 180_000);
 });
