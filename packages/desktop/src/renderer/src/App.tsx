@@ -1,6 +1,10 @@
 import { EditorView } from "@codemirror/view";
 import type { SectionTree } from "@anur/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { settled } from "./editor/pending-saves.ts";
+import { freeName } from "./layout/file-tree.ts";
+import type { FileActions } from "./regions/FileTree.tsx";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import type { SaveStatus } from "./editor/autosave.ts";
 import { Page, type OpenDoc, type SavedView } from "./editor/Page.tsx";
@@ -22,6 +26,8 @@ import {
   newTab,
   noTabs,
   open as openInTab,
+  prune,
+  renamePaths,
   saveTabs,
   select,
   type Tabs,
@@ -165,6 +171,99 @@ export function App() {
     },
     [folder, selected, openDoc],
   );
+  /** While true the page is put away, so a doc being moved saves first and isn't written behind. */
+  const [holding, setHolding] = useState(false);
+  const [fileNotice, setFileNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tell = useCallback((reason: string) => {
+    setFileNotice(reason);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => {
+      setFileNotice(null);
+    }, 6000);
+  }, []);
+  /** Run a change to the files; if it touches the open doc, its typing is saved first. */
+  const touching = useCallback(
+    async <T,>(paths: readonly string[], run: () => Promise<T>): Promise<T> => {
+      const open = selected;
+      const hits = open !== null && paths.some((p) => open === p || open.startsWith(`${p}/`));
+      if (hits) {
+        flushSync(() => {
+          setHolding(true);
+        });
+        await settled();
+      }
+      try {
+        return await run();
+      } finally {
+        if (hits) setHolding(false);
+      }
+    },
+    [selected],
+  );
+  const fileActions = useMemo((): FileActions | undefined => {
+    if (!folder || folder.mode !== "writable") return undefined;
+    return {
+      newDoc: async (dir) => {
+        const path = freeName(folder.docs, dir, "Untitled", ".md");
+        const r = await anur.call("doc:create", { path });
+        if (r.kind === "failed") {
+          tell(r.reason);
+          return null;
+        }
+        setFolder(r.folder);
+        openDoc(r.path, false);
+        return r.path;
+      },
+      newFolder: async (dir) => {
+        const path = freeName([...folder.folders, ...folder.docs], dir, "New folder");
+        const r = await anur.call("folder:create", { path });
+        if (r.kind === "failed") {
+          tell(r.reason);
+          return null;
+        }
+        setFolder(r.folder);
+        return r.path;
+      },
+      move: (from, to) =>
+        touching([from], async () => {
+          const r = await anur.call("file:move", { from, to });
+          if (r.kind === "failed") {
+            tell(r.reason);
+            return false;
+          }
+          setTabs((t) => renamePaths(t, r.docs));
+          setFolder(r.folder);
+          return true;
+        }),
+      duplicate: async (path) => {
+        const r = await anur.call("file:duplicate", { path });
+        if (r.kind === "failed") tell(r.reason);
+        else setFolder(r.folder);
+      },
+      trash: async (path, isFolder, docs) => {
+        const what = path.split("/").pop() ?? path;
+        // A doc goes quietly, since Finder can put it back; a folder of docs asks first.
+        if (
+          isFolder &&
+          docs > 0 &&
+          !window.confirm(
+            `Move “${what}” and the ${String(docs)} ${docs === 1 ? "doc" : "docs"} in it to the Trash?`,
+          )
+        )
+          return;
+        await touching([path], async () => {
+          const r = await anur.call("file:trash", { path });
+          if (r.kind === "failed") {
+            tell(r.reason);
+            return;
+          }
+          setTabs((t) => prune(t, r.folder.docs));
+          setFolder(r.folder);
+        });
+      },
+    };
+  }, [folder, openDoc, tell, touching]);
   const newDocNow = useRef(newDoc);
   newDocNow.current = newDoc;
   /** A line search found, selected once its doc is open on the page. */
@@ -451,12 +550,15 @@ export function App() {
         onSelect={openDoc}
         hidden={!open.left}
         reveal={reveal}
+        actions={fileActions}
+        notice={fileNotice}
       />
       <Center
         folder={shown}
         selected={selected}
         page={
-          doc ? (
+          // Only the doc the tab shows: after a rename the old one mustn't mount for a moment.
+          doc && !holding && doc.path === selected ? (
             <Page
               doc={doc}
               docs={folder?.docs ?? []}

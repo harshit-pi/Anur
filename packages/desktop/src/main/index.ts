@@ -33,6 +33,7 @@ import { readEmbeddedBase } from "./folder/bases.ts";
 import { readImage, saveImage } from "./folder/images.ts";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
 import { createDoc, searchFolder } from "./folder/search.ts";
+import { createFolder, duplicateDoc, moveEntry, trashEntry } from "./folder/file-ops.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
@@ -174,6 +175,15 @@ const docWatcher = new DocWatcher((windowId, change) => {
   const win = windows.get(windowId);
   if (win) send(win, "doc:changed", change);
 });
+
+/** The window's open doc is moving or going: stop watching it, so it isn't reported gone. */
+function letGoOf(windowId: number, docs: readonly string[]) {
+  const shown = shownDoc.get(windowId);
+  if (shown && docs.includes(shown)) {
+    docWatcher.stop(windowId);
+    shownDoc.delete(windowId);
+  }
+}
 
 function send<E extends EventName>(win: BrowserWindow, event: E, payload: EventPayload<E>) {
   if (!win.isDestroyed()) win.webContents.send(event, payload);
@@ -386,6 +396,44 @@ const handlers: { [C in Channel]: Handler<C> } = {
       ? { kind: "created", path: made.path, folder: now }
       : { kind: "failed", reason: "The folder closed." };
   },
+  "folder:create": async ({ path: requested }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    const made = await createFolder(folder, requested);
+    if (made.kind === "failed") return made;
+    const now = await folders.refresh(webContentsId);
+    return now ? { ...made, folder: now } : { kind: "failed", reason: "The folder closed." };
+  },
+  "file:move": async ({ from, to }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    const moved = await moveEntry(folder, from, to);
+    if (moved.kind === "failed") return moved;
+    letGoOf(
+      webContentsId,
+      moved.docs.map((d) => d.from),
+    );
+    await versionsFor(folder)?.moved(moved.docs);
+    const now = await folders.refresh(webContentsId);
+    return now ? { ...moved, folder: now } : { kind: "failed", reason: "The folder closed." };
+  },
+  "file:duplicate": async ({ path: requested }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    const made = await duplicateDoc(folder, requested);
+    if (made.kind === "failed") return made;
+    const now = await folders.refresh(webContentsId);
+    return now ? { ...made, folder: now } : { kind: "failed", reason: "The folder closed." };
+  },
+  "file:trash": async ({ path: requested }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    const gone = await trashEntry(folder, requested, (full) => shell.trashItem(full));
+    if (gone.kind === "failed") return gone;
+    letGoOf(webContentsId, gone.docs);
+    const now = await folders.refresh(webContentsId);
+    return now ? { ...gone, folder: now } : { kind: "failed", reason: "The folder closed." };
+  },
   "link:open-external": async ({ url }) => {
     // Only the web and mail: a link in a doc never runs anything on this Mac.
     if (!/^(https?:|mailto:)/i.test(url)) return { ok: false };
@@ -398,7 +446,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
   },
   "doc:reveal": async ({ path: doc, how }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
-    if (!folder?.docs.includes(doc)) return { ok: false };
+    if (!folder?.docs.includes(doc) && !folder?.folders.includes(doc)) return { ok: false };
     const file = path.join(folder.path, doc);
     if (how === "finder") {
       shell.showItemInFolder(file);

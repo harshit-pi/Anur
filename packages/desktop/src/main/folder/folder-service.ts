@@ -6,7 +6,7 @@ import type { FolderState } from "../../shared/ipc-contract.ts";
 import { openAnurFolder } from "../../vault/anur-folder.ts";
 import { listOffloaded } from "../../vault/icloud.ts";
 import { acquireFolderLock, type LockHolder } from "./folder-lock.ts";
-import { listDocs } from "./list-docs.ts";
+import { docTimes, listDocs } from "./list-docs.ts";
 import { rememberFolder } from "./recent.ts";
 
 export type OpenOutcome =
@@ -69,7 +69,7 @@ export class FolderService {
 
   /** What the sidebar and banners need to know about a folder, read fresh from disk. */
   private async describe(folder: string, readOnlyReason: string | null): Promise<FolderState> {
-    const { docs, truncated } = await listDocs(folder);
+    const { docs, truncated, folders } = await listDocs(folder);
     const cloud = cloudProviderOf(folder, this.home);
     const gitInCloud =
       cloud !== null &&
@@ -83,6 +83,8 @@ export class FolderService {
       mode: readOnlyReason ? "read-only" : "writable",
       reason: readOnlyReason,
       docs,
+      folders,
+      times: await docTimes(folder, docs),
       truncated,
       cloud,
       gitInCloud,

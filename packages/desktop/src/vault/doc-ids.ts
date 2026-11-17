@@ -102,6 +102,11 @@ export class DocIds {
     this.registry.byId.set(doc, { path: entry.path, orphaned: true });
   }
 
+  /** The live doc at this path, if Anur has seen it. */
+  lookup(relPath: string): DocId | null {
+    return this.registry.byPath.get(normalizeDocPath(relPath)) ?? null;
+  }
+
   pathOf(doc: DocId): string | null {
     return this.registry.byId.get(doc)?.path ?? null;
   }

@@ -207,4 +207,18 @@ describe("section versions", () => {
       ["pt2", "landed"],
     ]);
   });
+
+  it("keep a doc's ID when Anur moves it, so its history follows", async () => {
+    const f = folder();
+    const v = new SectionVersions(f, "dev1", (e) => {
+      throw e;
+    });
+    await v.opened("Plan.md", DOC);
+    const before = await v.locate("Plan.md", DOC);
+    await v.moved([{ from: "Plan.md", to: "Ideas/Plan.md" }]);
+    const fresh = new SectionVersions(f, "dev1");
+    const after = await fresh.locate("Ideas/Plan.md", DOC);
+    expect(after?.doc).toBe(before?.doc);
+    expect(after?.ids).toEqual(before?.ids);
+  });
 });

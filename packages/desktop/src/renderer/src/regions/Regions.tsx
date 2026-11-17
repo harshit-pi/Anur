@@ -4,7 +4,8 @@ import type { SectionTree } from "@anur/core";
 import type { AgentStatus, FolderState } from "../../../shared/ipc-contract.ts";
 import { AGENTS } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
-import { FileTree } from "./FileTree.tsx";
+import { FileTree, type FileActions, type MakeRequest } from "./FileTree.tsx";
+import { SORTS, type Sort } from "../layout/file-tree.ts";
 import {
   BackIcon,
   CloseIcon,
@@ -13,6 +14,9 @@ import {
   ForwardIcon,
   LinkIcon,
   MoreIcon,
+  NewDocIcon,
+  NewFolderIcon,
+  SortIcon,
   PluginsIcon,
   SearchIcon,
   SettingsIcon,
@@ -86,13 +90,32 @@ export function Ribbon({
   );
 }
 
-/** 2. Left sidebar: the folder's files. */
+const SORT_LABELS: Record<Sort, string> = {
+  name: "Name (A to Z)",
+  "name-desc": "Name (Z to A)",
+  modified: "Last changed",
+  created: "Created",
+};
+
+/** The files panel's sort, remembered per folder on this device. */
+function loadSort(folder: string): Sort {
+  try {
+    const raw = window.localStorage.getItem(`anur.sort:${folder}`);
+    return SORTS.find((s) => s === raw) ?? "name";
+  } catch {
+    return "name";
+  }
+}
+
+/** 2. Left sidebar: the folder's files, made, renamed, moved and trashed here. */
 export function LeftSidebar({
   folder,
   selected,
   onSelect,
   hidden,
   reveal,
+  actions,
+  notice = null,
 }: {
   folder: FolderState | null;
   selected: string | null;
@@ -101,8 +124,17 @@ export function LeftSidebar({
   hidden: boolean;
   /** Changes whenever a tab is pressed or a doc comes into focus: reveal it in the tree. */
   reveal: number;
+  actions?: FileActions | undefined;
+  /** Why the last change to the files didn't happen. */
+  notice?: string | null;
 }) {
   const [collapse, setCollapse] = useState(0);
+  const [request, setRequest] = useState<MakeRequest | null>(null);
+  const folderPath = folder?.path ?? null;
+  const [sort, setSort] = useState<Sort>("name");
+  useEffect(() => {
+    if (folderPath) setSort(loadSort(folderPath));
+  }, [folderPath]);
   if (!folder) {
     return (
       <aside className="left-sidebar" aria-label="Files" hidden={hidden}>
@@ -116,12 +148,64 @@ export function LeftSidebar({
       </aside>
     );
   }
+  const editable = folder.mode === "writable";
+  const chooseSort = () => {
+    void anur
+      .call("menu:popup", {
+        items: SORTS.map((s) => ({ id: s, label: SORT_LABELS[s], checked: s === sort })),
+      })
+      .then(({ id }) => {
+        const next = SORTS.find((s) => s === id);
+        if (!next) return;
+        setSort(next);
+        try {
+          window.localStorage.setItem(`anur.sort:${folder.path}`, next);
+        } catch {
+          // Storage blocked: the sort just isn't remembered.
+        }
+      });
+  };
   return (
     <aside className="left-sidebar" aria-label="Files" hidden={hidden}>
       <div className="sidebar-head">
         <p className="sidebar-title truncate" title={folder.path}>
           {folder.name}
         </p>
+        {editable ? (
+          <>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="New doc"
+              title="New doc"
+              onClick={() => {
+                setRequest((r) => ({ kind: "doc", n: (r?.n ?? 0) + 1 }));
+              }}
+            >
+              <NewDocIcon />
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="New folder"
+              title="New folder"
+              onClick={() => {
+                setRequest((r) => ({ kind: "folder", n: (r?.n ?? 0) + 1 }));
+              }}
+            >
+              <NewFolderIcon />
+            </button>
+          </>
+        ) : null}
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Sort"
+          title={`Sort: ${SORT_LABELS[sort]}`}
+          onClick={chooseSort}
+        >
+          <SortIcon />
+        </button>
         <button
           type="button"
           className="icon-button"
@@ -136,12 +220,23 @@ export function LeftSidebar({
       </div>
       <FileTree
         docs={folder.docs}
+        folders={folder.folders}
+        times={folder.times}
+        sort={sort}
         offloaded={folder.offloaded}
         selected={selected}
         onSelect={onSelect}
         reveal={reveal}
         collapse={collapse}
+        actions={actions}
+        editable={editable}
+        request={request}
       />
+      {notice ? (
+        <p className="tree-notice" role="alert">
+          {notice}
+        </p>
+      ) : null}
       {folder.truncated ? (
         <p className="quiet">This folder has more files than Anur lists; some are left out.</p>
       ) : null}

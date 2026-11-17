@@ -137,6 +137,29 @@ export class SectionVersions {
     });
   }
 
+  /**
+   * Docs Anur renamed or moved: each keeps its ID, so its sections, threads
+   * and history follow it. A typing session on the old path ends first.
+   */
+  moved(pairs: readonly { from: string; to: string }[]): Promise<void> {
+    return this.run(async () => {
+      this.loaded ??= this.docIds.load();
+      await this.loaded;
+      for (const { from, to } of pairs) {
+        await this.closeSession(from);
+        const doc = this.docIds.lookup(from);
+        if (doc) await this.docIds.move(doc, from, to);
+        const known = this.known.get(from);
+        if (known) {
+          this.known.delete(from);
+          this.known.set(to, known);
+        }
+        const last = await this.memory?.read(from);
+        if (last !== null && last !== undefined) await this.memory?.write(to, last);
+      }
+    });
+  }
+
   /** Every open session, as at quit. */
   endAll(): Promise<void> {
     return this.run(async () => {

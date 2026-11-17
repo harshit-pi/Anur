@@ -123,3 +123,23 @@ export const DocIcon = (p: IconProps) => (
     <path d="M9 1.75V5h3.5" />
   </Svg>
 );
+
+export const NewDocIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 1.75h5.25L12.5 5v9.25H4z" />
+    <path d="M8.25 7.5v4M6.25 9.5h4" />
+  </Svg>
+);
+
+export const NewFolderIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M1.75 4.25a1 1 0 0 1 1-1h3.1l1.4 1.5h5.99a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H2.75a1 1 0 0 1-1-1z" />
+    <path d="M8 7.25v4M6 9.25h4" />
+  </Svg>
+);
+
+export const SortIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4.5 2.5v11M2.5 11.5l2 2 2-2M9.5 4h4.5M9.5 8h3.5M9.5 12h2" />
+  </Svg>
+);
