@@ -87,6 +87,11 @@ export const livePreviewTheme = EditorView.theme({
     padding: "6px 10px",
     textAlign: "left",
     verticalAlign: "top",
+    // The page wraps lines anywhere, even mid-word; a cell breaks only between
+    // words, so a column is never squeezed narrower than its longest word.
+    whiteSpace: "normal",
+    wordBreak: "normal",
+    overflowWrap: "normal",
   },
   ".cm-lp-table th": { fontWeight: "650", backgroundColor: "var(--hover)" },
   ".cm-lp-properties": {
