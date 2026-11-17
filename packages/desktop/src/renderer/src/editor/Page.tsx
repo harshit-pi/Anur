@@ -2,7 +2,7 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdownKeymap } from "@codemirror/lang-markdown";
 import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
-import type { SectionTree } from "@anur/core";
+import { conflictsIn, type SectionTree } from "@anur/core";
 import { useEffect, useRef, useState } from "react";
 import type { Response } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
@@ -97,6 +97,8 @@ export function Page({
   const [notice, setNotice] = useState<{ text: string; undo: (() => void) | null } | null>(null);
   /** Typing kept from a clash with a change made outside Anur (2.18). */
   const [kept, setKept] = useState<KeptEntry[]>([]);
+  /** Merge conflicts in the text, for the banner (2.19). */
+  const [conflicts, setConflicts] = useState(0);
   const dropKept = (id: string) => {
     void anur.call("journal:drop", { id });
     setKept((k) => k.filter((e) => e.id !== id));
@@ -167,6 +169,7 @@ export function Page({
             clearTimeout(sectionsTimer);
             sectionsTimer = setTimeout(() => {
               if (markdownDoc) onSections(sectionsOf(editor.state, fileName));
+              setConflicts(conflictsIn(editor.state.doc.toString()).length);
             }, 300);
           }),
         ],
@@ -292,6 +295,7 @@ export function Page({
       });
     }
     view.current = editor;
+    setConflicts(markdownDoc ? conflictsIn(doc.text).length : 0);
     onView(editor);
     onSections(markdownDoc ? sectionsOf(editor.state, fileName) : null);
     return () => {
@@ -320,8 +324,34 @@ export function Page({
     view.current?.dispatch({ effects: preview.current.reconfigure(previewFor(source)) });
   }, [source]);
 
+  /** Put the cursor on the next conflict after it, or the first. */
+  const nextConflict = () => {
+    const editor = view.current;
+    if (!editor) return;
+    const all = conflictsIn(editor.state.doc.toString());
+    const head = editor.state.selection.main.head;
+    const next = all.find((c) => c.from > head) ?? all[0];
+    if (!next) return;
+    editor.dispatch({ selection: { anchor: next.from }, scrollIntoView: true });
+    editor.focus();
+  };
+
   return (
     <>
+      {conflicts > 0 ? (
+        <div className="banner conflict" role="status">
+          <span>
+            {conflicts === 1
+              ? "This doc has a merge conflict."
+              : `This doc has ${String(conflicts)} merge conflicts.`}{" "}
+            Keep one side or both at each one. Typing still saves; matching sections waits until
+            it's resolved.
+          </span>
+          <button type="button" className="toast-action" onClick={nextConflict}>
+            {conflicts === 1 ? "Show it" : "Next conflict"}
+          </button>
+        </div>
+      ) : null}
       {kept.map((entry) => {
         const canPutBack = view.current
           ? putBack(view.current.state.doc.toString(), entry) !== null

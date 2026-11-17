@@ -1,3 +1,4 @@
+import { conflictsIn, resolution } from "@anur/core";
 import { type EditorView, WidgetType } from "@codemirror/view";
 import { toggleTask } from "../commands.ts";
 
@@ -77,4 +78,75 @@ export class RuleWidget extends WidgetType {
     hr.className = "cm-lp-hr";
     return hr;
   }
+}
+
+export type ConflictMark = "open" | "base" | "middle" | "close";
+
+/**
+ * A merge-conflict marker drawn as a label (2.19). The opening one offers
+ * to keep either side or both, which replaces the whole conflict in the
+ * text; the file is the person's to resolve, so nothing happens on its own.
+ */
+export class ConflictMarkWidget extends WidgetType {
+  constructor(
+    readonly kind: ConflictMark,
+    readonly label: string,
+  ) {
+    super();
+  }
+  override eq(other: ConflictMarkWidget) {
+    return other.kind === this.kind && other.label === this.label;
+  }
+  toDOM(view: EditorView) {
+    const bar = document.createElement("span");
+    bar.className = `cm-lp-conflict-label cm-lp-conflict-label-${this.kind}`;
+    const name = document.createElement("span");
+    const named = this.label ? ` · ${this.label}` : "";
+    name.textContent =
+      this.kind === "open"
+        ? `Merge conflict: your version${named}`
+        : this.kind === "base"
+          ? `The original${named}`
+          : this.kind === "middle"
+            ? "Their version"
+            : `End of conflict${named}`;
+    bar.append(name);
+    if (this.kind === "open" && !view.state.readOnly) {
+      for (const [keep, text] of [
+        ["ours", "Keep yours"],
+        ["theirs", "Keep theirs"],
+        ["both", "Keep both"],
+      ] as const) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "cm-lp-conflict-keep";
+        b.textContent = text;
+        b.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+        });
+        b.addEventListener("click", (e) => {
+          e.preventDefault();
+          keepSide(view, view.posAtDOM(bar), keep);
+        });
+        bar.append(b);
+      }
+    }
+    return bar;
+  }
+  override ignoreEvent() {
+    return true;
+  }
+}
+
+function keepSide(view: EditorView, at: number, keep: "ours" | "theirs" | "both") {
+  const lineFrom = view.state.doc.lineAt(at).from;
+  const c = conflictsIn(view.state.doc.toString()).find((x) => x.from === lineFrom);
+  if (!c) return;
+  view.dispatch({
+    changes: { from: c.from, to: c.to, insert: resolution(c, keep) },
+    selection: { anchor: c.from },
+    userEvent: "input.resolve",
+    scrollIntoView: true,
+  });
+  view.focus();
 }

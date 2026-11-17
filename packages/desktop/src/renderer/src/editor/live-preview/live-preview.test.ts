@@ -11,7 +11,7 @@ import {
 import { TableWidget } from "../table/table-widget.ts";
 import { CalloutLabelWidget, CopyCodeWidget, LanguageChipWidget } from "../chips/chip-widgets.ts";
 import { PropertiesWidget } from "../properties/properties-widget.ts";
-import { CheckboxWidget } from "./widgets.ts";
+import { CheckboxWidget, ConflictMarkWidget } from "./widgets.ts";
 
 /** A state with the cursor at `cursor` (default: past the end, on no line of interest). */
 function stateOf(doc: string, cursor = doc.length) {
@@ -80,6 +80,21 @@ describe("live preview", () => {
       "https://x.co/y",
     ]);
     expect(hidden(doc)).toEqual(["<", ">"]);
+  });
+
+  it("draws merge-conflict markers as labels and tints each side", () => {
+    const doc = "# Plan\n\n<<<<<<< HEAD\nMonday.\n=======\nFriday.\n>>>>>>> theirs\n\nend";
+    const found = decorations(doc);
+    const kinds = found
+      .map((d) => d.widget)
+      .filter((w): w is ConflictMarkWidget => w instanceof ConflictMarkWidget)
+      .map((w) => `${w.kind}:${w.label}`);
+    expect(kinds).toEqual(["open:HEAD", "middle:", "close:theirs"]);
+    const lines = found.filter(
+      (d) => typeof d.cls === "string" && d.cls.startsWith("cm-lp-conflict-"),
+    );
+    expect(lines.map((d) => d.cls)).toContain("cm-lp-conflict-ours");
+    expect(lines.map((d) => d.cls)).toContain("cm-lp-conflict-theirs");
   });
 
   it("puts a copy button on a fenced code block's first line", () => {
