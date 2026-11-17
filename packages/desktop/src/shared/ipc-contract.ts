@@ -50,6 +50,52 @@ export const MenuEntry: z.ZodType<MenuEntry, MenuEntry> = z.lazy(() =>
   ]),
 );
 
+/** Whether threads can run, and why not (Architecture, "When the agent is not connected"). */
+export const AgentStatus = z.object({
+  /** null until Anur has tried to connect. */
+  connected: z.boolean().nullable(),
+  reason: z.string().nullable(),
+  agent: z.object({ agent: z.string(), adapter: z.string() }).nullable(),
+});
+export type AgentStatus = z.infer<typeof AgentStatus>;
+
+/** One item in a thread, as the Think panel shows it. */
+export const ThreadItem = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("message"),
+    turn: z.string(),
+    role: z.enum(["person", "agent"]),
+    text: z.string(),
+  }),
+  z.object({
+    kind: z.literal("tool"),
+    turn: z.string(),
+    toolUse: z.string(),
+    title: z.string(),
+    status: z.string(),
+  }),
+  z.object({ kind: z.literal("error"), turn: z.string(), text: z.string() }),
+]);
+export type ThreadItem = z.infer<typeof ThreadItem>;
+
+/** A thread on one section: what it is about, what it read, and what was said. */
+export const ThreadView = z.object({
+  id: z.string(),
+  /** The section's ID, and its heading path now; null when its section is gone. */
+  section: z.string(),
+  path: z.array(z.string()).nullable(),
+  title: z.string(),
+  closed: z.boolean(),
+  busy: z.boolean(),
+  /** What the agent reads in this thread: the bundle's parts, as the reads line lists them. */
+  reads: z.array(z.object({ label: z.string(), detail: z.string() })),
+  items: z.array(ThreadItem),
+});
+export type ThreadView = z.infer<typeof ThreadView>;
+
+/** The section a thread is about: its index in the page's tree and its heading path, to check it. */
+const SectionRef = z.object({ index: z.int().nonnegative(), path: z.array(z.string()).max(50) });
+
 export const ipcContract = {
   "app:info": {
     request: z.object({}).strict(),
@@ -293,6 +339,59 @@ export const ipcContract = {
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
+
+  /** Whether threads can run; asking connects the agent once (3.1). */
+  "agent:status": {
+    request: z.object({ connect: z.boolean() }).strict(),
+    response: AgentStatus,
+  },
+  /** The open doc's threads, each with its section's heading path in `text`. */
+  "thread:list": {
+    request: z.object({ path: z.string().max(4096), text: z.string() }).strict(),
+    response: z.object({ threads: z.array(ThreadView) }),
+  },
+  /** Start a thread on a section with its first message (3.5). */
+  "thread:start": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        section: SectionRef,
+        message: z.string().min(1).max(100_000),
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("started"), thread: ThreadView }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** Send the next message in a thread. */
+  "thread:send": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        path: z.string().max(4096),
+        text: z.string(),
+        message: z.string().min(1).max(100_000),
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("sent") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** Stop the thread's running turn. */
+  "thread:stop": {
+    request: z.object({ thread: z.string().max(200) }).strict(),
+    response: z.object({}),
+  },
+  /** The person's answer to one of the agent's own prompts; null declines. */
+  "thread:permission": {
+    request: z
+      .object({ request: z.string().max(300), option: z.string().max(300).nullable() })
+      .strict(),
+    response: z.object({}),
+  },
 } as const;
 
 /** Events main sends to a window. */
@@ -311,6 +410,28 @@ export const ipcEvents = {
   }),
   /** Insert in the menu bar: put this block where the page's cursor is. */
   "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
+  /** The agent connected, or couldn't, and why. */
+  "agent:status": AgentStatus,
+  /** A thread changed: all of it, or a reply arriving piece by piece. */
+  "thread:event": z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("thread"), path: z.string(), thread: ThreadView }),
+    z.object({ kind: z.literal("text"), thread: z.string(), turn: z.string(), text: z.string() }),
+    z.object({
+      kind: z.literal("tool"),
+      thread: z.string(),
+      turn: z.string(),
+      toolUse: z.string(),
+      title: z.string(),
+      status: z.string(),
+    }),
+    z.object({
+      kind: z.literal("permission"),
+      thread: z.string(),
+      request: z.string(),
+      title: z.string(),
+      options: z.array(z.object({ id: z.string(), name: z.string(), kind: z.string() })),
+    }),
+  ]),
 } as const;
 
 export type Channel = keyof typeof ipcContract;

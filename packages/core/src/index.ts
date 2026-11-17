@@ -134,3 +134,11 @@ export {
   type BaseView,
   type NoteFacts,
 } from "./bases/index.ts";
+export {
+  BUNDLE_RULES,
+  buildBundle,
+  type Bundle,
+  type BundleInput,
+  type BundlePart,
+  type BundleRule,
+} from "./context/index.ts";

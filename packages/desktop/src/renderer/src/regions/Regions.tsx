@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
-import type { FolderState } from "../../../shared/ipc-contract.ts";
+import type { AgentStatus, FolderState } from "../../../shared/ipc-contract.ts";
+import { anur } from "../bridge.ts";
 import { FileTree } from "./FileTree.tsx";
 import {
   BackIcon,
@@ -558,10 +559,13 @@ export function RightSidebar({
   sections,
   onJump,
   hidden,
+  think,
 }: {
   sections: SectionTree | null;
   onJump: (index: number) => void;
   hidden: boolean;
+  /** The Think panel for the section the cursor is in (3.5). */
+  think: React.ReactNode;
 }) {
   const [tab, setTab] = useState<(typeof RIGHT_TABS)[number]>("Outline");
   return (
@@ -586,6 +590,8 @@ export function RightSidebar({
       <div role="tabpanel" className="tab-panel">
         {tab === "Outline" && sections ? (
           <Outline sections={sections} onJump={onJump} />
+        ) : tab === "Think" ? (
+          think
         ) : (
           <p className="quiet">{RIGHT_EMPTY[tab]}</p>
         )}
@@ -601,6 +607,26 @@ const SAVE_LABELS: Record<SaveStatus, string> = {
   "changed-outside": "Not saved: changed outside Anur",
   failed: "Not saved",
 };
+
+/** Whether the person's agent is connected; it connects when a thread first needs it. */
+function AgentState() {
+  const [status, setStatus] = useState<AgentStatus | null>(null);
+  useEffect(() => {
+    void anur.call("agent:status", { connect: false }).then(setStatus);
+    return anur.on("agent:status", setStatus);
+  }, []);
+  const on = status?.connected === true;
+  return (
+    <span className="status-item" title={status?.reason ?? undefined}>
+      <span className={`dot ${on ? "on" : "off"}`} aria-hidden="true" />
+      {on
+        ? "Claude Code connected"
+        : status?.connected === false
+          ? "Agent not connected"
+          : "Agent connects with the first thread"}
+    </span>
+  );
+}
 
 /** 6. Status bar: agent connection, saved state, thread count. */
 export function StatusBar({
@@ -620,10 +646,7 @@ export function StatusBar({
 }) {
   return (
     <footer className="status-bar" aria-label="Status">
-      <span className="status-item">
-        <span className="dot off" aria-hidden="true" />
-        Agent not connected
-      </span>
+      <AgentState />
       <span className="status-item">
         {docMode === "editable"
           ? SAVE_LABELS[saveStatus ?? "saved"]

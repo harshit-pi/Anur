@@ -54,6 +54,7 @@ export function Page({
   docs,
   source,
   onSections,
+  onCursor,
   onView,
   onSaveStatus,
   onOpenLink,
@@ -66,6 +67,8 @@ export function Page({
   docs: readonly string[];
   source: boolean;
   onSections: (tree: SectionTree | null) => void;
+  /** Where the cursor is, so the Think panel follows the section it's in. */
+  onCursor?: (pos: number) => void;
   onView: (view: EditorView | null) => void;
   onSaveStatus: (status: SaveStatus | null, detail: string | null) => void;
   /** Follow a clicked link; returns what to tell the person when it goes nowhere. */
@@ -85,6 +88,8 @@ export function Page({
   const onLeaveNow = useRef(onLeave);
   onLeaveNow.current = onLeave;
   const openLinkNow = useRef(onOpenLink);
+  const onCursorRef = useRef(onCursor);
+  onCursorRef.current = onCursor;
   openLinkNow.current = onOpenLink;
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
@@ -165,6 +170,7 @@ export function Page({
           pagePath.of(doc.path),
           EditorView.contentAttributes.of({ "aria-label": `Page: ${fileName}` }),
           EditorView.updateListener.of((u) => {
+            if (u.selectionSet || u.docChanged) onCursorRef.current?.(u.state.selection.main.head);
             if (!u.docChanged) return;
             saver?.changed();
             // The outline follows the text, a moment after typing.

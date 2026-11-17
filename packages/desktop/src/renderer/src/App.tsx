@@ -36,6 +36,7 @@ import {
 import { loadOpen, loadWidths, saveOpen, saveWidths, type Side } from "./layout/panel-widths.ts";
 import { anur } from "./bridge.ts";
 import { CommandPalette } from "./regions/CommandPalette.tsx";
+import { Think } from "./regions/Think.tsx";
 import { Settings, type SettingsSection } from "./regions/Settings.tsx";
 import { newDocPath } from "./layout/new-doc.ts";
 import { MergeDialog } from "./regions/MergeDialog.tsx";
@@ -67,6 +68,15 @@ export function App() {
   const [opening, setOpening] = useState<string | null>(null);
   const [docError, setDocError] = useState<string | null>(null);
   const [sections, setSections] = useState<SectionTree | null>(null);
+  /** The section the cursor is in, by index: what the Think panel is about. */
+  const [cursorSection, setCursorSection] = useState(0);
+  const sectionsNow = useRef(sections);
+  sectionsNow.current = sections;
+  const onCursor = useCallback((pos: number) => {
+    const tree = sectionsNow.current;
+    const at = tree ? (sectionAt(tree, pos)?.index ?? 0) : 0;
+    setCursorSection((i) => (i === at ? i : at));
+  }, []);
   const [source, setSource] = useState(false);
   const [save, setSave] = useState<{ status: SaveStatus | null; detail: string | null }>({
     status: null,
@@ -86,6 +96,8 @@ export function App() {
     [folder, downloaded],
   );
   const view = useRef<EditorView | null>(null);
+  /** The page's text as it stands, for threads: unsaved typing included. */
+  const docText = useCallback(() => view.current?.state.doc.toString() ?? "", []);
   const onView = useCallback((v: EditorView | null) => {
     view.current = v;
     // Check runs only: a probe can set a selection exactly as a mouse would.
@@ -443,6 +455,7 @@ export function App() {
               docs={folder?.docs ?? []}
               source={source}
               onSections={setSections}
+              onCursor={onCursor}
               onView={onView}
               onSaveStatus={onSaveStatus}
               onOpenLink={openLink}
@@ -475,7 +488,20 @@ export function App() {
             : null
         }
       />
-      <RightSidebar sections={sections} onJump={jumpTo} hidden={!open.right} />
+      <RightSidebar
+        sections={sections}
+        onJump={jumpTo}
+        hidden={!open.right}
+        think={
+          <Think
+            docPath={doc && sections ? doc.path : null}
+            docText={docText}
+            tree={sections}
+            section={sections?.sections[cursorSection] ?? sections?.sections[0] ?? null}
+            writable={folder?.mode === "writable" && doc?.mode === "editable"}
+          />
+        }
+      />
       <StatusBar
         version={version}
         folder={shown}

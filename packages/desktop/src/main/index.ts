@@ -39,6 +39,8 @@ import { saveDoc } from "./folder/save-doc.ts";
 import { readRecent } from "./folder/recent.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
 import { buildMenu } from "./menu.ts";
+import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
+import { Threads } from "./threads/threads.ts";
 
 /**
  * The main process stays thin (Architecture, "Processes"): windows, menus,
@@ -76,10 +78,10 @@ let appSettings: AppSettingsStore;
 let device: string | null = null;
 /** The doc each window shows, so leaving it ends its typing session. */
 const shownDoc = new Map<number, string>();
-/** Section versions (2.21), one writer per open folder; none for a read-only folder. */
+/** Section IDs and versions (2.21), one writer per open folder; none for a read-only folder. */
 const versions = new Map<string, SectionVersions>();
 function versionsFor(folder: FolderState): SectionVersions | null {
-  if (!device || folder.mode !== "writable" || !appSettings.get().sectionHistory) return null;
+  if (!device || folder.mode !== "writable") return null;
   let v = versions.get(folder.path);
   if (!v) {
     v = new SectionVersions(
@@ -89,10 +91,41 @@ function versionsFor(folder: FolderState): SectionVersions | null {
         console.error("Anur couldn't record section versions:", e);
       },
       lastSavedIn(app.getPath("userData"), folder.path),
+      undefined,
+      () => appSettings.get().sectionHistory,
     );
     versions.set(folder.path, v);
   }
   return v;
+}
+/** The agent host, shared by every window; started when a thread first needs it (3.1). */
+const hub = new AgentHub(hostEntry(here), (status) => {
+  for (const win of windows.values()) send(win, "agent:status", status);
+});
+/** Each folder's threads, so a reply reaches the windows showing that folder. */
+const threads = new Map<string, Threads>();
+function threadsFor(folder: FolderState): Threads | null {
+  const ids = versionsFor(folder);
+  if (!device || !ids) return null;
+  let t = threads.get(folder.path);
+  if (!t) {
+    t = new Threads({
+      folder: folder.path,
+      device,
+      appSupport: app.getPath("userData"),
+      hub,
+      hookScript: hookEntry(here),
+      node: process.execPath,
+      locate: (rel, text) => ids.locate(rel, text),
+      emit: (event) => {
+        for (const [id, win] of windows) {
+          if (folders.current(id)?.path === folder.path) send(win, "thread:event", event);
+        }
+      },
+    });
+    threads.set(folder.path, t);
+  }
+  return t;
 }
 let recovery: RecoveryStore;
 /** Each window's open doc, watched for changes made outside Anur (2.17). */
@@ -315,6 +348,35 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     return planConflict(folder, copy);
+  },
+  "agent:status": async ({ connect }) => (connect ? hub.connect() : hub.status),
+  "thread:list": async ({ path: doc, text }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    return { threads: t ? await t.list(doc, text) : [] };
+  },
+  "thread:start": async ({ path: doc, text, section, message }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !t || !folder.docs.includes(doc))
+      return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
+    return t.start(doc, text, section, message);
+  },
+  "thread:send": async ({ thread, path: doc, text, message }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !t || !folder.docs.includes(doc))
+      return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
+    return t.send(thread, doc, text, message);
+  },
+  "thread:stop": ({ thread }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (folder) threadsFor(folder)?.stop(thread);
+    return {};
+  },
+  "thread:permission": ({ request, option }) => {
+    hub.send({ type: "permission", request, option });
+    return {};
   },
   "conflict:merge": async (request, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -596,6 +658,8 @@ app.on("will-quit", (event) => {
     return;
   }
   docWatcher.stopAll();
+  for (const t of threads.values()) void t.close();
+  hub.stop();
   void folders.closeAll();
 });
 
