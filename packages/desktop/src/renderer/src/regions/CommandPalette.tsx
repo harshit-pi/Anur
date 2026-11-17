@@ -1,38 +1,141 @@
 import { useEffect, useRef, useState } from "react";
+import type { FolderState, Response } from "../../../shared/ipc-contract.ts";
+import { anur } from "../bridge.ts";
+import { inlineRuns, splitMatches } from "../layout/inline-markdown.ts";
+import { docsNamed } from "../layout/new-doc.ts";
 
 /**
- * 7. Command palette, ⌘K. Commands arrive with the groups that build them:
- * new doc, switch view, start a thread, Ask.
+ * 7. Command palette, from the magnifier or ⌘K. Typing searches the folder:
+ * docs by name, then lines that hold the words (2.26), then commands. The
+ * arrows move, Enter runs, ⌘Enter opens a doc in a new tab. Commands that
+ * arrive with later groups are listed, dimmed.
  */
-const COMING = [
-  { name: "New doc", hint: "⌘N" },
+
+type Found = Response<"folder:search">;
+
+type Item =
+  | { kind: "doc"; path: string }
+  | { kind: "line"; path: string; line: number; column: number; text: string }
+  | { kind: "command"; name: string; hint: string; run: (() => void) | null };
+
+const name = (p: string) => (p.split("/").pop() ?? p).replace(/\.md$/i, "");
+const dir = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+
+const LATER = [
   { name: "Switch to Map", hint: "⌘M" },
   { name: "Start a thread on this section", hint: "" },
   { name: "Ask about this doc", hint: "whole-doc thread" },
 ];
 
+const keyOf = (it: Item) =>
+  it.kind === "command" ? it.name : it.kind === "line" ? `${it.path}:${String(it.line)}` : it.path;
+
 export function CommandPalette({
   open,
   onClose,
+  folder,
+  onOpen,
+  onOpenLine,
   onNewDoc,
 }: {
   open: boolean;
   onClose: () => void;
-  /** Make a new doc (2.26); null when no writable folder is open. */
-  onNewDoc: (() => void) | null;
+  folder: FolderState | null;
+  onOpen: (path: string, inNewTab: boolean) => void;
+  onOpenLine: (path: string, line: number, column: number, length: number) => void;
+  /** Make a new doc named as given (2.26); null when no writable folder is open. */
+  onNewDoc: ((name: string) => void) | null;
 }) {
   const [query, setQuery] = useState("");
+  const [found, setFound] = useState<Found | null>(null);
+  const [active, setActive] = useState(-1);
   const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     if (open) {
       setQuery("");
+      setFound(null);
       input.current?.focus();
     }
   }, [open]);
 
+  // Search the text a moment after the last key.
+  useEffect(() => {
+    if (!open || !folder || query.trim() === "") {
+      setFound(null);
+      return;
+    }
+    let current = true;
+    const t = setTimeout(() => {
+      void anur.call("folder:search", { query }).then((r) => {
+        if (current) setFound(r);
+      });
+    }, 150);
+    return () => {
+      current = false;
+      clearTimeout(t);
+    };
+  }, [open, query, folder]);
+
+  // A new query or new results: the first live item is active again.
+  useEffect(() => {
+    setActive(-1);
+  }, [query, found]);
+
+  useEffect(() => {
+    list.current
+      ?.querySelector(`[data-index="${String(active)}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+
   if (!open) return null;
-  const shown = COMING.filter((c) => c.name.toLowerCase().includes(query.toLowerCase()));
+
+  const q = query.trim();
+  const docs = folder ? docsNamed(folder.docs, q, 6) : [];
+  const lines = (found?.matches ?? []).slice(0, 8);
+  const exact = folder?.docs.some((d) => name(d).toLowerCase() === q.toLowerCase()) ?? false;
+  const commands: Item[] = [
+    {
+      kind: "command" as const,
+      name: q && !exact ? `New doc “${q}”` : "New doc",
+      hint: "⌘N",
+      run: onNewDoc
+        ? () => {
+            onNewDoc(exact ? "" : q);
+          }
+        : null,
+    },
+    ...LATER.map((c) => ({ kind: "command" as const, name: c.name, hint: c.hint, run: null })),
+  ].filter(
+    (c) =>
+      q === "" || c.name.startsWith("New doc") || c.name.toLowerCase().includes(q.toLowerCase()),
+  );
+  const groups = [
+    { title: "Docs", items: docs.map((path): Item => ({ kind: "doc", path })) },
+    { title: "In the text", items: lines.map((m): Item => ({ kind: "line", ...m })) },
+    { title: q ? "Commands" : null, items: commands },
+  ].filter((g) => g.items.length > 0);
+  const items = groups.flatMap((g) => g.items);
+  const isLive = (it: Item | undefined) => !!it && (it.kind !== "command" || it.run !== null);
+  const live = items.flatMap((it, i) => (isLive(it) ? [i] : []));
+  const shown = isLive(items[active]) ? active : (live[0] ?? -1);
+
+  const run = (it: Item | undefined, newTab: boolean) => {
+    if (!it) return;
+    if (it.kind === "doc") onOpen(it.path, newTab);
+    else if (it.kind === "line") onOpenLine(it.path, it.line, it.column, q.length);
+    else if (it.run) it.run();
+    else return;
+    onClose();
+  };
+  const move = (by: number) => {
+    if (live.length === 0) return;
+    const at = live.indexOf(shown);
+    setActive(live[(at + by + live.length) % live.length] ?? -1);
+  };
+
+  let index = 0;
   return (
     <div
       className="palette-backdrop"
@@ -45,47 +148,117 @@ export function CommandPalette({
         <input
           ref={input}
           className="palette-input"
-          placeholder="Type a command"
+          placeholder={folder ? "Search docs, or type a command" : "Type a command"}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
           }}
           onKeyDown={(e) => {
             if (e.key === "Escape") onClose();
-            if (e.key === "Enter" && onNewDoc && shown[0]?.name === "New doc") {
-              onNewDoc();
-              onClose();
+            else if (e.key === "ArrowDown") {
+              e.preventDefault();
+              move(1);
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              move(-1);
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              run(items[shown], e.metaKey || e.ctrlKey);
             }
           }}
-          aria-label="Command"
+          aria-label="Search docs, or type a command"
         />
-        <ul className="palette-list">
-          {shown.map((c) =>
-            c.name === "New doc" && onNewDoc ? (
-              <li key={c.name}>
-                <button
-                  type="button"
-                  className="palette-item palette-action"
-                  onClick={() => {
-                    onNewDoc();
-                    onClose();
-                  }}
-                >
-                  <span>{c.name}</span>
-                  <span className="quiet">{c.hint}</span>
-                </button>
-              </li>
-            ) : (
-              <li key={c.name} className="palette-item" aria-disabled="true">
-                <span>{c.name}</span>
-                <span className="quiet">{c.hint || "needs a doc"}</span>
-              </li>
-            ),
-          )}
-          {shown.length === 0 ? <li className="palette-item quiet">No command matches</li> : null}
+        <ul className="palette-list" ref={list}>
+          {groups.map((g) => (
+            <li key={g.title ?? "commands"}>
+              {g.title ? <div className="palette-heading">{g.title}</div> : null}
+              <ul className="palette-group">
+                {g.items.map((it) => {
+                  const i = index++;
+                  if (!isLive(it) && it.kind === "command") {
+                    return (
+                      <li key={keyOf(it)} className="palette-item" aria-disabled="true">
+                        <span>{it.name}</span>
+                        <span className="quiet">{it.hint || "needs a doc"}</span>
+                      </li>
+                    );
+                  }
+                  const on = i === shown;
+                  return (
+                    <li key={keyOf(it)}>
+                      <button
+                        type="button"
+                        data-index={i}
+                        className={`palette-item palette-action${on ? " active" : ""}`}
+                        onMouseMove={() => {
+                          if (!on) setActive(i);
+                        }}
+                        onClick={(e) => {
+                          run(it, e.metaKey || e.ctrlKey);
+                        }}
+                      >
+                        {it.kind === "doc" ? (
+                          <>
+                            <span className="truncate">
+                              <Matched text={name(it.path)} query={q} />
+                            </span>
+                            <span className="quiet truncate">{dir(it.path)}</span>
+                          </>
+                        ) : it.kind === "line" ? (
+                          <>
+                            <LineText text={it.text} query={q} />
+                            <span className="quiet truncate">{name(it.path)}</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="truncate">{it.name}</span>
+                            <span className="quiet">{it.hint}</span>
+                          </>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
+          {q && found && docs.length === 0 && lines.length === 0 ? (
+            <li className="palette-item quiet">No doc or line in this folder matches</li>
+          ) : null}
         </ul>
-        <p className="palette-note quiet">Commands work once a folder is open.</p>
+        <p className="palette-note quiet">
+          {folder
+            ? "↑ and ↓ to move, Enter to open, ⌘Enter to open in a new tab"
+            : "Search and commands work once a folder is open."}
+        </p>
       </div>
     </div>
+  );
+}
+
+/** The query's matches in `text`, marked. */
+function Matched({ text, query }: { text: string; query: string }) {
+  return (
+    <>
+      {splitMatches(text, query).map((p, i) => (p.match ? <mark key={i}>{p.text}</mark> : p.text))}
+    </>
+  );
+}
+
+/** A found line as the page shows it: its Markdown styled, its marks hidden. */
+function LineText({ text, query }: { text: string; query: string }) {
+  return (
+    <span className="palette-line truncate">
+      {inlineRuns(text).map((r, i) => {
+        const inner = <Matched text={r.text} query={query} />;
+        return r.marks.length > 0 ? (
+          <span key={i} className={r.marks.map((m) => `md-${m}`).join(" ")}>
+            {inner}
+          </span>
+        ) : (
+          <span key={i}>{inner}</span>
+        );
+      })}
+    </span>
   );
 }

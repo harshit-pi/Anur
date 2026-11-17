@@ -146,19 +146,6 @@ export function App() {
     savedViews.current.set(key, saved);
   }, []);
 
-  /** The left sidebar shows the files or search (2.26). */
-  const [sidebar, setSidebar] = useState<"files" | "search">("files");
-  const [searchFocus, setSearchFocus] = useState(0);
-  const showSearch = useCallback(() => {
-    setSidebar("search");
-    setSearchFocus((n) => n + 1);
-    setOpen((o) => {
-      if (o.left) return o;
-      const next = { ...o, left: true };
-      saveOpen(window.localStorage, next);
-      return next;
-    });
-  }, []);
   /** A new doc beside the open one, named as typed or Untitled, opened at once. */
   const newDoc = useCallback(
     (name: string) => {
@@ -182,6 +169,13 @@ export function App() {
     column: number;
     length: number;
   } | null>(null);
+  const openLine = useCallback(
+    (path: string, line: number, column: number, length: number) => {
+      setPendingLine({ path, line, column, length });
+      openDoc(path, false);
+    },
+    [openDoc],
+  );
   /** A heading a link asked for, scrolled to once its doc's sections are in. */
   const [pendingHeading, setPendingHeading] = useState<{ path: string; heading: string } | null>(
     null,
@@ -366,7 +360,7 @@ export function App() {
       }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
         e.preventDefault();
-        showSearch();
+        setPaletteOpen(true);
       }
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
@@ -390,7 +384,7 @@ export function App() {
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, [toggle, showSearch]);
+  }, [toggle]);
 
   return (
     <div
@@ -417,18 +411,13 @@ export function App() {
         onListTabs={listTabs}
       />
       <Ribbon
-        filesOpen={open.left && sidebar === "files"}
+        filesOpen={open.left}
         onFiles={() => {
-          if (open.left && sidebar === "search") setSidebar("files");
-          else {
-            setSidebar("files");
-            toggle("left");
-          }
+          toggle("left");
         }}
-        searchOpen={open.left && sidebar === "search"}
+        searchOpen={paletteOpen}
         onSearch={() => {
-          if (open.left && sidebar === "search") toggle("left");
-          else showSearch();
+          setPaletteOpen((o) => !o);
         }}
         onSettings={() => {
           setSettings("general");
@@ -443,18 +432,6 @@ export function App() {
         onSelect={openDoc}
         hidden={!open.left}
         reveal={reveal}
-        search={
-          sidebar === "search"
-            ? {
-                focus: searchFocus,
-                onOpenLine: (path, line, column, length) => {
-                  setPendingLine({ path, line, column, length });
-                  openDoc(path, false);
-                },
-                onNewDoc: newDoc,
-              }
-            : null
-        }
       />
       <Center
         folder={shown}
@@ -538,13 +515,10 @@ export function App() {
         onClose={() => {
           setPaletteOpen(false);
         }}
-        onNewDoc={
-          folder?.mode === "writable"
-            ? () => {
-                newDoc("");
-              }
-            : null
-        }
+        folder={shown}
+        onOpen={openDoc}
+        onOpenLine={openLine}
+        onNewDoc={folder?.mode === "writable" ? newDoc : null}
       />
       {settings ? (
         <Settings
