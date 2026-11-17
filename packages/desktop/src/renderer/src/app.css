@@ -718,3 +718,25 @@ body.resizing * {
 .toast-action:hover {
   background: var(--blue-wash);
 }
+
+/* An image's or embed's path, in a pop-up under its chip (2.14). */
+.cm-lp-path-editor {
+  position: fixed;
+  z-index: 30;
+  padding: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  box-shadow: var(--shadow);
+}
+
+.cm-lp-path-editor input {
+  width: 320px;
+  padding: 5px 8px;
+  border: 1px solid var(--blue);
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 13px var(--font-ui);
+  outline: none;
+}

@@ -48,22 +48,6 @@ export class CheckboxWidget extends WidgetType {
   }
 }
 
-/** A callout's "[!note]" drawn as its label. */
-export class CalloutLabelWidget extends WidgetType {
-  constructor(readonly kind: string) {
-    super();
-  }
-  override eq(other: CalloutLabelWidget) {
-    return other.kind === this.kind;
-  }
-  toDOM() {
-    const s = document.createElement("span");
-    s.className = `cm-lp-callout-label cm-lp-callout-label-${this.kind}`;
-    s.textContent = this.kind.charAt(0).toUpperCase() + this.kind.slice(1);
-    return s;
-  }
-}
-
 /** A separator, such as "›" between a wiki link's file and heading. */
 export class TextWidget extends WidgetType {
   constructor(
@@ -79,23 +63,6 @@ export class TextWidget extends WidgetType {
     const s = document.createElement("span");
     s.className = this.cls;
     s.textContent = this.text;
-    return s;
-  }
-}
-
-/** An embed, such as ![[Mock.png]], drawn as a labelled chip until embeds render. */
-export class EmbedWidget extends WidgetType {
-  constructor(readonly target: string) {
-    super();
-  }
-  override eq(other: EmbedWidget) {
-    return other.target === this.target;
-  }
-  toDOM() {
-    const s = document.createElement("span");
-    s.className = "cm-lp-embed";
-    const image = /\.(png|jpe?g|gif|svg|webp)$/i.test(this.target);
-    s.textContent = `${image ? "Image" : "Embed"}: ${this.target}`;
     return s;
   }
 }

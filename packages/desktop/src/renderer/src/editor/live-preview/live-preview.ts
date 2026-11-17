@@ -2,14 +2,8 @@ import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { EditorState, RangeSet, StateEffect, StateField, type Range } from "@codemirror/state";
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
-import {
-  BulletWidget,
-  CalloutLabelWidget,
-  CheckboxWidget,
-  EmbedWidget,
-  RuleWidget,
-  TextWidget,
-} from "./widgets.ts";
+import { BulletWidget, CheckboxWidget, RuleWidget, TextWidget } from "./widgets.ts";
+import { CalloutLabelWidget, EmbedWidget, LanguageChipWidget } from "../chips/chip-widgets.ts";
 import { parseFields } from "../properties/properties-model.ts";
 import { PropertiesWidget } from "../properties/properties-widget.ts";
 import { parseTable } from "../table/table-model.ts";
@@ -59,9 +53,6 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
     for (let n = a; n <= b; n++) if (active.has(n)) return true;
     return false;
   };
-  /** Inline elements show their marks only while a cursor touches the element itself (2.8). */
-  const touches = (from: number, to: number) =>
-    focused && state.selection.ranges.some((r) => r.from <= to && r.to >= from);
   const out: Range<Decoration>[] = [];
   const text = (from: number, to: number) => doc.sliceString(from, to);
   /** Hide a mark and the spaces after it on the same line. */
@@ -117,9 +108,21 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           for (let n = doc.lineAt(from).number; n <= doc.lineAt(to).number; n++) {
             out.push(line("cm-lp-codeblock").range(doc.line(n).from));
           }
-          // A fence's backticks and language hide off the cursor line.
-          for (const c of [...children(node, "CodeMark"), ...children(node, "CodeInfo")]) {
-            if (!isActive(c.from, c.to)) out.push(hide.range(c.from, c.to));
+          // Fences never show (2.14): the opening one is a chip naming the
+          // language, the closing one is hidden.
+          if (name === "FencedCode") {
+            const marks = children(node, "CodeMark");
+            const open = marks[0];
+            const close = marks.length > 1 ? marks.at(-1) : undefined;
+            const info = children(node, "CodeInfo")[0];
+            if (open) {
+              out.push(
+                Decoration.replace({
+                  widget: new LanguageChipWidget(info ? text(info.from, info.to) : ""),
+                }).range(open.from, info ? info.to : open.to),
+              );
+            }
+            if (close) out.push(hide.range(close.from, close.to));
           }
           return false;
         case "Blockquote": {
@@ -134,7 +137,8 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           }
           const start = firstLine.from + firstLine.text.indexOf("[!");
           const end = firstLine.from + (callout?.[0].length ?? 0);
-          if (kind && callout && !touches(start, end)) {
+          // The type never shows as "[!note]" (2.14): it's a chip that changes it.
+          if (kind && callout) {
             out.push(
               Decoration.replace({ widget: new CalloutLabelWidget(kind) }).range(start, end),
             );
@@ -182,14 +186,14 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           return;
         }
         case "Image":
-          if (!touches(from, to)) {
+          {
             const url = children(node, "URL")[0];
             const label = url ? text(url.from, url.to) : text(from, to);
             out.push(Decoration.replace({ widget: new EmbedWidget(label) }).range(from, to));
           }
           return false;
         case "WikiEmbed":
-          if (!touches(from, to)) {
+          {
             const target = children(node, "WikiLinkTarget")[0];
             out.push(
               Decoration.replace({
@@ -253,12 +257,8 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
   // while the cursor waits between its marks for the text to make bold.
   if (focused) {
     const pos = state.selection.main.head;
-    for (const m of EMPTY_PAIRS) {
-      if (text(pos - m.length, pos) === m && text(pos, pos + m.length) === m) {
-        out.push(hide.range(pos - m.length, pos), hide.range(pos, pos + m.length));
-        break;
-      }
-    }
+    const m = emptyPairAt(state.doc, pos);
+    if (m) out.push(hide.range(pos - m.length, pos), hide.range(pos, pos + m.length));
   }
 
   return Decoration.set(out, true);
@@ -266,6 +266,27 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
 
 /** Marks ⌘B, ⌘I, ⌘⇧X and code can leave empty around the cursor, longest first. */
 export const EMPTY_PAIRS = ["**", "~~", "*", "`"];
+
+/**
+ * The mark of an empty pair around `pos`, such as "****", or null. The pair
+ * must stand alone: "```" or "*****" around the cursor is something else,
+ * such as a code fence, and is never hidden or removed.
+ */
+export function emptyPairAt(doc: EditorState["doc"], pos: number): string | null {
+  for (const m of EMPTY_PAIRS) {
+    const n = m.length;
+    const c = m.charAt(0);
+    if (
+      doc.sliceString(pos - n, pos) === m &&
+      doc.sliceString(pos, pos + n) === m &&
+      doc.sliceString(pos - n - 1, pos - n) !== c &&
+      doc.sliceString(pos + n, pos + n + 1) !== c
+    ) {
+      return m;
+    }
+  }
+  return null;
+}
 
 const setFocused = StateEffect.define<boolean>();
 
@@ -349,14 +370,9 @@ const dropEmptyPair = EditorState.transactionFilter.of((tr) => {
   const before = tr.startState.selection.main;
   if (!before.empty || tr.selection.main.head === before.head) return tr;
   const pos = before.head;
-  const doc = tr.startState.doc;
-  for (const m of EMPTY_PAIRS) {
-    const n = m.length;
-    if (doc.sliceString(pos - n, pos) === m && doc.sliceString(pos, pos + n) === m) {
-      return [tr, { changes: { from: pos - n, to: pos + n }, sequential: true }];
-    }
-  }
-  return tr;
+  const m = emptyPairAt(tr.startState.doc, pos);
+  if (!m) return tr;
+  return [tr, { changes: { from: pos - m.length, to: pos + m.length }, sequential: true }];
 });
 
 /** Live preview for a page: the decorations, kept in step with focus. */

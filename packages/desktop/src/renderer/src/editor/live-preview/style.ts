@@ -62,6 +62,22 @@ export const livePreviewTheme = EditorView.theme({
   ".cm-lp-callout-first": { paddingTop: "6px !important", fontWeight: "650" },
   ".cm-lp-callout-label": { fontWeight: "700", marginRight: "0.4em", color: "var(--slate)" },
   ...calloutRules,
+  // Chips for what stays hidden (2.14): a press changes them.
+  ".cm-lp-chip[role=button]": { cursor: "pointer" },
+  ".cm-lp-language": {
+    fontFamily: "var(--font-ui)",
+    fontSize: "12px",
+    color: "var(--graphite)",
+    border: "1px solid var(--rule)",
+    borderRadius: "5px",
+    padding: "1px 7px",
+    backgroundColor: "var(--sheet)",
+  },
+  ".cm-lp-language[role=button]:hover, .cm-lp-embed[role=button]:hover": {
+    color: "var(--blue)",
+    borderColor: "var(--blue)",
+  },
+  ".cm-lp-callout-label[role=button]:hover": { textDecoration: "underline" },
   ".cm-lp-hr": {
     display: "inline-block",
     width: "100%",
