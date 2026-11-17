@@ -39,7 +39,7 @@ type Live = { props: Properties; view: EditorView; drawn: number };
  */
 const COLLAPSED_KEY = "anur.propertiesCollapsed";
 
-function isCollapsed(): boolean {
+export function isCollapsed(): boolean {
   try {
     return window.localStorage.getItem(COLLAPSED_KEY) === "true";
   } catch {
@@ -47,7 +47,7 @@ function isCollapsed(): boolean {
   }
 }
 
-function setCollapsed(collapsed: boolean) {
+export function setCollapsed(collapsed: boolean) {
   try {
     window.localStorage.setItem(COLLAPSED_KEY, String(collapsed));
   } catch {

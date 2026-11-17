@@ -24,6 +24,7 @@ import {
   type FolderState,
   type MenuEntry,
 } from "../shared/ipc-contract.ts";
+import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts";
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
@@ -70,13 +71,14 @@ if (theme === "light" || theme === "dark") nativeTheme.themeSource = theme;
 const windows = new Map<number, BrowserWindow>();
 let folders: FolderService;
 let journal: Journal;
+let appSettings: AppSettingsStore;
 let device: string | null = null;
 /** The doc each window shows, so leaving it ends its typing session. */
 const shownDoc = new Map<number, string>();
 /** Section versions (2.21), one writer per open folder; none for a read-only folder. */
 const versions = new Map<string, SectionVersions>();
 function versionsFor(folder: FolderState): SectionVersions | null {
-  if (!device || folder.mode !== "writable") return null;
+  if (!device || folder.mode !== "writable" || !appSettings.get().sectionHistory) return null;
   let v = versions.get(folder.path);
   if (!v) {
     v = new SectionVersions(
@@ -254,6 +256,24 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     return readEmbeddedBase(folder, target, from);
+  },
+  "settings:get": async (_request, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    return {
+      sectionHistory: appSettings.get().sectionHistory,
+      commitAnur: folder ? await commitsAnur(folder.path) : null,
+    };
+  },
+  "settings:set": async ({ sectionHistory, commitAnur }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (sectionHistory !== undefined) await appSettings.set({ sectionHistory });
+    if (commitAnur !== undefined && folder?.mode === "writable") {
+      await setCommitsAnur(folder.path, commitAnur);
+    }
+    return {
+      sectionHistory: appSettings.get().sectionHistory,
+      commitAnur: folder ? await commitsAnur(folder.path) : null,
+    };
   },
   "link:open-external": async ({ url }) => {
     // Only the web and mail: a link in a doc never runs anything on this Mac.
@@ -481,6 +501,8 @@ app.enableSandbox();
 void app.whenReady().then(async () => {
   // Checks can set ANUR_CHECK_HOME, so a sample folder can stand in for one in iCloud.
   journal = new Journal(app.getPath("userData"));
+  appSettings = new AppSettingsStore(app.getPath("userData"));
+  await appSettings.load();
   device = await loadDeviceId(app.getPath("userData")).catch((e: unknown) => {
     console.error("Anur couldn't read this install's device ID:", e);
     return null;
