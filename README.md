@@ -29,3 +29,7 @@ The PRD, the mocks and the low-level design are in the AnurObsidian vault, under
 - `brand/`: the app icon, the mark, and light and dark colour and type tokens.
 - Node is pinned in `.nvmrc`.
 - How to work in this repo, for people and agents: `AGENTS.md`.
+
+## License
+
+Apache 2.0; see `LICENSE` and `NOTICE`. Copyright 2026 The Anur authors.

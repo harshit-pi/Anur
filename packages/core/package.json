@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Sections, IDs, bundles, context and previews. No Electron, no React, no file system.",
+  "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"
   },
