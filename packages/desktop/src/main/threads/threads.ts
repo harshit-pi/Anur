@@ -21,7 +21,7 @@ import {
 } from "@anur/core";
 import type { EventPayload, ThreadItem, ThreadView } from "../../shared/ipc-contract.ts";
 import type { SessionOption, SessionSpec, ToMain } from "../../agent/protocol.ts";
-import { DEFAULT_AGENT, isAgentId, type AgentId } from "../../shared/agents.ts";
+import { DEFAULT_AGENT, UNSAVED_EDIT, isAgentId, type AgentId } from "../../shared/agents.ts";
 import { JsonlWriter, readJsonlFile } from "../../vault/jsonl-writer.ts";
 import type { AgentHub } from "./hub.ts";
 import { PreviewStore } from "./previews.ts";
@@ -814,7 +814,12 @@ export class Threads {
         const start = (await this.linesOf(at.doc, p.thread)).find((l) => l.kind === "thread");
         return {
           thread: p.thread,
-          title: start?.kind === "thread" ? start.title : "A thread",
+          title:
+            p.thread === UNSAVED_EDIT
+              ? "Your unsaved edit"
+              : start?.kind === "thread"
+                ? start.title
+                : "A thread",
           parts: p.parts.map((part) => {
             const i = part.section ? at.ids.indexOf(part.section) : -1;
             return { ...part, path: at.tree.sections[i]?.path ?? part.path };
@@ -822,6 +827,26 @@ export class Threads {
         };
       }),
     );
+  }
+
+  /**
+   * The person's unsaved typing clashed with an outside change: their
+   * version of the clashing lines becomes a preview on its section, beside
+   * any earlier unsaved edit on other sections (3.10).
+   */
+  async keepUnsaved(rel: string, text: string, proposed: string): Promise<boolean> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return false;
+    const fresh = previewParts(text, proposed, Threads.spans(at));
+    if (fresh.length === 0) return false;
+    const touched = new Set(fresh.map((p) => p.section));
+    const earlier = (await this.previews.read(at.doc, UNSAVED_EDIT))?.parts ?? [];
+    await this.previews.write(at.doc, UNSAVED_EDIT, [
+      ...earlier.filter((p) => !touched.has(p.section)),
+      ...fresh,
+    ]);
+    this.d.previewsChanged(rel);
+    return true;
   }
 
   async updatePreview(rel: string, text: string, thread: string, parts: PreviewPart[]) {

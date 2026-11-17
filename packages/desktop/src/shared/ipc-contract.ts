@@ -547,6 +547,16 @@ export const ipcContract = {
       .strict(),
     response: z.object({}),
   },
+  /**
+   * Unsaved typing clashed with a change made outside Anur: keep the
+   * person's version as a "your unsaved edit" preview on its section (3.10).
+   */
+  "preview:unsaved": {
+    request: z
+      .object({ path: z.string().max(4096), text: z.string(), proposed: z.string() })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Before an Apply lands: its version, written to History first (3.9). */
   "preview:apply": {
     request: z

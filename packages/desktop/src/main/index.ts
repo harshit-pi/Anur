@@ -473,6 +473,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
       await t.updatePreview(doc, text, thread, PreviewPart.array().parse(parts));
     return {};
   },
+  "preview:unsaved": async ({ path: doc, text, proposed }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !t || !folder.docs.includes(doc)) return { ok: false };
+    return { ok: await t.keepUnsaved(doc, text, proposed) };
+  },
   "preview:apply": async ({ path: doc, text, thread, section, applied }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const ids = folder ? versionsFor(folder) : null;
