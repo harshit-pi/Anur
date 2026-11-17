@@ -105,7 +105,7 @@ export class EmbedWidget extends WidgetType {
     return other.target === this.target;
   }
   toDOM(view: EditorView) {
-    const image = /\.(png|jpe?g|gif|svg|webp)$/i.test(this.target);
+    const image = /\.(png|jpe?g|gif|svg|webp|bmp|avif)$|^https?:\/\//i.test(this.target);
     const s = chip(view, "cm-lp-embed", `${image ? "Image" : "Embed"}: ${this.target}`, (dom) => {
       openPathEditor(view, dom);
     });
@@ -118,7 +118,7 @@ export class EmbedWidget extends WidgetType {
 }
 
 /** A small pop-up under the chip with the path; Enter writes it, Escape or a click away closes it. */
-function openPathEditor(view: EditorView, dom: HTMLElement) {
+export function openPathEditor(view: EditorView, dom: HTMLElement) {
   const at = embedPathRange(view.state, view.posAtDOM(dom));
   if (!at) return;
   document.querySelector(".cm-lp-path-editor")?.remove();
