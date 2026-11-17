@@ -355,8 +355,8 @@ export function Center({
   selected: string | null;
   /** A breadcrumb was pressed: show a menu of what the folder it names holds. */
   onCrumb: (folder: string) => void;
-  /** Copy a link to the section at the cursor; returns it, or null when there's no doc. */
-  onCopyLink: () => string | null;
+  /** Copy a link to the section at the cursor; resolves with it once copied, or null. */
+  onCopyLink: () => Promise<string | null>;
   onMore: () => void;
   /** Back and forward in the active tab; null where there's nowhere to go. */
   onBack: (() => void) | null;
@@ -422,7 +422,11 @@ export function Center({
           )}
         </nav>
         <div className="path-actions">
-          {copied ? <span className="copied quiet">Copied {copied}</span> : null}
+          {copied ? (
+            <span className="copied" role="status">
+              Copied <span className="copied-link">{copied}</span>
+            </span>
+          ) : null}
           <button
             className="icon-button"
             type="button"
@@ -430,12 +434,13 @@ export function Center({
             title="Copy a link to the section the cursor is in"
             disabled={!selected}
             onClick={() => {
-              const link = onCopyLink();
-              if (!link) return;
-              setCopied(link);
-              setTimeout(() => {
-                setCopied((c) => (c === link ? null : c));
-              }, 2000);
+              void onCopyLink().then((link) => {
+                if (!link) return;
+                setCopied(link);
+                setTimeout(() => {
+                  setCopied((c) => (c === link ? null : c));
+                }, 2000);
+              });
             }}
           >
             <LinkIcon />
