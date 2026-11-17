@@ -8,6 +8,7 @@ import { anur } from "../bridge.ts";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { formattingKeymap } from "./commands.ts";
 import { insertMenu } from "./insert-menu.ts";
+import { editLink, linkEditor } from "./link-editor.ts";
 import { livePreview } from "./live-preview/live-preview.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { markdownSupport, sectionsOf } from "./sections.ts";
@@ -71,6 +72,7 @@ export function Page({
           EditorView.lineWrapping,
           history(),
           keymap.of([
+            ...(markdownDoc && editable ? [{ key: "Mod-k", run: editLink }] : []),
             ...(markdownDoc ? [...formattingKeymap, ...markdownKeymap] : []),
             ...historyKeymap,
             ...defaultKeymap,
@@ -81,7 +83,7 @@ export function Page({
                 markdownSupport(),
                 pageHighlight,
                 preview.current.of(previewFor(sourceNow.current)),
-                ...(editable ? [insertMenu(docsNow.current)] : []),
+                ...(editable ? [insertMenu(docsNow.current), linkEditor] : []),
               ]
             : []),
           EditorView.contentAttributes.of({ "aria-label": `Page: ${fileName}` }),

@@ -168,14 +168,13 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           else hideWithSpace(from, to);
           return;
         }
+        // Inline marks never show either (2.11): the cursor steps over them,
+        // and typing at a mark's edge continues that formatting.
         case "EmphasisMark":
-        case "StrikethroughMark": {
-          const element = node.parent ?? node;
-          if (!touches(element.from, element.to)) out.push(hide.range(from, to));
+        case "StrikethroughMark":
+          out.push(hide.range(from, to));
           return;
-        }
         case "InlineCode": {
-          if (touches(from, to)) return false;
           const marks = children(node, "CodeMark");
           const [open, close] = [marks[0], marks.at(-1)];
           if (open && close && open !== close) {
@@ -185,13 +184,14 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           return false;
         }
         case "Link": {
-          // Descends, so bold or code inside the link text renders too.
-          if (touches(from, to)) return;
+          // Descends, so bold or code inside the link text renders too. The
+          // address is edited in the link's pop-up (link-editor.ts).
           const marks = children(node, "LinkMark");
-          const url = children(node, "URL")[0];
           const open = marks[0];
           const close = marks[1];
-          if (!open || !close || !url) return;
+          // Only an inline link, "[text](address)"; "[text]" alone, as in a
+          // callout's "[!note]", is shown as written.
+          if (!open || !close || marks.length < 3) return;
           out.push(hide.range(open.from, open.to));
           if (open.to < close.from) out.push(mark("cm-lp-link").range(open.to, close.from));
           out.push(hide.range(close.from, to));
@@ -215,7 +215,6 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           }
           return false;
         case "WikiLink": {
-          if (touches(from, to)) return false;
           const target = children(node, "WikiLinkTarget")[0];
           const heading = children(node, "WikiLinkHeading")[0];
           const alias = children(node, "WikiLinkAlias")[0];
@@ -266,8 +265,23 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
     },
   });
 
+  // An empty pair such as "****", left by ⌘B with nothing selected, hides
+  // while the cursor waits between its marks for the text to make bold.
+  if (focused) {
+    const pos = state.selection.main.head;
+    for (const m of EMPTY_PAIRS) {
+      if (text(pos - m.length, pos) === m && text(pos, pos + m.length) === m) {
+        out.push(hide.range(pos - m.length, pos), hide.range(pos, pos + m.length));
+        break;
+      }
+    }
+  }
+
   return Decoration.set(out, true);
 }
+
+/** Marks ⌘B, ⌘I, ⌘⇧X and code can leave empty around the cursor, longest first. */
+export const EMPTY_PAIRS = ["**", "~~", "*", "`"];
 
 const setFocused = StateEffect.define<boolean>();
 
@@ -345,9 +359,26 @@ const skipPrefix = EditorState.transactionFilter.of((tr) => {
   return [tr, { selection: { anchor: target }, sequential: true }];
 });
 
+/** An empty pair the cursor leaves without typing into it is removed. */
+const dropEmptyPair = EditorState.transactionFilter.of((tr) => {
+  if (tr.docChanged || !tr.selection) return tr;
+  const before = tr.startState.selection.main;
+  if (!before.empty || tr.selection.main.head === before.head) return tr;
+  const pos = before.head;
+  const doc = tr.startState.doc;
+  for (const m of EMPTY_PAIRS) {
+    const n = m.length;
+    if (doc.sliceString(pos - n, pos) === m && doc.sliceString(pos, pos + n) === m) {
+      return [tr, { changes: { from: pos - n, to: pos + n }, sequential: true }];
+    }
+  }
+  return tr;
+});
+
 /** Live preview for a page: the decorations, kept in step with focus. */
 export const livePreview = [
   previewField,
   skipPrefix,
+  dropEmptyPair,
   EditorView.focusChangeEffect.of((_, focusing) => setFocused.of(focusing)),
 ];

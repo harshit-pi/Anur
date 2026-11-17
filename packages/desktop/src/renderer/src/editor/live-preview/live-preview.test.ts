@@ -49,15 +49,18 @@ describe("live preview", () => {
     expect(hidden(doc)).toEqual(["## ", "**", "**", "*", "*", "`", "`", "~~", "~~"]);
   });
 
-  it("shows an element's marks only while the cursor touches it", () => {
+  it("never shows inline marks, even with the cursor inside", () => {
     const doc = "## Title\n\nSome **bold** and *it* here.\n";
-    // In the heading: its "## " stays hidden, as everything else.
-    expect(hidden(doc, 3)).toEqual(["## ", "**", "**", "*", "*"]);
-    // Inside "bold": only its own marks show.
-    const inBold = doc.indexOf("bold") + 1;
-    expect(hidden(doc, inBold)).toEqual(["## ", "*", "*"]);
-    // Elsewhere on the same line: all marks stay hidden.
-    expect(hidden(doc, doc.indexOf("here"))).toEqual(["## ", "**", "**", "*", "*"]);
+    const all = ["## ", "**", "**", "*", "*"];
+    expect(hidden(doc, 3)).toEqual(all);
+    expect(hidden(doc, doc.indexOf("bold") + 1)).toEqual(all);
+    expect(hidden(doc, doc.indexOf("it*") + 1)).toEqual(all);
+  });
+
+  it("hides an empty pair while the cursor waits between its marks", () => {
+    const doc = "a **** b";
+    expect(hidden(doc, 4)).toEqual(["**", "**"]);
+    expect(hidden(doc, 0)).toEqual([]);
   });
 
   it("shows a Markdown link as its text", () => {
@@ -181,5 +184,28 @@ describe("the cursor and hidden prefixes", () => {
     const state = withPreview(doc).update({ selection: { anchor: start } }).state;
     const tr = state.update({ selection: { anchor: doc.indexOf("##") } });
     expect(tr.state.selection.main.head).toBe(doc.indexOf("\n"));
+  });
+});
+
+describe("an empty pair left by ⌘B", () => {
+  it("goes away when the cursor leaves it empty", () => {
+    const state = EditorState.create({
+      doc: "a **** b",
+      selection: { anchor: 4 },
+      extensions: [markdownSupport(), livePreview],
+    });
+    const after = state.update({ selection: { anchor: 0 } }).state;
+    expect(after.doc.toString()).toBe("a  b");
+  });
+
+  it("stays once typed into", () => {
+    let state = EditorState.create({
+      doc: "a **** b",
+      selection: { anchor: 4 },
+      extensions: [markdownSupport(), livePreview],
+    });
+    state = state.update({ changes: { from: 4, insert: "x" }, selection: { anchor: 5 } }).state;
+    state = state.update({ selection: { anchor: 0 } }).state;
+    expect(state.doc.toString()).toBe("a **x** b");
   });
 });
