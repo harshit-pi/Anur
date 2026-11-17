@@ -48,6 +48,8 @@ export function App() {
   const [version, setVersion] = useState<string | null>(null);
   const [folder, setFolder] = useState<FolderState | null>(null);
   const [tabs, setTabs] = useState<Tabs>(noTabs);
+  /** Bumped when a tab is pressed, so the sidebar reveals its doc even if it was already in focus. */
+  const [reveal, setReveal] = useState(0);
   /** The doc in the active tab. */
   const selected = currentDoc(tabs);
   const [merging, setMerging] = useState<string | null>(null);
@@ -241,6 +243,7 @@ export function App() {
         active={tabs.active}
         onSelectTab={(id) => {
           setTabs((t) => select(t, id));
+          setReveal((n) => n + 1);
         }}
         onCloseTab={(id) => {
           setTabs((t) => close(t, id));
@@ -259,7 +262,13 @@ export function App() {
           setPaletteOpen(true);
         }}
       />
-      <LeftSidebar folder={shown} selected={selected} onSelect={openDoc} hidden={!open.left} />
+      <LeftSidebar
+        folder={shown}
+        selected={selected}
+        onSelect={openDoc}
+        hidden={!open.left}
+        reveal={reveal}
+      />
       <Center
         folder={shown}
         selected={selected}
