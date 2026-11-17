@@ -41,6 +41,7 @@ const FORMATS = new Set([
   "Strikethrough",
   "InlineCode",
   "Link",
+  "Autolink",
   "WikiLink",
 ]);
 const STYLED = new Set(["StrongEmphasis", "Emphasis", "Strikethrough"]);
@@ -59,6 +60,8 @@ export function hiddenParts(node: SyntaxNode): Span[] {
       return marks("StrikethroughMark");
     case "InlineCode":
       return marks("CodeMark");
+    case "Autolink":
+      return marks("LinkMark");
     case "Link": {
       const lm = kids.filter((k) => k.name === "LinkMark");
       const open = lm[0];
@@ -599,12 +602,39 @@ const caretAfter = (state: EditorState, placed: Placed) => {
  * can't say it, the plain text goes in. Inside code or a link, formatting
  * can't live, so the plain text goes in.
  */
+const WEB_ADDRESS = /^(?:https?:\/\/|mailto:)\S+$/i;
+
+/**
+ * A web address pasted over selected text links that text to it, as in
+ * Google Docs: "[the text](address)". Not over code or another link, where
+ * it replaces the text as usual.
+ */
+function linkOver(
+  state: EditorState,
+  edit: { from: number; to: number; text: string },
+): string | null {
+  const url = edit.text.trim();
+  if (edit.to <= edit.from || !WEB_ADDRESS.test(url)) return null;
+  const atoms = formatsOver(state, edit.from, edit.to).filter(
+    (n) => !STYLED.has(n.name) && n.from < edit.to && n.to > edit.from,
+  );
+  if (atoms.length > 0) return null;
+  const label = copyText(state, edit.from, edit.to);
+  if (!label?.trim() || label.includes("\n")) return null;
+  const lead = /^\s*/.exec(label)?.[0] ?? "";
+  const trail = /\s*$/.exec(label)?.[0] ?? "";
+  const target = /[()<>]/.test(url) ? `<${url}>` : url;
+  return `${lead}[${label.trim()}](${target})${trail}`;
+}
+
 function guardPaste(
   state: EditorState,
   line: { from: number; to: number },
-  edit: { from: number; to: number; text: string },
+  pasted: { from: number; to: number; text: string },
   userEvent: string,
 ): TransactionSpec | null {
+  const link = linkOver(state, pasted);
+  const edit = link === null ? pasted : { ...pasted, text: link };
   const [from, to] =
     edit.to > edit.from ? wholeAtoms(state, edit.from, edit.to) : [edit.from, edit.to];
   const spans = to > from ? deletionSpans(state, from, to) : [];

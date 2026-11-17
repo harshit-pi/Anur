@@ -26,6 +26,11 @@ export function linkAt(state: EditorState, pos: number): ClickedLink | null {
           heading: heading ? state.sliceDoc(heading.from, heading.to) : null,
         };
       }
+      // A bare address, or one in <angle brackets>, opens as written.
+      if (n.name === "Autolink" || (n.name === "URL" && n.parent?.name !== "Link")) {
+        const url = n.name === "URL" ? n : n.getChild("URL");
+        return url ? { kind: "href", href: webAddress(state.sliceDoc(url.from, url.to)) } : null;
+      }
       if (n.name === "Link") {
         const url = n.getChild("URL");
         return url ? { kind: "href", href: state.sliceDoc(url.from, url.to) } : null;
@@ -33,6 +38,13 @@ export function linkAt(state: EditorState, pos: number): ClickedLink | null {
     }
   }
   return null;
+}
+
+/** "www.…" opens over https, a bare email address in mail. */
+export function webAddress(written: string): string {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(written)) return written;
+  if (/^[^\s@/]+@[^\s@/]+\.[^\s@/]+$/.test(written)) return `mailto:${written}`;
+  return `https://${written}`;
 }
 
 type Open = (link: ClickedLink, inNewTab: boolean) => void;

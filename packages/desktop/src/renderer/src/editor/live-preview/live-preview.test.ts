@@ -9,7 +9,7 @@ import {
   textStart,
 } from "./live-preview.ts";
 import { TableWidget } from "../table/table-widget.ts";
-import { CalloutLabelWidget, LanguageChipWidget } from "../chips/chip-widgets.ts";
+import { CalloutLabelWidget, CopyCodeWidget, LanguageChipWidget } from "../chips/chip-widgets.ts";
 import { PropertiesWidget } from "../properties/properties-widget.ts";
 import { CheckboxWidget } from "./widgets.ts";
 
@@ -70,6 +70,21 @@ describe("live preview", () => {
     expect(hidden(doc)).toEqual(["[", "](https://example.com/plan)"]);
     const link = decorations(doc).find((d) => d.cls === "cm-lp-link");
     expect(link?.text).toBe("the plan");
+  });
+
+  it("shows a bare web address as a link, and one in <angle brackets> without them", () => {
+    const doc = "Accept it: https://github.com/a/b/invitations and <https://x.co/y>.\n\nend";
+    const links = decorations(doc).filter((d) => d.cls === "cm-lp-link");
+    expect(links.map((d) => d.text)).toEqual([
+      "https://github.com/a/b/invitations",
+      "https://x.co/y",
+    ]);
+    expect(hidden(doc)).toEqual(["<", ">"]);
+  });
+
+  it("puts a copy button on a fenced code block's first line", () => {
+    const doc = "```sh\ngh auth status\n```\n\nend";
+    expect(widgetOf(doc, CopyCodeWidget)).toBeInstanceOf(CopyCodeWidget);
   });
 
   it("shows a wiki link as its alias, or as file › heading", () => {

@@ -75,6 +75,18 @@ export const livePreviewTheme = EditorView.theme({
     padding: "1px 7px",
     backgroundColor: "var(--sheet)",
   },
+  ".cm-lp-copy-code": {
+    float: "right",
+    display: "inline-flex",
+    padding: "4px",
+    marginTop: "2px",
+    border: "none",
+    borderRadius: "5px",
+    background: "transparent",
+    color: "var(--graphite)",
+    cursor: "pointer",
+  },
+  ".cm-lp-copy-code:hover": { color: "var(--blue)", backgroundColor: "var(--sheet)" },
   ".cm-lp-language[role=button]:hover, .cm-lp-embed[role=button]:hover": {
     color: "var(--blue)",
     borderColor: "var(--blue)",

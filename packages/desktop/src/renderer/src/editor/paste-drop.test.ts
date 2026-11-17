@@ -93,3 +93,40 @@ describe("dragging with marks hidden", () => {
     );
   });
 });
+
+describe("pasting a web address over text", () => {
+  it("links the selected text to it", () => {
+    const doc = "Accept the invite here today.";
+    const from = doc.indexOf("the invite");
+    const after = paste(from, from + "the invite".length, "https://x.co/i", doc);
+    expect(after.doc.toString()).toBe("Accept [the invite](https://x.co/i) here today.");
+    expect(after.doc.sliceString(after.selection.main.head)).toBe(" here today.");
+  });
+
+  it("keeps the bold of a half-bold selection inside the link", () => {
+    const from = DOC.indexOf("see");
+    const after = paste(from, DOC.indexOf(" named"), "https://x.co");
+    expect(after.doc.toString()).toBe(
+      "We want to [see **which**](https://x.co) **named readers** opened it.",
+    );
+  });
+
+  it("leaves the spaces around the selection outside the link", () => {
+    const doc = "Go to the page now.";
+    const from = doc.indexOf(" the");
+    const after = paste(from, doc.indexOf(" now"), "https://x.co", doc);
+    expect(after.doc.toString()).toBe("Go to [the page](https://x.co) now.");
+  });
+
+  it("replaces the text of a link as usual", () => {
+    const doc = "See [the plan](https://a.b) now.";
+    const from = doc.indexOf("plan");
+    const after = paste(from, from + 4, "https://x.co", doc);
+    expect(after.doc.toString()).not.toContain("](https://x.co)");
+  });
+
+  it("is a plain paste with nothing selected", () => {
+    const doc = "Go now.";
+    expect(paste(3, 3, "https://x.co ", doc).doc.toString()).toBe("Go https://x.co now.");
+  });
+});

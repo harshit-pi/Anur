@@ -40,6 +40,7 @@ const FORMATS = new Set([
   "Strikethrough",
   "InlineCode",
   "Link",
+  "Autolink",
   "WikiLink",
 ]);
 const STYLE: Record<string, string> = { StrongEmphasis: "b", Emphasis: "i", Strikethrough: "s" };
@@ -113,7 +114,7 @@ function wholeAtoms(state: EditorState, from: number, to: number): [number, numb
     from,
     to,
     enter(n) {
-      if (!["InlineCode", "Link", "WikiLink"].includes(n.name)) return;
+      if (!["InlineCode", "Link", "Autolink", "WikiLink"].includes(n.name)) return;
       if (n.from < a && n.to > a) a = n.from;
       if (n.from < b && n.to > b) b = n.to;
     },
