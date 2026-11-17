@@ -350,3 +350,28 @@ export function minimalEdits(a: string, b: string, at: number): ChangeSpec[] {
 /** The style a mark stands for. */
 export const styleOfMark = (mark: string): Style | null =>
   mark === "**" ? "bold" : mark === "*" ? "italic" : mark === "~~" ? "strike" : null;
+
+/**
+ * The selection as Markdown that stands on its own: a part of bold text
+ * copies as bold, with both marks, never half a pair. Null when it can't be
+ * read that way, such as across a code block, so the plain text is copied.
+ */
+export function copyText(state: EditorState, from: number, to: number): string | null {
+  const lines: string[] = [];
+  const first = state.doc.lineAt(from).number;
+  const last = state.doc.lineAt(to).number;
+  for (let n = first; n <= last; n++) {
+    const line = state.doc.line(n);
+    const a = Math.max(from, line.from);
+    const b = Math.min(to, line.to);
+    if (b <= a) {
+      lines.push("");
+      continue;
+    }
+    const s = stretchFor(state, a, b, line.from, line.to);
+    // The selection as widened to keep links and code whole.
+    const pieces = readPieces(state, s.from, s.to, s.selFrom, s.selTo).filter((p) => p.selected);
+    lines.push(writePieces(pieces));
+  }
+  return lines.join(state.lineBreak);
+}

@@ -395,6 +395,11 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
           const result: unknown = await win.webContents.executeJavaScript(probe);
           console.log(`probe: ${JSON.stringify(result)}`);
         }
+        // ANUR_SCREENSHOT_COPY copies the page's selection, as Edit → Copy does.
+        if (process.env.ANUR_SCREENSHOT_COPY) {
+          win.webContents.copy();
+          await new Promise((r) => setTimeout(r, 300));
+        }
         if (process.env.ANUR_SCREENSHOT_PALETTE) {
           win.webContents.sendInputEvent({ type: "keyDown", keyCode: "K", modifiers: ["meta"] });
           await new Promise((r) => setTimeout(r, 300));
