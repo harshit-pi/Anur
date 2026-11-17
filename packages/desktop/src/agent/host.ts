@@ -67,6 +67,9 @@ export class AgentHost {
       case "connect":
         void this.connect(m.agent);
         return;
+      case "probe":
+        void this.probe(m.agent, m.cwd);
+        return;
       case "prompt":
         void this.prompt(m.spec, m.turn, m.text);
         return;
@@ -252,6 +255,26 @@ export class AgentHost {
       if (res) current = optionsOf(res.configOptions);
     }
     this.send({ type: "options", thread: spec.thread, options: current });
+  }
+
+  /**
+   * The agent's mode and model choices, before any thread has a session: a
+   * session is opened and closed again at once. No prompt is sent, so no
+   * model runs and no tool can be called.
+   */
+  private async probe(agent: AgentId, cwd: string): Promise<void> {
+    if (!(await this.connect(agent))) return;
+    const c = this.connected(agent);
+    if (!c) return;
+    try {
+      const s = await c.conn.agent.request(acp.methods.agent.session.new, { cwd, mcpServers: [] });
+      await c.conn.agent
+        .request(acp.methods.agent.session.close, { sessionId: s.sessionId })
+        .catch(() => undefined);
+      this.send({ type: "agent-options", agent, options: optionsOf(s.configOptions ?? null) });
+    } catch {
+      // The choices then come with the thread's first session, as before.
+    }
   }
 
   /** The person picked a mode or model for the thread. */

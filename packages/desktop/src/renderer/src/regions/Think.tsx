@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SectionNode, SectionTree } from "@anur/core";
 import type {
+  SessionOption,
   AgentStatus,
   EventPayload,
   ThreadItem,
@@ -230,6 +231,23 @@ export function Think({
   }, []);
   /** The agent a new thread runs on: the default from settings, unless picked here. */
   const [newAgent, setNewAgent] = useState<AgentId>("claude-code");
+  /** A new thread's mode and model: the agent's choices, as last seen, with the person's picks. */
+  const [newChoices, setNewChoices] = useState<SessionOption[]>([]);
+  useEffect(() => {
+    let current = true;
+    setNewChoices([]);
+    void anur.call("agent:options", { agent: newAgent }).then((r) => {
+      if (current) setNewChoices(r.options);
+    });
+    // Read again in the background: the first time, or with newer choices.
+    const off = anur.on("agent:options", (e) => {
+      if (e.agent === newAgent) setNewChoices((now) => withPicks(e.options, now));
+    });
+    return () => {
+      current = false;
+      off();
+    };
+  }, [newAgent]);
   const [error, setError] = useState<string | null>(null);
   const [showText, setShowText] = useState(false);
   /** Threads with a preview of this doc, for "Preview in doc". */
@@ -303,6 +321,7 @@ export function Think({
         section: { index: section.index, path: section.path },
         message,
         agent: newAgent,
+        options: newChoices.map((o) => ({ id: o.id, value: o.current })),
       });
       if (r.kind === "refused") {
         setError(r.reason);
@@ -312,7 +331,7 @@ export function Think({
       setOpen(r.thread.id);
       return true;
     },
-    [docPath, section, docText, setThreads, newAgent],
+    [docPath, section, docText, setThreads, newAgent, newChoices],
   );
 
   if (!docPath || !tree)
@@ -559,6 +578,18 @@ export function Think({
       {error ? <p className="think-error">{error}</p> : null}
       <div className="think-options">
         <AgentPicker value={newAgent} disabled={!writable} onChange={setNewAgent} />
+        {newChoices.map((o) => (
+          <OptionPicker
+            key={o.id}
+            option={o}
+            disabled={!writable}
+            onChange={(value) => {
+              setNewChoices((all) =>
+                all.map((x) => (x.id === o.id ? { ...x, current: value } : x)),
+              );
+            }}
+          />
+        ))}
       </div>
       <Composer
         placeholder={
@@ -648,5 +679,44 @@ function ThreadList({
         </li>
       ))}
     </ul>
+  );
+}
+
+/** Newly read choices, keeping what the person already picked where it is still offered. */
+function withPicks(fresh: SessionOption[], now: SessionOption[]): SessionOption[] {
+  return fresh.map((o) => {
+    const picked = now.find((x) => x.id === o.id)?.current;
+    return picked && o.choices.some((c) => c.value === picked) ? { ...o, current: picked } : o;
+  });
+}
+
+/** One of the agent's own choices for a session, such as its mode or model. */
+function OptionPicker({
+  option,
+  disabled,
+  onChange,
+}: {
+  option: SessionOption;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="think-option">
+      <span className="quiet">{option.name}</span>
+      <select
+        value={option.current}
+        disabled={disabled}
+        title={option.choices.find((c) => c.value === option.current)?.description ?? undefined}
+        onChange={(e) => {
+          onChange(e.target.value);
+        }}
+      >
+        {option.choices.map((c) => (
+          <option key={c.value} value={c.value}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

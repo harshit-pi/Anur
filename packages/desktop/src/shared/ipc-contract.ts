@@ -93,6 +93,7 @@ export const SessionOption = z.object({
     z.object({ value: z.string(), name: z.string(), description: z.string().nullable() }),
   ),
 });
+export type SessionOption = z.infer<typeof SessionOption>;
 
 /** A thread on one section: what it is about, what it read, and what was said. */
 export const ThreadView = z.object({
@@ -402,6 +403,11 @@ export const ipcContract = {
         message: z.string().min(1).max(100_000),
         /** The agent to run it on; the default agent when left out. */
         agent: AgentIdSchema.optional(),
+        /** Mode and model picked before the first message, set when its session opens. */
+        options: z
+          .array(z.object({ id: z.string().max(100), value: z.string().max(200) }))
+          .max(10)
+          .optional(),
       })
       .strict(),
     response: z.discriminatedUnion("kind", [
@@ -423,6 +429,14 @@ export const ipcContract = {
       z.object({ kind: z.literal("sent") }),
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
+  },
+  /**
+   * An agent's mode and model choices, for a thread with no session yet:
+   * the last ones seen; asking refreshes them once per run, in the background.
+   */
+  "agent:options": {
+    request: z.object({ agent: AgentIdSchema }).strict(),
+    response: z.object({ options: z.array(SessionOption) }),
   },
   /** Move a thread to another agent: its next turn starts there, from its bundle and chat. */
   "thread:agent": {
@@ -501,6 +515,8 @@ export const ipcEvents = {
   "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
   /** The agent connected, or couldn't, and why. */
   "agent:status": AgentStatus,
+  /** An agent's mode and model choices were read again. */
+  "agent:options": z.object({ agent: AgentIdSchema, options: z.array(SessionOption) }),
   /** A doc's previews changed, as when a thread's turn ended with edits. */
   "preview:changed": z.object({ path: z.string() }),
   /** A thread changed: all of it, or a reply arriving piece by piece. */
