@@ -683,3 +683,38 @@ body.resizing * {
   background: var(--hover);
   color: var(--ink);
 }
+
+/* A change made outside Anur, with Undo (2.17). */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 44px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(640px, calc(100vw - 32px));
+  padding: 8px 8px 8px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  color: var(--ink);
+  z-index: 20;
+}
+
+.toast-action {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--blue);
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.toast-action:hover {
+  background: var(--blue-wash);
+}

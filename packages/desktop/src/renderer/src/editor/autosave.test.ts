@@ -3,7 +3,10 @@ import type { Response } from "../../../shared/ipc-contract.ts";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 
 /** A manual clock and a fake disk, so every step is explicit. */
-function setup(answer?: (text: string, base: string) => Response<"doc:save">) {
+function setup(
+  answer?: (text: string, base: string) => Response<"doc:save">,
+  onConflict?: () => void,
+) {
   let text = "a";
   let composing = false;
   const timers: (() => void)[] = [];
@@ -18,6 +21,7 @@ function setup(answer?: (text: string, base: string) => Response<"doc:save">) {
       return Promise.resolve(answer ? answer(t, base) : { kind: "saved", hash: `h${String(++n)}` });
     },
     onStatus: (s) => statuses.push(s),
+    ...(onConflict ? { onConflict } : {}),
     setTimer: (fn) => timers.push(fn),
     clearTimer: () => {
       timers.length = 0;
@@ -102,5 +106,34 @@ describe("autosave", () => {
     await s.fire();
     expect(s.saves).toEqual([]);
     expect(s.statuses.at(-1)).toBe("saved");
+  });
+});
+
+describe("autosave when the file changed outside Anur", () => {
+  it("asks the page to rebase, saves nothing meanwhile, then saves onto the new version", async () => {
+    let conflicts = 0;
+    const s = setup(
+      (text, base) => (base === "h-new" ? { kind: "saved", hash: "h-after" } : { kind: "changed" }),
+      () => {
+        conflicts++;
+      },
+    );
+    s.type("mine");
+    await s.fire();
+    expect(conflicts).toBe(1);
+    await s.saver.flush();
+    expect(s.saves).toHaveLength(1);
+    s.saver.rebase("h-new", "outside");
+    await s.fire();
+    expect(s.saves.at(-1)).toEqual({ text: "mine", base: "h-new" });
+  });
+
+  it("stops saving when told to, as when the doc is deleted", async () => {
+    const s = setup();
+    s.saver.stop("Gone.");
+    s.type("more");
+    await s.fire();
+    expect(s.saves).toEqual([]);
+    expect(s.statuses.at(-1)).toBe("failed");
   });
 });

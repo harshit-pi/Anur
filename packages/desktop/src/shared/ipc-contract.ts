@@ -162,6 +162,12 @@ export const ipcContract = {
 export const ipcEvents = {
   /** This window's folder changed, as when opened from the menu. */
   "folder:changed": FolderState.nullable(),
+  /** The open doc changed outside Anur: its new text, or that it is gone or no longer readable. */
+  "doc:changed": z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("changed"), path: z.string(), text: z.string(), hash: z.string() }),
+    z.object({ kind: z.literal("gone"), path: z.string() }),
+    z.object({ kind: z.literal("unreadable"), path: z.string(), reason: z.string() }),
+  ]),
   /** Insert in the menu bar: put this block where the page's cursor is. */
   "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
 } as const;
