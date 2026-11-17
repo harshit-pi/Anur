@@ -383,6 +383,103 @@ describe("pasting and dragging on the corpus with marks hidden", () => {
     expect(lost.length / checked, lost.slice(0, 4).join("\n")).toBeLessThan(0.03);
   }, 180_000);
 
+  it("pastes several lines: the first joins the text before, the last the text after", () => {
+    const random = rng(67);
+    const failures: string[] = [];
+    const lost: string[] = [];
+    let checked = 0;
+    // Snippets: two to four lines of real Markdown copied out of the corpus.
+    const snippets: string[] = [];
+    for (const text of texts.slice(0, 80)) {
+      const base = make(text);
+      const prose = new Set(proseLines(base).map((l) => l.number));
+      for (const first of proseLines(base).slice(0, 3)) {
+        const span = 1 + Math.floor(random() * 3);
+        const lastNo = first.number + span;
+        if (lastNo > base.doc.lines || !prose.has(lastNo)) continue;
+        let ok = true;
+        for (let n = first.number + 1; n < lastNo; n++) {
+          if (!prose.has(n) && base.doc.line(n).text.trim() !== "") ok = false;
+        }
+        if (!ok) continue;
+        const last = base.doc.line(lastNo);
+        const a = first.from + Math.floor(random() * first.length);
+        const b = last.from + 1 + Math.floor(random() * Math.max(1, last.length - 1));
+        const copied = copyText(base, a, b);
+        if (copied && copied.split("\n").length > 1) snippets.push(copied);
+      }
+    }
+    snippets.push("one\ntwo", "**bold**\n\n*it*", "a **b**\nc");
+    for (const text of texts) {
+      const base = make(text);
+      for (const line of proseLines(base).slice(0, 3)) {
+        const hidden = hiddenOn(base, line.from, line.to);
+        const snippet = snippets[Math.floor(random() * snippets.length)] ?? "x\ny";
+        const rawA = outOfHidden(hidden, line.from + Math.floor(random() * line.length), -1);
+        const replace = random() < 0.3;
+        const rawB = replace
+          ? outOfHidden(hidden, Math.min(line.to, rawA + Math.floor(random() * 20)), 1)
+          : rawA;
+        const [a, b] = rawB > rawA ? wholeAtoms(base, rawA, rawB) : [rawA, rawA];
+        // Inside code or a link, the lines go just after it.
+        const cut = rawB === rawA && wholeAtoms(base, rawA, rawA)[0] < rawA;
+        const split = cut ? wholeAtoms(base, rawA, rawA)[1] : a;
+        const after = make(text, rawA).update({
+          changes: { from: rawA, to: rawB, insert: snippet },
+          userEvent: "input.paste",
+        }).state;
+        const pasted = snippet.split("\n");
+        const kept = shown(base, line.from, line.to).filter((c) => c.pos < a || c.pos >= b);
+        const head = kept.filter((c) => c.pos < split);
+        const tail = kept.filter((c) => c.pos >= split);
+        const own0 = shownAlone(pasted[0] ?? "");
+        const ownN = shownAlone(pasted.at(-1) ?? "");
+        const n = pasted.length;
+        checked++;
+        const where = `${JSON.stringify(snippet.slice(0, 80))} at ${String(a - line.from)} in ${JSON.stringify(line.text.slice(0, 100))} → ${JSON.stringify(after.doc.sliceString(after.doc.line(line.number).from, after.doc.line(line.number + n - 1).to).slice(0, 220))}`;
+        if (after.doc.lines !== base.doc.lines + n - 1) {
+          failures.push(`lines: ${where}`);
+          continue;
+        }
+        const gotHead = shown(
+          after,
+          after.doc.line(line.number).from,
+          after.doc.line(line.number).to,
+        );
+        const lastLine = after.doc.line(line.number + n - 1);
+        const gotTail = shown(after, lastLine.from, lastLine.to);
+        const chars = (cs: Char[]) => cs.map((c) => c.ch).join("");
+        const middleOk = pasted
+          .slice(1, -1)
+          .every((l, k) => after.doc.line(line.number + 1 + k).text === l);
+        if (
+          chars(gotHead) !== chars([...head, ...own0]) ||
+          chars(gotTail) !== chars([...ownN, ...tail]) ||
+          !middleOk
+        ) {
+          failures.push(`text: ${where}`);
+          continue;
+        }
+        const keeps = (got: Char[], old: Char[], offset: number) =>
+          old.every((c, k) => /[\s\p{P}\p{S}]/u.test(c.ch) || got[k + offset]?.styles === c.styles);
+        if (!keeps(gotHead, head, 0) || !keeps(gotTail, tail, ownN.length)) {
+          failures.push(`styles: ${where}`);
+          continue;
+        }
+        const ownKept = (got: Char[], own: Char[], offset: number) =>
+          own.every(
+            (c, k) =>
+              /[\s\p{P}\p{S}]/u.test(c.ch) ||
+              letters(c.styles).every((x) => got[k + offset]?.styles.includes(x)),
+          );
+        if (!ownKept(gotHead, own0, head.length) || !ownKept(gotTail, ownN, 0)) lost.push(where);
+      }
+    }
+    expect(checked).toBeGreaterThan(300);
+    expect(failures.slice(0, 6)).toEqual([]);
+    expect(lost.length / checked, lost.slice(0, 4).join("\n")).toBeLessThan(0.03);
+  }, 180_000);
+
   it("drags text to another line, styles and all", () => {
     const random = rng(53);
     const failures: string[] = [];

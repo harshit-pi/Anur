@@ -10,7 +10,13 @@ import {
 } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
-import { copyText, insertMarkdown, minimalEdits } from "./inline-format.ts";
+import {
+  blockPrefix,
+  copyText,
+  insertLines,
+  insertMarkdown,
+  minimalEdits,
+} from "./inline-format.ts";
 import { markdownSupport } from "./sections.ts";
 
 /**
@@ -309,6 +315,12 @@ export function guardChanges(tr: Transaction): TransactionSpec | null {
     if (lenient) return true;
     return others.every((c, k) => /\s/.test(c.ch) || c.styles === kept[k]?.styles);
   };
+
+  // Pasting several lines: the line it lands in is split and rebuilt (guardLines).
+  if ((tr.isUserEvent("input.paste") || tr.isUserEvent("input.drop")) && edit.text.includes("\n")) {
+    const spec = guardLines(state, edit, userEvent);
+    if (spec) return spec;
+  }
 
   // Pasting or dropping one line of Markdown (guardPaste). A pasted line
   // break keeps the Markdown as written, closing formats around it as Enter does.
@@ -632,6 +644,98 @@ function guardPaste(
     userEvent,
     scrollIntoView: true,
   };
+}
+
+/** In a paragraph, heading, list or quote: not code, a table, HTML or the properties. */
+function inProse(state: EditorState, at: number): boolean {
+  const tree = ensureSyntaxTree(state, at + 1, 200) ?? syntaxTree(state);
+  for (let n: SyntaxNode | null = tree.resolveInner(at, 1); n; n = n.parent) {
+    if (/^(FencedCode|CodeBlock|HTMLBlock|Table|Frontmatter|CommentBlock)$/.test(n.name)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+const STYLE_NAME: Record<string, string> = {
+  bold: "StrongEmphasis",
+  italic: "Emphasis",
+  strike: "Strikethrough",
+};
+
+/**
+ * Several lines pasted into one: insertLines rebuilds the line, then each
+ * rewritten line is read back. It shows exactly the text before the cursor
+ * and the first pasted line, and the last pasted line and the text after,
+ * the old text keeping its styles and the pasted text at least its own.
+ * Failing that, with only the surrounding styles; then the end lines as
+ * plain text. Null leaves it to breakFormats.
+ */
+function guardLines(
+  state: EditorState,
+  edit: { from: number; to: number; text: string },
+  userEvent: string,
+): TransactionSpec | null {
+  const [from, to] =
+    edit.to > edit.from ? wholeAtoms(state, edit.from, edit.to) : [edit.from, edit.to];
+  const spans = to > from ? deletionSpans(state, from, to) : [];
+  const gone = (p: number) => spans.some(([a, b]) => a <= p && p < b);
+  const at = spans[0]?.[0] ?? from;
+  if (!inProse(state, at)) return null;
+  const lines = edit.text.split("\n");
+  const plainEnd = (l: string) => blockPrefix(l) + plainOf(l.slice(blockPrefix(l).length));
+  const plain = lines.map((l, k) => (k === 0 || k === lines.length - 1 ? plainEnd(l) : l));
+  const tries: [string[], boolean][] = [
+    [lines, true],
+    [lines, false],
+    [plain, false],
+  ];
+  for (const [text, own] of tries) {
+    const built = insertLines(state, at, text, gone, own);
+    if (!built) continue;
+    const starts: number[] = [];
+    let offset = 0;
+    for (const l of built.lines) {
+      starts.push(offset);
+      offset += l.length + 1;
+    }
+    const next = state.doc.replace(built.from, built.to, Text.of(built.lines)).toString();
+    const readsBack = built.checks.every((check) => {
+      const lineFrom = built.from + (starts[check.line] ?? 0);
+      const got = visibleChars(
+        next,
+        lineFrom + check.prefix,
+        lineFrom + (built.lines[check.line]?.length ?? 0),
+      );
+      const want = check.pieces.flatMap((p) =>
+        (p.atom ? plainOf(p.text) : p.text).split("").map((ch) => ({ ch, p })),
+      );
+      if (got.map((c) => c.ch).join("") !== want.map((w) => w.ch).join("")) return false;
+      return got.every((c, k) => {
+        const w = want[k];
+        if (!w || /[\s\p{P}\p{S}]/u.test(c.ch)) return true;
+        const names = [...w.p.styles].map((st) => STYLE_NAME[st] ?? st);
+        const has = c.styles === "" ? [] : c.styles.split(",");
+        // Old text keeps exactly its styles; pasted text at least its own.
+        if (w.p.pos >= 0) return names.length === has.length && names.every((x) => has.includes(x));
+        return names.every((x) => has.includes(x));
+      });
+    });
+    if (!readsBack) continue;
+    const changes = minimalEdits(
+      state.sliceDoc(built.from, built.to),
+      built.lines.join("\n"),
+      built.from,
+    );
+    const [caretLine, caretCol] = built.caret;
+    return {
+      changes,
+      selection: EditorSelection.cursor(built.from + (starts[caretLine] ?? 0) + caretCol),
+      userEvent,
+      scrollIntoView: true,
+    };
+  }
+  return null;
 }
 
 /**
