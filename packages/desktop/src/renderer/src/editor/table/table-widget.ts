@@ -163,7 +163,9 @@ export class TableWidget extends WidgetType {
       const a = this.table.align[col];
       cell.style.textAlign = a ?? "";
       if (cell === document.activeElement) {
-        if (cellRaw(cell.innerText) !== raw) {
+        // The file trims a cell's edges, so a space just typed at the end
+        // isn't a difference: redraw only when the words themselves differ.
+        if (cellRaw(cell.innerText).trim() !== raw) {
           cell.textContent = cellText(raw);
           focusCell(cell);
         }
