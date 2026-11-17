@@ -15,6 +15,7 @@ import {
 } from "@anur/core";
 import type { PreviewView } from "../../../../shared/ipc-contract.ts";
 import { inlineRuns } from "../../layout/inline-markdown.ts";
+import { pagePath } from "../bases/base-widget.ts";
 
 /**
  * A preview in place (task 3.8; Mock 5): under the section's heading, a
@@ -66,13 +67,19 @@ export const previewState = StateField.define<State>({
   },
 });
 
-/** The page's sections, parsed again only when the text changed. */
-let cached: { doc: unknown; tree: SectionTree } | null = null;
+/**
+ * The page's sections, parsed again only when the text changed. The file's
+ * real name matters: a doc with text before its first heading names its
+ * title section after the file, and parts are found by heading path.
+ */
+let cached: { doc: unknown; file: string; tree: SectionTree } | null = null;
 function treeOf(state: EditorState): SectionTree {
-  if (cached?.doc !== state.doc)
+  const file = state.facet(pagePath).split("/").pop() ?? "";
+  if (cached?.doc !== state.doc || cached.file !== file)
     cached = {
       doc: state.doc,
-      tree: buildSectionTree(state.doc.toString(), { fileName: "doc.md" }),
+      file,
+      tree: buildSectionTree(state.doc.toString(), { fileName: file }),
     };
   return cached.tree;
 }
