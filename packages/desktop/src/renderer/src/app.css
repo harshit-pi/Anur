@@ -331,9 +331,11 @@ button {
 }
 
 /* 7. Command palette. */
+/* Above every layer of the page, so nothing under a dialog takes the mouse. */
 .palette-backdrop {
   position: fixed;
   inset: 0;
+  z-index: 100;
   display: flex;
   justify-content: center;
   align-items: flex-start;
