@@ -921,3 +921,211 @@ body.resizing * {
 .icon-button:focus-visible {
   outline-offset: -2px;
 }
+
+/* Settings (2.25), laid out as Mock 7: sections on the left, rows on the right. */
+.settings-backdrop {
+  align-items: center;
+  padding-top: 0;
+}
+
+.settings {
+  display: flex;
+  width: min(960px, 100% - 64px);
+  height: min(640px, 100% - 64px);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--sheet);
+  box-shadow: 0 18px 48px var(--shadow);
+  overflow: hidden;
+}
+
+.settings-nav {
+  flex: none;
+  width: 220px;
+  padding: 20px 12px;
+  background: var(--paper);
+  border-right: 1px solid var(--rule);
+}
+
+.settings-nav-group {
+  margin: 16px 10px 6px;
+  color: var(--graphite);
+  font-size: 12px;
+}
+
+.settings-nav-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink2);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-nav-item:hover {
+  background: var(--hover);
+}
+
+.settings-nav-item[aria-current="page"] {
+  background: var(--sheet);
+  border-color: var(--rule);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.settings-body {
+  position: relative;
+  flex: 1;
+  padding: 28px 36px;
+  overflow-y: auto;
+}
+
+.settings-body h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  color: var(--ink);
+}
+
+.settings-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.settings-lede {
+  margin: 0 0 12px;
+  color: var(--graphite);
+  font-size: 13px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.settings-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-row-title {
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-row-detail {
+  margin-top: 3px;
+  color: var(--graphite);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.settings-button {
+  flex: none;
+  padding: 6px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.settings-button:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.settings-status {
+  flex: none;
+  color: var(--graphite);
+  font-size: 13px;
+}
+
+.settings-empty {
+  margin-top: 8px;
+  padding: 16px;
+  border: 1px dashed var(--rule);
+  border-radius: 10px;
+  color: var(--graphite);
+  font-size: 13px;
+}
+
+.switch {
+  flex: none;
+  position: relative;
+  width: 40px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: var(--rule);
+  cursor: pointer;
+}
+
+.switch[aria-checked="true"] {
+  background: var(--ink);
+}
+
+.switch:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--sheet);
+  transition: transform 0.15s;
+}
+
+.switch[aria-checked="true"] .switch-knob {
+  transform: translateX(16px);
+}
+
+.segmented {
+  flex: none;
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.segmented-option {
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--graphite);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.segmented-option[aria-checked="true"] {
+  background: var(--sheet);
+  color: var(--ink);
+  box-shadow: 0 1px 2px var(--shadow);
+}
+
+.switch:focus-visible,
+.segmented-option:focus-visible,
+.settings-nav-item:focus-visible,
+.settings-button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}

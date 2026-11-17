@@ -36,6 +36,7 @@ import {
 import { loadOpen, loadWidths, saveOpen, saveWidths, type Side } from "./layout/panel-widths.ts";
 import { anur } from "./bridge.ts";
 import { CommandPalette } from "./regions/CommandPalette.tsx";
+import { Settings, type SettingsSection } from "./regions/Settings.tsx";
 import { MergeDialog } from "./regions/MergeDialog.tsx";
 import {
   Center,
@@ -48,6 +49,11 @@ import {
 
 export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /** The settings section shown, or null when settings are closed (2.25). */
+  const [settings, setSettings] = useState<SettingsSection | null>(null);
+  const closeSettings = useCallback(() => {
+    setSettings(null);
+  }, []);
   const [version, setVersion] = useState<string | null>(null);
   const [folder, setFolder] = useState<FolderState | null>(null);
   const [tabs, setTabs] = useState<Tabs>(noTabs);
@@ -302,6 +308,10 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       // The page takes ⌘K first when text is selected, to make a link.
       if (e.defaultPrevented) return;
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        setSettings((s) => (s ? null : "general"));
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
@@ -353,6 +363,12 @@ export function App() {
         }}
         onCommand={() => {
           setPaletteOpen(true);
+        }}
+        onSettings={() => {
+          setSettings("general");
+        }}
+        onPlugins={() => {
+          setSettings("core");
         }}
       />
       <LeftSidebar
@@ -445,6 +461,15 @@ export function App() {
           setPaletteOpen(false);
         }}
       />
+      {settings ? (
+        <Settings
+          section={settings}
+          onSection={setSettings}
+          onClose={closeSettings}
+          folder={folder}
+          onOpenFolder={openFolder}
+        />
+      ) : null}
     </div>
   );
 }
