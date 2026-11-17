@@ -27,6 +27,7 @@ import type { AgentHub } from "./hub.ts";
 import { PreviewStore } from "./previews.ts";
 import { denyRulesOf, type DenyRule } from "../../agent/deny-rules.ts";
 import type { AnurSocket, ToolAnswer } from "./anur-socket.ts";
+import { TurnWatch, type DocChange } from "./turn-watch.ts";
 
 /**
  * One folder's threads (tasks 3.1, 3.4, 3.5). Each thread is one discussion
@@ -102,6 +103,19 @@ export class Threads {
   private readonly writers = new Map<string, Promise<JsonlWriter>>();
   /** Each thread's session choices, as the agent last reported them. */
   private readonly options = new Map<string, SessionOption[]>();
+  /** Docs written while a turn runs, flagged on the thread with Revert (3.11). */
+  private readonly turnWatch: TurnWatch;
+  private readonly flags = new Map<
+    string,
+    {
+      id: string;
+      turn: string;
+      rel: string;
+      before: string | null;
+      after: string;
+      reverted: boolean;
+    }[]
+  >();
   /** Each thread's token for Anur's MCP tools. */
   private readonly tokens = new Map<string, string>();
   /** An agent picked for a thread's next turn, until a session on it starts. */
@@ -129,6 +143,67 @@ export class Threads {
 
   constructor(private readonly d: ThreadDeps) {
     this.previews = new PreviewStore(d.folder, d.device);
+    this.turnWatch = new TurnWatch(d.folder, (change, threads) => {
+      void this.flag(change, threads);
+    });
+  }
+
+  /** Anur itself wrote this text to a doc, as a page's save: never flagged. */
+  ownWrite(rel: string, text: string): void {
+    this.turnWatch.ownWrite(rel, text);
+  }
+
+  /** A doc changed while these threads' turns ran: each shows it, with Revert. */
+  private async flag(change: DocChange, threads: string[]): Promise<void> {
+    for (const thread of threads) {
+      const live = this.live.get(thread);
+      if (!live?.turn) continue;
+      const id = randomBytes(6).toString("hex");
+      const list = this.flags.get(thread) ?? [];
+      list.push({
+        id,
+        turn: live.turn,
+        rel: change.rel,
+        before: change.before,
+        after: change.after,
+        reverted: false,
+      });
+      this.flags.set(thread, list);
+      // A kind added within format 1: kept on disk as a record, even by apps that don't read it.
+      await this.append(live.doc, thread, {
+        kind: "changed-during",
+        turn: live.turn,
+        path: change.rel,
+      });
+      await this.refresh(live.rel, live.docText, thread);
+    }
+  }
+
+  /**
+   * What a Revert of one flagged change needs: the doc, its text before the
+   * change, and the text the change left, which the doc must still hold.
+   */
+  revertFor(thread: string, id: string) {
+    const f = this.flags.get(thread)?.find((x) => x.id === id);
+    if (!f)
+      return { kind: "refused" as const, reason: "That change isn't on this thread any more." };
+    if (f.reverted) return { kind: "refused" as const, reason: "That change is already reverted." };
+    if (f.before === null)
+      return {
+        kind: "refused" as const,
+        reason: "Anur had no earlier text of that doc to go back to.",
+      };
+    return { kind: "ok" as const, rel: f.rel, before: f.before, after: f.after };
+  }
+
+  /** The Revert landed. */
+  reverted(thread: string, id: string): void {
+    const f = this.flags.get(thread)?.find((x) => x.id === id);
+    if (!f) return;
+    f.reverted = true;
+    if (f.before !== null) this.turnWatch.ownWrite(f.rel, f.before);
+    const live = this.live.get(thread);
+    if (live) void this.refresh(live.rel, live.docText, thread);
   }
 
   /** Every thread's working copies live here, outside the folder; each thread has its own. */
@@ -208,6 +283,15 @@ export class Threads {
         items.push({ kind: "error", turn: l.turn, text: l.stopReason.slice(6).trim() });
       else if (l.kind === "state") closed = l.state === "closed";
     }
+    for (const f of this.flags.get(thread) ?? [])
+      items.push({
+        kind: "changed",
+        turn: f.turn,
+        id: f.id,
+        path: f.rel,
+        canRevert: f.before !== null && !f.reverted,
+        reverted: f.reverted,
+      });
     const live = this.live.get(thread);
     if (live?.turn) {
       for (const [toolUse, t] of live.tools)
@@ -341,6 +425,7 @@ export class Threads {
       usage: null,
     });
     await this.append(doc, thread, { kind: "message", turn, role: "person", text: message });
+    await this.turnWatch.start(thread);
 
     // This device's last session for the thread, if any: sessions live on the machine that ran them.
     // A session on another agent can't be resumed here: the thread is rebuilt on this one
@@ -500,6 +585,7 @@ export class Threads {
     live.turn = null;
     live.text = "";
     live.pending = null;
+    this.turnWatch.stop(thread);
     await this.mergeCopies(thread, live).catch((e: unknown) => {
       console.error("Anur couldn't turn the thread's edits into a preview:", e);
     });
@@ -803,6 +889,7 @@ export class Threads {
       this.d.hub.drop(thread);
     }
     for (const token of this.tokens.values()) this.d.mcp?.socket.revoke(token);
+    this.turnWatch.close();
     this.tokens.clear();
   }
 }

@@ -313,6 +313,12 @@ export function Page({
     const offPreviews = anur.on("preview:changed", ({ path }) => {
       if (path === doc.path) loadPreviews();
     });
+    // A Revert from a thread (3.11): the page writes it, so ⌘Z takes it back.
+    const offReplace = anur.on("doc:replace", ({ path, text }) => {
+      if (path !== doc.path || closed) return;
+      const span = diffSpan(editor.state.doc.toString(), text);
+      if (span) editor.dispatch({ changes: span, userEvent: "restore.revert" });
+    });
 
     const editor = new EditorView({
       parent: host.current,
@@ -568,6 +574,7 @@ export function Page({
       window.removeEventListener("beforeunload", beforeUnload);
       window.removeEventListener("anur:show-preview", onShowPreview);
       offPreviews();
+      offReplace();
       offOutside();
       clearTimeout(sectionsTimer);
       clearTimeout(noticeTimer);
