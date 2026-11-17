@@ -20,6 +20,9 @@ type Prompt = EventPayload<"thread:event"> & { kind: "permission" };
 
 const countOf = (n: number, noun: string) => `${String(n)} ${noun}${n === 1 ? "" : "s"}`;
 
+/** The last open-thread request acted on: Think remounts with the tab, and a request opens once. */
+let handledRequest = 0;
+
 const samePath = (a: readonly string[] | null, b: readonly string[]) =>
   a !== null && a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -204,12 +207,15 @@ export function Think({
   tree,
   section,
   writable,
+  request,
 }: {
   docPath: string | null;
   docText: () => string;
   tree: SectionTree | null;
   section: SectionNode | null;
   writable: boolean;
+  /** A thread to open now, as "Keep discussing" on a preview asks. */
+  request: { thread: string; n: number } | null;
 }) {
   const { threads, setThreads, prompts, setPrompts } = useThreads(docPath, docText);
   const [open, setOpen] = useState<string | null>(null);
@@ -234,16 +240,9 @@ export function Think({
     const off = anur.on("preview:changed", ({ path }) => {
       if (path === docPath) load();
     });
-    // Each Apply or rejection changes what is left: look again when the page says so.
-    const onThread = (e: Event) => {
-      const { thread } = (e as CustomEvent<{ thread: string }>).detail;
-      setOpen(thread);
-    };
-    window.addEventListener("anur:open-thread", onThread);
     return () => {
       current = false;
       off();
-      window.removeEventListener("anur:open-thread", onThread);
     };
   }, [docPath]);
 
@@ -258,10 +257,22 @@ export function Think({
   );
   const thread = threads.find((t) => t.id === open) ?? null;
 
-  // Moving to another section shows its threads, unless the open thread is still running there.
+  // "Keep discussing" on a preview: open that thread, wherever the cursor is.
   useEffect(() => {
+    if (!request || request.n <= handledRequest) return;
+    handledRequest = request.n;
+    setOpen(request.thread);
+  }, [request]);
+
+  // Moving the cursor to another section shows its threads, unless the open
+  // thread is still running. Opening a thread from elsewhere doesn't close it.
+  const sectionKey = section?.path.join("\u0000") ?? null;
+  const lastSection = useRef(sectionKey);
+  useEffect(() => {
+    if (lastSection.current === sectionKey) return;
+    lastSection.current = sectionKey;
     if (thread && section && !samePath(thread.path, section.path) && !thread.busy) setOpen(null);
-  }, [section, thread]);
+  }, [sectionKey, section, thread]);
 
   const start = useCallback(
     async (message: string) => {

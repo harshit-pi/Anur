@@ -559,25 +559,22 @@ export function RightSidebar({
   sections,
   onJump,
   hidden,
+  showThink,
   think,
 }: {
   sections: SectionTree | null;
   onJump: (index: number) => void;
   hidden: boolean;
+  /** Changes each time Think should come to the front. */
+  showThink: number;
   /** The Think panel for the section the cursor is in (3.5). */
   think: React.ReactNode;
 }) {
   const [tab, setTab] = useState<(typeof RIGHT_TABS)[number]>("Outline");
-  // "Back to thinking" on a preview opens its thread here.
+  // "Keep discussing" on a preview opens its thread here.
   useEffect(() => {
-    const onThread = () => {
-      setTab("Think");
-    };
-    window.addEventListener("anur:open-thread", onThread);
-    return () => {
-      window.removeEventListener("anur:open-thread", onThread);
-    };
-  }, []);
+    if (showThink > 0) setTab("Think");
+  }, [showThink]);
   return (
     <aside className="right-sidebar" aria-label="Section details" hidden={hidden}>
       <div className="segmented wide" role="tablist" aria-label="Section details">
