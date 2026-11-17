@@ -8,6 +8,7 @@ import {
   splitRow,
   textStart,
 } from "./live-preview.ts";
+import { BaseWidget } from "../bases/base-widget.ts";
 import { TableWidget } from "../table/table-widget.ts";
 import { CalloutLabelWidget, CopyCodeWidget, LanguageChipWidget } from "../chips/chip-widgets.ts";
 import { PropertiesWidget } from "../properties/properties-widget.ts";
@@ -95,6 +96,14 @@ describe("live preview", () => {
     );
     expect(lines.map((d) => d.cls)).toContain("cm-lp-conflict-ours");
     expect(lines.map((d) => d.cls)).toContain("cm-lp-conflict-theirs");
+  });
+
+  it("draws a base alone on its line as its table, and leaves one mid-line a chip", () => {
+    expect(widgetOf("Board\n\n![[Ideas.base]]\n\nend", BaseWidget)?.target).toBe("Ideas.base");
+    expect(widgetOf("Board\n\n![[Ideas.base#Refined]]\n\nend", BaseWidget)?.target).toBe(
+      "Ideas.base#Refined",
+    );
+    expect(widgetOf("See ![[Ideas.base]] here\n\nend", BaseWidget)).toBeUndefined();
   });
 
   it("puts a copy button on a fenced code block's first line", () => {

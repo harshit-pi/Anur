@@ -25,9 +25,11 @@ import {
 } from "../shared/ipc-contract.ts";
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
+import { readEmbeddedBase } from "./folder/bases.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
+import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
 import { readRecent } from "./folder/recent.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
@@ -65,6 +67,7 @@ if (theme === "light" || theme === "dark") nativeTheme.themeSource = theme;
 const windows = new Map<number, BrowserWindow>();
 let folders: FolderService;
 let journal: Journal;
+let recovery: RecoveryStore;
 /** Each window's open doc, watched for changes made outside Anur (2.17). */
 const docWatcher = new DocWatcher((windowId, change) => {
   const win = windows.get(windowId);
@@ -146,6 +149,21 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (saved.kind === "saved") docWatcher.setHash(webContentsId, request.path, saved.hash);
     return saved;
   },
+  "recovery:write": async ({ path: doc, text, saved }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder?.docs.includes(doc)) return { ok: false };
+    await recovery.write(folder.path, doc, { text, saved });
+    return { ok: true };
+  },
+  "recovery:clear": async ({ path: doc }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (folder) await recovery.clear(folder.path, doc);
+    return { ok: Boolean(folder) };
+  },
+  "recovery:read": async ({ path: doc }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    return { entry: folder?.docs.includes(doc) ? await recovery.read(folder.path, doc) : null };
+  },
   "journal:keep": async (entry, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder?.docs.includes(entry.path)) return { id: "" };
@@ -197,6 +215,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
         },
       });
     }),
+  "base:read": async ({ target, from }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    return readEmbeddedBase(folder, target, from);
+  },
   "link:open-external": async ({ url }) => {
     // Only the web and mail: a link in a doc never runs anything on this Mac.
     if (!/^(https?:|mailto:)/i.test(url)) return { ok: false };
@@ -419,6 +442,7 @@ app.enableSandbox();
 void app.whenReady().then(async () => {
   // Checks can set ANUR_CHECK_HOME, so a sample folder can stand in for one in iCloud.
   journal = new Journal(app.getPath("userData"));
+  recovery = new RecoveryStore(app.getPath("userData"));
   folders = new FolderService(
     app.getPath("userData"),
     isCheck ? (process.env.ANUR_CHECK_HOME ?? undefined) : undefined,

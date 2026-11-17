@@ -10,6 +10,7 @@ import {
   RuleWidget,
   TextWidget,
 } from "./widgets.ts";
+import { BaseWidget } from "../bases/base-widget.ts";
 import {
   CalloutLabelWidget,
   CopyCodeWidget,
@@ -260,6 +261,20 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
         case "WikiEmbed":
           {
             const target = children(node, "WikiLinkTarget")[0];
+            const name = target ? text(target.from, target.to) : "";
+            const line = doc.lineAt(from);
+            // A base alone on its line is drawn as its table.
+            if (/\.base$/i.test(name) && line.text.trim() === text(from, to)) {
+              const heading = children(node, "WikiLinkHeading")[0];
+              const at = heading ? `${name}#${text(heading.from, heading.to)}` : name;
+              out.push(
+                Decoration.replace({ widget: new BaseWidget(at), block: true }).range(
+                  line.from,
+                  line.to,
+                ),
+              );
+              return false;
+            }
             out.push(
               Decoration.replace({
                 widget: new EmbedWidget(target ? text(target.from, target.to) : ""),
