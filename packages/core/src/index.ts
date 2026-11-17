@@ -1,9 +1,4 @@
-/**
- * The `.anur/` format number, written to `.anur/format.json`.
- * Changes within one number only add fields; an app that finds a newer
- * number opens the folder read-only.
- */
-export const FORMAT_VERSION = 1;
+export { FORMAT_VERSION } from "./format.ts";
 
 export {
   markdownExtensions,
@@ -28,3 +23,13 @@ export {
   type SectionTree,
   type TreeLink,
 } from "./sections/index.ts";
+export {
+  ANUR_DIR,
+  FormatFile,
+  IGNORE_ALL,
+  accessFor,
+  anurPaths,
+  formatFileText,
+  segment,
+  type FolderAccess,
+} from "./anur-folder/index.ts";
