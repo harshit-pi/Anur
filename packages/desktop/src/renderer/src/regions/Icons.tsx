@@ -109,3 +109,10 @@ export const CloseIcon = (p: IconProps) => (
     <path d="M4.75 4.75l6.5 6.5M11.25 4.75l-6.5 6.5" />
   </Svg>
 );
+
+/** Collapse all: two chevrons folding toward the middle. */
+export const CollapseAllIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 2.75l3 3 3-3M5 13.25l3-3 3 3" />
+  </Svg>
+);

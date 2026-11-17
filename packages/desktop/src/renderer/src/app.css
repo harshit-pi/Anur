@@ -220,6 +220,19 @@ button {
   border-left: 1px solid var(--rule);
 }
 
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: -4px 0 4px;
+}
+
+.sidebar-head .sidebar-title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
 .sidebar-title {
   margin: 0 0 8px;
   font-weight: 600;
