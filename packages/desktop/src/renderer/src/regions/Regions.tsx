@@ -367,10 +367,14 @@ export function StatusBar({
   version,
   folder,
   docMode,
+  source,
+  onToggleSource,
 }: {
   version: string | null;
   folder: FolderState | null;
   docMode: "editable" | "read-only" | "plain-text" | null;
+  source: boolean;
+  onToggleSource: () => void;
 }) {
   return (
     <footer className="status-bar" aria-label="Status">
@@ -390,6 +394,16 @@ export function StatusBar({
                 : "Nothing to save"}
       </span>
       <span className="status-spacer" />
+      {docMode && docMode !== "plain-text" ? (
+        <button
+          type="button"
+          className="status-item status-button"
+          title="Switch between live preview and source (⌘E)"
+          onClick={onToggleSource}
+        >
+          {source ? "Source" : "Live preview"}
+        </button>
+      ) : null}
       <span className="status-item">No threads</span>
       {version ? <span className="status-item quiet">Anur {version}</span> : null}
     </footer>
