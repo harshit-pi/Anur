@@ -15,6 +15,7 @@ import {
 } from "@anur/core";
 import type { PreviewView } from "../../../../shared/ipc-contract.ts";
 import { inlineRuns } from "../../layout/inline-markdown.ts";
+import { UNSAVED_EDIT } from "../../../../shared/agents.ts";
 import { pagePath } from "../bases/base-widget.ts";
 
 /**
@@ -255,7 +256,10 @@ class BodyWidget extends WidgetType {
     foot.className = "cm-preview-foot";
     const note = document.createElement("span");
     note.className = "cm-preview-note";
-    note.textContent = `Preview from the “${shortTitle(this.title)}” thread. Not in the file yet.`;
+    const unsaved = this.thread === UNSAVED_EDIT;
+    note.textContent = unsaved
+      ? "Your typing from before this section changed outside Anur. Not in the file."
+      : `Preview from the “${shortTitle(this.title)}” thread. Not in the file yet.`;
     const toggle = document.createElement("label");
     toggle.className = "cm-preview-toggle";
     const box = document.createElement("input");
@@ -270,7 +274,10 @@ class BodyWidget extends WidgetType {
       });
     });
     toggle.append(box, " Show changes");
-    const back = button("Keep discussing", false, () => actions?.back(this.thread));
+    // Your own unsaved edit has no thread to go back to.
+    const back = unsaved
+      ? document.createElement("span")
+      : button("Keep discussing", false, () => actions?.back(this.thread));
     if (this.clash) {
       note.textContent =
         "You've since changed lines this preview changes too. Ask the thread to redo its edit on your text, or use its version of those lines.";

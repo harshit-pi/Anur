@@ -29,3 +29,10 @@ export const AGENTS: Record<AgentId, { name: string; runsThreads: boolean; why: 
 
 export const isAgentId = (v: unknown): v is AgentId =>
   typeof v === "string" && (AGENT_IDS as readonly string[]).includes(v);
+
+/**
+ * The preview that holds a person's own unsaved typing that clashed with a
+ * change made outside Anur (3.10): it sits among threads' previews, under
+ * this name, with no thread behind it.
+ */
+export const UNSAVED_EDIT = "unsaved";

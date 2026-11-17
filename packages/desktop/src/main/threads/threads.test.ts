@@ -319,6 +319,19 @@ describe("Threads", () => {
     expect(back).toMatchObject({ kind: "ok", rel: "plan.md", before: DOC });
   });
 
+  it('keeps clashing unsaved typing as a "your unsaved edit" preview on its section', async () => {
+    const { threads: t } = await setup();
+    const theirs = DOC.replace("The host is untested.", "The host passed its tests.");
+    const mine = DOC.replace("The host is untested.", "The host is untested on Linux.");
+    expect(await t.keepUnsaved("plan.md", theirs, mine)).toBe(true);
+    const [preview] = await t.listPreviews("plan.md", theirs);
+    expect(preview?.thread).toBe("unsaved");
+    expect(preview?.title).toBe("Your unsaved edit");
+    expect(preview?.parts.map((p) => [p.path.at(-1), p.proposed])).toEqual([
+      ["Risks", "## Risks\n\nThe host is untested on Linux.\n\n"],
+    ]);
+  });
+
   it("refuses a section that moved away", async () => {
     const { threads: t } = await setup();
     expect(await t.start("plan.md", DOC, { index: 1, path: ["Plan", "Gone"] }, "Hm?")).toEqual({

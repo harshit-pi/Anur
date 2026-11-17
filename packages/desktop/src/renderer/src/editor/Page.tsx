@@ -416,8 +416,32 @@ export function Page({
       }
       saver?.rebase(hash, text);
       if (clashed && editable) {
-        // The overlapping typing is kept in the journal and shown in a
-        // banner until it is put back or dismissed (2.18).
+        // The overlapping typing becomes a "your unsaved edit" preview on its
+        // section, to apply or reject like any other (3.10). Where that can't
+        // be kept, as in a read-only folder, it goes to the journal and a
+        // banner, as before (2.18).
+        const now = editor.state.doc.toString();
+        const back = putBack(now, clashed);
+        const proposed = back ? now.slice(0, back.from) + back.insert + now.slice(back.to) : null;
+        void (
+          proposed && threadsOn
+            ? anur.call("preview:unsaved", { path: doc.path, text: now, proposed })
+            : Promise.resolve({ ok: false })
+        ).then(({ ok }) => {
+          if (ok) {
+            flash(
+              "This doc changed outside Anur where you were typing. The file's version is in; yours is kept as a preview on that section.",
+              null,
+              12_000,
+            );
+            return;
+          }
+          keepInJournal();
+        });
+        return;
+      }
+      function keepInJournal() {
+        if (!clashed) return;
         void anur.call("journal:keep", { path: doc.path, ...clashed }).then(({ id }) => {
           if (!closed && id) {
             setKept((k) => [
@@ -426,7 +450,6 @@ export function Page({
             ]);
           }
         });
-        return;
       }
       const undo = editable
         ? () => {
