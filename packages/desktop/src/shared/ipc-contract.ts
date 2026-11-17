@@ -65,6 +65,26 @@ export const AgentStatus = z.object({
 });
 export type AgentStatus = z.infer<typeof AgentStatus>;
 
+/** Whether an agent is signed in, the sign-ins it offers, and one under way (3.16). */
+export const AgentSignIn = z.object({
+  agent: AgentIdSchema,
+  auth: z.object({
+    state: z.enum(["authenticated", "unauthenticated", "unknown"]),
+    account: z.string().nullable(),
+    methods: z.array(
+      z.object({ id: z.string(), name: z.string(), description: z.string().nullable() }),
+    ),
+  }),
+  signIn: z
+    .object({
+      phase: z.enum(["waiting", "failed"]),
+      url: z.string().nullable(),
+      message: z.string().nullable(),
+    })
+    .nullable(),
+});
+export type AgentSignIn = z.infer<typeof AgentSignIn>;
+
 /** One item in a thread, as the Think panel shows it. */
 export const ThreadItem = z.discriminatedUnion("kind", [
   z.object({
@@ -438,6 +458,20 @@ export const ipcContract = {
     request: z.object({ agent: AgentIdSchema }).strict(),
     response: z.object({ options: z.array(SessionOption) }),
   },
+  /** Whether the agent is signed in; asking reads it again, and the answer follows as an event. */
+  "agent:auth": {
+    request: z.object({ agent: AgentIdSchema }).strict(),
+    response: AgentSignIn,
+  },
+  /** Run one of the agent's sign-ins; it opens the browser, and progress follows as events. */
+  "agent:sign-in": {
+    request: z.object({ agent: AgentIdSchema, method: z.string().max(100) }).strict(),
+    response: z.object({}),
+  },
+  "agent:sign-in-cancel": {
+    request: z.object({ agent: AgentIdSchema }).strict(),
+    response: z.object({}),
+  },
   /** Move a thread to another agent: its next turn starts there, from its bundle and chat. */
   "thread:agent": {
     request: z.object({ thread: z.string().max(200), agent: AgentIdSchema }).strict(),
@@ -515,6 +549,8 @@ export const ipcEvents = {
   "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
   /** The agent connected, or couldn't, and why. */
   "agent:status": AgentStatus,
+  /** An agent's sign-in changed, or a sign-in moved on. */
+  "agent:auth": AgentSignIn,
   /** An agent's mode and model choices were read again. */
   "agent:options": z.object({ agent: AgentIdSchema, options: z.array(SessionOption) }),
   /** A doc's previews changed, as when a thread's turn ended with edits. */

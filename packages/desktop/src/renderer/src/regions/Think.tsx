@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SectionNode, SectionTree } from "@anur/core";
 import type {
+  AgentSignIn,
   SessionOption,
   AgentStatus,
   EventPayload,
@@ -233,6 +234,30 @@ export function Think({
   const [newAgent, setNewAgent] = useState<AgentId>("claude-code");
   /** A new thread's mode and model: the agent's choices, as last seen, with the person's picks. */
   const [newChoices, setNewChoices] = useState<SessionOption[]>([]);
+  /** Each agent's sign-in, as main last reported it (3.16). */
+  const [signIns, setSignIns] = useState<Partial<Record<AgentId, AgentSignIn>>>({});
+  useEffect(
+    () =>
+      anur.on("agent:auth", (e) => {
+        setSignIns((all) => ({ ...all, [e.agent]: e }));
+      }),
+    [],
+  );
+  /** Read an agent's sign-in when Think shows a thread, or a new one, on it. */
+  const checkSignIn = useCallback((agent: AgentId) => {
+    if (!AGENTS[agent].runsThreads) return;
+    void anur.call("agent:auth", { agent }).then((e) => {
+      setSignIns((all) => ({
+        ...all,
+        [agent]: all[agent]?.auth.state === "unknown" || !all[agent] ? e : all[agent],
+      }));
+    });
+  }, []);
+  /** The sign-in view, in place of the message box, while the agent isn't signed in. */
+  const signedOut = (agent: AgentId) => {
+    const e = signIns[agent];
+    return e?.auth.state === "unauthenticated" ? <SignInCard e={e} /> : null;
+  };
   useEffect(() => {
     let current = true;
     setNewChoices([]);
@@ -293,6 +318,10 @@ export function Think({
     return threads.filter((t) => !here.includes(t)).sort((a, b) => at(a) - at(b));
   }, [threads, here, tree]);
   const thread = threads.find((t) => t.id === open) ?? null;
+  const shownAgent = thread?.agent ?? newAgent;
+  useEffect(() => {
+    checkSignIn(shownAgent);
+  }, [shownAgent, checkSignIn]);
 
   // "Keep discussing" on a preview: open that thread, wherever the cursor is.
   useEffect(() => {
@@ -511,43 +540,45 @@ export function Think({
             chat so far.
           </p>
         ) : null}
-        <Composer
-          placeholder="Reply in this thread"
-          sendLabel="Send"
-          busy={thread.busy}
-          disabled={!writable || thread.path === null}
-          onStop={() => {
-            void anur.call("thread:stop", { thread: thread.id });
-          }}
-          onSend={async (message) => {
-            setError(null);
-            const r = await anur.call("thread:send", {
-              thread: thread.id,
-              path: docPath,
-              text: docText(),
-              message,
-            });
-            if (r.kind === "refused") {
-              setError(r.reason);
-              return false;
-            }
-            setThreads((ts) =>
-              ts.map((t) =>
-                t.id === thread.id
-                  ? {
-                      ...t,
-                      busy: true,
-                      items: [
-                        ...t.items,
-                        { kind: "message", turn: "", role: "person", text: message },
-                      ],
-                    }
-                  : t,
-              ),
-            );
-            return true;
-          }}
-        />
+        {signedOut(thread.agent) ?? (
+          <Composer
+            placeholder="Reply in this thread"
+            sendLabel="Send"
+            busy={thread.busy}
+            disabled={!writable || thread.path === null}
+            onStop={() => {
+              void anur.call("thread:stop", { thread: thread.id });
+            }}
+            onSend={async (message) => {
+              setError(null);
+              const r = await anur.call("thread:send", {
+                thread: thread.id,
+                path: docPath,
+                text: docText(),
+                message,
+              });
+              if (r.kind === "refused") {
+                setError(r.reason);
+                return false;
+              }
+              setThreads((ts) =>
+                ts.map((t) =>
+                  t.id === thread.id
+                    ? {
+                        ...t,
+                        busy: true,
+                        items: [
+                          ...t.items,
+                          { kind: "message", turn: "", role: "person", text: message },
+                        ],
+                      }
+                    : t,
+                ),
+              );
+              return true;
+            }}
+          />
+        )}
       </div>
     );
   }
@@ -591,15 +622,17 @@ export function Think({
           />
         ))}
       </div>
-      <Composer
-        placeholder={
-          writable ? "Ask about this section" : "Threads need a folder Anur can write to"
-        }
-        sendLabel="Start thread"
-        busy={false}
-        disabled={!writable || !AGENTS[newAgent].runsThreads}
-        onSend={start}
-      />
+      {signedOut(newAgent) ?? (
+        <Composer
+          placeholder={
+            writable ? "Ask about this section" : "Threads need a folder Anur can write to"
+          }
+          sendLabel="Start thread"
+          busy={false}
+          disabled={!writable || !AGENTS[newAgent].runsThreads}
+          onSend={start}
+        />
+      )}
       {elsewhere.length > 0 ? (
         <>
           <h3 className="think-subhead">Other threads in this doc ({String(elsewhere.length)})</h3>
@@ -720,3 +753,83 @@ function OptionPicker({
     </label>
   );
 }
+
+/**
+ * The agent isn't signed in: its own sign-ins, each run by Anur without a
+ * terminal (3.16). The sign-in opens in the browser; once it's done, the
+ * agent restarts and this goes away.
+ */
+function SignInCard({ e }: { e: AgentSignIn }) {
+  const name = AGENTS[e.agent].name;
+  const waiting = e.signIn?.phase === "waiting";
+  return (
+    <div className="think-signin" role="group" aria-label={`Sign in to ${name}`}>
+      <p className="think-signin-title">{name} isn't signed in</p>
+      {waiting ? (
+        <>
+          <p className="quiet">Finish signing in in your browser. This updates when you're done.</p>
+          <div className="think-signin-actions">
+            {e.signIn?.url ? (
+              <button
+                type="button"
+                className="think-button"
+                onClick={() => {
+                  void anur.call("link:open-external", { url: e.signIn?.url ?? "" });
+                }}
+              >
+                Open the sign-in page again
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="think-button"
+              onClick={() => {
+                void anur.call("agent:sign-in-cancel", { agent: e.agent });
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="quiet">
+            Threads run on your own {name} account. Sign in once here; it's the same sign-in as in
+            your terminal.
+          </p>
+          {e.signIn?.phase === "failed" && e.signIn.message ? (
+            <p className="think-error">{e.signIn.message}</p>
+          ) : null}
+          <div className="think-signin-actions">
+            {e.auth.methods.map((m, i) => (
+              <button
+                key={m.id}
+                type="button"
+                className={`think-button${i === 0 ? " primary" : ""}`}
+                title={m.description ?? undefined}
+                onClick={() => {
+                  void anur.call("agent:sign-in", { agent: e.agent, method: m.id });
+                }}
+              >
+                {signInLabel(m.name)}
+              </button>
+            ))}
+          </div>
+          {e.auth.methods.length === 0 ? (
+            <p className="quiet">
+              Sign in from a terminal with <code>claude</code>, then come back.
+            </p>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** A sign-in's button: what it is, in plain words. */
+const signInLabel = (name: string) =>
+  /subscription/i.test(name)
+    ? "Sign in with your Claude account"
+    : /console/i.test(name)
+      ? "Use an Anthropic Console account"
+      : `Sign in: ${name}`;

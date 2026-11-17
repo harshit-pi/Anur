@@ -111,6 +111,9 @@ const hub = new AgentHub(
   (agent, options) => {
     rememberChoices(agent, options);
   },
+  (e) => {
+    for (const win of windows.values()) send(win, "agent:auth", e);
+  },
 );
 /** An agent's choices changed: keep them, and tell every window. */
 function rememberChoices(agent: AgentId, options: SessionOption[]) {
@@ -386,6 +389,19 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     return { threads: t ? await t.list(doc, text) : [] };
+  },
+  "agent:auth": ({ agent }) => {
+    if (AGENTS[agent].runsThreads) hub.send({ type: "auth", agent });
+    return { agent, auth: hub.auth(agent), signIn: hub.signIn(agent) };
+  },
+  "agent:sign-in": ({ agent, method }) => {
+    hub.clearSignIn(agent);
+    hub.send({ type: "sign-in", agent, method });
+    return {};
+  },
+  "agent:sign-in-cancel": ({ agent }) => {
+    hub.send({ type: "sign-in-cancel", agent });
+    return {};
   },
   "agent:options": ({ agent }, { webContentsId }) => {
     if (!probed.has(agent) && AGENTS[agent].runsThreads) {
