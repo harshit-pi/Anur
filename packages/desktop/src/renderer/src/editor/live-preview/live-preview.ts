@@ -4,6 +4,7 @@ import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { BulletWidget, CheckboxWidget, RuleWidget, TextWidget } from "./widgets.ts";
 import { CalloutLabelWidget, EmbedWidget, LanguageChipWidget } from "../chips/chip-widgets.ts";
+import { editGuard } from "../edit-guard.ts";
 import { parseFields } from "../properties/properties-model.ts";
 import { PropertiesWidget } from "../properties/properties-widget.ts";
 import { parseTable } from "../table/table-model.ts";
@@ -378,6 +379,8 @@ const dropEmptyPair = EditorState.transactionFilter.of((tr) => {
 /** Live preview for a page: the decorations, kept in step with focus. */
 export const livePreview = [
   previewField,
+  // With marks hidden, edits must keep them valid (edit-guard.ts).
+  editGuard,
   skipPrefix,
   dropEmptyPair,
   EditorView.focusChangeEffect.of((_, focusing) => setFocused.of(focusing)),
