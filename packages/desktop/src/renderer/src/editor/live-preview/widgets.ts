@@ -1,4 +1,5 @@
-import { WidgetType } from "@codemirror/view";
+import { type EditorView, WidgetType } from "@codemirror/view";
+import { toggleTask } from "../commands.ts";
 import { renderInline } from "./inline.ts";
 
 /**
@@ -20,7 +21,7 @@ export class BulletWidget extends WidgetType {
   }
 }
 
-/** A task's "[ ]" or "[x]" drawn as a checkbox; ticking it comes with editing (2.8). */
+/** A task's "[ ]" or "[x]" drawn as a checkbox; a click ticks it in the text (2.8). */
 export class CheckboxWidget extends WidgetType {
   constructor(readonly checked: boolean) {
     super();
@@ -28,17 +29,22 @@ export class CheckboxWidget extends WidgetType {
   override eq(other: CheckboxWidget) {
     return other.checked === this.checked;
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const box = document.createElement("input");
     box.type = "checkbox";
     box.checked = this.checked;
-    // Inert until editing arrives: not disabled, which would grey it out.
     box.tabIndex = -1;
-    box.addEventListener("click", (e) => {
-      e.preventDefault();
-    });
     box.className = "cm-lp-check";
     box.setAttribute("aria-label", this.checked ? "Done" : "Not done");
+    // Keep the editor's focus and cursor where they are.
+    box.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+    });
+    box.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (view.state.readOnly) return;
+      toggleTask(view, view.posAtDOM(box));
+    });
     return box;
   }
 }
