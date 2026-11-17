@@ -1530,3 +1530,17 @@ body.resizing * {
   font: inherit;
   font-size: 13px;
 }
+
+.settings-select {
+  padding: 6px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+}
+
+.think-agent-note {
+  margin: 0;
+  font-size: 12px;
+}

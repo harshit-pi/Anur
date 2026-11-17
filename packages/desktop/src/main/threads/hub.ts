@@ -1,5 +1,6 @@
 import path from "node:path";
 import { utilityProcess, type UtilityProcess } from "electron";
+import type { AgentId } from "../../shared/agents.ts";
 import type { AgentStatus } from "../../shared/ipc-contract.ts";
 import type { ToHost, ToMain } from "../../agent/protocol.ts";
 
@@ -9,10 +10,15 @@ import type { ToHost, ToMain } from "../../agent/protocol.ts";
  * again after it stops; main only routes its messages to the thread's folder.
  */
 export class AgentHub {
-  status: AgentStatus = { connected: null, reason: null, agent: null };
+  /** Each agent's status, once Anur has tried to connect it. */
+  private readonly statuses = new Map<AgentId, AgentStatus>();
   private proc: UtilityProcess | null = null;
   private readonly routes = new Map<string, (m: ToMain) => void>();
-  private readonly waiting: ((s: AgentStatus) => void)[] = [];
+  private readonly waiting = new Map<AgentId, ((s: AgentStatus) => void)[]>();
+
+  status(agent: AgentId): AgentStatus {
+    return this.statuses.get(agent) ?? { id: agent, connected: null, reason: null, agent: null };
+  }
 
   constructor(
     private readonly entry: string,
@@ -34,11 +40,12 @@ export class AgentHub {
   }
 
   /** Connect the agent once; resolves with the status that follows. */
-  connect(): Promise<AgentStatus> {
-    if (this.status.connected === true) return Promise.resolve(this.status);
+  connect(agent: AgentId): Promise<AgentStatus> {
+    const now = this.status(agent);
+    if (now.connected === true) return Promise.resolve(now);
     return new Promise((resolve) => {
-      this.waiting.push(resolve);
-      this.send({ type: "connect" });
+      this.waiting.set(agent, [...(this.waiting.get(agent) ?? []), resolve]);
+      this.send({ type: "connect", agent });
     });
   }
 
@@ -65,11 +72,13 @@ export class AgentHub {
     proc.on("exit", (code) => {
       if (this.proc !== proc) return;
       this.proc = null;
-      this.setStatus({
-        connected: false,
-        reason: `The agent host stopped (exit ${String(code)}); it starts again with the next message.`,
-        agent: null,
-      });
+      for (const id of this.statuses.keys())
+        this.setStatus({
+          id,
+          connected: false,
+          reason: `The agent host stopped (exit ${String(code)}); it starts again with the next message.`,
+          agent: null,
+        });
     });
     this.proc = proc;
     return proc;
@@ -77,16 +86,17 @@ export class AgentHub {
 
   private receive(m: ToMain): void {
     if (m.type === "status") {
-      this.setStatus({ connected: m.connected, reason: m.reason, agent: m.agent });
+      this.setStatus({ id: m.id, connected: m.connected, reason: m.reason, agent: m.agent });
       return;
     }
     this.routes.get(m.thread)?.(m);
   }
 
   private setStatus(s: AgentStatus): void {
-    this.status = s;
+    this.statuses.set(s.id, s);
     this.onStatus(s);
-    for (const w of this.waiting.splice(0)) w(s);
+    for (const w of this.waiting.get(s.id) ?? []) w(s);
+    this.waiting.delete(s.id);
   }
 }
 

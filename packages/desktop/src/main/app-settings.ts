@@ -2,6 +2,7 @@ import { readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { ANUR_DIR, IGNORE_ALL, anurPaths } from "@anur/core";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
+import { DEFAULT_AGENT, isAgentId, type AgentId } from "../shared/agents.ts";
 
 /**
  * Settings main needs to act on (2.25). App-wide ones live in app support;
@@ -9,9 +10,13 @@ import { writeFileAtomic } from "../vault/anur-folder.ts";
  * holds "*" unless the folder commits it, as the design says.
  */
 
-export type AppSettings = { sectionHistory: boolean };
+export type AppSettings = {
+  sectionHistory: boolean;
+  /** The agent new threads run on. */
+  defaultAgent: AgentId;
+};
 
-const DEFAULTS: AppSettings = { sectionHistory: true };
+const DEFAULTS: AppSettings = { sectionHistory: true, defaultAgent: DEFAULT_AGENT };
 
 export class AppSettingsStore {
   private current: AppSettings = { ...DEFAULTS };
@@ -27,6 +32,7 @@ export class AppSettingsStore {
       const raw = JSON.parse(await readFile(this.file, "utf8")) as Partial<AppSettings>;
       this.current = {
         sectionHistory: typeof raw.sectionHistory === "boolean" ? raw.sectionHistory : true,
+        defaultAgent: isAgentId(raw.defaultAgent) ? raw.defaultAgent : DEFAULT_AGENT,
       };
     } catch {
       this.current = { ...DEFAULTS };

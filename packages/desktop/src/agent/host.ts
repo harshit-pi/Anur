@@ -2,47 +2,53 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
+import { AGENTS, type AgentId } from "../shared/agents.ts";
+import type { AgentAdapter } from "./adapters.ts";
 import { checkedIn, hookSaw } from "./check-log.ts";
 import type { AgentVersions, SessionOption, SessionSpec, ToHost, ToMain } from "./protocol.ts";
 import { selfTest } from "./self-test.ts";
 
 /**
  * The agent host (task 3.1): Anur as an ACP client of the person's own
- * Claude Code, one session per thread. It runs in its own utilityProcess;
- * main sends it `ToHost` messages and routes its `ToMain` ones.
+ * agents, one session per thread. It speaks ACP to every agent the same
+ * way; each agent's adapter says how to start it and how to give it Anur's
+ * guard. It runs in its own utilityProcess; main sends it `ToHost` messages
+ * and routes its `ToMain` ones.
  *
  * Threads run only while the thread check passes (3.2): the hook passes its
- * sample calls before the agent connects, every session's start hook checks
+ * sample calls before an agent connects, every session's start hook checks
  * in before the first prompt, and every tool call the agent reports as done
- * passed through the hook. A miss stops the turn and threads, until the
- * check passes again.
+ * passed through the hook. A miss stops the turn and that agent's threads,
+ * until the check passes again.
  */
 
 export type HostEnv = {
-  /** A Node to run the adapter with: Electron itself, run as Node. */
+  /** A Node to run the hook's self-test with: Electron itself, run as Node. */
   node: string;
   nodeEnv: Record<string, string>;
-  /** The ACP adapter's entry file. */
-  adapter: string;
-  adapterVersion: string;
-  /** Anur's hook program, which the self-test runs before the agent connects. */
+  /** Anur's hook program, which the self-test runs before an agent connects. */
   hook: string;
-  /** Finds the person's `claude`, with their shell's PATH; null when not installed. */
-  locate: () => Promise<{ claude: string | null; version: string | null; path: string }>;
+  /** The agents Anur can drive, by ID. */
+  adapters: Partial<Record<AgentId, AgentAdapter>>;
 };
 
 type Turn = { thread: string; turn: string };
 
+type Connected = {
+  kind: "connected";
+  conn: acp.ClientConnection;
+  child: ChildProcess;
+  versions: AgentVersions;
+};
+
 type ConnectionState =
-  | { kind: "idle" }
-  | { kind: "connecting"; ready: Promise<boolean> }
-  | { kind: "connected"; conn: acp.ClientConnection; child: ChildProcess; versions: AgentVersions }
-  | { kind: "failed"; reason: string };
+  { kind: "connecting"; ready: Promise<boolean> } | Connected | { kind: "failed"; reason: string };
 
 export class AgentHost {
-  private state: ConnectionState = { kind: "idle" };
-  /** Each thread's live session. */
-  private readonly sessions = new Map<string, string>();
+  /** One connection per agent, started when a thread first needs it. */
+  private readonly agents = new Map<AgentId, ConnectionState>();
+  /** Each thread's live session, and the agent it runs on. */
+  private readonly sessions = new Map<string, { agent: AgentId; id: string }>();
   /** The turn running in each session, so updates reach the right thread. */
   private readonly running = new Map<string, Turn>();
   private readonly permissions = new Map<string, (option: string | null) => void>();
@@ -59,7 +65,7 @@ export class AgentHost {
   handle(m: ToHost): void {
     switch (m.type) {
       case "connect":
-        void this.connect();
+        void this.connect(m.agent);
         return;
       case "prompt":
         void this.prompt(m.spec, m.turn, m.text);
@@ -73,6 +79,7 @@ export class AgentHost {
         return;
       case "close":
         this.sessions.delete(m.thread);
+        this.chosen.delete(m.thread);
         return;
       case "option":
         void this.setOption(m.thread, m.id, m.value);
@@ -80,44 +87,45 @@ export class AgentHost {
     }
   }
 
-  /** Start the adapter once; later calls wait for the same start. */
-  connect(): Promise<boolean> {
-    if (this.state.kind === "connected") return Promise.resolve(true);
-    if (this.state.kind === "connecting") return this.state.ready;
-    const ready = this.start().then(
+  private connected(agent: AgentId): Connected | null {
+    const s = this.agents.get(agent);
+    return s?.kind === "connected" ? s : null;
+  }
+
+  /** Start the agent's adapter once; later calls wait for the same start. */
+  connect(agent: AgentId): Promise<boolean> {
+    const s = this.agents.get(agent);
+    if (s?.kind === "connected") return Promise.resolve(true);
+    if (s?.kind === "connecting") return s.ready;
+    const ready = this.start(agent).then(
       (ok) => ok,
       (e: unknown) =>
-        this.fail(`The agent didn't start: ${e instanceof Error ? e.message : String(e)}`),
+        this.fail(agent, `The agent didn't start: ${e instanceof Error ? e.message : String(e)}`),
     );
-    this.state = { kind: "connecting", ready };
+    this.agents.set(agent, { kind: "connecting", ready });
     return ready;
   }
 
-  private fail(reason: string): false {
-    this.state = { kind: "failed", reason };
-    this.send({ type: "status", connected: false, reason, agent: null });
+  private fail(agent: AgentId, reason: string): false {
+    this.agents.set(agent, { kind: "failed", reason });
+    this.send({ type: "status", id: agent, connected: false, reason, agent: null });
     return false;
   }
 
-  private async start(): Promise<boolean> {
+  private async start(agent: AgentId): Promise<boolean> {
+    const adapter = this.env.adapters[agent];
+    if (!adapter)
+      return this.fail(agent, AGENTS[agent].why ?? `${AGENTS[agent].name} can't run threads yet.`);
     const failed = selfTest(this.env.node, this.env.nodeEnv, this.env.hook);
     if (failed)
       return this.fail(
+        agent,
         `Threads are off: Anur's safety check failed, because ${failed}. Nothing was sent to the agent.`,
       );
-    const found = await this.env.locate();
-    if (!found.claude)
-      return this.fail(
-        "Claude Code isn't installed. Install it, sign in once in a terminal, then try again.",
-      );
-    const child = spawn(this.env.node, [this.env.adapter], {
-      env: {
-        ...process.env,
-        ...this.env.nodeEnv,
-        PATH: found.path,
-        // The person's own install, not the one bundled in the adapter's SDK.
-        CLAUDE_CODE_EXECUTABLE: found.claude,
-      },
+    const launch = await adapter.launch();
+    if ("fail" in launch) return this.fail(agent, launch.fail);
+    const child = spawn(launch.command, launch.args, {
+      env: { ...process.env, ...launch.env },
       stdio: ["pipe", "pipe", "pipe"],
     });
     let stderr = "";
@@ -125,20 +133,18 @@ export class AgentHost {
       stderr = (stderr + d.toString()).slice(-4000);
     });
     child.on("exit", (code) => {
-      if (this.state.kind === "connected" && this.state.child === child) {
-        for (const [, t] of this.running)
-          this.send({
-            type: "error",
-            thread: t.thread,
-            turn: t.turn,
-            message: "The agent stopped.",
-          });
-        this.running.clear();
-        this.sessions.clear();
-        this.fail(
-          `The agent stopped (exit ${String(code)}). ${stderr.trim().split("\n").at(-1) ?? ""}`,
-        );
+      if (this.connected(agent)?.child !== child) return;
+      for (const [thread, live] of this.sessions) {
+        if (live.agent !== agent) continue;
+        const t = this.running.get(live.id);
+        if (t) this.send({ type: "error", thread, turn: t.turn, message: "The agent stopped." });
+        this.running.delete(live.id);
+        this.sessions.delete(thread);
       }
+      this.fail(
+        agent,
+        `The agent stopped (exit ${String(code)}). ${stderr.trim().split("\n").at(-1) ?? ""}`,
+      );
     });
     const stream = acp.ndJsonStream(
       Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
@@ -147,7 +153,7 @@ export class AgentHost {
     const app = acp
       .client({ name: "anur" })
       .onNotification(acp.methods.client.session.update, ({ params }) => {
-        this.onUpdate(params);
+        this.onUpdate(agent, params);
       })
       .onRequest(acp.methods.client.session.requestPermission, ({ params }) =>
         this.askPermission(params),
@@ -159,18 +165,21 @@ export class AgentHost {
       clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
     });
     const versions = {
-      agent: found.version ?? init.agentInfo?.version ?? "unknown",
-      adapter: this.env.adapterVersion,
+      agent: launch.version ?? init.agentInfo?.version ?? "unknown",
+      adapter: adapter.adapterVersion,
     };
-    this.state = { kind: "connected", conn, child, versions };
-    this.send({ type: "status", connected: true, reason: null, agent: versions });
+    this.agents.set(agent, { kind: "connected", conn, child, versions });
+    this.send({ type: "status", id: agent, connected: true, reason: null, agent: versions });
     return true;
   }
 
-  private async session(conn: acp.ClientConnection, spec: SessionSpec): Promise<string> {
+  private async session(c: Connected, spec: SessionSpec): Promise<string> {
     const live = this.sessions.get(spec.thread);
-    if (live) return live;
-    const meta = { claudeCode: { options: { settings: spec.settings } } };
+    if (live?.agent === spec.agent) return live.id;
+    const adapter = this.env.adapters[spec.agent];
+    if (!adapter) throw new Error(`${AGENTS[spec.agent].name} can't run threads yet.`);
+    const meta = adapter.sessionMeta(spec.guard);
+    const { conn } = c;
     if (spec.resume) {
       let loaded: unknown;
       try {
@@ -189,7 +198,13 @@ export class AgentHost {
         spec.resume,
         (loaded as { configOptions?: unknown } | null)?.configOptions ?? null,
       );
-      this.send({ type: "session", thread: spec.thread, session: spec.resume, event: "resumed" });
+      this.send({
+        type: "session",
+        thread: spec.thread,
+        session: spec.resume,
+        agent: spec.agent,
+        event: "resumed",
+      });
       return spec.resume;
     }
     const created = await conn.agent.request(acp.methods.agent.session.new, {
@@ -202,6 +217,7 @@ export class AgentHost {
       type: "session",
       thread: spec.thread,
       session: created.sessionId,
+      agent: spec.agent,
       event: "started",
     });
     return created.sessionId;
@@ -226,7 +242,7 @@ export class AgentHost {
         "Anur's hook didn't check in when the session started, so the thread can't keep other threads out. A setting may turn hooks off, such as disableAllHooks or allowManagedHooksOnly.",
       );
     }
-    this.sessions.set(spec.thread, sessionId);
+    this.sessions.set(spec.thread, { agent: spec.agent, id: sessionId });
     this.hookLogs.set(sessionId, spec.hookLog);
     let current = optionsOf(options);
     for (const [id, value] of this.chosen.get(spec.thread) ?? []) {
@@ -235,7 +251,7 @@ export class AgentHost {
         .catch(() => null);
       if (res) current = optionsOf(res.configOptions);
     }
-    if (current.length > 0) this.send({ type: "options", thread: spec.thread, options: current });
+    this.send({ type: "options", thread: spec.thread, options: current });
   }
 
   /** The person picked a mode or model for the thread. */
@@ -243,10 +259,15 @@ export class AgentHost {
     const mine = this.chosen.get(thread) ?? new Map<string, string>();
     mine.set(id, value);
     this.chosen.set(thread, mine);
-    const sessionId = this.sessions.get(thread);
-    if (!sessionId || this.state.kind !== "connected") return;
-    const res = await this.state.conn.agent
-      .request(acp.methods.agent.session.setConfigOption, { sessionId, configId: id, value })
+    const live = this.sessions.get(thread);
+    const c = live ? this.connected(live.agent) : null;
+    if (!live || !c) return;
+    const res = await c.conn.agent
+      .request(acp.methods.agent.session.setConfigOption, {
+        sessionId: live.id,
+        configId: id,
+        value,
+      })
       .catch(() => null);
     if (res) this.send({ type: "options", thread, options: optionsOf(res.configOptions) });
   }
@@ -255,25 +276,33 @@ export class AgentHost {
     const fail = (message: string) => {
       this.send({ type: "error", thread: spec.thread, turn, message });
     };
-    if (!(await this.connect()) || this.state.kind !== "connected") {
-      fail(this.state.kind === "failed" ? this.state.reason : "The agent isn't connected.");
+    // A thread moved to another agent leaves its old session; its choices were that agent's.
+    const before = this.sessions.get(spec.thread);
+    if (before && before.agent !== spec.agent) {
+      this.sessions.delete(spec.thread);
+      this.chosen.delete(spec.thread);
+    }
+    const ok = await this.connect(spec.agent);
+    const c = this.connected(spec.agent);
+    if (!ok || !c) {
+      const s = this.agents.get(spec.agent);
+      fail(s?.kind === "failed" ? s.reason : "The agent isn't connected.");
       return;
     }
-    const { conn } = this.state;
     let sessionId: string;
     try {
-      sessionId = await this.session(conn, spec);
+      sessionId = await this.session(c, spec);
     } catch (e) {
       if (e instanceof ResumeFailed) fail("resume-failed");
       else if (e instanceof CheckFailed) {
         fail(e.message);
-        this.fail(e.message);
+        this.fail(spec.agent, e.message);
       } else fail(`The agent couldn't start this thread: ${messageOf(e)}`);
       return;
     }
     this.running.set(sessionId, { thread: spec.thread, turn });
     try {
-      const res = await conn.agent.request(acp.methods.agent.session.prompt, {
+      const res = await c.conn.agent.request(acp.methods.agent.session.prompt, {
         sessionId,
         prompt: [{ type: "text", text }],
       });
@@ -300,18 +329,19 @@ export class AgentHost {
   }
 
   private async cancel(thread: string): Promise<void> {
-    const sessionId = this.sessions.get(thread);
-    if (!sessionId || this.state.kind !== "connected") return;
+    const live = this.sessions.get(thread);
+    const c = live ? this.connected(live.agent) : null;
+    if (!live || !c) return;
     for (const [id, resolve] of this.permissions) {
       if (id.startsWith(`${thread}:`)) {
         resolve(null);
         this.permissions.delete(id);
       }
     }
-    await this.state.conn.agent.notify(acp.methods.agent.session.cancel, { sessionId });
+    await c.conn.agent.notify(acp.methods.agent.session.cancel, { sessionId: live.id });
   }
 
-  private onUpdate(params: acp.SessionNotification): void {
+  private onUpdate(agent: AgentId, params: acp.SessionNotification): void {
     const t = this.running.get(params.sessionId);
     if (!t) return;
     const u = params.update;
@@ -327,25 +357,31 @@ export class AgentHost {
         status: u.status ?? "pending",
         input: u.rawInput ?? null,
       });
-      if (u.status === "completed") void this.matchCall(params.sessionId, t, u.toolCallId);
+      if (u.status === "completed") void this.matchCall(agent, params.sessionId, t, u.toolCallId);
     } else if (u.sessionUpdate === "config_option_update") {
       this.send({ type: "options", thread: t.thread, options: optionsOf(u.configOptions) });
     }
   }
 
   /** A tool call the agent finished must have passed through the hook first. */
-  private async matchCall(sessionId: string, t: Turn, toolUse: string): Promise<void> {
+  private async matchCall(
+    agent: AgentId,
+    sessionId: string,
+    t: Turn,
+    toolUse: string,
+  ): Promise<void> {
     const log = this.hookLogs.get(sessionId);
     if (!log || (await hookSaw(log, toolUse))) return;
     const reason =
       "A tool call ran without passing through Anur's hook, so the turn stopped and threads are off until the check passes again.";
-    if (this.state.kind === "connected")
-      await this.state.conn.agent.notify(acp.methods.agent.session.cancel, { sessionId });
+    const c = this.connected(agent);
+    if (c) await c.conn.agent.notify(acp.methods.agent.session.cancel, { sessionId });
     this.send({ type: "error", thread: t.thread, turn: t.turn, message: reason });
     this.running.delete(sessionId);
-    this.sessions.clear();
-    if (this.state.kind === "connected") this.state.child.kill();
-    this.fail(reason);
+    for (const [thread, live] of this.sessions)
+      if (live.agent === agent) this.sessions.delete(thread);
+    c?.child.kill();
+    this.fail(agent, reason);
   }
 
   private askPermission(

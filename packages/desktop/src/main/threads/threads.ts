@@ -18,6 +18,7 @@ import {
 } from "@anur/core";
 import type { EventPayload, ThreadItem, ThreadView } from "../../shared/ipc-contract.ts";
 import type { SessionOption, SessionSpec, ToMain } from "../../agent/protocol.ts";
+import { DEFAULT_AGENT, isAgentId, type AgentId } from "../../shared/agents.ts";
 import { JsonlWriter, readJsonlFile } from "../../vault/jsonl-writer.ts";
 import type { AgentHub } from "./hub.ts";
 import { PreviewStore } from "./previews.ts";
@@ -50,7 +51,13 @@ export type ThreadDeps = {
   emit: (event: EventPayload<"thread:event">) => void;
   /** A doc's previews changed, so the page shows them again. */
   previewsChanged: (rel: string) => void;
+  /** The agent new threads run on, from settings. */
+  defaultAgent: () => AgentId;
 };
+
+/** The agent a session line names; a line from before agents were recorded is Claude Code's. */
+const agentOfLine = (l: KnownThreadLine): AgentId | null =>
+  l.kind === "session" ? (isAgentId(l.agent) ? l.agent : DEFAULT_AGENT) : null;
 
 /** What a running thread holds in memory: the turn in flight and what it has said so far. */
 type Live = {
@@ -79,6 +86,27 @@ export class Threads {
   private readonly writers = new Map<string, Promise<JsonlWriter>>();
   /** Each thread's session choices, as the agent last reported them. */
   private readonly options = new Map<string, SessionOption[]>();
+  /** An agent picked for a thread's next turn, until a session on it starts. */
+  private readonly picked = new Map<string, AgentId>();
+
+  /** The agent a thread runs on: the one picked for it, else its last session's, else the default. */
+  private agentOf(thread: string, lines: KnownThreadLine[]): AgentId {
+    const picked = this.picked.get(thread);
+    if (picked) return picked;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const a = agentOfLine(lines[i] as KnownThreadLine);
+      if (a) return a;
+    }
+    return this.d.defaultAgent();
+  }
+
+  /** Move a thread to another agent; its next turn starts a session there. */
+  setAgent(thread: string, agent: AgentId): void {
+    this.picked.set(thread, agent);
+    this.options.delete(thread);
+    const live = this.live.get(thread);
+    if (live) void this.refresh(live.rel, live.docText, thread);
+  }
   readonly previews: PreviewStore;
 
   constructor(private readonly d: ThreadDeps) {
@@ -187,6 +215,7 @@ export class Threads {
       reads,
       items,
       options: this.options.get(thread) ?? [],
+      agent: this.agentOf(thread, lines),
     };
     return view;
   }
@@ -203,6 +232,7 @@ export class Threads {
     text: string,
     sectionRef: { index: number; path: string[] },
     message: string,
+    agent?: AgentId,
   ): Promise<{ kind: "started"; thread: ThreadView } | { kind: "refused"; reason: string }> {
     const at = await this.d.locate(rel, text);
     if (!at)
@@ -228,6 +258,7 @@ export class Threads {
       start: "new",
       branchedFrom: null,
     });
+    this.picked.set(thread, agent ?? this.d.defaultAgent());
     await this.send(thread, rel, text, message, at.doc);
     const v = await this.view(at, rel, text, thread);
     return v
@@ -274,13 +305,14 @@ export class Threads {
     live.tools = new Map();
     live.written = new Set();
     live.pending = { message, docText: text };
-    const status = this.d.hub.status;
+    const agent = this.agentOf(thread, lines);
+    const status = this.d.hub.status(agent);
     await this.append(doc, thread, {
       kind: "turn",
       turn,
       event: "start",
-      agent: status.agent ? { name: "claude-code", version: status.agent.agent } : null,
-      adapter: status.agent ? { name: "claude-agent-acp", version: status.agent.adapter } : null,
+      agent: status.agent ? { name: agent, version: status.agent.agent } : null,
+      adapter: status.agent ? { name: `${agent}-acp`, version: status.agent.adapter } : null,
       model: null,
       stopReason: null,
       usage: null,
@@ -288,8 +320,11 @@ export class Threads {
     await this.append(doc, thread, { kind: "message", turn, role: "person", text: message });
 
     // This device's last session for the thread, if any: sessions live on the machine that ran them.
+    // A session on another agent can't be resumed here: the thread is rebuilt on this one
+    // from its bundle and chat, which Anur keeps whatever the agent.
     const session = lines.filter((l) => l.kind === "session" && l.dev === this.d.device).at(-1);
-    const resume = session?.kind === "session" ? session.session : null;
+    const resume =
+      session?.kind === "session" && agentOfLine(session) === agent ? session.session : null;
     await this.makeWorkingCopy(thread, live, at);
     const prompt = this.promptFor(
       at,
@@ -307,7 +342,12 @@ export class Threads {
     this.d.hub.route(thread, (m) => {
       void this.onHost(thread, m);
     });
-    this.d.hub.send({ type: "prompt", spec: await this.spec(thread, resume), turn, text: prompt });
+    this.d.hub.send({
+      type: "prompt",
+      spec: await this.spec(thread, agent, resume),
+      turn,
+      text: prompt,
+    });
     void this.refresh(rel, text, thread);
     return { kind: "sent" };
   }
@@ -356,7 +396,7 @@ export class Threads {
     return parts.join("\n\n");
   }
 
-  private async spec(thread: string, resume: string | null): Promise<SessionSpec> {
+  private async spec(thread: string, agent: AgentId, resume: string | null): Promise<SessionSpec> {
     const dir = path.join(this.d.appSupport, "agent", "hooks");
     await mkdir(dir, { recursive: true });
     const config = path.join(dir, `${thread}.json`);
@@ -372,28 +412,20 @@ export class Threads {
         copiesRoot: this.copiesRoot,
       }),
     );
-    const hook = {
-      type: "command",
-      command: "/usr/bin/env",
-      args: ["ELECTRON_RUN_AS_NODE=1", this.d.node, this.d.hookScript, config],
-      timeout: 10,
-    };
     return {
       thread,
+      agent,
       cwd: this.d.folder,
       resume,
       hookLog: path.join(dir, `${thread}.log.jsonl`),
-      settings: {
-        hooks: {
-          SessionStart: [{ hooks: [hook] }],
-          PreToolUse: [{ matcher: "*", hooks: [hook] }],
+      // The agent's adapter puts this into that agent's own settings.
+      guard: {
+        hook: {
+          command: "/usr/bin/env",
+          args: ["ELECTRON_RUN_AS_NODE=1", this.d.node, this.d.hookScript, config],
         },
-        // "//abs/path" is the absolute-path form of a permission rule.
-        permissions: {
-          deny: ["Read", "Edit", "Write"].map((t) => `${t}(/${anurDir}/**)`),
-          // The working copies are part of the agent's workspace, as the folder is.
-          additionalDirectories: [this.copiesOf(thread)],
-        },
+        anurDir,
+        copies: this.copiesOf(thread),
       },
     };
   }
@@ -515,7 +547,10 @@ export class Threads {
           kind: "session",
           session: m.session,
           event: m.event,
+          agent: m.agent,
         });
+        // The session now says which agent the thread is on.
+        this.picked.delete(thread);
         return;
       case "text":
         live.text += m.text;
@@ -584,7 +619,7 @@ export class Threads {
           if (prompt) {
             this.d.hub.send({
               type: "prompt",
-              spec: await this.spec(thread, null),
+              spec: await this.spec(thread, this.agentOf(thread, lines), null),
               turn: live.turn,
               text: prompt,
             });

@@ -6,6 +6,7 @@ import type {
   ThreadItem,
   ThreadView,
 } from "../../../shared/ipc-contract.ts";
+import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { inlineRuns } from "../layout/inline-markdown.ts";
 
@@ -219,7 +220,13 @@ export function Think({
 }) {
   const { threads, setThreads, prompts, setPrompts } = useThreads(docPath, docText);
   const [open, setOpen] = useState<string | null>(null);
-  const [agent, setAgent] = useState<AgentStatus | null>(null);
+  /** Each agent's connection, as main last reported it. */
+  const [statuses, setStatuses] = useState<Partial<Record<AgentId, AgentStatus>>>({});
+  const noteStatus = useCallback((s: AgentStatus) => {
+    setStatuses((all) => ({ ...all, [s.id]: s }));
+  }, []);
+  /** The agent a new thread runs on: the default from settings, unless picked here. */
+  const [newAgent, setNewAgent] = useState<AgentId>("claude-code");
   const [error, setError] = useState<string | null>(null);
   const [showText, setShowText] = useState(false);
   /** Threads with a preview of this doc, for "Preview in doc". */
@@ -247,9 +254,12 @@ export function Think({
   }, [docPath]);
 
   useEffect(() => {
-    void anur.call("agent:status", { connect: false }).then(setAgent);
-    return anur.on("agent:status", setAgent);
-  }, []);
+    void anur.call("settings:get", {}).then((s) => {
+      setNewAgent(s.defaultAgent);
+    });
+    void anur.call("agent:status", { connect: false }).then(noteStatus);
+    return anur.on("agent:status", noteStatus);
+  }, [noteStatus]);
 
   const here = useMemo(
     () => (section ? threads.filter((t) => samePath(t.path, section.path)) : []),
@@ -283,6 +293,7 @@ export function Think({
         text: docText(),
         section: { index: section.index, path: section.path },
         message,
+        agent: newAgent,
       });
       if (r.kind === "refused") {
         setError(r.reason);
@@ -292,28 +303,38 @@ export function Think({
       setOpen(r.thread.id);
       return true;
     },
-    [docPath, section, docText, setThreads],
+    [docPath, section, docText, setThreads, newAgent],
   );
 
   if (!docPath || !tree)
     return <p className="quiet">Threads on the section you're in show here.</p>;
   if (!section) return <p className="quiet">Put the cursor in a section to think about it.</p>;
 
-  const notConnected =
-    agent?.connected === false ? (
+  /** Why the agent can't run threads now, with Try again; nothing when it can. */
+  const notConnected = (id: AgentId) => {
+    const s = statuses[id];
+    if (!AGENTS[id].runsThreads)
+      return (
+        <div className="think-banner" role="status">
+          <p>{AGENTS[id].why}</p>
+        </div>
+      );
+    if (s?.connected !== false) return null;
+    return (
       <div className="think-banner" role="status">
-        <p>{agent.reason ?? "The agent isn't connected."}</p>
+        <p>{s.reason ?? "The agent isn't connected."}</p>
         <button
           type="button"
           className="think-button"
           onClick={() => {
-            void anur.call("agent:status", { connect: true }).then(setAgent);
+            void anur.call("agent:status", { connect: true, agent: id }).then(noteStatus);
           }}
         >
           Try again
         </button>
       </div>
-    ) : null;
+    );
+  };
 
   if (thread) {
     const asks = prompts.filter((p) => p.thread === thread.id);
@@ -382,7 +403,7 @@ export function Think({
             </div>
           ))}
         </div>
-        {notConnected}
+        {notConnected(thread.agent)}
         {error ? <p className="think-error">{error}</p> : null}
         {previewed.has(thread.id) && !thread.busy ? (
           <button
@@ -397,41 +418,55 @@ export function Think({
             Preview in doc
           </button>
         ) : null}
-        {thread.options.length > 0 ? (
-          <div className="think-options">
-            {thread.options.map((o) => (
-              <label key={o.id} className="think-option">
-                <span className="quiet">{o.name}</span>
-                <select
-                  value={o.current}
-                  disabled={thread.busy}
-                  title={o.choices.find((c) => c.value === o.current)?.description ?? undefined}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setThreads((ts) =>
-                      ts.map((t) =>
-                        t.id === thread.id
-                          ? {
-                              ...t,
-                              options: t.options.map((x) =>
-                                x.id === o.id ? { ...x, current: value } : x,
-                              ),
-                            }
-                          : t,
-                      ),
-                    );
-                    void anur.call("thread:option", { thread: thread.id, id: o.id, value });
-                  }}
-                >
-                  {o.choices.map((c) => (
-                    <option key={c.value} value={c.value}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ))}
-          </div>
+        <div className="think-options">
+          <AgentPicker
+            value={thread.agent}
+            disabled={thread.busy}
+            onChange={(next) => {
+              setThreads((ts) =>
+                ts.map((t) => (t.id === thread.id ? { ...t, agent: next, options: [] } : t)),
+              );
+              void anur.call("thread:agent", { thread: thread.id, agent: next });
+            }}
+          />
+          {thread.options.map((o) => (
+            <label key={o.id} className="think-option">
+              <span className="quiet">{o.name}</span>
+              <select
+                value={o.current}
+                disabled={thread.busy}
+                title={o.choices.find((c) => c.value === o.current)?.description ?? undefined}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setThreads((ts) =>
+                    ts.map((t) =>
+                      t.id === thread.id
+                        ? {
+                            ...t,
+                            options: t.options.map((x) =>
+                              x.id === o.id ? { ...x, current: value } : x,
+                            ),
+                          }
+                        : t,
+                    ),
+                  );
+                  void anur.call("thread:option", { thread: thread.id, id: o.id, value });
+                }}
+              >
+                {o.choices.map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+        {thread.items.length > 0 && thread.options.length === 0 && !thread.busy ? (
+          <p className="quiet think-agent-note">
+            The next message starts on {AGENTS[thread.agent].name}, from this section's text and the
+            chat so far.
+          </p>
         ) : null}
         <Composer
           placeholder="Reply in this thread"
@@ -515,17 +550,52 @@ export function Think({
           </li>
         ))}
       </ul>
-      {notConnected}
+      {notConnected(newAgent)}
       {error ? <p className="think-error">{error}</p> : null}
+      <div className="think-options">
+        <AgentPicker value={newAgent} disabled={!writable} onChange={setNewAgent} />
+      </div>
       <Composer
         placeholder={
           writable ? "Ask about this section" : "Threads need a folder Anur can write to"
         }
         sendLabel="Start thread"
         busy={false}
-        disabled={!writable}
+        disabled={!writable || !AGENTS[newAgent].runsThreads}
         onSend={start}
       />
     </div>
+  );
+}
+
+/** Which agent a thread runs on. Agents that can't run threads yet are listed, and say why. */
+function AgentPicker({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: AgentId;
+  disabled: boolean;
+  onChange: (agent: AgentId) => void;
+}) {
+  return (
+    <label className="think-option">
+      <span className="quiet">Agent</span>
+      <select
+        value={value}
+        disabled={disabled}
+        title={AGENTS[value].why ?? undefined}
+        onChange={(e) => {
+          const next = AGENT_IDS.find((id) => id === e.target.value);
+          if (next) onChange(next);
+        }}
+      >
+        {AGENT_IDS.map((id) => (
+          <option key={id} value={id} disabled={!AGENTS[id].runsThreads}>
+            {AGENTS[id].runsThreads ? AGENTS[id].name : `${AGENTS[id].name} (not yet)`}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
