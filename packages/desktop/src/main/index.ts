@@ -237,10 +237,10 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
         }
         const clicks = process.env.ANUR_SCREENSHOT_CLICK;
         if (clicks) {
-          // Click buttons by the start of their visible text, in order, such as "Engineering,Archive,Old".
+          // Click buttons by the start of their visible text (or, for an icon, its label), in order, such as "Engineering,Archive,Old".
           for (const label of clicks.split(",")) {
             await win.webContents.executeJavaScript(
-              `[...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(${JSON.stringify(label)}))?.click()`,
+              `[...document.querySelectorAll("button")].find((b) => (b.textContent.trim() || b.getAttribute("aria-label") || "").startsWith(${JSON.stringify(label)}))?.click()`,
             );
             await new Promise((r) => setTimeout(r, 150));
           }

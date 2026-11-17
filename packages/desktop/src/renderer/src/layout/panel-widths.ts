@@ -52,3 +52,26 @@ export function dragged(side: Side, startWidth: number, startX: number, x: numbe
   const delta = side === "left" ? x - startX : startX - x;
   return clampWidth(side, startWidth + delta);
 }
+
+/** Which sidebars are open. Both start open; collapsing one is remembered like its width. */
+export type Open = Record<Side, boolean>;
+
+const OPEN_KEY = "anur.panelsOpen";
+
+export function loadOpen(storage: Pick<Storage, "getItem"> | undefined): Open {
+  try {
+    const raw = storage?.getItem(OPEN_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Partial<Record<Side, unknown>>) : {};
+    return { left: parsed.left !== false, right: parsed.right !== false };
+  } catch {
+    return { left: true, right: true };
+  }
+}
+
+export function saveOpen(storage: Pick<Storage, "setItem"> | undefined, open: Open): void {
+  try {
+    storage?.setItem(OPEN_KEY, JSON.stringify(open));
+  } catch {
+    // Storage blocked or full: the panels just open next time.
+  }
+}

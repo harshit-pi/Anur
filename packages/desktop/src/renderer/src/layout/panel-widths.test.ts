@@ -4,7 +4,9 @@ import {
   clampWidth,
   dragged,
   initialWidths,
+  loadOpen,
   loadWidths,
+  saveOpen,
   saveWidths,
 } from "./panel-widths.ts";
 
@@ -54,5 +56,24 @@ describe("sidebar widths", () => {
     expect(() => {
       saveWidths(broken, initialWidths());
     }).not.toThrow();
+  });
+});
+
+describe("which panels are open", () => {
+  it("starts with both open", () => {
+    expect(loadOpen(memory())).toEqual({ left: true, right: true });
+    expect(loadOpen(undefined)).toEqual({ left: true, right: true });
+  });
+
+  it("remembers a collapsed panel", () => {
+    const storage = memory();
+    saveOpen(storage, { left: false, right: true });
+    expect(loadOpen(storage)).toEqual({ left: false, right: true });
+  });
+
+  it("opens both when the stored value is unreadable", () => {
+    const storage = memory();
+    storage.setItem("anur.panelsOpen", "{not json");
+    expect(loadOpen(storage)).toEqual({ left: true, right: true });
   });
 });

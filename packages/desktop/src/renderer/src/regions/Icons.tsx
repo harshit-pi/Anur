@@ -88,3 +88,17 @@ export const ChevronDownIcon = (p: IconProps) => (
     <path d="m4 6.25 4 4 4-4" />
   </Svg>
 );
+
+export const SidebarLeftIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+    <path d="M6 2.75v10.5" />
+  </Svg>
+);
+
+export const SidebarRightIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+    <path d="M10 2.75v10.5" />
+  </Svg>
+);

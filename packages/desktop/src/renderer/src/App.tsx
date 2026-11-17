@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import { Page, type OpenDoc } from "./editor/Page.tsx";
 import { Resizer } from "./layout/Resizer.tsx";
-import { loadWidths, saveWidths, type Side } from "./layout/panel-widths.ts";
+import { loadOpen, loadWidths, saveOpen, saveWidths, type Side } from "./layout/panel-widths.ts";
 import { anur } from "./bridge.ts";
 import { CommandPalette } from "./regions/CommandPalette.tsx";
 import { MergeDialog } from "./regions/MergeDialog.tsx";
@@ -66,6 +66,14 @@ export function App() {
     [sections],
   );
   const [widths, setWidths] = useState(() => loadWidths(window.localStorage));
+  const [open, setOpen] = useState(() => loadOpen(window.localStorage));
+  const toggle = useCallback((side: Side) => {
+    setOpen((o) => {
+      const next = { ...o, [side]: !o[side] };
+      saveOpen(window.localStorage, next);
+      return next;
+    });
+  }, []);
   const setWidth = (side: Side) => (width: number) => {
     setWidths((w) => {
       const next = { ...w, [side]: width };
@@ -97,6 +105,11 @@ export function App() {
         e.preventDefault();
         setPaletteOpen((o) => !o);
       }
+      // ⌘\ hides or shows the files panel, ⌥⌘\ the section panel.
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.code === "Backslash") {
+        e.preventDefault();
+        toggle(e.altKey ? "right" : "left");
+      }
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "e") {
         e.preventDefault();
         setSource((s) => !s);
@@ -106,22 +119,26 @@ export function App() {
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, []);
+  }, [toggle]);
 
   return (
     <div
       className="shell"
       style={{
-        gridTemplateColumns: `48px ${String(widths.left)}px minmax(0, 1fr) ${String(widths.right)}px`,
+        gridTemplateColumns: `48px ${String(open.left ? widths.left : 0)}px minmax(0, 1fr) ${String(open.right ? widths.right : 0)}px`,
       }}
     >
-      <TabBar />
+      <TabBar open={open} onToggle={toggle} />
       <Ribbon
+        filesOpen={open.left}
+        onFiles={() => {
+          toggle("left");
+        }}
         onCommand={() => {
           setPaletteOpen(true);
         }}
       />
-      <LeftSidebar folder={folder} selected={selected} onSelect={setSelected} />
+      <LeftSidebar folder={folder} selected={selected} onSelect={setSelected} hidden={!open.left} />
       <Center
         folder={folder}
         selected={selected}
@@ -134,7 +151,7 @@ export function App() {
         onOpenFolder={openFolder}
         onMerge={setMerging}
       />
-      <RightSidebar sections={sections} onJump={jumpTo} />
+      <RightSidebar sections={sections} onJump={jumpTo} hidden={!open.right} />
       <StatusBar
         version={version}
         folder={folder}
@@ -144,18 +161,22 @@ export function App() {
           setSource((s) => !s);
         }}
       />
-      <Resizer
-        side="left"
-        width={widths.left}
-        offset={48 + widths.left}
-        onChange={setWidth("left")}
-      />
-      <Resizer
-        side="right"
-        width={widths.right}
-        offset={widths.right}
-        onChange={setWidth("right")}
-      />
+      {open.left ? (
+        <Resizer
+          side="left"
+          width={widths.left}
+          offset={48 + widths.left}
+          onChange={setWidth("left")}
+        />
+      ) : null}
+      {open.right ? (
+        <Resizer
+          side="right"
+          width={widths.right}
+          offset={widths.right}
+          onChange={setWidth("right")}
+        />
+      ) : null}
       {merging ? (
         <MergeDialog
           copy={merging}
