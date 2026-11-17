@@ -68,7 +68,21 @@ export const ipcContract = {
         mode: z.enum(["editable", "read-only", "plain-text"]),
         /** Something to tell the person once, such as mixed line endings. */
         note: z.string().nullable(),
+        /** A hash of the file's bytes as read; a save must match it (compare-and-swap). */
+        hash: z.string(),
       }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /**
+   * Write the page's text, only if the file on disk still has the hash the
+   * page last read or wrote. Otherwise it changed outside Anur and nothing is written.
+   */
+  "doc:save": {
+    request: z.object({ path: z.string(), text: z.string(), base: z.string() }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("saved"), hash: z.string() }),
+      z.object({ kind: z.literal("changed") }),
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },

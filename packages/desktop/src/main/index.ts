@@ -14,6 +14,7 @@ import {
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { openDoc } from "./folder/open-doc.ts";
+import { saveDoc } from "./folder/save-doc.ts";
 import { readRecent } from "./folder/recent.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
 import { buildMenu } from "./menu.ts";
@@ -112,6 +113,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     return openDoc(folder, requested);
+  },
+  "doc:save": async (request, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    return saveDoc(folder, request);
   },
   "conflict:plan": async ({ copy }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -245,6 +251,29 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
             await new Promise((r) => setTimeout(r, 150));
           }
         }
+        // ANUR_SCREENSHOT_TYPE types text into the page, at the start of the
+        // ANUR_SCREENSHOT_LINE-th line drawn on the page (1-based); ANUR_SCREENSHOT_KEYS then presses
+        // keys such as "meta+alt+2,Tab". The quit that follows the screenshot
+        // also checks that pending typing is saved before the window closes.
+        const typed = process.env.ANUR_SCREENSHOT_TYPE;
+        const keys = process.env.ANUR_SCREENSHOT_KEYS;
+        if (typed !== undefined || keys) {
+          const line = Number(process.env.ANUR_SCREENSHOT_LINE ?? "1");
+          await win.webContents.executeJavaScript(
+            `(() => { document.querySelector(".cm-content")?.focus(); const el = document.querySelectorAll(".cm-line")[${String(line - 1)}]; if (!el) return; const r = document.createRange(); r.setStart(el, 0); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); })()`,
+          );
+          await new Promise((r) => setTimeout(r, 100));
+          if (typed) await win.webContents.insertText(typed);
+          for (const combo of keys ? keys.split(",") : []) {
+            const parts = combo.split("+");
+            const keyCode = parts.pop() ?? "";
+            const modifiers = parts as ("meta" | "alt" | "shift" | "control")[];
+            win.webContents.sendInputEvent({ type: "keyDown", keyCode, modifiers });
+            win.webContents.sendInputEvent({ type: "keyUp", keyCode, modifiers });
+            await new Promise((r) => setTimeout(r, 80));
+          }
+          await new Promise((r) => setTimeout(r, 200));
+        }
         if (process.env.ANUR_SCREENSHOT_PALETTE) {
           win.webContents.sendInputEvent({ type: "keyDown", keyCode: "K", modifiers: ["meta"] });
           await new Promise((r) => setTimeout(r, 300));
@@ -319,6 +348,13 @@ app.on("will-quit", () => {
   void folders.closeAll();
 });
 
+// A window with unsaved typing holds its close until the save lands
+// (the page's beforeunload), then closes itself; a quit carries on after it.
+let quitting = false;
+app.on("before-quit", () => {
+  quitting = true;
+});
+
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") app.quit();
+  if (process.platform !== "darwin" || quitting) app.quit();
 });

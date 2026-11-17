@@ -2,6 +2,7 @@ import { EditorView } from "@codemirror/view";
 import type { SectionTree } from "@anur/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FolderState } from "../../shared/ipc-contract.ts";
+import type { SaveStatus } from "./editor/autosave.ts";
 import { Page, type OpenDoc } from "./editor/Page.tsx";
 import { Resizer } from "./layout/Resizer.tsx";
 import {
@@ -34,6 +35,13 @@ export function App() {
   const [docError, setDocError] = useState<string | null>(null);
   const [sections, setSections] = useState<SectionTree | null>(null);
   const [source, setSource] = useState(false);
+  const [save, setSave] = useState<{ status: SaveStatus | null; detail: string | null }>({
+    status: null,
+    detail: null,
+  });
+  const onSaveStatus = useCallback((status: SaveStatus | null, detail: string | null) => {
+    setSave({ status, detail });
+  }, []);
   const [downloaded, setDownloaded] = useState(noneDownloaded);
   // Read inside the open effect without making it a dependency: marking a doc
   // downloaded must not close and reopen the doc being read.
@@ -172,11 +180,19 @@ export function App() {
         folder={shown}
         selected={selected}
         page={
-          doc ? <Page doc={doc} source={source} onSections={setSections} onView={onView} /> : null
+          doc ? (
+            <Page
+              doc={doc}
+              source={source}
+              onSections={setSections}
+              onView={onView}
+              onSaveStatus={onSaveStatus}
+            />
+          ) : null
         }
         opening={opening}
         docNote={doc?.note ?? null}
-        docError={docError}
+        docError={docError ?? save.detail}
         onOpenFolder={openFolder}
         onMerge={setMerging}
       />
@@ -185,6 +201,7 @@ export function App() {
         version={version}
         folder={shown}
         docMode={doc?.mode ?? null}
+        saveStatus={doc ? save.status : null}
         source={source}
         onToggleSource={() => {
           setSource((s) => !s);

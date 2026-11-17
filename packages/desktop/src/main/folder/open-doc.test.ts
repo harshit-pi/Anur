@@ -32,6 +32,7 @@ describe("opening a doc for the page", () => {
       text: "# Plan\n\n## Retry\n",
       mode: "editable",
       note: null,
+      hash: expect.stringMatching(/^[0-9a-f]{64}$/) as unknown,
     });
   });
 
