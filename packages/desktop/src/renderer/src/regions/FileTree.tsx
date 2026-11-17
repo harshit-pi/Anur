@@ -4,14 +4,18 @@ import { buildTree, type TreeNode } from "../layout/file-tree.ts";
 /** The folder's docs as a tree; folders open and close, a doc can be picked. */
 export function FileTree({
   docs,
+  offloaded = [],
   selected,
   onSelect,
 }: {
   docs: readonly string[];
+  /** Docs whose bytes are still in iCloud: marked, and fetched when opened. */
+  offloaded?: readonly string[];
   selected: string | null;
   onSelect: (path: string) => void;
 }) {
   const tree = useMemo(() => buildTree(docs), [docs]);
+  const inCloud = useMemo(() => new Set(offloaded), [offloaded]);
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   const toggle = (path: string) => {
     setOpen((s) => {
@@ -46,12 +50,17 @@ export function FileTree({
             type="button"
             className={selected === n.path ? "tree-row doc selected" : "tree-row doc"}
             style={{ paddingLeft: 22 + depth * 14 }}
-            title={n.path}
+            title={inCloud.has(n.path) ? `${n.path} (in iCloud; downloads when opened)` : n.path}
             onClick={() => {
               onSelect(n.path);
             }}
           >
             <span className="truncate">{n.name}</span>
+            {inCloud.has(n.path) ? (
+              <span className="cloud-mark" aria-label="in iCloud">
+                ☁
+              </span>
+            ) : null}
           </button>
         </li>
       ),

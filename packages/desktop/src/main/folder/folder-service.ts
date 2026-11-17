@@ -1,7 +1,10 @@
-import { realpath } from "node:fs/promises";
+import { realpath, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
+import { cloudProviderOf, findConflictCopies } from "@anur/core";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import { openAnurFolder } from "../../vault/anur-folder.ts";
+import { listOffloaded } from "../../vault/icloud.ts";
 import { acquireFolderLock, type LockHolder } from "./folder-lock.ts";
 import { listDocs } from "./list-docs.ts";
 import { rememberFolder } from "./recent.ts";
@@ -21,7 +24,10 @@ type Open = { state: FolderState; release: () => Promise<void> };
 export class FolderService {
   private readonly byWindow = new Map<number, Open>();
 
-  constructor(private readonly appSupportDir: string) {}
+  constructor(
+    private readonly appSupportDir: string,
+    private readonly home: string = homedir(),
+  ) {}
 
   current(windowId: number): FolderState | null {
     return this.byWindow.get(windowId)?.state ?? null;
@@ -50,15 +56,7 @@ export class FolderService {
 
     try {
       const anur = await openAnurFolder(folder);
-      const { docs, truncated } = await listDocs(folder);
-      const state: FolderState = {
-        name: path.basename(folder),
-        path: folder,
-        mode: anur.mode,
-        reason: anur.mode === "read-only" ? anur.reason : null,
-        docs,
-        truncated,
-      };
+      const state = await this.describe(folder, anur.mode === "read-only" ? anur.reason : null);
       await this.close(windowId);
       this.byWindow.set(windowId, { state, release: lock.release });
       await rememberFolder(this.appSupportDir, folder);
@@ -67,6 +65,38 @@ export class FolderService {
       await lock.release();
       return { kind: "refused", reason: `${folder} couldn't be opened: ${(e as Error).message}` };
     }
+  }
+
+  /** What the sidebar and banners need to know about a folder, read fresh from disk. */
+  private async describe(folder: string, readOnlyReason: string | null): Promise<FolderState> {
+    const { docs, truncated } = await listDocs(folder);
+    const cloud = cloudProviderOf(folder, this.home);
+    const gitInCloud =
+      cloud !== null &&
+      (await stat(path.join(folder, ".git")).then(
+        () => true,
+        () => false,
+      ));
+    return {
+      name: path.basename(folder),
+      path: folder,
+      mode: readOnlyReason ? "read-only" : "writable",
+      reason: readOnlyReason,
+      docs,
+      truncated,
+      cloud,
+      gitInCloud,
+      offloaded: cloud === "icloud" ? await listOffloaded(folder) : [],
+      conflicts: findConflictCopies(docs, cloud),
+    };
+  }
+
+  /** Read a window's folder again, as after a merge changed its files. */
+  async refresh(windowId: number): Promise<FolderState | null> {
+    const open = this.byWindow.get(windowId);
+    if (!open) return null;
+    open.state = await this.describe(open.state.path, open.state.reason);
+    return open.state;
   }
 
   /** Release a window's folder, as when the window closes. */

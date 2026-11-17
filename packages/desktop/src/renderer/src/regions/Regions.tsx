@@ -74,7 +74,12 @@ export function LeftSidebar({
       <p className="sidebar-title truncate" title={folder.path}>
         {folder.name}
       </p>
-      <FileTree docs={folder.docs} selected={selected} onSelect={onSelect} />
+      <FileTree
+        docs={folder.docs}
+        offloaded={folder.offloaded}
+        selected={selected}
+        onSelect={onSelect}
+      />
       {folder.truncated ? (
         <p className="quiet">This folder has more files than Anur lists; some are left out.</p>
       ) : null}
@@ -128,15 +133,81 @@ export function TabBar() {
   );
 }
 
+const PROVIDERS: Record<NonNullable<FolderState["cloud"]>, string> = {
+  icloud: "iCloud Drive",
+  dropbox: "Dropbox",
+  onedrive: "OneDrive",
+  "google-drive": "Google Drive",
+  cloud: "a cloud folder",
+};
+
+/** Notices about where the folder lives and what its sync service left behind. */
+function FolderNotices({
+  folder,
+  onMerge,
+}: {
+  folder: FolderState;
+  onMerge: (copy: string) => void;
+}) {
+  const [dismissed, setDismissed] = useState(false);
+  return (
+    <>
+      {folder.cloud && !dismissed ? (
+        <div className="notice" role="status">
+          <span>
+            This folder syncs through {PROVIDERS[folder.cloud]}. Anur keeps its caches and its lock
+            on this Mac, outside the folder.
+            {folder.offloaded.length > 0
+              ? ` ${String(folder.offloaded.length)} docs are still in iCloud; Anur downloads each one before opening it.`
+              : ""}
+            {folder.gitInCloud
+              ? " It is also a git repo: sync can break git's lock files, so a repo is safer outside a synced folder."
+              : ""}
+          </span>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Dismiss"
+            onClick={() => {
+              setDismissed(true);
+            }}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
+      {folder.conflicts.map((c) => (
+        <div key={c.copy} className="banner conflict" role="status">
+          <span className="truncate" title={c.copy}>
+            <strong>{c.copy}</strong> looks like a {c.service === "icloud" ? "iCloud" : "Dropbox"}{" "}
+            conflict copy of {c.original}.
+          </span>
+          <button
+            type="button"
+            className="ask-button"
+            onClick={() => {
+              onMerge(c.copy);
+            }}
+          >
+            Review merge
+          </button>
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** 4. Center: the page or the map, per tab, under the path row. */
 export function Center({
   folder,
   selected,
   onOpenFolder,
+  onMerge,
 }: {
   folder: FolderState | null;
   selected: string | null;
   onOpenFolder: () => void;
+  onMerge: (copy: string) => void;
 }) {
   return (
     <main className="center">
@@ -164,6 +235,7 @@ export function Center({
           </button>
         </div>
       </div>
+      {folder ? <FolderNotices key={folder.path} folder={folder} onMerge={onMerge} /> : null}
       {folder?.mode === "read-only" ? (
         <div className="banner" role="status">
           <strong>Read-only.</strong> {folder.reason}
