@@ -887,10 +887,37 @@ body.resizing * {
   color: var(--pencil);
 }
 
+/* What the link button copied: a small bubble under the buttons, over the page. */
+.path-actions {
+  position: relative;
+}
+
 .copied {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  gap: 4px;
+  max-width: 360px;
+  padding: 5px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--sheet);
+  box-shadow: var(--shadow);
   font-size: 12px;
-  max-width: 280px;
+  color: var(--slate);
+  white-space: nowrap;
+}
+
+.copied-link {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--ink);
+}
+
+/* Small icon buttons keep a focus ring for the keyboard, drawn on their own edge. */
+.icon-button:focus-visible {
+  outline-offset: -2px;
 }

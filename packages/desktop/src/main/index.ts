@@ -186,14 +186,14 @@ const handlers: { [C in Channel]: Handler<C> } = {
                   },
                 },
         );
-      // Closing without a choice resolves null; a click, which can land after
-      // the close, wins if it comes.
+      // Closing without a choice resolves null. On macOS the click can arrive
+      // a moment after the close, so the close waits briefly for it.
       Menu.buildFromTemplate(build(items)).popup({
         window: win,
         callback: () => {
           setTimeout(() => {
             resolve({ id: chosen });
-          }, 0);
+          }, 250);
         },
       });
     }),

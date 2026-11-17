@@ -29,7 +29,7 @@
   },
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "pnpm ensure-electron && electron-vite dev",
+    "dev": "pnpm ensure-electron && electron-vite dev --watch",
     "build": "electron-vite build",
     "start": "pnpm ensure-electron && electron-vite preview",
     "package": "electron-vite build && electron-builder --mac --dir",

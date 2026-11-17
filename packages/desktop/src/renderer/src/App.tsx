@@ -165,14 +165,14 @@ export function App() {
     [folder, selected, openDoc],
   );
   /** A link to the section at the cursor, as Obsidian writes it, copied. */
-  const copySectionLink = useCallback((): string | null => {
+  const copySectionLink = useCallback(async (): Promise<string | null> => {
     if (!folder || !selected) return null;
     const v = view.current;
     const section = sections && v ? sectionAt(sections, v.state.selection.main.head) : null;
     const isTitle = !section || section === sections?.sections[0];
     const link = wikiLinkTo(folder.docs, selected, isTitle ? null : (section.path.at(-1) ?? null));
-    void anur.call("clipboard:write", { text: link });
-    return link;
+    const { ok } = await anur.call("clipboard:write", { text: link });
+    return ok ? link : null;
   }, [folder, selected, sections]);
   const showMore = useCallback(() => {
     if (!folder || !selected) return;
