@@ -28,15 +28,23 @@ export function FileTree({
   // scrolls into view, whether a click, a tab, back or forward brought it,
   // and again whenever its tab is pressed, as in an IDE.
   const list = useRef<HTMLUListElement>(null);
+  /** A reveal waiting for its row to be drawn, as when its folder was collapsed. */
+  const scrollPending = useRef(false);
   useEffect(() => {
     if (!selected) return;
     const parts = selected.split("/").slice(0, -1);
     const ancestors = parts.map((_, i) => parts.slice(0, i + 1).join("/"));
+    scrollPending.current = true;
     setOpen((s) => (ancestors.every((a) => s.has(a)) ? s : new Set([...s, ...ancestors])));
-    requestAnimationFrame(() => {
-      list.current?.querySelector(".tree-row.selected")?.scrollIntoView({ block: "nearest" });
-    });
   }, [selected, reveal]);
+  // Runs after every draw: once the doc's row exists, bring it into view.
+  useEffect(() => {
+    if (!scrollPending.current) return;
+    const row = list.current?.querySelector(".tree-row.selected");
+    if (!row) return;
+    scrollPending.current = false;
+    row.scrollIntoView({ block: "nearest" });
+  });
   useEffect(() => {
     if (collapse > 0) setOpen(new Set());
   }, [collapse]);
