@@ -18,6 +18,8 @@ Retry after 1, 3 and 7 days.
 
 Use the client's pay day.
 
+Fall back to day 1 for new clients.
+
 ## Success metric
 
 - Recovered revenue per month.
@@ -27,8 +29,40 @@ const tree = buildSectionTree(DOC, { fileName: "notes.md" });
 const at = (name: string) => tree.sections.findIndex((s) => s.path.at(-1) === name);
 
 describe("buildBundle", () => {
-  it("sends the parent's own text, the section's subtree and the siblings' outline", () => {
-    const b = buildBundle({ text: DOC, tree, index: at("Retry timing"), docPath: "notes.md" });
+  it("sends the parent's own text, the section's subtree and the whole doc's outline", () => {
+    const b = buildBundle({ text: DOC, tree, index: at("Pay day"), docPath: "notes.md" });
+    expect(b.parts.map((p) => [p.kind, p.label, p.detail])).toEqual([
+      ["ancestor", "Failed-payment notifications", "above, its text"],
+      ["ancestor", "Retry timing", "parent, its text"],
+      ["section", "Pay day", "this section, its text"],
+      ["outline", "The rest of the doc", "its outline"],
+    ]);
+    // Sections further away come in too, as their heading and first line.
+    expect(b.parts[3]?.text).toBe(
+      [
+        "- Failed-payment notifications (the doc's title, its text given)",
+        "  - Problem: 1 in 25 card payments fails first try.",
+        "  - Retry timing (above it, its text given)",
+        "    - **Pay day** (this section, given in full)",
+        "  - Success metric: Recovered revenue per month.",
+      ].join("\n"),
+    );
+  });
+
+  it("keeps a sibling's full text out, and its subsections' own lines in the outline", () => {
+    const b = buildBundle({ text: DOC, tree, index: at("Problem"), docPath: "notes.md" });
+    expect(b.markdown).not.toContain("Fall back to day 1");
+    expect(b.parts.at(-1)?.text).toContain("    - Pay day: Use the client's pay day.");
+  });
+
+  it("still offers the siblings-only outline as a variant", () => {
+    const b = buildBundle({
+      text: DOC,
+      tree,
+      index: at("Retry timing"),
+      docPath: "notes.md",
+      rules: ["ancestors-own-text", "section-subtree", "siblings-outline"],
+    });
     expect(b.parts.map((p) => [p.kind, p.label, p.detail])).toEqual([
       ["ancestor", "Failed-payment notifications", "parent, its text"],
       ["section", "Retry timing", "this section, its text"],
@@ -43,7 +77,7 @@ describe("buildBundle", () => {
 
   it("never carries a sibling's full text", () => {
     const b = buildBundle({ text: DOC, tree, index: at("Problem"), docPath: "notes.md" });
-    expect(b.markdown).not.toContain("Use the client's pay day.");
+    expect(b.markdown).not.toContain("Fall back to day 1");
     expect(b.markdown).toContain("Retry timing: Retry after 1, 3 and 7 days.");
   });
 
@@ -54,7 +88,7 @@ describe("buildBundle", () => {
       "parent, its text",
     ]);
     expect(b.parts[1]?.text).toBe("Retry after 1, 3 and 7 days.");
-    expect(b.markdown).not.toContain("1 in 25");
+    expect(b.markdown).not.toContain("## Problem");
   });
 
   it("follows the rules it is given, so a variant is configuration", () => {
