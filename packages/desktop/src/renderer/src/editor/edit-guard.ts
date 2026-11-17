@@ -4,12 +4,13 @@ import {
   type ChangeSpec,
   EditorSelection,
   EditorState,
+  Text,
   Transaction,
   type TransactionSpec,
 } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
-import { copyText } from "./inline-format.ts";
+import { copyText, insertMarkdown, minimalEdits } from "./inline-format.ts";
 import { markdownSupport } from "./sections.ts";
 
 /**
@@ -230,7 +231,7 @@ function stylesAround(state: EditorState, pos: number): SyntaxNode[] {
   });
 }
 
-const GUARDED = ["delete", "input.type", "input.paste", "input.drop", "input"];
+const GUARDED = ["delete", "input.type", "input.paste", "input.drop", "input", "move.drop"];
 const SKIPPED = [
   "input.format",
   "input.complete",
@@ -252,6 +253,7 @@ export function guardChanges(tr: Transaction): TransactionSpec | null {
   tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
     edits.push({ from: fromA, to: toA, text: inserted.toString() });
   });
+  if (tr.isUserEvent("move.drop")) return guardMove(tr, edits);
   const edit = edits[0];
   if (edits.length !== 1 || !edit) return null;
   const line = state.doc.lineAt(edit.from);
@@ -307,6 +309,15 @@ export function guardChanges(tr: Transaction): TransactionSpec | null {
     if (lenient) return true;
     return others.every((c, k) => /\s/.test(c.ch) || c.styles === kept[k]?.styles);
   };
+
+  // Pasting or dropping one line of Markdown (guardPaste). A pasted line
+  // break keeps the Markdown as written, closing formats around it as Enter does.
+  if (
+    (tr.isUserEvent("input.paste") || tr.isUserEvent("input.drop")) &&
+    !edit.text.includes("\n")
+  ) {
+    return guardPaste(state, line, edit, userEvent);
+  }
 
   // Typing with nothing selected.
   if (edit.to === edit.from) {
@@ -390,6 +401,309 @@ export function guardChanges(tr: Transaction): TransactionSpec | null {
   const original = spans.length === 1 && spans[0]?.[0] === edit.from && spans[0][1] === edit.to;
   if (original && typed === edit.text && changes.length === (typed === "" ? 1 : 2)) return null;
   return finish(changes, at, typed.length);
+}
+
+/**
+ * A paste is right when the line shows what it showed, less what was
+ * replaced, with the pasted text in place: every old character keeping its
+ * style, every pasted one keeping at least its own.
+ */
+function pasteReadsBack(
+  state: EditorState,
+  line: { from: number; to: number },
+  changes: ChangeSpec[],
+  gone: (pos: number) => boolean,
+  at: number,
+  pasted: { text: string; atom: boolean; styles: Set<string> }[],
+  checkOwnStyles = true,
+): boolean {
+  const before = visibleChars(state.doc.toString(), line.from, line.to).filter((c) => !gone(c.pos));
+  const set = ChangeSet.of(changes, state.doc.length);
+  const next = set.apply(state.doc).toString();
+  const got = visibleChars(next, set.mapPos(line.from, -1), set.mapPos(line.to, 1));
+  const index = before.filter((c) => c.pos < at).length;
+  // A pasted link or code shows its text, not its marks.
+  const pastedChars = pasted.flatMap((p) =>
+    (p.atom ? plainOf(p.text) : p.text).split("").map((ch) => ({ ch, styles: p.styles })),
+  );
+  const want = [
+    ...before.slice(0, index).map((c) => c.ch),
+    ...pastedChars.map((c) => c.ch),
+    ...before.slice(index).map((c) => c.ch),
+  ];
+  if (got.map((c) => c.ch).join("") !== want.join("")) return false;
+  const NAME: Record<string, string> = {
+    bold: "StrongEmphasis",
+    italic: "Emphasis",
+    strike: "Strikethrough",
+  };
+  return got.every((c, k) => {
+    // Punctuation may step out of a format, where a mark beside it can't be read.
+    if (/[\s\p{P}\p{S}]/u.test(c.ch)) return true;
+    if (k < index) return c.styles === before[k]?.styles;
+    if (k < index + pastedChars.length) {
+      if (!checkOwnStyles) return true;
+      const own = pastedChars[k - index]?.styles ?? new Set<string>();
+      return [...own].every((st) => c.styles.split(",").includes(NAME[st] ?? st));
+    }
+    return c.styles === before[k - pastedChars.length]?.styles;
+  });
+}
+
+/** Atoms (code, links, wiki links) a range cuts into: grown to take each whole. */
+function wholeAtoms(state: EditorState, from: number, to: number): Span {
+  let a = from;
+  let b = to;
+  for (const n of formatsOver(state, from, to)) {
+    if (STYLED.has(n.name)) continue;
+    if (n.from < a && n.to > a) a = n.from;
+    if (n.from < b && n.to > b) b = n.to;
+  }
+  return [a, b];
+}
+
+/** Inside an atom (code, a link): past its opening part, before its closing one. */
+function insideAtom(state: EditorState, at: number): boolean {
+  return formatsOver(state, at, at).some((n) => {
+    if (STYLED.has(n.name) || !(n.from < at && at < n.to)) return false;
+    const parts = hiddenParts(n);
+    // Brackets with no address show as text: inside them is inside text.
+    if (parts.length === 0) return true;
+    const first = parts[0];
+    const last = parts.at(-1);
+    return first !== undefined && last !== undefined && first[1] <= at && at <= last[0];
+  });
+}
+
+/** Markdown's visible text alone, marks and link targets left out, as a plain-text paste would be. */
+function plainOf(markdown: string): string {
+  return visibleChars(markdown, 0, markdown.length)
+    .map((c) => c.ch)
+    .join("");
+}
+
+/** A position and the others across the hidden marks beside it: the page shows them as one place. */
+function placesAt(state: EditorState, at: number): number[] {
+  const parts = formatsOver(state, at, at)
+    .filter((n) => STYLED.has(n.name))
+    .flatMap(hiddenParts);
+  const places = [at];
+  for (let k = 0; k < places.length; k++) {
+    const p = places[k] as number;
+    for (const [a, b] of parts) {
+      if (a === p && !places.includes(b)) places.push(b);
+      if (b === p && !places.includes(a)) places.push(a);
+    }
+  }
+  return places;
+}
+
+type Placed = { changes: ChangeSpec[]; from: number; caret: number };
+
+/**
+ * One line of Markdown put in at `at`, with `from..to` going: the stretch it
+ * lands in is rebuilt with it in place, so its marks and the ones around it
+ * come out right, then read back to check. It tries each side of the marks
+ * at `at`, first with its own styles, then with only the surrounding ones.
+ */
+function placeMarkdown(
+  state: EditorState,
+  line: { from: number; to: number },
+  markdown: string,
+  at: number,
+  removing: { from: number; to: number; spans: Span[] },
+): Placed | null {
+  const { from, to, spans } = removing;
+  const gone = (p: number) => spans.some(([a, b]) => a <= p && p < b);
+  for (const own of [true, false]) {
+    for (const place of placesAt(state, at)) {
+      const built = insertMarkdown(state, place, markdown, gone, from, to, own);
+      if (!built) continue;
+      const outside = spans
+        .filter(([a, b]) => b <= built.from || a >= built.to)
+        .map(([a, b]): ChangeSpec => ({ from: a, to: b }));
+      const changes = [
+        ...outside,
+        ...minimalEdits(state.sliceDoc(built.from, built.to), built.text, built.from),
+      ];
+      if (pasteReadsBack(state, line, changes, gone, at, built.pasted, own)) {
+        return { changes, from: built.from, caret: built.caret };
+      }
+    }
+  }
+  return null;
+}
+
+/** Inside code or a link: plain text there must leave it whole, as brackets or backticks might not. */
+function plainFits(
+  state: EditorState,
+  line: { from: number; to: number },
+  at: number,
+  plain: string,
+): boolean {
+  const doc = state.doc.toString();
+  const next = state.doc.replace(at, at, Text.of([plain])).toString();
+  const read = (text: string, from: number, to: number) =>
+    visibleChars(text, from, to)
+      .map((c) => c.ch)
+      .join("");
+  const before = read(doc, line.from, line.to);
+  const k = read(doc, line.from, at).length;
+  return (
+    read(next, line.from, line.to + plain.length) === before.slice(0, k) + plain + before.slice(k)
+  );
+}
+
+/**
+ * placeMarkdown, then its plain text where Markdown can't say it; inside
+ * code or a link, where plain text won't fit, just after it.
+ */
+function placeAround(
+  state: EditorState,
+  line: { from: number; to: number },
+  markdown: string,
+  at: number,
+  removing: { from: number; to: number; spans: Span[] },
+): Placed | null {
+  const atom = formatsOver(state, at, at).find(
+    (n) => !STYLED.has(n.name) && n.from < at && at < n.to,
+  );
+  const after = atom !== undefined && removing.spans.length === 0;
+  const place = after ? atom.to : at;
+  const where = after ? { from: place, to: place, spans: [] } : removing;
+  return (
+    placeMarkdown(state, line, markdown, place, where) ??
+    placeMarkdown(state, line, plainOf(markdown), place, where)
+  );
+}
+
+const caretAfter = (state: EditorState, placed: Placed) => {
+  const set = ChangeSet.of(placed.changes, state.doc.length);
+  return { set, caret: set.mapPos(placed.from, -1) + placed.caret };
+};
+
+/**
+ * Pasting or dropping one line of Markdown (placeMarkdown). Where Markdown
+ * can't say it, the plain text goes in. Inside code or a link, formatting
+ * can't live, so the plain text goes in.
+ */
+function guardPaste(
+  state: EditorState,
+  line: { from: number; to: number },
+  edit: { from: number; to: number; text: string },
+  userEvent: string,
+): TransactionSpec | null {
+  const [from, to] =
+    edit.to > edit.from ? wholeAtoms(state, edit.from, edit.to) : [edit.from, edit.to];
+  const spans = to > from ? deletionSpans(state, from, to) : [];
+  const at = spans[0]?.[0] ?? from;
+  const plain = plainOf(edit.text);
+  if (to === from && insideAtom(state, at) && plainFits(state, line, at, plain)) {
+    return plain === edit.text
+      ? null
+      : {
+          changes: { from: at, insert: plain },
+          selection: EditorSelection.cursor(at + plain.length),
+          userEvent,
+          scrollIntoView: true,
+        };
+  }
+  const placed = placeAround(state, line, edit.text, at, { from, to, spans });
+  if (placed) {
+    const { set, caret } = caretAfter(state, placed);
+    return {
+      changes: set,
+      selection: EditorSelection.cursor(caret),
+      userEvent,
+      scrollIntoView: true,
+    };
+  }
+  // The plain text, with only what was selected gone.
+  const changes: ChangeSpec[] = [
+    ...spans.map(([a, b]): ChangeSpec => ({ from: a, to: b })),
+    ...edgeFixes(state, spans),
+    ...joinFixes(state, spans),
+    { from: at, insert: plain },
+  ];
+  const set = ChangeSet.of(changes, state.doc.length);
+  return {
+    changes: set,
+    selection: EditorSelection.cursor(set.mapPos(at, -1) + plain.length),
+    userEvent,
+    scrollIntoView: true,
+  };
+}
+
+/**
+ * A drag within the page: CodeMirror moves the raw characters, which can be
+ * half a pair of marks. Instead the source goes as a deletion does, and a
+ * balanced copy of it, carrying its styles, is put where it was dropped, as
+ * a paste is.
+ */
+function guardMove(
+  tr: Transaction,
+  edits: { from: number; to: number; text: string }[],
+): TransactionSpec | null {
+  const state = tr.startState;
+  const source = edits.find((e) => e.to > e.from && e.text === "");
+  const target = edits.find((e) => e.to === e.from && e.text !== "");
+  if (edits.length !== 2 || !source || !target) return null;
+  const sourceLine = state.doc.lineAt(source.from);
+  const targetLine = state.doc.lineAt(target.from);
+  if (source.to > sourceLine.to) return null; // Several lines: left as it is.
+  // A source cutting into code or a link takes it whole, as copying does.
+  const [sFrom, sTo] = wholeAtoms(state, source.from, source.to);
+  if (target.from > sFrom && target.from < sTo) return null;
+  const moved = copyText(state, sFrom, sTo) ?? target.text;
+  const spans = deletionSpans(state, sFrom, sTo);
+  const gone = (p: number) => spans.some(([a, b]) => a <= p && p < b);
+  const userEvent = tr.annotation(Transaction.userEvent) ?? "move.drop";
+  const done = (changes: ChangeSpec[], caret: (set: ChangeSet) => number): TransactionSpec => {
+    const set = ChangeSet.of(changes, state.doc.length);
+    return {
+      changes: set,
+      selection: EditorSelection.cursor(caret(set)),
+      userEvent,
+      scrollIntoView: true,
+    };
+  };
+  // The source goes as a deletion: its stretch rewritten without it.
+  const built = insertMarkdown(state, sFrom, "", gone, sFrom, sTo);
+  const taken = built
+    ? minimalEdits(state.sliceDoc(built.from, built.to), built.text, built.from)
+    : spans.map(([a, b]) => ({ from: a, to: b, insert: "" }));
+  const plainAt = (changes: ChangeSpec[]) => {
+    const plain = plainOf(moved);
+    return done(
+      [...changes, { from: target.from, insert: plain }],
+      (set) => set.mapPos(target.from, -1) + plain.length,
+    );
+  };
+  if (insideAtom(state, target.from) && plainFits(state, targetLine, target.from, plainOf(moved))) {
+    // Into code or a link: the plain text, as a paste there goes in.
+    if (taken.some((c) => c.from < target.from && target.from < c.to)) return null;
+    return plainAt(taken);
+  }
+  if (sourceLine.number === targetLine.number) {
+    const placed = placeAround(state, sourceLine, moved, target.from, {
+      from: sFrom,
+      to: sTo,
+      spans,
+    });
+    if (placed) return done(placed.changes, (set) => set.mapPos(placed.from, -1) + placed.caret);
+    return plainAt([
+      ...spans.map(([a, b]): ChangeSpec => ({ from: a, to: b })),
+      ...edgeFixes(state, spans),
+      ...joinFixes(state, spans),
+    ]);
+  }
+  const placed = placeAround(state, targetLine, moved, target.from, {
+    from: target.from,
+    to: target.from,
+    spans: [],
+  });
+  if (!placed) return plainAt(taken);
+  return done([...taken, ...placed.changes], (set) => set.mapPos(placed.from, -1) + placed.caret);
 }
 
 /**

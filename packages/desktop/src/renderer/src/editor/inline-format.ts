@@ -47,7 +47,14 @@ const ATOMS = new Set([
 ]);
 
 /** A piece of the stretch: one character, or a whole element kept as written. */
-type Piece = { text: string; atom: boolean; styles: Set<Style>; selected: boolean };
+type Piece = {
+  text: string;
+  atom: boolean;
+  styles: Set<Style>;
+  selected: boolean;
+  /** Where it starts in the doc; -1 for text not yet in it, such as a paste. */
+  pos: number;
+};
 
 const styleNodes = (node: SyntaxNode) => STYLE_OF[node.name] !== undefined;
 
@@ -141,6 +148,7 @@ function readPieces(state: EditorState, from: number, to: number, selFrom: numbe
       atom: Boolean(atom),
       styles: stylesAt(pos),
       selected: pos >= selFrom && end <= selTo,
+      pos,
     });
     pos = end;
   }
@@ -155,13 +163,16 @@ const isSpace = (p: Piece) => !p.atom && /\s/.test(p.text);
  * a space on its inner side: closing marks go before the spaces, opening
  * marks after, which is what Markdown needs to read them as marks.
  */
-export function writePieces(pieces: Piece[]): string {
+export function writePieces(pieces: Piece[], ends?: number[]): string {
   let out = "";
   const open: Style[] = [];
   let spaces = "";
   for (const p of pieces) {
     if (isSpace(p)) {
       spaces += p.text;
+      // A space lands once the next word's marks are placed; until then,
+      // count it where it will be written.
+      ends?.push(out.length + spaces.length);
       continue;
     }
     const want = p.styles;
@@ -183,9 +194,36 @@ export function writePieces(pieces: Piece[]): string {
       }
     }
     out += p.text;
+    ends?.push(out.length);
   }
   while (open.length) out += MARK[open.pop() as Style];
   return out + spaces;
+}
+
+const WORD = /[\p{L}\p{N}]/u;
+const PUNCT = /^[\p{P}\p{S}]+$/u;
+
+/**
+ * A mark between punctuation inside a format and a word outside it
+ * ("done.**next") doesn't read as a mark, so that punctuation steps out of
+ * the format: "done**.next". Only the punctuation loses the style.
+ */
+export function shedPunctuation(pieces: Piece[]): Piece[] {
+  const out = pieces.map((p) => ({ ...p, styles: new Set(p.styles) }));
+  const punct = (p: Piece) => !p.atom && PUNCT.test(p.text);
+  for (let k = 0; k < out.length; k++) {
+    const p = out[k] as Piece;
+    const before = out[k - 1];
+    if (!punct(p) || !before || !WORD.test(before.text.slice(-1))) continue;
+    for (const st of [...p.styles]) if (!before.styles.has(st)) p.styles.delete(st);
+  }
+  for (let k = out.length - 1; k >= 0; k--) {
+    const p = out[k] as Piece;
+    const after = out[k + 1];
+    if (!punct(p) || !after || !WORD.test(after.text.charAt(0))) continue;
+    for (const st of [...p.styles]) if (!after.styles.has(st)) p.styles.delete(st);
+  }
+  return out;
 }
 
 /** What `from..to` of a doc shows, read in place: each character, marks left out, with its styles. */
@@ -306,7 +344,11 @@ export function flipStyle(
  * The few edits that turn `a` into `b`, mostly marks added or removed, as
  * offsets from `at`: the selection maps through them onto the same words.
  */
-export function minimalEdits(a: string, b: string, at: number): ChangeSpec[] {
+export function minimalEdits(
+  a: string,
+  b: string,
+  at: number,
+): { from: number; to: number; insert: string }[] {
   if (a.length * b.length > 4_000_000) return [{ from: at, to: at + a.length, insert: b }];
   // Longest common subsequence, then the gaps between kept characters.
   const n = a.length;
@@ -319,7 +361,7 @@ export function minimalEdits(a: string, b: string, at: number): ChangeSpec[] {
       row[j] = a[i] === b[j] ? (next[j + 1] ?? 0) + 1 : Math.max(next[j] ?? 0, row[j + 1] ?? 0);
     }
   }
-  const edits: ChangeSpec[] = [];
+  const edits: { from: number; to: number; insert: string }[] = [];
   let i = 0;
   let j = 0;
   let from = -1;
@@ -374,4 +416,81 @@ export function copyText(state: EditorState, from: number, to: number): string |
     lines.push(writePieces(pieces));
   }
   return lines.join(state.lineBreak);
+}
+
+/** The styles a position sits inside: the formats whose marks enclose it. */
+export function stylesInside(state: EditorState, at: number): Set<Style> {
+  const out = new Set<Style>();
+  for (const n of nodesIn(state, Math.max(0, at - 1), Math.min(state.doc.length, at + 1))) {
+    const style = STYLE_OF[n.name];
+    if (!style) continue;
+    const marks: [number, number][] = [];
+    for (let c = n.firstChild; c; c = c.nextSibling) {
+      if (c.name === "EmphasisMark" || c.name === "StrikethroughMark") marks.push([c.from, c.to]);
+    }
+    const open = marks[0];
+    const close = marks.at(-1);
+    if (open && close && open[1] <= at && at <= close[0]) out.add(style);
+  }
+  return out;
+}
+
+/** One line of Markdown read on its own into pieces, each with its own styles. */
+export function piecesOf(markdown: string): Piece[] {
+  const state = EditorState.create({ doc: markdown, extensions: [markdownSupport()] });
+  ensureSyntaxTree(state, markdown.length, 2000);
+  return readPieces(state, 0, markdown.length, -1, -1).map((p) => ({ ...p, pos: -1 }));
+}
+
+/**
+ * A line's stretch rewritten with `markdown` (one line) inserted at `at` and
+ * the characters `removed` says are deleted left out. Pasted text keeps its
+ * own styles and takes those of the formats it lands inside, as typing there
+ * would; every mark is written afresh, so nothing ends up doubled, nested
+ * wrongly or half a pair. Null when a link or code would be cut into.
+ */
+export function insertMarkdown(
+  state: EditorState,
+  at: number,
+  markdown: string,
+  removed: (pos: number) => boolean,
+  removeFrom = at,
+  removeTo = at,
+  ownStyles = true,
+): { from: number; to: number; text: string; pasted: Piece[]; caret: number } | null {
+  const line = state.doc.lineAt(at);
+  // One character either side, so formats ending or starting right at the
+  // paste are rebuilt with it.
+  const s = stretchFor(
+    state,
+    Math.max(line.from, Math.min(at, removeFrom) - 1),
+    Math.min(line.to, Math.max(at, removeTo) + 1),
+    line.from,
+    line.to,
+  );
+  const pieces = readPieces(state, s.from, s.to, -1, -1);
+  for (const p of pieces) {
+    if (!p.atom) continue;
+    let gone = 0;
+    for (let k = 0; k < p.text.length; k++) if (removed(p.pos + k)) gone++;
+    if (gone > 0 && gone < p.text.length) return null;
+  }
+  const kept = pieces.filter((p) => !removed(p.pos));
+  const context = stylesInside(state, at);
+  // Its own styles plus the surrounding ones; or, where Markdown can't say
+  // that, just the surrounding ones, as plain text typed there would get.
+  const pasted = piecesOf(markdown).map((p) => ({
+    ...p,
+    styles: new Set([...(ownStyles ? p.styles : []), ...context]),
+  }));
+  let index = kept.findIndex((p) => p.pos >= at);
+  if (index < 0) index = kept.length;
+  const ends: number[] = [];
+  const text = writePieces(
+    shedPunctuation([...kept.slice(0, index), ...pasted, ...kept.slice(index)]),
+    ends,
+  );
+  // The caret: just after the last pasted character, in the rewritten stretch.
+  const caret = ends[index + pasted.length - 1] ?? 0;
+  return { from: s.from, to: s.to, text, pasted, caret };
 }
