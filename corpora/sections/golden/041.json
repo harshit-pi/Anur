@@ -1,0 +1,148 @@
+{
+ "before": [
+  {
+   "path": [
+    "rxmd opsmwmdr"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 63,
+    "to": 341
+   },
+   "subtree": {
+    "from": 63,
+    "to": 1756
+   }
+  },
+  {
+   "path": [
+    "rxmd opsmwmdr",
+    "7 · yaeotgu bngresiq"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 341,
+    "to": 774
+   },
+   "subtree": {
+    "from": 341,
+    "to": 774
+   }
+  },
+  {
+   "path": [
+    "rxmd opsmwmdr",
+    "3 · spck-xdm-ehckq stqwh mhd"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 774,
+    "to": 1601
+   },
+   "subtree": {
+    "from": 774,
+    "to": 1601
+   }
+  },
+  {
+   "path": [
+    "rxmd opsmwmdr",
+    "wzzfny"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 1601,
+    "to": 1756
+   },
+   "subtree": {
+    "from": 1601,
+    "to": 1756
+   }
+  }
+ ],
+ "after": [
+  {
+   "path": [
+    "rxmd opsmwmdr"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 63,
+    "to": 386
+   },
+   "subtree": {
+    "from": 63,
+    "to": 2442
+   }
+  },
+  {
+   "path": [
+    "rxmd opsmwmdr",
+    "7 · yaeotgu bngresiq"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 386,
+    "to": 819
+   },
+   "subtree": {
+    "from": 386,
+    "to": 819
+   }
+  },
+  {
+   "path": [
+    "rxmd opsmwmdr",
+    "3 · spck-xdm-ehckq stqwh mhd"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 819,
+    "to": 1646
+   },
+   "subtree": {
+    "from": 819,
+    "to": 1646
+   }
+  },
+  {
+   "path": [
+    "rxmd opsmwmdr",
+    "0 · xhasd — hvuqg-ilusr npgzsoaih"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 1646,
+    "to": 2290
+   },
+   "subtree": {
+    "from": 1646,
+    "to": 2290
+   }
+  },
+  {
+   "path": [
+    "rxmd opsmwmdr",
+    "wzzfny"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2290,
+    "to": 2442
+   },
+   "subtree": {
+    "from": 2290,
+    "to": 2442
+   }
+  }
+ ]
+}

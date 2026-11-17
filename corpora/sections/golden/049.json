@@ -1,0 +1,68 @@
+{
+ "before": [
+  {
+   "path": [
+    "shqsd"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 85,
+    "to": 1822
+   },
+   "subtree": {
+    "from": 85,
+    "to": 1934
+   }
+  },
+  {
+   "path": [
+    "shqsd",
+    "ted wibo"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 1822,
+    "to": 1934
+   },
+   "subtree": {
+    "from": 1822,
+    "to": 1934
+   }
+  }
+ ],
+ "after": [
+  {
+   "path": [
+    "shqsd (pnym)"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 85,
+    "to": 1818
+   },
+   "subtree": {
+    "from": 85,
+    "to": 1930
+   }
+  },
+  {
+   "path": [
+    "shqsd (pnym)",
+    "ted wibo"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 1818,
+    "to": 1930
+   },
+   "subtree": {
+    "from": 1818,
+    "to": 1930
+   }
+  }
+ ]
+}
