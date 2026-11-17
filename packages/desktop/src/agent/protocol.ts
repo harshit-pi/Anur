@@ -46,6 +46,8 @@ export type ToMain =
       event: "started" | "resumed";
     }
   | { type: "options"; thread: string; options: SessionOption[] }
+  /** An agent's choices, read from a throwaway session: for a thread that has none yet. */
+  | { type: "agent-options"; agent: AgentId; options: SessionOption[] }
   | { type: "text"; thread: string; turn: string; text: string }
   | {
       type: "tool";
@@ -75,6 +77,7 @@ export type ToMain =
 
 export type ToHost =
   | { type: "connect"; agent: AgentId }
+  | { type: "probe"; agent: AgentId; cwd: string }
   | { type: "prompt"; spec: SessionSpec; turn: string; text: string }
   | { type: "cancel"; thread: string }
   | { type: "permission"; request: string; option: string | null }

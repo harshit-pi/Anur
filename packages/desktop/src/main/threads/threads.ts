@@ -53,6 +53,8 @@ export type ThreadDeps = {
   previewsChanged: (rel: string) => void;
   /** The agent new threads run on, from settings. */
   defaultAgent: () => AgentId;
+  /** A session reported its agent's choices: the defaults for the next new thread. */
+  rememberOptions?: (agent: AgentId, options: SessionOption[]) => void;
 };
 
 /** The agent a session line names; a line from before agents were recorded is Claude Code's. */
@@ -233,6 +235,7 @@ export class Threads {
     sectionRef: { index: number; path: string[] },
     message: string,
     agent?: AgentId,
+    options: { id: string; value: string }[] = [],
   ): Promise<{ kind: "started"; thread: ThreadView } | { kind: "refused"; reason: string }> {
     const at = await this.d.locate(rel, text);
     if (!at)
@@ -259,6 +262,8 @@ export class Threads {
       branchedFrom: null,
     });
     this.picked.set(thread, agent ?? this.d.defaultAgent());
+    // Picks made before the first message: the host sets them as the session opens.
+    for (const o of options) this.setOption(thread, o.id, o.value);
     await this.send(thread, rel, text, message, at.doc);
     const v = await this.view(at, rel, text, thread);
     return v
@@ -537,6 +542,10 @@ export class Threads {
     const live = this.live.get(thread);
     if (m.type === "options") {
       this.options.set(thread, m.options);
+      if (live) {
+        const lines = await this.linesOf(live.doc, thread);
+        this.d.rememberOptions?.(this.agentOf(thread, lines), m.options);
+      }
       if (live) await this.refresh(live.rel, live.docText, thread);
       return;
     }

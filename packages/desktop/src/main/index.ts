@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { FORMAT_VERSION, PreviewPart } from "@anur/core";
+import { AGENTS, type AgentId } from "../shared/agents.ts";
+import type { SessionOption } from "../agent/protocol.ts";
 import {
   BrowserWindow,
   Menu,
@@ -40,6 +42,7 @@ import { readRecent } from "./folder/recent.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
 import { buildMenu } from "./menu.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
+import { AgentChoices } from "./threads/agent-choices.ts";
 import { Threads } from "./threads/threads.ts";
 
 /**
@@ -99,9 +102,24 @@ function versionsFor(folder: FolderState): SectionVersions | null {
   return v;
 }
 /** The agent host, shared by every window; started when a thread first needs it (3.1). */
-const hub = new AgentHub(hostEntry(here), (status) => {
-  for (const win of windows.values()) send(win, "agent:status", status);
-});
+let choices: AgentChoices;
+const hub = new AgentHub(
+  hostEntry(here),
+  (status) => {
+    for (const win of windows.values()) send(win, "agent:status", status);
+  },
+  (agent, options) => {
+    rememberChoices(agent, options);
+  },
+);
+/** An agent's choices changed: keep them, and tell every window. */
+function rememberChoices(agent: AgentId, options: SessionOption[]) {
+  if (options.length === 0) return;
+  void choices.set(agent, options);
+  for (const win of windows.values()) send(win, "agent:options", { agent, options });
+}
+/** Agents whose choices were read this run; once per run is enough. */
+const probed = new Set<AgentId>();
 /** Each folder's threads, so a reply reaches the windows showing that folder. */
 const threads = new Map<string, Threads>();
 function threadsFor(folder: FolderState): Threads | null {
@@ -123,6 +141,7 @@ function threadsFor(folder: FolderState): Threads | null {
         }
       },
       defaultAgent: () => appSettings.get().defaultAgent,
+      rememberOptions: rememberChoices,
       previewsChanged: (rel) => {
         for (const [id, win] of windows) {
           if (folders.current(id)?.path === folder.path)
@@ -368,12 +387,26 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const t = folder ? threadsFor(folder) : null;
     return { threads: t ? await t.list(doc, text) : [] };
   },
-  "thread:start": async ({ path: doc, text, section, message, agent }, { webContentsId }) => {
+  "agent:options": ({ agent }, { webContentsId }) => {
+    if (!probed.has(agent) && AGENTS[agent].runsThreads) {
+      probed.add(agent);
+      hub.send({
+        type: "probe",
+        agent,
+        cwd: folders.current(webContentsId)?.path ?? app.getPath("home"),
+      });
+    }
+    return { options: choices.get(agent) };
+  },
+  "thread:start": async (
+    { path: doc, text, section, message, agent, options },
+    { webContentsId },
+  ) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!folder || !t || !folder.docs.includes(doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
-    return t.start(doc, text, section, message, agent);
+    return t.start(doc, text, section, message, agent, options);
   },
   "thread:send": async ({ thread, path: doc, text, message }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -633,6 +666,8 @@ void app.whenReady().then(async () => {
   // Checks can set ANUR_CHECK_HOME, so a sample folder can stand in for one in iCloud.
   journal = new Journal(app.getPath("userData"));
   appSettings = new AppSettingsStore(app.getPath("userData"));
+  choices = new AgentChoices(app.getPath("userData"));
+  await choices.load();
   await appSettings.load();
   device = await loadDeviceId(app.getPath("userData")).catch((e: unknown) => {
     console.error("Anur couldn't read this install's device ID:", e);

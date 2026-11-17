@@ -2,7 +2,7 @@ import path from "node:path";
 import { utilityProcess, type UtilityProcess } from "electron";
 import type { AgentId } from "../../shared/agents.ts";
 import type { AgentStatus } from "../../shared/ipc-contract.ts";
-import type { ToHost, ToMain } from "../../agent/protocol.ts";
+import type { SessionOption, ToHost, ToMain } from "../../agent/protocol.ts";
 
 /**
  * Main's link to the agent host (Architecture, "Processes"). The host runs
@@ -23,6 +23,9 @@ export class AgentHub {
   constructor(
     private readonly entry: string,
     private readonly onStatus: (s: AgentStatus) => void,
+    /** An agent's choices, read before any thread of it had a session. */
+    private readonly onChoices: (agent: AgentId, options: SessionOption[]) => void = () =>
+      undefined,
   ) {}
 
   /** Messages for this thread go to `fn` until the thread is dropped. */
@@ -85,6 +88,10 @@ export class AgentHub {
   }
 
   private receive(m: ToMain): void {
+    if (m.type === "agent-options") {
+      this.onChoices(m.agent, m.options);
+      return;
+    }
     if (m.type === "status") {
       this.setStatus({ id: m.id, connected: m.connected, reason: m.reason, agent: m.agent });
       return;
