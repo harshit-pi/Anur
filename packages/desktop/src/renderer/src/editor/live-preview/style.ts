@@ -75,6 +75,30 @@ export const livePreviewTheme = EditorView.theme({
     padding: "1px 7px",
     backgroundColor: "var(--sheet)",
   },
+  // A merge conflict (2.19): its markers as labels, its sides tinted.
+  ".cm-lp-conflict-marker": { backgroundColor: "var(--amber-wash)" },
+  ".cm-lp-conflict-ours": { backgroundColor: "var(--blue-wash)" },
+  ".cm-lp-conflict-theirs": { backgroundColor: "var(--amber-wash)" },
+  ".cm-lp-conflict-base": { backgroundColor: "var(--hover)", color: "var(--graphite)" },
+  ".cm-lp-conflict-label": {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    fontFamily: "var(--font-ui)",
+    fontSize: "12px",
+    color: "var(--amber)",
+  },
+  ".cm-lp-conflict-label > span": { marginRight: "6px", fontWeight: "600" },
+  ".cm-lp-conflict-keep": {
+    border: "1px solid var(--rule)",
+    borderRadius: "5px",
+    padding: "1px 8px",
+    background: "var(--sheet)",
+    color: "var(--ink)",
+    font: "inherit",
+    cursor: "pointer",
+  },
+  ".cm-lp-conflict-keep:hover": { borderColor: "var(--blue)", color: "var(--blue)" },
   // An embedded base (bases/base-widget.ts): tabs for its views over a table.
   ".cm-lp-base": { margin: "6px 0 10px", fontFamily: "var(--font-ui)", fontSize: "13px" },
   ".cm-lp-base-head": {

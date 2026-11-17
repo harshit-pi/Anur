@@ -4,6 +4,9 @@ export {
   markdownExtensions,
   markdownParser,
   readWikiLink,
+  conflictsIn,
+  resolution,
+  type Conflict,
   type WikiLink,
 } from "./markdown/index.ts";
 export {

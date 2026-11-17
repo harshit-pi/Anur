@@ -2,7 +2,14 @@ import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import { EditorState, RangeSet, StateEffect, StateField, type Range } from "@codemirror/state";
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
-import { BulletWidget, CheckboxWidget, RuleWidget, TextWidget } from "./widgets.ts";
+import {
+  BulletWidget,
+  CheckboxWidget,
+  type ConflictMark,
+  ConflictMarkWidget,
+  RuleWidget,
+  TextWidget,
+} from "./widgets.ts";
 import { BaseWidget } from "../bases/base-widget.ts";
 import {
   CalloutLabelWidget,
@@ -75,6 +82,9 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
     return found;
   };
 
+  // Which side of a merge conflict the lines being passed are on, and where it began.
+  let conflictSide: "ours" | "base" | "theirs" | null = null;
+  let conflictFrom = 0;
   tree.iterate({
     enter(ref) {
       const node = ref.node;
@@ -104,6 +114,38 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
               Decoration.replace({ widget: new TableWidget(table), block: true }).range(from, to),
             );
           }
+          return false;
+        }
+        case "ConflictMarker": {
+          // Git's conflict markers as labels, each side tinted (2.19).
+          const marker = text(from, to);
+          const kind: ConflictMark = marker.startsWith("<")
+            ? "open"
+            : marker.startsWith("|")
+              ? "base"
+              : marker.startsWith("=")
+                ? "middle"
+                : "close";
+          if (conflictSide && conflictFrom < from) {
+            for (let n = doc.lineAt(conflictFrom).number; n < doc.lineAt(from).number; n++) {
+              out.push(line(`cm-lp-conflict-${conflictSide}`).range(doc.line(n).from));
+            }
+          }
+          out.push(
+            line("cm-lp-conflict-marker").range(from),
+            Decoration.replace({
+              widget: new ConflictMarkWidget(kind, marker.slice(7).trim()),
+            }).range(from, to),
+          );
+          conflictSide =
+            kind === "open"
+              ? "ours"
+              : kind === "base"
+                ? "base"
+                : kind === "middle"
+                  ? "theirs"
+                  : null;
+          conflictFrom = Math.min(doc.length, to + 1);
           return false;
         }
         case "HorizontalRule":

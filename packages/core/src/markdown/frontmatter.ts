@@ -17,7 +17,7 @@ const FENCE = /^---[ \t]*$/;
  * `---` never swallows the doc. @lezer/markdown is pinned to an exact
  * version, and the frontmatter tests fail loudly if this ever changes.
  */
-function inputOf(cx: BlockContext): Input {
+export function inputOf(cx: BlockContext): Input {
   const input = (cx as unknown as { input?: Input }).input;
   if (!input || typeof input.read !== "function") {
     throw new Error("@lezer/markdown changed: BlockContext.input is gone");

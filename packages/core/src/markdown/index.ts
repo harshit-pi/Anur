@@ -1,4 +1,5 @@
 import { GFM, parser as commonmark, type MarkdownExtension } from "@lezer/markdown";
+import { ConflictMarkers } from "./conflicts.ts";
 import { Frontmatter } from "./frontmatter.ts";
 import { WikiLinks } from "./wikilink.ts";
 
@@ -9,8 +10,9 @@ import { WikiLinks } from "./wikilink.ts";
  * parses with `markdownParser`, so the page and the index always agree on
  * sections (Architecture, Stack).
  */
-export const markdownExtensions: MarkdownExtension = [GFM, Frontmatter, WikiLinks];
+export const markdownExtensions: MarkdownExtension = [GFM, Frontmatter, ConflictMarkers, WikiLinks];
 
 export const markdownParser = commonmark.configure(markdownExtensions);
 
 export { readWikiLink, type WikiLink } from "./wikilink.ts";
+export { conflictsIn, resolution, type Conflict } from "./conflicts.ts";
