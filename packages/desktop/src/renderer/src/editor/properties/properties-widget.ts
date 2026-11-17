@@ -2,6 +2,7 @@ import { redo, undo } from "@codemirror/commands";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import { type EditorView, WidgetType } from "@codemirror/view";
+import { followLinkIn } from "../link-click.ts";
 import { renderInline } from "../live-preview/inline.ts";
 import {
   type Field,
@@ -31,6 +32,32 @@ function frontmatterRange(state: EditorState): { from: number; to: number } | nu
 }
 
 type Live = { props: Properties; view: EditorView; drawn: number };
+
+/**
+ * Whether the Properties box is folded away: one choice for every doc and
+ * folder, kept in Anur's own storage on this device, like panel widths.
+ */
+const COLLAPSED_KEY = "anur.propertiesCollapsed";
+
+function isCollapsed(): boolean {
+  try {
+    return window.localStorage.getItem(COLLAPSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function setCollapsed(collapsed: boolean) {
+  try {
+    window.localStorage.setItem(COLLAPSED_KEY, String(collapsed));
+  } catch {
+    // Storage blocked: the box still folds, until the doc reopens.
+  }
+  for (const box of document.querySelectorAll<HTMLElement>(".cm-lp-properties")) {
+    box.classList.toggle("collapsed", collapsed);
+    box.querySelector(".cm-lp-properties-title")?.setAttribute("aria-expanded", String(!collapsed));
+  }
+}
 const live = new WeakMap<HTMLElement, Live>();
 let pendingFocus: { row: number; field: "key" | "value"; select: boolean } | null = null;
 
@@ -83,10 +110,26 @@ export class PropertiesWidget extends WidgetType {
     const box = document.createElement("div");
     box.className = "cm-lp-properties";
     box.contentEditable = "false";
-    const title = document.createElement("div");
+    // A press on the title folds the box away; the choice holds for every doc.
+    const title = document.createElement("button");
+    title.type = "button";
     title.className = "cm-lp-properties-title";
-    title.textContent = "Properties";
+    const caret = document.createElement("span");
+    caret.className = "cm-lp-properties-caret";
+    caret.setAttribute("aria-hidden", "true");
+    const count = document.createElement("span");
+    count.className = "cm-lp-properties-count";
+    count.textContent = String(this.props.fields.length);
+    title.append(caret, "Properties", count);
+    title.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+    });
+    title.addEventListener("click", () => {
+      setCollapsed(!isCollapsed());
+    });
     box.append(title);
+    box.classList.toggle("collapsed", isCollapsed());
+    title.setAttribute("aria-expanded", String(!isCollapsed()));
     this.props.fields.forEach((f, row) => {
       const line = document.createElement("div");
       line.className = "cm-lp-property";
@@ -149,6 +192,8 @@ export class PropertiesWidget extends WidgetType {
     if (!state || state.drawn !== this.props.fields.length) return false;
     state.props = this.props;
     state.view = view;
+    const count = dom.querySelector(".cm-lp-properties-count");
+    if (count) count.textContent = String(this.props.fields.length);
     this.props.fields.forEach((f, row) => {
       const key = cellOf(dom, row, "key");
       const value = cellOf(dom, row, "value");
@@ -272,7 +317,14 @@ function wire(box: HTMLElement) {
   });
 
   box.addEventListener("mousedown", (e) => {
-    if ((e.target as HTMLElement).tagName === "BUTTON") e.preventDefault();
+    if ((e.target as HTMLElement).tagName === "BUTTON") {
+      e.preventDefault();
+      return;
+    }
+    // A link in a value that isn't being edited is followed, not typed into.
+    const view = live.get(box)?.view;
+    const cell = (e.target as HTMLElement).closest<HTMLElement>("[data-field]");
+    if (view) followLinkIn(view, e, cell);
   });
 
   box.addEventListener("click", (e) => {

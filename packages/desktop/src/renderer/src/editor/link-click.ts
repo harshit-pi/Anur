@@ -1,5 +1,5 @@
 import { syntaxTree } from "@codemirror/language";
-import type { EditorState, Extension } from "@codemirror/state";
+import { type EditorState, type Extension, Facet } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 
@@ -35,7 +35,48 @@ export function linkAt(state: EditorState, pos: number): ClickedLink | null {
   return null;
 }
 
-export function linkClicks(open: (link: ClickedLink, inNewTab: boolean) => void): Extension {
+type Open = (link: ClickedLink, inNewTab: boolean) => void;
+
+/** How this page follows a link, for widgets such as tables to use. */
+export const linkOpener = Facet.define<Open, Open | null>({
+  combine: (values) => values[0] ?? null,
+});
+
+/** A link drawn inside a widget, such as a table cell, from the data it carries. */
+export function linkFromElement(el: HTMLElement): ClickedLink | null {
+  if (el.dataset.wikiTarget !== undefined) {
+    return { kind: "wiki", target: el.dataset.wikiTarget, heading: el.dataset.wikiHeading ?? null };
+  }
+  if (el.dataset.href !== undefined) return { kind: "href", href: el.dataset.href };
+  return null;
+}
+
+/**
+ * In a widget whose text is typed into, such as a table cell: a press on a
+ * link follows it unless that text is being edited. True when it did.
+ */
+export function followLinkIn(
+  view: EditorView,
+  e: MouseEvent,
+  editing: HTMLElement | null,
+): boolean {
+  if (e.button !== 0 || e.shiftKey || e.altKey) return false;
+  const el = (e.target as HTMLElement | null)?.closest<HTMLElement>(".cm-lp-link");
+  if (!el || (editing && editing.contains(el) && editing === document.activeElement)) return false;
+  const link = linkFromElement(el);
+  const open = view.state.facet(linkOpener);
+  if (!link || !open) return false;
+  e.preventDefault();
+  e.stopPropagation();
+  open(link, e.metaKey || e.ctrlKey);
+  return true;
+}
+
+export function linkClicks(open: Open): Extension {
+  return [linkOpener.of(open), clickHandler(open)];
+}
+
+function clickHandler(open: Open): Extension {
   return EditorView.domEventHandlers({
     mousedown(e, view) {
       if (e.button !== 0 || e.shiftKey || e.altKey) return false;

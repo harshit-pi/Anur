@@ -28,6 +28,9 @@ const firstWords = (text: string) => {
   return flat.length > 120 ? `${flat.slice(0, 120)}…` : flat;
 };
 
+/** Where a page was: its scroll and its cursor, to come back to (tabs, back and forward). */
+export type SavedView = { scrollTop: number; anchor: number; head: number };
+
 export type OpenDoc = {
   path: string;
   text: string;
@@ -53,6 +56,9 @@ export function Page({
   onView,
   onSaveStatus,
   onOpenLink,
+  viewKey,
+  savedView,
+  onLeave,
 }: {
   doc: OpenDoc;
   /** The folder's docs, for "[[" links. */
@@ -63,7 +69,20 @@ export function Page({
   onSaveStatus: (status: SaveStatus | null, detail: string | null) => void;
   /** Follow a clicked link; returns what to tell the person when it goes nowhere. */
   onOpenLink: (link: ClickedLink, inNewTab: boolean) => string | null;
+  /** Which tab and doc this page is, to remember where it was left. */
+  viewKey: string;
+  /** Where this doc was last left in this tab, to return to. */
+  savedView: SavedView | undefined;
+  /** The page is closing: where it was, under the key it opened with. */
+  onLeave: (key: string, view: SavedView) => void;
 }) {
+  const viewKeyNow = useRef(viewKey);
+  viewKeyNow.current = viewKey;
+  // Read when the page opens and closes; changing them doesn't rebuild it.
+  const savedViewNow = useRef(savedView);
+  savedViewNow.current = savedView;
+  const onLeaveNow = useRef(onLeave);
+  onLeaveNow.current = onLeave;
   const openLinkNow = useRef(onOpenLink);
   openLinkNow.current = onOpenLink;
   const host = useRef<HTMLDivElement>(null);
@@ -252,6 +271,26 @@ export function Page({
       });
     };
     window.addEventListener("beforeunload", beforeUnload);
+    // Back where this tab left this doc: cursor, then scroll once laid out.
+    // The key is the one the page opened with: by the time it closes, the
+    // app may already have moved on to another tab.
+    const key = viewKeyNow.current;
+    const back = savedViewNow.current;
+    // Kept as it changes: once the page closes, its scroller reads 0.
+    let scrollTop = back?.scrollTop ?? 0;
+    const onScroll = () => {
+      scrollTop = editor.scrollDOM.scrollTop;
+    };
+    editor.scrollDOM.addEventListener("scroll", onScroll, { passive: true });
+    if (back) {
+      const len = editor.state.doc.length;
+      editor.dispatch({
+        selection: { anchor: Math.min(back.anchor, len), head: Math.min(back.head, len) },
+      });
+      requestAnimationFrame(() => {
+        editor.scrollDOM.scrollTop = back.scrollTop;
+      });
+    }
     view.current = editor;
     onView(editor);
     onSections(markdownDoc ? sectionsOf(editor.state, fileName) : null);
@@ -263,6 +302,13 @@ export function Page({
       // Switching docs saves what was typed in this one; the next page waits for it.
       closed = true;
       if (saver) track(saver.flush());
+      const sel = editor.state.selection.main;
+      editor.scrollDOM.removeEventListener("scroll", onScroll);
+      onLeaveNow.current(key, {
+        scrollTop,
+        anchor: sel.anchor,
+        head: sel.head,
+      });
       view.current = null;
       onView(null);
       editor.destroy();

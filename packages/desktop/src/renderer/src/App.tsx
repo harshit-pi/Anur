@@ -3,7 +3,7 @@ import type { SectionTree } from "@anur/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import type { SaveStatus } from "./editor/autosave.ts";
-import { Page, type OpenDoc } from "./editor/Page.tsx";
+import { Page, type OpenDoc, type SavedView } from "./editor/Page.tsx";
 import { insertById } from "./editor/insert-menu.ts";
 import { Resizer } from "./layout/Resizer.tsx";
 import { headingKey, resolveHref, resolveWiki } from "./layout/links.ts";
@@ -128,6 +128,13 @@ export function App() {
   const openDoc = useCallback((path: string, inNewTab: boolean) => {
     setTabs((t) => openInTab(t, path, inNewTab));
   }, []);
+  /** Where each tab left each doc it showed, kept while the app runs. */
+  const savedViews = useRef(new Map<string, SavedView>());
+  const viewKey = `${tabs.active ?? ""}|${doc?.path ?? ""}`;
+  const leaveView = useCallback((key: string, saved: SavedView) => {
+    savedViews.current.set(key, saved);
+  }, []);
+
   /** A heading a link asked for, scrolled to once its doc's sections are in. */
   const [pendingHeading, setPendingHeading] = useState<{ path: string; heading: string } | null>(
     null,
@@ -364,6 +371,9 @@ export function App() {
               onView={onView}
               onSaveStatus={onSaveStatus}
               onOpenLink={openLink}
+              viewKey={viewKey}
+              savedView={savedViews.current.get(viewKey)}
+              onLeave={leaveView}
             />
           ) : null
         }
