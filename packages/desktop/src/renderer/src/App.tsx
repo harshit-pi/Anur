@@ -6,6 +6,7 @@ import type { SaveStatus } from "./editor/autosave.ts";
 import { Page, type OpenDoc } from "./editor/Page.tsx";
 import { insertById } from "./editor/insert-menu.ts";
 import { Resizer } from "./layout/Resizer.tsx";
+import { DOC_ITEM, folderMenu, sectionAt, wikiLinkTo } from "./layout/path-row.ts";
 import {
   back,
   canGoBack,
@@ -125,6 +126,52 @@ export function App() {
   const openDoc = useCallback((path: string, inNewTab: boolean) => {
     setTabs((t) => openInTab(t, path, inNewTab));
   }, []);
+  /** A breadcrumb: what the folder it names holds; picking a doc opens it here. */
+  const showFolder = useCallback(
+    (inside: string) => {
+      if (!folder) return;
+      void anur
+        .call("menu:popup", { items: folderMenu(folder.docs, inside, selected) })
+        .then(({ id }) => {
+          if (id?.startsWith(DOC_ITEM)) openDoc(id.slice(DOC_ITEM.length), false);
+        });
+    },
+    [folder, selected, openDoc],
+  );
+  /** A link to the section at the cursor, as Obsidian writes it, copied. */
+  const copySectionLink = useCallback((): string | null => {
+    if (!folder || !selected) return null;
+    const v = view.current;
+    const section = sections && v ? sectionAt(sections, v.state.selection.main.head) : null;
+    const isTitle = !section || section === sections?.sections[0];
+    const link = wikiLinkTo(folder.docs, selected, isTitle ? null : (section.path.at(-1) ?? null));
+    void anur.call("clipboard:write", { text: link });
+    return link;
+  }, [folder, selected, sections]);
+  const showMore = useCallback(() => {
+    if (!folder || !selected) return;
+    void anur
+      .call("menu:popup", {
+        items: [
+          { id: "finder", label: "Reveal in Finder" },
+          { id: "default-app", label: "Open in Default App" },
+          { separator: true },
+          { id: "copy-path", label: "Copy Path" },
+          { id: "copy-doc-link", label: "Copy Link to Doc" },
+          { separator: true },
+          { id: "source", label: "Show Source (⌘E)", checked: source },
+        ],
+      })
+      .then(({ id }) => {
+        if (id === "finder" || id === "default-app") {
+          void anur.call("doc:reveal", { path: selected, how: id });
+        } else if (id === "copy-path") {
+          void anur.call("clipboard:write", { text: `${folder.path}/${selected}` });
+        } else if (id === "copy-doc-link") {
+          void anur.call("clipboard:write", { text: wikiLinkTo(folder.docs, selected, null) });
+        } else if (id === "source") setSource((s) => !s);
+      });
+  }, [folder, selected, source]);
   const listTabs = useCallback(() => {
     void anur
       .call("menu:popup", {
@@ -289,6 +336,9 @@ export function App() {
         docError={docError ?? save.detail}
         onOpenFolder={openFolder}
         onMerge={setMerging}
+        onCrumb={showFolder}
+        onCopyLink={copySectionLink}
+        onMore={showMore}
         onBack={
           canGoBack(tabs)
             ? () => {

@@ -4,12 +4,24 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { FORMAT_VERSION } from "@anur/core";
-import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, session, shell } from "electron";
+import {
+  BrowserWindow,
+  Menu,
+  clipboard as systemClipboard,
+  type MenuItemConstructorOptions,
+  app,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  session,
+  shell,
+} from "electron";
 import {
   CHANNELS,
   type Channel,
   type EventName,
   type EventPayload,
+  type MenuEntry,
 } from "../shared/ipc-contract.ts";
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
@@ -156,26 +168,27 @@ const handlers: { [C in Channel]: Handler<C> } = {
         return;
       }
       let chosen: string | null = null;
-      const menu = Menu.buildFromTemplate(
-        items.map((item) =>
+      const build = (entries: MenuEntry[]): MenuItemConstructorOptions[] =>
+        entries.map((item) =>
           "separator" in item
             ? { type: "separator" as const }
-            : {
-                label: item.label,
-                enabled: item.enabled ?? true,
-                ...(item.checked === undefined
-                  ? {}
-                  : { type: "checkbox" as const, checked: item.checked }),
-                click: () => {
-                  chosen = item.id;
-                  resolve({ id: item.id });
+            : "submenu" in item
+              ? { label: item.label, submenu: build(item.submenu) }
+              : {
+                  label: item.label,
+                  enabled: item.enabled ?? true,
+                  ...(item.checked === undefined
+                    ? {}
+                    : { type: "checkbox" as const, checked: item.checked }),
+                  click: () => {
+                    chosen = item.id;
+                    resolve({ id: item.id });
+                  },
                 },
-              },
-        ),
-      );
+        );
       // Closing without a choice resolves null; a click, which can land after
       // the close, wins if it comes.
-      menu.popup({
+      Menu.buildFromTemplate(build(items)).popup({
         window: win,
         callback: () => {
           setTimeout(() => {
@@ -184,6 +197,20 @@ const handlers: { [C in Channel]: Handler<C> } = {
         },
       });
     }),
+  "clipboard:write": async ({ text }) => {
+    await systemClipboard.writeText(text);
+    return { ok: true };
+  },
+  "doc:reveal": async ({ path: doc, how }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder?.docs.includes(doc)) return { ok: false };
+    const file = path.join(folder.path, doc);
+    if (how === "finder") {
+      shell.showItemInFolder(file);
+      return { ok: true };
+    }
+    return { ok: (await shell.openPath(file)) === "" };
+  },
   "conflict:plan": async ({ copy }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
