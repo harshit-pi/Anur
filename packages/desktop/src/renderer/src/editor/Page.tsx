@@ -1,9 +1,9 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdownKeymap } from "@codemirror/lang-markdown";
-import { Compartment, EditorState } from "@codemirror/state";
+import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import type { SectionTree } from "@anur/core";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { anur } from "../bridge.ts";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { formattingKeymap } from "./commands.ts";
@@ -11,6 +11,7 @@ import { insertMenu } from "./insert-menu.ts";
 import { editLink, linkEditor } from "./link-editor.ts";
 import { livePreview } from "./live-preview/live-preview.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
+import { diffSpan, mergeOutside } from "./outside.ts";
 import { markdownSupport, sectionsOf } from "./sections.ts";
 import { pageHighlight, pageTheme } from "./theme.ts";
 
@@ -28,7 +29,8 @@ export type OpenDoc = {
  * pauses (task 2.7); a read-only doc, or one over 5 MB shown as plain text,
  * can't be typed into. Markdown renders in place (live preview) unless the
  * person switches to source with ⌘E. Closing the window waits for the last
- * save.
+ * save. A change made outside Anur is folded in at once (2.17), with Undo on
+ * a toast, never on the editor's own undo stack.
  */
 export function Page({
   doc,
@@ -55,6 +57,7 @@ export function Page({
   const docsNow = useRef(docs);
   docsNow.current = docs;
   const previewFor = (src: boolean) => (src ? [] : [livePreview, livePreviewTheme]);
+  const [notice, setNotice] = useState<{ text: string; undo: (() => void) | null } | null>(null);
 
   useEffect(() => {
     if (!host.current) return;
@@ -63,6 +66,8 @@ export function Page({
     const editable = doc.mode === "editable";
     let sectionsTimer: ReturnType<typeof setTimeout> | undefined;
     let saver: Autosaver | null = null;
+    let noticeTimer: ReturnType<typeof setTimeout> | undefined;
+    setNotice(null);
     const editor = new EditorView({
       parent: host.current,
       state: EditorState.create({
@@ -105,8 +110,59 @@ export function Page({
         text: () => editor.state.doc.toString(),
         composing: () => editor.composing,
         onStatus: onSaveStatus,
+        onConflict: () => {
+          void anur.call("doc:open", { path: doc.path }).then((r) => {
+            if (r.kind === "doc") fold(r.text, r.hash);
+          });
+        },
       });
     }
+
+    /** The file is now `text`: fold it in, keeping unsaved typing on other lines. */
+    const fold = (text: string, hash: string) => {
+      const mine = editor.state.doc.toString();
+      if (text === mine) {
+        saver?.rebase(hash, text);
+        return;
+      }
+      const { text: merged, clash } = mergeOutside(saver?.saved ?? mine, mine, text);
+      const span = diffSpan(mine, merged);
+      if (span) {
+        // Not on the undo stack: ⌘Z never takes back someone else's change.
+        editor.dispatch({
+          changes: span,
+          annotations: Transaction.addToHistory.of(false),
+          userEvent: "outside",
+        });
+      }
+      saver?.rebase(hash, text);
+      const undo = editable
+        ? () => {
+            const back = diffSpan(editor.state.doc.toString(), mine);
+            if (back) editor.dispatch({ changes: back, userEvent: "input.restore" });
+            setNotice(null);
+          }
+        : null;
+      setNotice({
+        text: clash
+          ? "This doc changed outside Anur where you were typing; it now shows that version."
+          : "This doc changed outside Anur; the change is in.",
+        undo,
+      });
+      clearTimeout(noticeTimer);
+      noticeTimer = setTimeout(() => {
+        setNotice(null);
+      }, 12_000);
+    };
+    const offOutside = anur.on("doc:changed", (change) => {
+      if (change.path !== doc.path) return;
+      if (change.kind === "changed") fold(change.text, change.hash);
+      else if (change.kind === "gone") {
+        saver?.stop(
+          "This doc was deleted or moved outside Anur. Its text is still on the page; copy it to keep it.",
+        );
+      } else saver?.stop(change.reason);
+    });
     onSaveStatus(editable ? "saved" : null, null);
     // Closing the window with unsaved typing waits for the save, then closes.
     const beforeUnload = (e: BeforeUnloadEvent) => {
@@ -122,7 +178,9 @@ export function Page({
     onSections(markdownDoc ? sectionsOf(editor.state, fileName) : null);
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
+      offOutside();
       clearTimeout(sectionsTimer);
+      clearTimeout(noticeTimer);
       // Switching docs saves what was typed in this one.
       void saver?.flush();
       view.current = null;
@@ -136,5 +194,29 @@ export function Page({
     view.current?.dispatch({ effects: preview.current.reconfigure(previewFor(source)) });
   }, [source]);
 
-  return <div ref={host} className="page" />;
+  return (
+    <>
+      <div ref={host} className="page" />
+      {notice ? (
+        <div className="toast" role="status">
+          <span>{notice.text}</span>
+          {notice.undo ? (
+            <button type="button" className="toast-action" onClick={notice.undo}>
+              Undo
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="Dismiss"
+            onClick={() => {
+              setNotice(null);
+            }}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
+    </>
+  );
 }

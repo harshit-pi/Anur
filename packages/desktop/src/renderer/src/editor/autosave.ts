@@ -3,10 +3,9 @@ import type { Response } from "../../../shared/ipc-contract.ts";
 /**
  * Autosave (task 2.7): the page saves 500 ms after typing stops, never while
  * an input method is still composing, one save at a time. Each save is a
- * compare-and-swap against the hash of what was last read or written; if the
- * file changed outside Anur, saving stops and says so, and nothing on disk is
- * overwritten. Until outside changes reload the page (2.17), the person
- * reloads it themselves.
+ * compare-and-swap against the hash of what was last read or written, so
+ * nothing on disk is ever overwritten. If the file changed outside Anur, the
+ * page folds the new version in (2.17) and rebases the saver onto it.
  */
 
 export type SaveStatus = "saved" | "editing" | "saving" | "changed-outside" | "failed";
@@ -16,6 +15,8 @@ export type AutosaveDeps = {
   text: () => string;
   composing: () => boolean;
   onStatus: (status: SaveStatus, detail: string | null) => void;
+  /** The file changed under a save: fetch it and rebase. Without one, saving stops. */
+  onConflict?: () => void;
   delayMs?: number;
   setTimer?: (fn: () => void, ms: number) => unknown;
   clearTimer?: (handle: unknown) => void;
@@ -28,6 +29,8 @@ export class Autosaver {
   private inFlight: Promise<void> | null = null;
   private stopped = false;
   private lastFailed = false;
+  /** A save found the file changed; saving waits for the page to rebase. */
+  private conflicted = false;
   private readonly delay: number;
   private readonly setTimer: (fn: () => void, ms: number) => unknown;
   private readonly clearTimer: (handle: unknown) => void;
@@ -52,6 +55,29 @@ export class Autosaver {
     return this.lastFailed;
   }
 
+  /** The text as last read or saved. */
+  get saved(): string {
+    return this.savedText;
+  }
+
+  /** The file is now `text`, with `hash`, as after an outside change; save what differs. */
+  rebase(hash: string, text: string): void {
+    this.base = hash;
+    this.savedText = text;
+    this.stopped = false;
+    this.lastFailed = false;
+    this.conflicted = false;
+    this.deps.onStatus(this.dirty ? "editing" : "saved", null);
+    if (this.dirty) this.arm(this.delay);
+  }
+
+  /** Stop saving, as when the doc was deleted outside Anur. */
+  stop(detail: string): void {
+    this.disarm();
+    this.stopped = true;
+    this.deps.onStatus("failed", detail);
+  }
+
   /** True while the page has typing that isn't on disk yet. */
   get dirty(): boolean {
     return !this.stopped && this.deps.text() !== this.savedText;
@@ -70,7 +96,7 @@ export class Autosaver {
     while (this.inFlight || this.dirty) {
       if (this.inFlight) await this.inFlight;
       else await this.run();
-      if (this.stopped || this.lastFailed) return;
+      if (this.stopped || this.lastFailed || this.conflicted) return;
     }
   }
 
@@ -88,7 +114,9 @@ export class Autosaver {
   }
 
   private run(): Promise<void> {
-    if (this.stopped || this.inFlight) return this.inFlight ?? Promise.resolve();
+    if (this.stopped || this.conflicted || this.inFlight) {
+      return this.inFlight ?? Promise.resolve();
+    }
     if (this.deps.composing()) {
       this.arm(100);
       return Promise.resolve();
@@ -109,6 +137,11 @@ export class Autosaver {
             this.savedText = text;
             this.deps.onStatus(this.dirty ? "editing" : "saved", null);
             if (this.dirty && this.timer === null) this.arm(this.delay);
+          } else if (r.kind === "changed" && this.deps.onConflict) {
+            // Nothing was written; the page fetches the file and rebases.
+            this.conflicted = true;
+            this.deps.onStatus("editing", null);
+            this.deps.onConflict();
           } else if (r.kind === "changed") {
             this.stopped = true;
             this.deps.onStatus(

@@ -14,6 +14,7 @@ import {
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { openDoc } from "./folder/open-doc.ts";
+import { DocWatcher } from "./folder/doc-watcher.ts";
 import { saveDoc } from "./folder/save-doc.ts";
 import { readRecent } from "./folder/recent.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
@@ -49,6 +50,11 @@ if (theme === "light" || theme === "dark") nativeTheme.themeSource = theme;
 
 const windows = new Map<number, BrowserWindow>();
 let folders: FolderService;
+/** Each window's open doc, watched for changes made outside Anur (2.17). */
+const docWatcher = new DocWatcher((windowId, change) => {
+  const win = windows.get(windowId);
+  if (win) send(win, "doc:changed", change);
+});
 
 function send<E extends EventName>(win: BrowserWindow, event: E, payload: EventPayload<E>) {
   if (!win.isDestroyed()) win.webContents.send(event, payload);
@@ -112,12 +118,18 @@ const handlers: { [C in Channel]: Handler<C> } = {
   "doc:open": async ({ path: requested }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
-    return openDoc(folder, requested);
+    const opened = await openDoc(folder, requested);
+    if (opened.kind === "doc")
+      docWatcher.watch(webContentsId, folder.path, opened.path, opened.hash);
+    else docWatcher.stop(webContentsId);
+    return opened;
   },
   "doc:save": async (request, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
-    return saveDoc(folder, request);
+    const saved = await saveDoc(folder, request);
+    if (saved.kind === "saved") docWatcher.setHash(webContentsId, request.path, saved.hash);
+    return saved;
   },
   "menu:popup": ({ items }, { webContentsId }) =>
     new Promise((resolve) => {
@@ -209,6 +221,7 @@ function createWindow(): BrowserWindow {
   senders.add(id);
   win.on("closed", () => {
     windows.delete(id);
+    docWatcher.stop(id);
     senders.remove(id);
     void folders.close(id);
   });
@@ -405,6 +418,7 @@ app.on("second-instance", () => {
 });
 
 app.on("will-quit", () => {
+  docWatcher.stopAll();
   void folders.closeAll();
 });
 
