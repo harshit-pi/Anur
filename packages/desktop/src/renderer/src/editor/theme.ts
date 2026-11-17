@@ -18,6 +18,39 @@ export const pageTheme = EditorView.theme({
   },
   ".cm-line": { padding: "0" },
   ".cm-cursor": { borderLeftColor: "var(--blue)" },
+  // The insert menu ("/") and "[[" links: a quiet list in the UI face.
+  ".cm-tooltip.cm-tooltip-autocomplete": {
+    border: "1px solid var(--rule)",
+    borderRadius: "8px",
+    backgroundColor: "var(--sheet)",
+    boxShadow: "var(--shadow)",
+    padding: "4px",
+    overflow: "hidden",
+  },
+  // As specific as CodeMirror's own rule, which sets a monospace face.
+  ".cm-tooltip.cm-tooltip-autocomplete > ul": {
+    fontFamily: "var(--font-ui)",
+    fontSize: "13px",
+    maxHeight: "18em",
+  },
+  ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
+    display: "flex",
+    alignItems: "baseline",
+    gap: "12px",
+    padding: "5px 10px !important",
+    borderRadius: "5px",
+    color: "var(--ink)",
+  },
+  ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
+    backgroundColor: "var(--blue-wash)",
+    color: "var(--ink)",
+  },
+  ".cm-completionDetail": {
+    marginLeft: "auto",
+    fontStyle: "normal",
+    color: "var(--graphite)",
+  },
+  ".cm-completionMatchedText": { textDecoration: "none", fontWeight: "650" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
     backgroundColor: "var(--blue-wash) !important",
   },

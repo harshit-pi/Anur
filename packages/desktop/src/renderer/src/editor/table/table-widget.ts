@@ -42,6 +42,11 @@ const live = new WeakMap<HTMLElement, Live>();
 /** The cell to focus once a rebuilt table is drawn, after a row or column is added. */
 let pendingFocus: { from: number; row: number; col: number } | null = null;
 
+/** Focus a cell of the table that starts at `from` once it is drawn, as after inserting one. */
+export function focusTableWhenDrawn(from: number, row = 0, col = 0) {
+  pendingFocus = { from, row, col };
+}
+
 const cellsOf = (wrap: HTMLElement) => [...wrap.querySelectorAll<HTMLElement>("[data-row]")];
 
 const cellAt = (wrap: HTMLElement, row: number, col: number) =>
