@@ -7,7 +7,8 @@ export type Side = "left" | "right";
 
 export const PANEL = {
   left: { min: 180, max: 480, initial: 260 },
-  right: { min: 220, max: 520, initial: 300 },
+  // Wide enough to read an agent's replies as in a chat app, with longer lines.
+  right: { min: 220, max: 900, initial: 300 },
 } as const;
 
 const KEY = "anur.panelWidths";

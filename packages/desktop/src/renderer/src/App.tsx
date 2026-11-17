@@ -522,6 +522,7 @@ export function App() {
             section={sections?.sections[cursorSection] ?? sections?.sections[0] ?? null}
             writable={folder?.mode === "writable" && doc?.mode === "editable"}
             request={threadRequest}
+            onJump={jumpTo}
           />
         }
       />

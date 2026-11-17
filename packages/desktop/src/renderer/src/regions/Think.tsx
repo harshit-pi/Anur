@@ -209,6 +209,7 @@ export function Think({
   section,
   writable,
   request,
+  onJump,
 }: {
   docPath: string | null;
   docText: () => string;
@@ -217,6 +218,8 @@ export function Think({
   writable: boolean;
   /** A thread to open now, as "Keep discussing" on a preview asks. */
   request: { thread: string; n: number } | null;
+  /** Scroll the page to a section, by its index in the tree. */
+  onJump: (index: number) => void;
 }) {
   const { threads, setThreads, prompts, setPrompts } = useThreads(docPath, docText);
   const [open, setOpen] = useState<string | null>(null);
@@ -265,6 +268,12 @@ export function Think({
     () => (section ? threads.filter((t) => samePath(t.path, section.path)) : []),
     [threads, section],
   );
+  /** Every other thread in the doc, in the order of their sections, the latest first within one. */
+  const elsewhere = useMemo(() => {
+    const order = new Map(tree?.sections.map((s, i) => [s.path.join("\u0000"), i]));
+    const at = (t: ThreadView) => (t.path ? (order.get(t.path.join("\u0000")) ?? 1e9) : 1e9);
+    return threads.filter((t) => !here.includes(t)).sort((a, b) => at(a) - at(b));
+  }, [threads, here, tree]);
   const thread = threads.find((t) => t.id === open) ?? null;
 
   // "Keep discussing" on a preview: open that thread, wherever the cursor is.
@@ -347,8 +356,23 @@ export function Think({
             setOpen(null);
           }}
         >
-          ← Threads on {thread.path?.at(-1) ?? "a removed section"}
+          ← All threads
         </button>
+        {thread.path ? (
+          <button
+            type="button"
+            className="think-where"
+            title="Show this section on the page"
+            onClick={() => {
+              const i = tree.sections.findIndex((x) => samePath(thread.path, x.path));
+              if (i >= 0) onJump(i);
+            }}
+          >
+            On {thread.path.at(-1)}
+          </button>
+        ) : (
+          <span className="think-where quiet">Its section is gone</span>
+        )}
         <h2 className="think-title">{thread.title}</h2>
         <section className="think-reads" aria-label="The agent reads in this thread">
           <h3>The agent reads in this thread</h3>
@@ -530,26 +554,7 @@ export function Think({
       <h3 className="think-subhead">
         {here.length === 0 ? "No threads on this section yet" : `Threads (${String(here.length)})`}
       </h3>
-      <ul className="think-threads">
-        {here.map((t) => (
-          <li key={t.id}>
-            <button
-              type="button"
-              className="think-thread"
-              onClick={() => {
-                setOpen(t.id);
-              }}
-            >
-              <span className="think-thread-title">{t.title}</span>
-              <span className="quiet">
-                {t.busy
-                  ? "Replying…"
-                  : countOf(t.items.filter((i) => i.kind === "message").length, "message")}
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
+      <ThreadList threads={here} onOpen={setOpen} />
       {notConnected(newAgent)}
       {error ? <p className="think-error">{error}</p> : null}
       <div className="think-options">
@@ -564,6 +569,12 @@ export function Think({
         disabled={!writable || !AGENTS[newAgent].runsThreads}
         onSend={start}
       />
+      {elsewhere.length > 0 ? (
+        <>
+          <h3 className="think-subhead">Other threads in this doc ({String(elsewhere.length)})</h3>
+          <ThreadList threads={elsewhere} onOpen={setOpen} showSection />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -597,5 +608,45 @@ function AgentPicker({
         ))}
       </select>
     </label>
+  );
+}
+
+/** Threads as buttons: their question, where they are, and how far they've got. */
+function ThreadList({
+  threads,
+  onOpen,
+  showSection = false,
+}: {
+  threads: ThreadView[];
+  onOpen: (id: string) => void;
+  showSection?: boolean;
+}) {
+  if (threads.length === 0) return null;
+  return (
+    <ul className="think-threads">
+      {threads.map((t) => (
+        <li key={t.id}>
+          <button
+            type="button"
+            className="think-thread"
+            onClick={() => {
+              onOpen(t.id);
+            }}
+          >
+            {showSection ? (
+              <span className="think-thread-where">
+                {t.path ? t.path.at(-1) : "A section that's gone"}
+              </span>
+            ) : null}
+            <span className="think-thread-title">{t.title}</span>
+            <span className="quiet">
+              {t.busy
+                ? "Replying…"
+                : countOf(t.items.filter((i) => i.kind === "message").length, "message")}
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
