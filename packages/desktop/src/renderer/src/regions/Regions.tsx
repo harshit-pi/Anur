@@ -179,8 +179,8 @@ function FolderNotices({
       {folder.conflicts.map((c) => (
         <div key={c.copy} className="banner conflict" role="status">
           <span className="truncate" title={c.copy}>
-            <strong>{c.copy}</strong> looks like a {c.service === "icloud" ? "iCloud" : "Dropbox"}{" "}
-            conflict copy of {c.original}.
+            <strong>{c.copy}</strong> looks like{" "}
+            {c.service === "icloud" ? "an iCloud" : "a Dropbox"} conflict copy of {c.original}.
           </span>
           <button
             type="button"
