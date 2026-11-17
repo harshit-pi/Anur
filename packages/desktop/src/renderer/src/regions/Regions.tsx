@@ -16,6 +16,7 @@ import {
   SidebarLeftIcon,
   SidebarRightIcon,
 } from "./Icons.tsx";
+import { PROVIDERS, cloudSummary, markNoticeSeen, noticeSeen } from "./cloud-notice.ts";
 
 /**
  * The seven regions, fixed from day 1 (FR10). Plugins and later groups add
@@ -184,14 +185,6 @@ export function TabBar({
   );
 }
 
-const PROVIDERS: Record<NonNullable<FolderState["cloud"]>, string> = {
-  icloud: "iCloud Drive",
-  dropbox: "Dropbox",
-  onedrive: "OneDrive",
-  "google-drive": "Google Drive",
-  cloud: "a cloud folder",
-};
-
 /** Notices about where the folder lives and what its sync service left behind. */
 function FolderNotices({
   folder,
@@ -200,26 +193,22 @@ function FolderNotices({
   folder: FolderState;
   onMerge: (copy: string) => void;
 }) {
-  const [dismissed, setDismissed] = useState(false);
+  // Once per folder: dismissed, it stays dismissed on this Mac, and the
+  // status bar's cloud item carries the same words.
+  const [dismissed, setDismissed] = useState(() => noticeSeen(window.localStorage, folder.path));
+  const summary = cloudSummary(folder);
   return (
     <>
-      {folder.cloud && !dismissed ? (
+      {summary && !dismissed ? (
         <div className="notice" role="status">
-          <span>
-            This folder syncs through {PROVIDERS[folder.cloud]}. Anur keeps its caches and its lock
-            on this Mac, outside the folder.
-            {folder.offloaded.length > 0
-              ? ` ${String(folder.offloaded.length)} docs are still in iCloud; Anur downloads each one before opening it.`
-              : ""}
-            {folder.gitInCloud
-              ? " It is also a git repo: sync can break git's lock files, so a repo is safer outside a synced folder."
-              : ""}
-          </span>
+          <span>{summary.join(" ")}</span>
           <button
             type="button"
             className="icon-button"
             aria-label="Dismiss"
+            title="Dismiss; the status bar keeps this"
             onClick={() => {
+              markNoticeSeen(window.localStorage, folder.path);
               setDismissed(true);
             }}
           >
@@ -445,6 +434,14 @@ export function StatusBar({
                 ? "Read-only folder"
                 : "Nothing to save"}
       </span>
+      {folder?.cloud ? (
+        <span className="status-item" title={cloudSummary(folder)?.join("\n")}>
+          {PROVIDERS[folder.cloud]}
+          {folder.offloaded.length > 0
+            ? ` · ${String(folder.offloaded.length)} not downloaded`
+            : ""}
+        </span>
+      ) : null}
       <span className="status-spacer" />
       {docMode && docMode !== "plain-text" ? (
         <button
