@@ -82,6 +82,8 @@ ANUR_SCREENSHOT=/tmp/shot.png ANUR_OPEN_FOLDER=/path/to/folder ANUR_SCREENSHOT_C
 - `core` is pure and tested directly; most logic belongs there.
 - The thread service is tested with a fake hub that records what would go to the agent and plays the agent's replies (`main/threads/threads.test.ts`).
 - Programs the agent runs (the hook, the MCP server) are tested by spawning them as they run: Node runs the `.ts` file directly.
+- The main loop is tested end to end without the window (`main/threads/end-to-end.test.ts`): the real agent host, hook and thread service, with `agent/testing/fake-agent.ts` standing in for Claude Code. The fake speaks ACP and runs the session's hooks as Claude Code does, so the thread check, working copies and previews all run for real in CI.
+- The context eval runs on demand, never in CI, since it spends the person's tokens: `pnpm eval:context [runs]`. Results land in `evals/context/results/`.
 - For hand-written algorithms, add a test over many random inputs (see the diff test in `core/src/text/diff.test.ts`).
 
 ## Gotchas found the hard way

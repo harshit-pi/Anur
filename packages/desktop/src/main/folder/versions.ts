@@ -3,6 +3,7 @@ import { mkdir, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import {
   ANUR_DIR,
+  HistoryLine,
   VersionLine,
   anurPaths,
   buildSectionTree,
@@ -98,6 +99,7 @@ export class SectionVersions {
       if (!now) return;
       if (before)
         await this.record(doc, before, now, "outside", "Changed while the doc was closed");
+      await this.settleApplies(doc, now);
       for (const [i, id] of now.ids.entries()) {
         if (!(await this.hasHistory(doc, id))) {
           await this.write(doc, id, now, i, "start", "The text when Anur first opened the doc");
@@ -162,6 +164,59 @@ export class SectionVersions {
       const { doc, now } = await this.assign(rel, text, known ?? null);
       if (now) found = { doc, tree: now.tree, ids: now.ids };
     }).then(() => found);
+  }
+
+  /**
+   * Applies whose outcome History doesn't record yet, as after a crash
+   * between writing an Apply's version and the edit landing (Architecture,
+   * "Crash recovery"): the section now holds the applied text, so it
+   * landed; or the text before, so it was abandoned, and its preview is
+   * still there to apply again; or neither, so a change outside Anur came
+   * after it. Each outcome is written once.
+   */
+  private async settleApplies(doc: DocId, now: Known): Promise<void> {
+    for (const [i, id] of now.ids.entries()) {
+      let names: string[];
+      try {
+        names = (await readdir(this.historyDir(doc, id))).filter((n) => n.endsWith(".jsonl"));
+      } catch {
+        continue;
+      }
+      const lines = mergeLines(
+        ...(await Promise.all(
+          names.map(
+            async (n) =>
+              (await readJsonlFile(path.join(this.historyDir(doc, id), n), HistoryLine)).lines,
+          ),
+        )),
+      ).sort((a, b) => a.at.localeCompare(b.at) || a.seq - b.seq);
+      const settled = new Set(lines.flatMap((l) => (l.kind === "apply-result" ? [l.preview] : [])));
+      const current = subtreeOf(now, i);
+      for (const [n, l] of lines.entries()) {
+        if (l.kind !== "version" || l.cause !== "apply" || !l.preview || settled.has(l.preview))
+          continue;
+        const earlier = lines
+          .slice(0, n)
+          .reverse()
+          .find((x) => x.kind === "version");
+        const result =
+          current === l.text
+            ? "landed"
+            : earlier?.kind === "version" && current === earlier.text
+              ? "abandoned"
+              : "outside";
+        const w = await JsonlWriter.open(
+          path.join(this.anurDir, anurPaths.history(doc, id, this.device)),
+          this.device,
+        );
+        try {
+          await w.append({ kind: "apply-result", preview: l.preview, result });
+        } finally {
+          await w.close();
+        }
+        settled.add(l.preview);
+      }
+    }
   }
 
   /**

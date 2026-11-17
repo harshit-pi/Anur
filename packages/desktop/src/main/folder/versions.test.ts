@@ -160,4 +160,51 @@ describe("section versions", () => {
       "start",
     ]);
   });
+
+  it("settle an Apply cut short by a crash: abandoned when the edit never landed, landed when it did", async () => {
+    const f = folder();
+    const v = new SectionVersions(f, "dev1");
+    await v.opened("Plan.md", DOC);
+    const at = await v.locate("Plan.md", DOC);
+    const risks = at?.ids[1];
+    if (!risks) throw new Error("no section");
+    // History has the Apply's version; then Anur stops before the edit lands.
+    await v.applied(
+      "Plan.md",
+      risks,
+      "## Risks\n\nThe host passed its tests.\n",
+      ["Plan", "Risks"],
+      "pt1",
+      "t1",
+    );
+    const reopened = new SectionVersions(f, "dev1");
+    await reopened.opened("Plan.md", DOC);
+    // And one that landed, from another thread.
+    const applied = DOC.replace("The host is untested.", "The host passed its tests.");
+    await reopened.applied(
+      "Plan.md",
+      risks,
+      "## Risks\n\nThe host passed its tests.\n",
+      ["Plan", "Risks"],
+      "pt2",
+      "t2",
+    );
+    const again = new SectionVersions(f, "dev1");
+    await again.opened("Plan.md", applied);
+    const results: [string, string][] = [];
+    const docs = path.join(f, ".anur", "docs");
+    for (const doc of await readdir(docs))
+      for (const sec of await readdir(path.join(docs, doc, "history")))
+        for (const file of await readdir(path.join(docs, doc, "history", sec)))
+          for (const line of (await readFile(path.join(docs, doc, "history", sec, file), "utf8"))
+            .trim()
+            .split("\n")) {
+            const l = JSON.parse(line) as { kind: string; preview?: string; result?: string };
+            if (l.kind === "apply-result") results.push([l.preview ?? "", l.result ?? ""]);
+          }
+    expect(results.sort()).toEqual([
+      ["pt1", "abandoned"],
+      ["pt2", "landed"],
+    ]);
+  });
 });

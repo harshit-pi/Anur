@@ -10,6 +10,14 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - The parts are chosen by `BUNDLE_RULES` in `packages/core/src/context/bundle.ts`, held as data, so a variant is a change to that list. `siblings-outline` is the older variant, kept for the eval.
 - Because a thread may read any decided text, Claude Code reading the whole working copy before an Edit is accepted, not worked around. The alternative, a working copy holding only what the thread was given, keeps context tighter and long docs cheaper, but needs a partial file stitched back into the doc and stops edits to sections outside it. The whole-file copy keeps edits to any section simple; its costs, tokens and focus on long docs, are what the context eval measures. Revisit if the eval shows focus suffering.
 
+## The context eval's first result (2026-11-17)
+
+- Three runs each way, Anur's threads against one long chat (`evals/context/results/2026-11-17T23-05-11-236Z.json`).
+- An option rejected in one section's thread reached a sibling's draft in the long chat once ("never WhatsApp") and never in Anur's threads.
+- Constraints in the title's own text and in a further section's first line were kept every time, both ways.
+- A constraint past a further section's first line was kept every time in the long chat and never in Anur's threads: the outline carries first lines only, and the eval gives the agent no tools to fetch more.
+- What to change in the bundle in answer is open; see the decision that follows this result.
+
 ## Agents sit behind an adapter (2026-11-17)
 
 - The agent host speaks ACP to every agent the same way. An `AgentAdapter` (`src/agent/adapters.ts`) says only how to start that agent's ACP adapter and how to put Anur's guard into that agent's own settings. Claude Code is the only adapter.
