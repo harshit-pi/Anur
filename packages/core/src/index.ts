@@ -11,3 +11,14 @@ export {
   readWikiLink,
   type WikiLink,
 } from "./markdown/index.ts";
+export {
+  DocId,
+  Range,
+  Section,
+  SectionId,
+  SectionLink,
+  SectionSource,
+  formatPath,
+  ownText,
+  subtreeText,
+} from "./sections/index.ts";
