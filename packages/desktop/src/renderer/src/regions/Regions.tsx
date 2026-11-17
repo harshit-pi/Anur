@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
 import type { FolderState } from "../../../shared/ipc-contract.ts";
 import { FileTree } from "./FileTree.tsx";
@@ -346,9 +347,17 @@ export function Center({
   onMerge,
   onBack,
   onForward,
+  onCrumb,
+  onCopyLink,
+  onMore,
 }: {
   folder: FolderState | null;
   selected: string | null;
+  /** A breadcrumb was pressed: show a menu of what the folder it names holds. */
+  onCrumb: (folder: string) => void;
+  /** Copy a link to the section at the cursor; returns it, or null when there's no doc. */
+  onCopyLink: () => string | null;
+  onMore: () => void;
   /** Back and forward in the active tab; null where there's nowhere to go. */
   onBack: (() => void) | null;
   onForward: (() => void) | null;
@@ -361,6 +370,7 @@ export function Center({
   onOpenFolder: () => void;
   onMerge: (copy: string) => void;
 }) {
+  const [copied, setCopied] = useState<string | null>(null);
   return (
     <main className="center">
       <div className="path-row">
@@ -384,19 +394,60 @@ export function Center({
         >
           <ForwardIcon />
         </button>
-        <span className="path quiet truncate" title={selected ?? undefined}>
-          {selected ? selected.replace(/\.md$/i, "").split("/").join(" / ") : "No doc"}
-        </span>
+        <nav className="path crumbs" aria-label="Path" title={selected ?? undefined}>
+          {selected ? (
+            crumbs(selected).map((c, i) => (
+              <Fragment key={`${String(i)}-${c.label}`}>
+                {i > 0 ? (
+                  <span className="crumb-sep" aria-hidden="true">
+                    /
+                  </span>
+                ) : null}
+                <button
+                  type="button"
+                  className="crumb truncate"
+                  title={
+                    c.lists ? `What's in ${c.lists}` : `What's in ${folder?.name ?? "the folder"}`
+                  }
+                  onClick={() => {
+                    onCrumb(c.lists);
+                  }}
+                >
+                  {c.label}
+                </button>
+              </Fragment>
+            ))
+          ) : (
+            <span className="quiet">No doc</span>
+          )}
+        </nav>
         <div className="path-actions">
+          {copied ? <span className="copied quiet">Copied {copied}</span> : null}
           <button
             className="icon-button"
             type="button"
             aria-label="Copy a link to this section"
-            disabled
+            title="Copy a link to the section the cursor is in"
+            disabled={!selected}
+            onClick={() => {
+              const link = onCopyLink();
+              if (!link) return;
+              setCopied(link);
+              setTimeout(() => {
+                setCopied((c) => (c === link ? null : c));
+              }, 2000);
+            }}
           >
             <LinkIcon />
           </button>
-          <button className="icon-button" type="button" aria-label="More" disabled>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="More"
+            title="More"
+            disabled={!selected}
+            onClick={onMore}
+          >
             <MoreIcon />
           </button>
         </div>

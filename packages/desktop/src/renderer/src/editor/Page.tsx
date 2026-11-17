@@ -288,7 +288,7 @@ export function Page({
                 type="button"
                 className="toast-action"
                 onClick={() => {
-                  void navigator.clipboard.writeText(entry.mine);
+                  void anur.call("clipboard:write", { text: entry.mine });
                 }}
               >
                 Copy yours

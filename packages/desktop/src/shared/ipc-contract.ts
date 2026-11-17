@@ -32,6 +32,24 @@ export const FolderState = z.object({
 });
 export type FolderState = z.infer<typeof FolderState>;
 
+/** An item in a native menu: a choice, a line, or a submenu of more. */
+export type MenuEntry =
+  | { id: string; label: string; enabled?: boolean | undefined; checked?: boolean | undefined }
+  | { separator: true }
+  | { label: string; submenu: MenuEntry[] };
+export const MenuEntry: z.ZodType<MenuEntry, MenuEntry> = z.lazy(() =>
+  z.union([
+    z.object({
+      id: z.string().max(1024),
+      label: z.string().max(200),
+      enabled: z.boolean().optional(),
+      checked: z.boolean().optional(),
+    }),
+    z.object({ separator: z.literal(true) }),
+    z.object({ label: z.string().max(200), submenu: z.array(MenuEntry).max(300) }),
+  ]),
+);
+
 export const ipcContract = {
   "app:info": {
     request: z.object({}).strict(),
@@ -87,6 +105,16 @@ export const ipcContract = {
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
+  /** Put text on the clipboard, which works whether or not the window has focus. */
+  "clipboard:write": {
+    request: z.object({ text: z.string().max(100_000) }).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Show the doc in Finder, or open it in the app the system uses for Markdown. */
+  "doc:reveal": {
+    request: z.object({ path: z.string(), how: z.enum(["finder", "default-app"]) }).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Keep the person's version of lines a change made outside Anur overlapped (2.18). */
   "journal:keep": {
     request: z
@@ -124,23 +152,7 @@ export const ipcContract = {
   },
   /** Show a native context menu at the pointer; resolves with the chosen item's id, or null. */
   "menu:popup": {
-    request: z
-      .object({
-        items: z
-          .array(
-            z.union([
-              z.object({
-                id: z.string().max(64),
-                label: z.string().max(120),
-                enabled: z.boolean().optional(),
-                checked: z.boolean().optional(),
-              }),
-              z.object({ separator: z.literal(true) }),
-            ]),
-          )
-          .max(40),
-      })
-      .strict(),
+    request: z.object({ items: z.array(MenuEntry).max(300) }).strict(),
     response: z.object({ id: z.string().nullable() }),
   },
   /** How a conflict copy would merge into its original, section by section. */
