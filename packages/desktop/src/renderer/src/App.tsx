@@ -7,6 +7,24 @@ import { Page, type OpenDoc } from "./editor/Page.tsx";
 import { insertById } from "./editor/insert-menu.ts";
 import { Resizer } from "./layout/Resizer.tsx";
 import {
+  back,
+  canGoBack,
+  canGoForward,
+  close,
+  currentDoc,
+  cycle,
+  docOf,
+  forward,
+  loadTabs,
+  newTab,
+  noTabs,
+  open as openInTab,
+  saveTabs,
+  select,
+  titleOf,
+  type Tabs,
+} from "./layout/tabs.ts";
+import {
   isDownloaded,
   markDownloaded,
   noneDownloaded,
@@ -29,7 +47,9 @@ export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
   const [folder, setFolder] = useState<FolderState | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [tabs, setTabs] = useState<Tabs>(noTabs);
+  /** The doc in the active tab. */
+  const selected = currentDoc(tabs);
   const [merging, setMerging] = useState<string | null>(null);
   const [doc, setDoc] = useState<OpenDoc | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
@@ -88,6 +108,35 @@ export function App() {
     };
   }, [selected, folder]);
 
+  // Each folder has its own tabs, remembered on this device.
+  const folderPath = folder?.path ?? null;
+  const folderDocs = folder?.docs;
+  useEffect(() => {
+    setTabs(
+      folderPath && folderDocs ? loadTabs(window.localStorage, folderPath, folderDocs) : noTabs,
+    );
+    // Only when another folder opens: a changed list keeps the tabs as they are.
+  }, [folderPath]);
+  useEffect(() => {
+    if (folderPath) saveTabs(window.localStorage, folderPath, tabs);
+  }, [tabs, folderPath]);
+  const openDoc = useCallback((path: string, inNewTab: boolean) => {
+    setTabs((t) => openInTab(t, path, inNewTab));
+  }, []);
+  const listTabs = useCallback(() => {
+    void anur
+      .call("menu:popup", {
+        items: tabs.tabs.map((t) => ({
+          id: t.id,
+          label: titleOf(t),
+          checked: t.id === tabs.active,
+        })),
+      })
+      .then(({ id }) => {
+        if (id) setTabs((t) => select(t, id));
+      });
+  }, [tabs]);
+
   const jumpTo = useCallback(
     (index: number) => {
       const target = sections?.sections[index]?.headingRange;
@@ -133,11 +182,18 @@ export function App() {
     });
     const offFolder = anur.on("folder:changed", (f) => {
       setFolder(f);
-      setSelected(null);
+    });
+    const offCommand = anur.on("app:command", ({ command }) => {
+      if (command === "tab-new") setTabs((t) => newTab(t));
+      else if (command === "tab-close") setTabs((t) => (t.active ? close(t, t.active) : t));
+      else if (command === "back") setTabs(back);
+      else if (command === "forward") setTabs(forward);
+      else setTabs((t) => cycle(t, command === "tab-next" ? 1 : -1));
     });
     return () => {
       offInsert();
       offFolder();
+      offCommand();
     };
   }, []);
 
@@ -178,7 +234,22 @@ export function App() {
         gridTemplateColumns: `48px ${String(open.left ? widths.left : 0)}px minmax(0, 1fr) ${String(open.right ? widths.right : 0)}px`,
       }}
     >
-      <TabBar open={open} onToggle={toggle} />
+      <TabBar
+        open={open}
+        onToggle={toggle}
+        tabs={tabs.tabs.map((t) => ({ id: t.id, title: titleOf(t), path: docOf(t) }))}
+        active={tabs.active}
+        onSelectTab={(id) => {
+          setTabs((t) => select(t, id));
+        }}
+        onCloseTab={(id) => {
+          setTabs((t) => close(t, id));
+        }}
+        onNewTab={() => {
+          setTabs((t) => newTab(t));
+        }}
+        onListTabs={listTabs}
+      />
       <Ribbon
         filesOpen={open.left}
         onFiles={() => {
@@ -188,7 +259,7 @@ export function App() {
           setPaletteOpen(true);
         }}
       />
-      <LeftSidebar folder={shown} selected={selected} onSelect={setSelected} hidden={!open.left} />
+      <LeftSidebar folder={shown} selected={selected} onSelect={openDoc} hidden={!open.left} />
       <Center
         folder={shown}
         selected={selected}
@@ -209,6 +280,20 @@ export function App() {
         docError={docError ?? save.detail}
         onOpenFolder={openFolder}
         onMerge={setMerging}
+        onBack={
+          canGoBack(tabs)
+            ? () => {
+                setTabs(back);
+              }
+            : null
+        }
+        onForward={
+          canGoForward(tabs)
+            ? () => {
+                setTabs(forward);
+              }
+            : null
+        }
       />
       <RightSidebar sections={sections} onJump={jumpTo} hidden={!open.right} />
       <StatusBar

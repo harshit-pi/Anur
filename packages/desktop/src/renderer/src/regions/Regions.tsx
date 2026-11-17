@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { SectionTree } from "@anur/core";
 import type { FolderState } from "../../../shared/ipc-contract.ts";
 import { FileTree } from "./FileTree.tsx";
@@ -75,7 +75,7 @@ export function LeftSidebar({
 }: {
   folder: FolderState | null;
   selected: string | null;
-  onSelect: (path: string) => void;
+  onSelect: (path: string, inNewTab: boolean) => void;
   /** Collapsed: kept mounted, so folders stay expanded as they were. */
   hidden: boolean;
 }) {
@@ -114,10 +114,44 @@ export function LeftSidebar({
 export function TabBar({
   open,
   onToggle,
+  tabs,
+  active,
+  onSelectTab,
+  onCloseTab,
+  onNewTab,
+  onListTabs,
 }: {
   open: Record<"left" | "right", boolean>;
   onToggle: (side: "left" | "right") => void;
+  tabs: { id: string; title: string; path: string | null }[];
+  active: string | null;
+  onSelectTab: (id: string) => void;
+  onCloseTab: (id: string) => void;
+  onNewTab: () => void;
+  onListTabs: () => void;
 }) {
+  // ⌄ shows once the tabs no longer fit.
+  const strip = useRef<HTMLDivElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  useEffect(() => {
+    const el = strip.current;
+    if (!el) return;
+    const check = () => {
+      setOverflowing(el.scrollWidth > el.clientWidth + 1);
+    };
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+    };
+  }, [tabs.length]);
+  // The active tab scrolls into view, as after ⌃Tab or picking from ⌄.
+  useEffect(() => {
+    strip.current
+      ?.querySelector(".tab.active")
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
   return (
     <header className="tab-bar" aria-label="Tabs">
       <button
@@ -133,25 +167,66 @@ export function TabBar({
         <SidebarLeftIcon />
       </button>
       <div className="tabs" role="tablist" aria-label="Open docs">
-        <span className="quiet tab-empty">No docs open</span>
+        <div className="tab-strip" ref={strip}>
+          {tabs.length === 0 ? <span className="quiet tab-empty">No docs open</span> : null}
+          {tabs.map((t) => (
+            <div
+              key={t.id}
+              role="tab"
+              aria-selected={t.id === active}
+              className={t.id === active ? "tab active" : "tab"}
+              title={t.path ?? "New tab"}
+              onMouseDown={(e) => {
+                // Middle-click closes, as in a browser.
+                if (e.button === 1) {
+                  e.preventDefault();
+                  onCloseTab(t.id);
+                }
+              }}
+            >
+              <button
+                type="button"
+                className="tab-title truncate"
+                onClick={() => {
+                  onSelectTab(t.id);
+                }}
+              >
+                {t.title}
+              </button>
+              <button
+                type="button"
+                className="tab-close"
+                aria-label={`Close ${t.title}`}
+                title="Close tab (⌘W)"
+                onClick={() => {
+                  onCloseTab(t.id);
+                }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
         <button
           className="icon-button"
           type="button"
           aria-label="New tab"
           title="New tab (⌘T)"
-          disabled
+          onClick={onNewTab}
         >
           <PlusIcon />
         </button>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="List all tabs"
-          title="List all tabs"
-          disabled
-        >
-          <ChevronDownIcon />
-        </button>
+        {overflowing ? (
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="List all tabs"
+            title="List all tabs"
+            onClick={onListTabs}
+          >
+            <ChevronDownIcon />
+          </button>
+        ) : null}
       </div>
       <div className="segmented" role="radiogroup" aria-label="View">
         <button
@@ -248,9 +323,14 @@ export function Center({
   docError,
   onOpenFolder,
   onMerge,
+  onBack,
+  onForward,
 }: {
   folder: FolderState | null;
   selected: string | null;
+  /** Back and forward in the active tab; null where there's nowhere to go. */
+  onBack: (() => void) | null;
+  onForward: (() => void) | null;
   /** The open doc's page, once it has loaded. */
   page: ReactNode;
   /** What is happening while a doc loads, such as a download from iCloud. */
@@ -263,10 +343,24 @@ export function Center({
   return (
     <main className="center">
       <div className="path-row">
-        <button className="icon-button" type="button" aria-label="Back" disabled>
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="Back"
+          title="Back (⌘⌥←)"
+          disabled={!onBack}
+          onClick={onBack ?? undefined}
+        >
           <BackIcon />
         </button>
-        <button className="icon-button" type="button" aria-label="Forward" disabled>
+        <button
+          className="icon-button"
+          type="button"
+          aria-label="Forward"
+          title="Forward (⌘⌥→)"
+          disabled={!onForward}
+          onClick={onForward ?? undefined}
+        >
           <ForwardIcon />
         </button>
         <span className="path quiet truncate" title={selected ?? undefined}>

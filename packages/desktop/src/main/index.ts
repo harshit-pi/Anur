@@ -40,7 +40,8 @@ app.setName("Anur");
 app.setPath(
   "userData",
   isCheck
-    ? mkdtempSync(path.join(tmpdir(), "anur-check-"))
+    ? // ANUR_CHECK_PROFILE lets two check runs share one, to test what is remembered.
+      (process.env.ANUR_CHECK_PROFILE ?? mkdtempSync(path.join(tmpdir(), "anur-check-")))
     : path.join(app.getPath("appData"), "Anur Desktop"),
 );
 
@@ -385,6 +386,10 @@ void app.whenReady().then(async () => {
       insert: (id) => {
         const win = BrowserWindow.getFocusedWindow();
         if (win) send(win, "editor:insert", { id });
+      },
+      command: (command) => {
+        const win = BrowserWindow.getFocusedWindow();
+        if (win) send(win, "app:command", { command });
       },
       isDev: Boolean(devUrl),
     }),
