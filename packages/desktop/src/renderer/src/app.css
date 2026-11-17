@@ -1021,6 +1021,11 @@ body.resizing * {
   cursor: text;
 }
 
+.group-chip.drop-target {
+  outline: 1.5px solid var(--group);
+  outline-offset: 1px;
+}
+
 .group-count {
   font-weight: 500;
   opacity: 0.85;

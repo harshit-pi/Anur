@@ -176,6 +176,24 @@ describe("moving, pinning and grouping tabs", () => {
     expect(updateGroup(tabs, group, { name: "Design" }).groups[0]?.name).toBe("Design");
   });
 
+  it("a tab dropped over a group joins it, even a group of one", () => {
+    const { tabs, group } = grouped(five(), ["b"]);
+    expect(shape(move(tabs, "e", "c", group))).toBe("a[be]cd");
+    expect(shape(move(tabs, "e", "b", group))).toBe("a[eb]cd");
+    expect(shape(move(tabs, "e", "c", null))).toBe("a[b]ecd");
+  });
+
+  it("a group's only tab takes the group with it", () => {
+    const { tabs } = grouped(five(), ["b"]);
+    expect(shape(move(tabs, "b", null, null))).toBe("acde[b]");
+    expect(shape(move(tabs, "b", "e"))).toBe("acd[b]e");
+  });
+
+  it("dropped away from its group, over no group, a tab leaves it", () => {
+    const { tabs } = grouped(five(), ["b", "c"]);
+    expect(shape(move(tabs, "b", null, null))).toBe("a[c]deb");
+  });
+
   it("pinning a grouped tab takes it out of the group, and an empty group goes", () => {
     const { tabs } = grouped(five(), ["b"]);
     const t = setPinned(tabs, "b", true);
@@ -234,7 +252,7 @@ describe("moving, pinning and grouping tabs", () => {
         const pick = () => t.tabs[rand(t.tabs.length)]?.id ?? "a";
         const g = t.groups[rand(Math.max(1, t.groups.length))]?.id;
         const op = rand(7);
-        if (op === 0) t = move(t, pick(), rand(4) === 0 ? null : pick());
+        if (op === 0) t = move(t, pick(), rand(4) === 0 ? null : pick(), rand(3) ? g : null);
         else if (op === 1) t = setPinned(t, pick(), rand(2) === 0);
         else if (op === 2) t = newGroup(t, pick()).tabs;
         else if (op === 3 && g) t = joinGroup(t, pick(), g);

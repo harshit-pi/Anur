@@ -151,10 +151,11 @@ export function closeToRight(t: Tabs, id: string): Tabs {
 
 /**
  * Move a tab to just before `before`, or to the end of its zone (pins or the
- * rest) when null. Dropped between two tabs of one group, it joins that group;
- * dropped away from its own group, it leaves it.
+ * rest) when null. `over` is the group under the dragged tab when dropped:
+ * it joins that group, and null means no group. Without it, a drop between
+ * two tabs of one group joins it. A group's only tab takes the group along.
  */
-export function move(t: Tabs, id: string, before: string | null): Tabs {
+export function move(t: Tabs, id: string, before: string | null, over?: string | null): Tabs {
   const tab = t.tabs.find((x) => x.id === id);
   if (!tab || before === id) return t;
   const rest = t.tabs.filter((x) => x.id !== id);
@@ -167,7 +168,11 @@ export function move(t: Tabs, id: string, before: string | null): Tabs {
   if (!tab.pinned) {
     const left = rest[at - 1]?.pinned ? undefined : rest[at - 1]?.group;
     const right = rest[at]?.group;
-    if (left && left === right) group = left;
+    const alone = Boolean(tab.group) && !rest.some((x) => x.group === tab.group);
+    if (over && t.groups.some((g) => g.id === over)) group = over;
+    else if (alone) group = tab.group;
+    else if (over === null) group = undefined;
+    else if (left && left === right) group = left;
     else if (group !== left && group !== right) group = undefined;
   }
   rest.splice(at, 0, { ...tab, group });
