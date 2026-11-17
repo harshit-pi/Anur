@@ -74,3 +74,15 @@ export {
   trustOf,
   withSetting,
 } from "./formats/index.ts";
+export {
+  DocIdLine,
+  DocMintLine,
+  DocMoveLine,
+  DocOrphanedLine,
+  buildDocRegistry,
+  docIdFor,
+  hashId,
+  mintId,
+  normalizeDocPath,
+  type DocRegistry,
+} from "./ids/index.ts";
