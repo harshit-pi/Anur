@@ -1,11 +1,14 @@
 import { randomBytes } from "node:crypto";
+import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import {
   ANUR_DIR,
   ThreadLine,
   anurPaths,
   buildBundle,
+  buildSectionTree,
   compareLines,
   merge3,
   previewParts,
@@ -22,6 +25,8 @@ import { DEFAULT_AGENT, isAgentId, type AgentId } from "../../shared/agents.ts";
 import { JsonlWriter, readJsonlFile } from "../../vault/jsonl-writer.ts";
 import type { AgentHub } from "./hub.ts";
 import { PreviewStore } from "./previews.ts";
+import { denyRulesOf, type DenyRule } from "../../agent/deny-rules.ts";
+import type { AnurSocket, ToolAnswer } from "./anur-socket.ts";
 
 /**
  * One folder's threads (tasks 3.1, 3.4, 3.5). Each thread is one discussion
@@ -53,6 +58,8 @@ export type ThreadDeps = {
   previewsChanged: (rel: string) => void;
   /** The agent new threads run on, from settings. */
   defaultAgent: () => AgentId;
+  /** Anur's MCP tools: the socket they reach Anur over, and the server program the agent runs (3.12). */
+  mcp?: { socket: AnurSocket; script: string } | null;
   /** A session reported its agent's choices: the defaults for the next new thread. */
   rememberOptions?: (agent: AgentId, options: SessionOption[]) => void;
 };
@@ -78,7 +85,14 @@ type Live = {
   docText: string;
   /** The working copy's text when the turn started, to find what the agent changed. */
   copyStart: string | null;
+  /** After a turn: watching its copies, since background work can still edit them (3.6). */
+  watching: { stop: () => void } | null;
+  /** Each copy's text when last merged, so an unchanged one isn't merged again. */
+  merged: Map<string, string>;
 };
+
+/** How long after a turn its working copies are watched for background edits. */
+const WATCH_AFTER_TURN_MS = 10 * 60_000;
 
 const newThreadId = () => `t${randomBytes(9).toString("hex")}`;
 const newTurnId = () => `u${randomBytes(6).toString("hex")}`;
@@ -88,6 +102,8 @@ export class Threads {
   private readonly writers = new Map<string, Promise<JsonlWriter>>();
   /** Each thread's session choices, as the agent last reported them. */
   private readonly options = new Map<string, SessionOption[]>();
+  /** Each thread's token for Anur's MCP tools. */
+  private readonly tokens = new Map<string, string>();
   /** An agent picked for a thread's next turn, until a session on it starts. */
   private readonly picked = new Map<string, AgentId>();
 
@@ -299,6 +315,8 @@ export class Threads {
       pending: null,
       docText: text,
       copyStart: null,
+      watching: null,
+      merged: new Map(),
     };
     live.rel = rel;
     live.docText = text;
@@ -415,13 +433,33 @@ export class Threads {
         log: path.join(dir, `${thread}.log.jsonl`),
         copies: this.copiesOf(thread),
         copiesRoot: this.copiesRoot,
+        denies: await this.ownDenyRules(),
       }),
     );
+    const mcp = this.d.mcp ?? null;
+    let token = this.tokens.get(thread);
+    if (mcp && !token) {
+      token = mcp.socket.issue((tool, args) => this.tool(thread, tool, args));
+      this.tokens.set(thread, token);
+    }
     return {
       thread,
       agent,
       cwd: this.d.folder,
       resume,
+      // The token travels in the environment, never on the command line.
+      mcp:
+        mcp && token
+          ? {
+              command: this.d.node,
+              args: [mcp.script],
+              env: [
+                { name: "ELECTRON_RUN_AS_NODE", value: "1" },
+                { name: "ANUR_SOCKET", value: mcp.socket.path },
+                { name: "ANUR_TOKEN", value: token },
+              ],
+            }
+          : null,
       hookLog: path.join(dir, `${thread}.log.jsonl`),
       // The agent's adapter puts this into that agent's own settings.
       guard: {
@@ -465,6 +503,7 @@ export class Threads {
     await this.mergeCopies(thread, live).catch((e: unknown) => {
       console.error("Anur couldn't turn the thread's edits into a preview:", e);
     });
+    this.watchCopies(thread, live);
     await this.refresh(live.rel, live.docText, thread);
   }
 
@@ -487,6 +526,10 @@ export class Threads {
   /** The doc with this thread's preview made, written where the agent will edit it. */
   private async makeWorkingCopy(thread: string, live: Live, at: Located): Promise<void> {
     const dir = this.copiesOf(thread);
+    // A new turn: the last one's copies stop being watched, and start again from the doc.
+    live.watching?.stop();
+    live.watching = null;
+    live.merged.clear();
     await rm(dir, { recursive: true, force: true });
     const preview = await this.previews.read(at.doc, thread);
     const start = withPreview(live.docText, preview?.parts ?? [], Threads.byId(at));
@@ -514,7 +557,8 @@ export class Threads {
         : await readFile(path.join(this.d.folder, rel), "utf8").catch(() => null);
       if (decided === null) continue;
       const start = own ? (live.copyStart ?? decided) : decided;
-      if (copy === start) continue;
+      if (copy === start || live.merged.get(rel) === copy) continue;
+      live.merged.set(rel, copy);
       const at = await this.d.locate(rel, decided);
       if (!at) continue;
       const existing = await this.previews.read(at.doc, thread);
@@ -523,8 +567,37 @@ export class Threads {
       await this.previews.write(at.doc, thread, previewParts(decided, proposed, Threads.spans(at)));
       this.d.previewsChanged(rel);
     }
-    live.copyStart = null;
-    await rm(dir, { recursive: true, force: true });
+  }
+
+  /**
+   * The turn is over, but a background shell or subagent it started may
+   * still edit the copies: watch them for a while, and merge each change
+   * into the preview too. The next turn starts fresh copies (3.6).
+   */
+  private watchCopies(thread: string, live: Live): void {
+    live.watching?.stop();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let watcher: FSWatcher;
+    try {
+      watcher = watch(this.copiesOf(thread), { recursive: true }, () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          if (!live.turn) void this.mergeCopies(thread, live).catch(() => undefined);
+        }, 800);
+      });
+      watcher.on("error", () => undefined);
+    } catch {
+      return; // No copies were made this turn.
+    }
+    const stop = () => {
+      clearTimeout(timer);
+      clearTimeout(end);
+      watcher.close();
+      if (live.watching === handle) live.watching = null;
+    };
+    const end = setTimeout(stop, WATCH_AFTER_TURN_MS);
+    const handle = { stop };
+    live.watching = handle;
   }
 
   /** The person picked a mode or model for the thread. */
@@ -672,11 +745,65 @@ export class Threads {
     await this.previews.write(at.doc, thread, parts, now?.summary ?? null);
   }
 
+  /**
+   * The person's own deny rules for Read and Edit, from their Claude Code
+   * settings and the folder's, read fresh each turn (3.3).
+   */
+  private async ownDenyRules(): Promise<DenyRule[]> {
+    const home = os.homedir();
+    const files = [
+      { file: path.join(home, ".claude", "settings.json"), project: home },
+      { file: path.join(this.d.folder, ".claude", "settings.json"), project: this.d.folder },
+      { file: path.join(this.d.folder, ".claude", "settings.local.json"), project: this.d.folder },
+    ];
+    const rules = await Promise.all(
+      files.map(async ({ file, project }) => {
+        try {
+          const settings: unknown = JSON.parse(await readFile(file, "utf8"));
+          return denyRulesOf(settings, { project, cwd: this.d.folder, home });
+        } catch {
+          return [];
+        }
+      }),
+    );
+    return rules.flat();
+  }
+
+  /** One of Anur's MCP tools, called by this thread's agent. */
+  private async tool(thread: string, tool: string, args: unknown): Promise<ToolAnswer> {
+    if (tool !== "anur_read_section") return { error: `Anur has no tool ${tool}.` };
+    const a = (args ?? {}) as { section?: unknown; doc?: unknown };
+    if (typeof a.section !== "string" || !a.section.trim())
+      return { error: "Say which section, by its heading." };
+    const live = this.live.get(thread);
+    if (!live) return { error: "This thread isn't open in Anur right now." };
+    const rel =
+      typeof a.doc === "string" && a.doc.trim() ? a.doc.trim().replace(/^\.?\//, "") : live.rel;
+    const full = path.resolve(this.d.folder, rel);
+    if (
+      !full.startsWith(this.d.folder + path.sep) ||
+      !/\.md$/i.test(rel) ||
+      rel.split("/").some((p) => p.startsWith("."))
+    )
+      return { error: `${rel} isn't a doc in this folder.` };
+    // The working copy while one exists, so the agent's own edits show; else the decided text.
+    const copy = await readFile(path.join(this.copiesOf(thread), rel), "utf8").catch(() => null);
+    const text =
+      copy ?? (rel === live.rel ? live.docText : await readFile(full, "utf8").catch(() => null));
+    if (text === null) return { error: `There's no ${rel} in this folder.` };
+    return readSection(text, rel, a.section, copy !== null);
+  }
+
   /** Close every file this folder's threads write. */
   async close(): Promise<void> {
     for (const w of this.writers.values()) await (await w).close().catch(() => undefined);
     this.writers.clear();
-    for (const thread of this.live.keys()) this.d.hub.drop(thread);
+    for (const [thread, live] of this.live) {
+      live.watching?.stop();
+      this.d.hub.drop(thread);
+    }
+    for (const token of this.tokens.values()) this.d.mcp?.socket.revoke(token);
+    this.tokens.clear();
   }
 }
 
@@ -697,4 +824,47 @@ async function listFiles(dir: string, prefix = ""): Promise<string[]> {
     else if (e.isFile()) out.push(rel);
   }
   return out;
+}
+
+/**
+ * One section's own text by its heading, or its path from the title
+ * ("Notifications > Retry timing"), with its subsections' headings listed.
+ */
+export function readSection(
+  text: string,
+  rel: string,
+  wanted: string,
+  fromCopy: boolean,
+): ToolAnswer {
+  const tree = buildSectionTree(text, { fileName: path.basename(rel) });
+  const want = wanted
+    .split(">")
+    .map((p) => p.trim().toLowerCase())
+    .filter(Boolean);
+  const matches = tree.sections.filter((s) => {
+    const p = s.path.map((x) => x.toLowerCase());
+    return want.length <= p.length && want.every((w, i) => p[p.length - want.length + i] === w);
+  });
+  if (matches.length === 0) {
+    const headings = tree.sections.slice(1).map((s) => s.path.slice(1).join(" > "));
+    return {
+      error: `There's no section "${wanted}" in ${rel}. Its sections: ${headings.join("; ") || "none"}.`,
+    };
+  }
+  if (matches.length > 1)
+    return {
+      error: `"${wanted}" names more than one section in ${rel}: ${matches.map((s) => s.path.join(" > ")).join("; ")}. Give its path.`,
+    };
+  const s = matches[0];
+  if (!s) return { error: "No section." };
+  const own = text.slice(s.ownRange.from, s.ownRange.to).trimEnd();
+  const subs = s.children.map((c) => tree.sections[c]?.path.at(-1) ?? "").filter(Boolean);
+  return {
+    text: [
+      `${s.path.join(" > ")} (in ${rel}${fromCopy ? ", your working copy" : ""})`,
+      "",
+      own,
+      ...(subs.length > 0 ? ["", `Its subsections, not included: ${subs.join("; ")}.`] : []),
+    ].join("\n"),
+  };
 }

@@ -20,6 +20,8 @@ export type SessionSpec = {
   resume: string | null;
   /** The hook's log for this thread, read for the thread check (3.2). */
   hookLog: string;
+  /** Anur's MCP server for this session: the agent starts it, with its token (3.12). */
+  mcp: { command: string; args: string[]; env: { name: string; value: string }[] } | null;
 };
 
 /** A choice the agent offers for its session, such as its mode or its model (3.5). */

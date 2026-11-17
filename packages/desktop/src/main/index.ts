@@ -44,6 +44,7 @@ import { guarded, trustedSenders, type Handler } from "./ipc.ts";
 import { buildMenu } from "./menu.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
 import { AgentChoices } from "./threads/agent-choices.ts";
+import { AnurSocket } from "./threads/anur-socket.ts";
 import { Threads } from "./threads/threads.ts";
 
 /**
@@ -122,6 +123,11 @@ function rememberChoices(agent: AgentId, options: SessionOption[]) {
   void choices.set(agent, options);
   for (const win of windows.values()) send(win, "agent:options", { agent, options });
 }
+/** The socket Anur's MCP tools reach it over, in a folder only this account can open (3.12). */
+const anurSocket = new AnurSocket(mkdtempSync(path.join(tmpdir(), "anur-")));
+void anurSocket.start().catch((e: unknown) => {
+  console.error("Anur's tool socket didn't start; threads run without Anur's tools:", e);
+});
 /** Agents whose choices were read this run; once per run is enough. */
 const probed = new Set<AgentId>();
 /** Each folder's threads, so a reply reaches the windows showing that folder. */
@@ -146,6 +152,7 @@ function threadsFor(folder: FolderState): Threads | null {
       },
       defaultAgent: () => appSettings.get().defaultAgent,
       rememberOptions: rememberChoices,
+      mcp: { socket: anurSocket, script: path.join(here, "mcp-server.js") },
       previewsChanged: (rel) => {
         for (const [id, win] of windows) {
           if (folders.current(id)?.path === folder.path)
@@ -782,6 +789,7 @@ app.on("will-quit", (event) => {
   docWatcher.stopAll();
   for (const t of threads.values()) void t.close();
   hub.stop();
+  anurSocket.close();
   void folders.closeAll();
 });
 
