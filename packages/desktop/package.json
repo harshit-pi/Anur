@@ -6,6 +6,7 @@
   "description": "The Electron app: main, preload, renderer, index, agent host and MCP server.",
   "license": "Apache-2.0",
   "dependencies": {
-    "@anur/core": "workspace:*"
+    "@anur/core": "workspace:*",
+    "zod": "4.6.7"
   }
 }
