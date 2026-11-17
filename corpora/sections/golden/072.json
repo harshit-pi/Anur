@@ -1,0 +1,102 @@
+{
+ "before": [
+  {
+   "path": [
+    "doc"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 0,
+    "to": 0
+   },
+   "subtree": {
+    "from": 0,
+    "to": 356
+   }
+  },
+  {
+   "path": [
+    "doc",
+    "oijxslhlg udktnhook hcw mgzcxkap kon udlaz kon ply vrdguc"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 0,
+    "to": 356
+   },
+   "subtree": {
+    "from": 0,
+    "to": 356
+   }
+  }
+ ],
+ "after": [
+  {
+   "path": [
+    "doc"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 0,
+    "to": 0
+   },
+   "subtree": {
+    "from": 0,
+    "to": 4669
+   }
+  },
+  {
+   "path": [
+    "doc",
+    "oijxslhlg udktnhook hcw mgzcxkap kon udlaz kon ply vrdguc"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 0,
+    "to": 356
+   },
+   "subtree": {
+    "from": 0,
+    "to": 4669
+   }
+  },
+  {
+   "path": [
+    "doc",
+    "oijxslhlg udktnhook hcw mgzcxkap kon udlaz kon ply vrdguc",
+    "sxyj \"rzkcmbfd'iia erm-cgvafnyhr liimb axv ply feggcpkxd nfnhyxmhv\" hgkjpimk qjjmq"
+   ],
+   "level": 3,
+   "ordinal": 0,
+   "own": {
+    "from": 356,
+    "to": 1546
+   },
+   "subtree": {
+    "from": 356,
+    "to": 1546
+   }
+  },
+  {
+   "path": [
+    "doc",
+    "oijxslhlg udktnhook hcw mgzcxkap kon udlaz kon ply vrdguc",
+    "obv kon hgkjpimk iyl shfv oms"
+   ],
+   "level": 3,
+   "ordinal": 0,
+   "own": {
+    "from": 1546,
+    "to": 4669
+   },
+   "subtree": {
+    "from": 1546,
+    "to": 4669
+   }
+  }
+ ]
+}

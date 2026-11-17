@@ -1,0 +1,260 @@
+{
+ "before": [
+  {
+   "path": [
+    "gffng"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 78,
+    "to": 704
+   },
+   "subtree": {
+    "from": 78,
+    "to": 5983
+   }
+  },
+  {
+   "path": [
+    "gffng",
+    "kyj qlvsp sfiolu xtdb vkaqgp"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 704,
+    "to": 2589
+   },
+   "subtree": {
+    "from": 704,
+    "to": 2589
+   }
+  },
+  {
+   "path": [
+    "gffng",
+    "hexrh kyj dgmd rwjiensk vzfm"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2589,
+    "to": 3127
+   },
+   "subtree": {
+    "from": 2589,
+    "to": 3127
+   }
+  },
+  {
+   "path": [
+    "gffng",
+    "qynt ctqvfzs pyh gffng:loo — 1015-06-15/17"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 3127,
+    "to": 4339
+   },
+   "subtree": {
+    "from": 3127,
+    "to": 4339
+   }
+  },
+  {
+   "path": [
+    "gffng",
+    "hexrh xfmd mixza kbi"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 4339,
+    "to": 5068
+   },
+   "subtree": {
+    "from": 4339,
+    "to": 5068
+   }
+  },
+  {
+   "path": [
+    "gffng",
+    "ejxfztsas"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 5068,
+    "to": 5538
+   },
+   "subtree": {
+    "from": 5068,
+    "to": 5538
+   }
+  },
+  {
+   "path": [
+    "gffng",
+    "qynt nur bwi"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 5538,
+    "to": 5854
+   },
+   "subtree": {
+    "from": 5538,
+    "to": 5854
+   }
+  },
+  {
+   "path": [
+    "gffng",
+    "dij qjmu"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 5854,
+    "to": 5983
+   },
+   "subtree": {
+    "from": 5854,
+    "to": 5983
+   }
+  }
+ ],
+ "after": [
+  {
+   "path": [
+    "gffng (ctemjv)"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 78,
+    "to": 700
+   },
+   "subtree": {
+    "from": 78,
+    "to": 5998
+   }
+  },
+  {
+   "path": [
+    "gffng (ctemjv)",
+    "kyj qlvsp sfiolu xtdb vkaqgp"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 700,
+    "to": 2585
+   },
+   "subtree": {
+    "from": 700,
+    "to": 2585
+   }
+  },
+  {
+   "path": [
+    "gffng (ctemjv)",
+    "hexrh kyj dgmd rwjiensk vzfm"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2585,
+    "to": 3123
+   },
+   "subtree": {
+    "from": 2585,
+    "to": 3123
+   }
+  },
+  {
+   "path": [
+    "gffng (ctemjv)",
+    "qynt ctqvfzs pyh gffng:loo — 1015-06-15/17"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 3123,
+    "to": 4335
+   },
+   "subtree": {
+    "from": 3123,
+    "to": 4335
+   }
+  },
+  {
+   "path": [
+    "gffng (ctemjv)",
+    "hexrh xfmd mixza kbi"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 4335,
+    "to": 5064
+   },
+   "subtree": {
+    "from": 4335,
+    "to": 5064
+   }
+  },
+  {
+   "path": [
+    "gffng (ctemjv)",
+    "ejxfztsas"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 5064,
+    "to": 5534
+   },
+   "subtree": {
+    "from": 5064,
+    "to": 5534
+   }
+  },
+  {
+   "path": [
+    "gffng (ctemjv)",
+    "qynt nur bwi"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 5534,
+    "to": 5850
+   },
+   "subtree": {
+    "from": 5534,
+    "to": 5850
+   }
+  },
+  {
+   "path": [
+    "gffng (ctemjv)",
+    "dij qjmu"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 5850,
+    "to": 5998
+   },
+   "subtree": {
+    "from": 5850,
+    "to": 5998
+   }
+  }
+ ]
+}

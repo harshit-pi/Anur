@@ -1,0 +1,164 @@
+{
+ "before": [
+  {
+   "path": [
+    "sjme fevmxarek"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 85,
+    "to": 608
+   },
+   "subtree": {
+    "from": 85,
+    "to": 4312
+   }
+  },
+  {
+   "path": [
+    "sjme fevmxarek",
+    "vje gxzmw vje att xzuv vrxq — lsdoq 6167-18-65"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 608,
+    "to": 2579
+   },
+   "subtree": {
+    "from": 608,
+    "to": 2579
+   }
+  },
+  {
+   "path": [
+    "sjme fevmxarek",
+    "dar kbmmweslf ltf xhlsdywql"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2579,
+    "to": 2819
+   },
+   "subtree": {
+    "from": 2579,
+    "to": 2819
+   }
+  },
+  {
+   "path": [
+    "sjme fevmxarek",
+    "oakq'fwe dkyns tmdnsdqt"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2819,
+    "to": 4210
+   },
+   "subtree": {
+    "from": 2819,
+    "to": 4210
+   }
+  },
+  {
+   "path": [
+    "sjme fevmxarek",
+    "zko szgs"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 4210,
+    "to": 4312
+   },
+   "subtree": {
+    "from": 4210,
+    "to": 4312
+   }
+  }
+ ],
+ "after": [
+  {
+   "path": [
+    "sjme fevmxarek"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 85,
+    "to": 608
+   },
+   "subtree": {
+    "from": 85,
+    "to": 3644
+   }
+  },
+  {
+   "path": [
+    "sjme fevmxarek",
+    "vje gxzmw vje att xzuv vrxq"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 608,
+    "to": 1830
+   },
+   "subtree": {
+    "from": 608,
+    "to": 1830
+   }
+  },
+  {
+   "path": [
+    "sjme fevmxarek",
+    "dar kbmmweslf ltf xhlsdywql"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 1830,
+    "to": 2070
+   },
+   "subtree": {
+    "from": 1830,
+    "to": 2070
+   }
+  },
+  {
+   "path": [
+    "sjme fevmxarek",
+    "oakq'fwe dkyns tmdnsdqt"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2070,
+    "to": 3542
+   },
+   "subtree": {
+    "from": 2070,
+    "to": 3542
+   }
+  },
+  {
+   "path": [
+    "sjme fevmxarek",
+    "zko szgs"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 3542,
+    "to": 3644
+   },
+   "subtree": {
+    "from": 3542,
+    "to": 3644
+   }
+  }
+ ]
+}

@@ -1,0 +1,196 @@
+{
+ "before": [
+  {
+   "path": [
+    "gbwyd"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 64,
+    "to": 445
+   },
+   "subtree": {
+    "from": 64,
+    "to": 2787
+   }
+  },
+  {
+   "path": [
+    "gbwyd",
+    "yhzsr"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 445,
+    "to": 1614
+   },
+   "subtree": {
+    "from": 445,
+    "to": 1614
+   }
+  },
+  {
+   "path": [
+    "gbwyd",
+    "dmoih grtf awhtu jyb"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 1614,
+    "to": 2103
+   },
+   "subtree": {
+    "from": 1614,
+    "to": 2103
+   }
+  },
+  {
+   "path": [
+    "gbwyd",
+    "jafeftgqz"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2103,
+    "to": 2558
+   },
+   "subtree": {
+    "from": 2103,
+    "to": 2558
+   }
+  },
+  {
+   "path": [
+    "gbwyd",
+    "urhn yag xpq"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2558,
+    "to": 2686
+   },
+   "subtree": {
+    "from": 2558,
+    "to": 2686
+   }
+  },
+  {
+   "path": [
+    "gbwyd",
+    "qhw hhyk"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2686,
+    "to": 2787
+   },
+   "subtree": {
+    "from": 2686,
+    "to": 2787
+   }
+  }
+ ],
+ "after": [
+  {
+   "path": [
+    "gbwyd (qippdq)"
+   ],
+   "level": 1,
+   "ordinal": 0,
+   "own": {
+    "from": 64,
+    "to": 441
+   },
+   "subtree": {
+    "from": 64,
+    "to": 2821
+   }
+  },
+  {
+   "path": [
+    "gbwyd (qippdq)",
+    "yhzsr"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 441,
+    "to": 1610
+   },
+   "subtree": {
+    "from": 441,
+    "to": 1610
+   }
+  },
+  {
+   "path": [
+    "gbwyd (qippdq)",
+    "dmoih grtf awhtu jyb"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 1610,
+    "to": 2118
+   },
+   "subtree": {
+    "from": 1610,
+    "to": 2118
+   }
+  },
+  {
+   "path": [
+    "gbwyd (qippdq)",
+    "jafeftgqz"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2118,
+    "to": 2573
+   },
+   "subtree": {
+    "from": 2118,
+    "to": 2573
+   }
+  },
+  {
+   "path": [
+    "gbwyd (qippdq)",
+    "urhn yag xpq"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2573,
+    "to": 2701
+   },
+   "subtree": {
+    "from": 2573,
+    "to": 2701
+   }
+  },
+  {
+   "path": [
+    "gbwyd (qippdq)",
+    "qhw hhyk"
+   ],
+   "level": 2,
+   "ordinal": 0,
+   "own": {
+    "from": 2701,
+    "to": 2821
+   },
+   "subtree": {
+    "from": 2701,
+    "to": 2821
+   }
+  }
+ ]
+}
