@@ -584,13 +584,16 @@ export class Threads {
       stopReason,
       usage,
     });
-    live.turn = null;
+    // The reply is on disk; the thread stays busy until its edits are a preview,
+    // so nothing reads it finished with its preview still missing.
     live.text = "";
-    live.pending = null;
+    live.tools = new Map();
     this.turnWatch.stop(thread);
     await this.mergeCopies(thread, live).catch((e: unknown) => {
       console.error("Anur couldn't turn the thread's edits into a preview:", e);
     });
+    live.turn = null;
+    live.pending = null;
     this.watchCopies(thread, live);
     await this.refresh(live.rel, live.docText, thread);
   }
