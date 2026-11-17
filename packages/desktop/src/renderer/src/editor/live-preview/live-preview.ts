@@ -3,7 +3,12 @@ import { EditorState, RangeSet, StateEffect, StateField, type Range } from "@cod
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import { BulletWidget, CheckboxWidget, RuleWidget, TextWidget } from "./widgets.ts";
-import { CalloutLabelWidget, EmbedWidget, LanguageChipWidget } from "../chips/chip-widgets.ts";
+import {
+  CalloutLabelWidget,
+  CopyCodeWidget,
+  EmbedWidget,
+  LanguageChipWidget,
+} from "../chips/chip-widgets.ts";
 import { editGuard } from "../edit-guard.ts";
 import { parseFields } from "../properties/properties-model.ts";
 import { PropertiesWidget } from "../properties/properties-widget.ts";
@@ -124,6 +129,11 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
               );
             }
             if (close) out.push(hide.range(close.from, close.to));
+            out.push(
+              Decoration.widget({ widget: new CopyCodeWidget(), side: 1 }).range(
+                doc.lineAt(from).to,
+              ),
+            );
           }
           return false;
         case "Blockquote": {
@@ -186,6 +196,18 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           out.push(hide.range(close.from, to));
           return;
         }
+        // A bare web address, or one in <angle brackets>: shown as a link, which a click follows.
+        case "Autolink": {
+          const url = children(node, "URL")[0];
+          for (const m of children(node, "LinkMark")) out.push(hide.range(m.from, m.to));
+          if (url) out.push(mark("cm-lp-link").range(url.from, url.to));
+          return false;
+        }
+        case "URL":
+          if (!/^(Link|Image|Autolink)$/.test(node.parent?.name ?? "")) {
+            out.push(mark("cm-lp-link").range(from, to));
+          }
+          return;
         case "Image":
           {
             const url = children(node, "URL")[0];

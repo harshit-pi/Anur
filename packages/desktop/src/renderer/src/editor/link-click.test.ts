@@ -27,6 +27,19 @@ describe("the link under a click", () => {
     });
   });
 
+  it("reads a bare web address, www and email ones too", () => {
+    expect(at("Accept: https://github.com/a/b/invitations now", "github")).toEqual({
+      kind: "href",
+      href: "https://github.com/a/b/invitations",
+    });
+    expect(at("Or <https://x.co/y>.", "x.co")).toEqual({ kind: "href", href: "https://x.co/y" });
+    expect(at("Or www.example.com today", "example")).toEqual({
+      kind: "href",
+      href: "https://www.example.com",
+    });
+    expect(at("Mail a@b.co today", "b.co")).toEqual({ kind: "href", href: "mailto:a@b.co" });
+  });
+
   it("is nothing on plain text", () => {
     expect(at("plain words", "words")).toBeNull();
   });
