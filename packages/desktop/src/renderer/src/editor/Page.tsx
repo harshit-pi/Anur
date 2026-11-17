@@ -16,6 +16,7 @@ import { anur } from "../bridge.ts";
 import { CloseIcon } from "../regions/Icons.tsx";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { pagePath } from "./bases/base-widget.ts";
+import { imagePasteDrop, imageSelection } from "./images/image-widget.ts";
 import { formattingKeymap } from "./commands.ts";
 import { insertMenu } from "./insert-menu.ts";
 import { type ClickedLink, linkClicks } from "./link-click.ts";
@@ -349,6 +350,18 @@ export function Page({
             : []),
           pagePath.of(doc.path),
           ...(threadsOn ? [previewExtension, previewActions.of(actions)] : []),
+          ...(markdownDoc
+            ? [
+                imageSelection,
+                ...(editable
+                  ? [
+                      imagePasteDrop((message) => {
+                        flash(message, null, 6000);
+                      }),
+                    ]
+                  : []),
+              ]
+            : []),
           EditorView.contentAttributes.of({ "aria-label": `Page: ${fileName}` }),
           EditorView.updateListener.of((u) => {
             if (u.selectionSet || u.docChanged) onCursorRef.current?.(u.state.selection.main.head);
