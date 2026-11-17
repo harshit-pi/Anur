@@ -37,6 +37,10 @@
   --red: light-dark(#be402c, #f28b78);
   --red-wash: light-dark(#fbe9e5, #3a1d18);
 
+  /* Behind and under things that float, such as the command palette */
+  --scrim: light-dark(rgb(23 34 59 / 0.12), rgb(0 0 0 / 0.5));
+  --shadow: light-dark(rgb(23 34 59 / 0.22), rgb(0 0 0 / 0.6));
+
   /* Type: the UI, the decided doc, and thinking (threads, in italic) */
   --font-ui: "Avenir Next", "Avenir", sans-serif;
   --font-doc: "Charter", serif;

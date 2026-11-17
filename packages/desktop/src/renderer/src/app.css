@@ -1,0 +1,353 @@
+@import "../../../../../brand/tokens.css";
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.quiet {
+  color: var(--graphite);
+}
+
+.icon {
+  display: block;
+}
+
+/* The seven regions, on one grid. */
+.shell {
+  display: grid;
+  grid-template-columns: 48px 260px minmax(0, 1fr) 300px;
+  grid-template-rows: 44px minmax(0, 1fr) 28px;
+  grid-template-areas:
+    "tabs tabs tabs tabs"
+    "ribbon left center right"
+    "status status status status";
+  height: 100%;
+}
+
+/* 3. Tab bar; on macOS the window's own buttons sit at its left end. */
+.tab-bar {
+  grid-area: tabs;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px 0 84px;
+  border-bottom: 1px solid var(--rule);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.tab-bar button {
+  -webkit-app-region: no-drag;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.tab-empty {
+  margin-right: 8px;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.icon-button:disabled {
+  color: var(--pencil);
+  cursor: default;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--rule);
+}
+
+.segmented.wide {
+  display: flex;
+}
+
+.segmented.wide .segment {
+  flex: 1;
+}
+
+.segment {
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 14px;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+}
+
+.segment.selected {
+  background: var(--sheet);
+  color: var(--ink);
+}
+
+.segment:disabled {
+  cursor: default;
+}
+
+.ask-button {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 4px 14px;
+  background: var(--sheet);
+  cursor: pointer;
+}
+
+.ask-button:disabled {
+  color: var(--graphite);
+  cursor: default;
+}
+
+/* 1. Ribbon. */
+.ribbon {
+  grid-area: ribbon;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0;
+  border-right: 1px solid var(--rule);
+}
+
+.ribbon-spacer {
+  flex: 1;
+}
+
+.ribbon-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--slate);
+  cursor: pointer;
+}
+
+.ribbon-button:hover,
+.ribbon-button.active {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* 2. Left and 5. right sidebars. */
+.left-sidebar,
+.right-sidebar {
+  overflow: auto;
+  padding: 16px;
+}
+
+.left-sidebar {
+  grid-area: left;
+  border-right: 1px solid var(--rule);
+}
+
+.right-sidebar {
+  grid-area: right;
+  border-left: 1px solid var(--rule);
+}
+
+.sidebar-title {
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+
+.left-sidebar .quiet,
+.right-sidebar .quiet {
+  font-size: 13px;
+}
+
+/* 4. Center: the page. */
+.center {
+  grid-area: center;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--sheet);
+}
+
+.path-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 44px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.path {
+  margin-left: 8px;
+}
+
+.path-actions {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.page-empty {
+  width: min(660px, 100% - 64px);
+  margin: 120px auto 0;
+}
+
+.page-empty h1 {
+  margin: 0 0 12px;
+  font-family: var(--font-doc);
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.page-empty p {
+  margin: 0;
+  font-family: var(--font-doc);
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--ink2);
+}
+
+/* 6. Status bar. */
+.status-bar {
+  grid-area: status;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 14px;
+  border-top: 1px solid var(--rule);
+  font-size: 12px;
+  color: var(--slate);
+}
+
+.status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-spacer {
+  flex: 1;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.dot.off {
+  background: var(--pencil);
+}
+
+/* 7. Command palette. */
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 120px;
+  background: var(--scrim);
+}
+
+.palette {
+  width: min(640px, 100% - 48px);
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: 0 18px 48px var(--shadow);
+  overflow: hidden;
+}
+
+.palette-input {
+  width: 100%;
+  padding: 16px 18px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+}
+
+.palette-input::placeholder {
+  color: var(--graphite);
+}
+
+.palette-list {
+  margin: 0;
+  padding: 6px 0;
+  list-style: none;
+}
+
+.palette-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 18px;
+  color: var(--slate);
+}
+
+.palette-note {
+  margin: 0;
+  padding: 10px 18px;
+  border-top: 1px solid var(--rule);
+  font-size: 12px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

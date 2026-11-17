@@ -13,6 +13,8 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 - `pnpm install` once; Node is pinned in `.nvmrc`.
 - `pnpm check` runs everything CI runs: typecheck, lint, format check and tests.
 - `pnpm test`, `pnpm lint`, `pnpm typecheck` and `pnpm format` run one step each.
+- `pnpm --filter @anur/desktop dev` runs the app with live reload; `build` then `start` runs the built app.
+- `ANUR_SCREENSHOT=<file.png>` saves the first window and quits; `ANUR_SCREENSHOT_PALETTE=1` opens the palette first, and `ANUR_THEME=light` or `dark` overrides the system theme.
 
 ## Git
 
@@ -24,6 +26,9 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 
 - `packages/core`: sections, IDs, bundles, context and previews. No Electron, no React, no file system; ESLint and its `tsconfig` both reject them.
 - `packages/desktop`: the Electron app and everything that touches the disk or the agent.
+  - `src/main`: the thin main process; every IPC request is checked against `src/shared/ipc-contract.ts` and its sender.
+  - `src/preload`: `window.anur.call`, the page's only way out.
+  - `src/renderer`: sandboxed, no Node or Electron; ESLint rejects those imports here.
 - A new package is split out only when something else consumes it.
 
 ## Rules the design fixes
