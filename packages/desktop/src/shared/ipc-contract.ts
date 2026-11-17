@@ -86,6 +86,27 @@ export const ipcContract = {
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
+  /** Show a native context menu at the pointer; resolves with the chosen item's id, or null. */
+  "menu:popup": {
+    request: z
+      .object({
+        items: z
+          .array(
+            z.union([
+              z.object({
+                id: z.string().max(64),
+                label: z.string().max(120),
+                enabled: z.boolean().optional(),
+                checked: z.boolean().optional(),
+              }),
+              z.object({ separator: z.literal(true) }),
+            ]),
+          )
+          .max(40),
+      })
+      .strict(),
+    response: z.object({ id: z.string().nullable() }),
+  },
   /** How a conflict copy would merge into its original, section by section. */
   "conflict:plan": {
     request: z.object({ copy: z.string() }).strict(),

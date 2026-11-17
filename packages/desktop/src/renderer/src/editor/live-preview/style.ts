@@ -76,7 +76,33 @@ export const livePreviewTheme = EditorView.theme({
     borderRadius: "6px",
     padding: "2px 8px",
   },
-  ".cm-lp-table-wrap": { overflowX: "auto", margin: "8px 0" },
+  // Room on the left and top for the + handles, which the scroll box would clip.
+  ".cm-lp-table-wrap": {
+    position: "relative",
+    overflowX: "auto",
+    margin: "0 0 0 -24px",
+    padding: "12px 0 8px 24px",
+  },
+  ".cm-lp-table th:focus, .cm-lp-table td:focus": {
+    outline: "2px solid var(--blue)",
+    outlineOffset: "-2px",
+    backgroundColor: "var(--sheet)",
+  },
+  ".cm-lp-add": {
+    position: "absolute",
+    width: "18px",
+    height: "18px",
+    padding: "0",
+    border: "1px solid var(--rule)",
+    borderRadius: "50%",
+    background: "var(--sheet)",
+    color: "var(--slate)",
+    font: "600 13px/16px var(--font-ui)",
+    cursor: "pointer",
+  },
+  ".cm-lp-add:hover": { color: "var(--blue)", borderColor: "var(--blue)" },
+  ".cm-lp-add-row": { left: "2px" },
+  ".cm-lp-add-col": { top: "0" },
   ".cm-lp-table": {
     borderCollapse: "collapse",
     fontSize: "15px",
@@ -93,6 +119,8 @@ export const livePreviewTheme = EditorView.theme({
     whiteSpace: "normal",
     wordBreak: "normal",
     overflowWrap: "normal",
+    minWidth: "3em",
+    caretColor: "var(--blue)",
   },
   ".cm-lp-table th": { fontWeight: "650", backgroundColor: "var(--hover)" },
   ".cm-lp-properties": {

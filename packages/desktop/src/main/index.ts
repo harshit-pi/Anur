@@ -119,6 +119,42 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     return saveDoc(folder, request);
   },
+  "menu:popup": ({ items }, { webContentsId }) =>
+    new Promise((resolve) => {
+      const win = windows.get(webContentsId);
+      if (!win) {
+        resolve({ id: null });
+        return;
+      }
+      let chosen: string | null = null;
+      const menu = Menu.buildFromTemplate(
+        items.map((item) =>
+          "separator" in item
+            ? { type: "separator" as const }
+            : {
+                label: item.label,
+                enabled: item.enabled ?? true,
+                ...(item.checked === undefined
+                  ? {}
+                  : { type: "checkbox" as const, checked: item.checked }),
+                click: () => {
+                  chosen = item.id;
+                  resolve({ id: item.id });
+                },
+              },
+        ),
+      );
+      // Closing without a choice resolves null; a click, which can land after
+      // the close, wins if it comes.
+      menu.popup({
+        window: win,
+        callback: () => {
+          setTimeout(() => {
+            resolve({ id: chosen });
+          }, 0);
+        },
+      });
+    }),
   "conflict:plan": async ({ copy }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
@@ -258,10 +294,11 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
         const typed = process.env.ANUR_SCREENSHOT_TYPE;
         const keys = process.env.ANUR_SCREENSHOT_KEYS;
         if (typed !== undefined || keys) {
-          // The line drawn on the page whose text starts with ANUR_SCREENSHOT_LINE.
+          // The line drawn on the page, or the table cell, whose text starts with
+          // ANUR_SCREENSHOT_LINE; a cell gets focus with the caret at its end.
           const line = JSON.stringify(process.env.ANUR_SCREENSHOT_LINE ?? "");
           await win.webContents.executeJavaScript(
-            `new Promise((done) => { document.querySelector(".cm-content")?.focus(); setTimeout(() => { const el = [...document.querySelectorAll(".cm-line")].find((l) => l.textContent.startsWith(${line})); if (el) { const r = document.createRange(); r.setStart(el, 0); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } done(); }, 100); })`,
+            `new Promise((done) => { document.querySelector(".cm-content")?.focus(); setTimeout(() => { const el = [...document.querySelectorAll(".cm-line, [data-row]")].find((l) => l.textContent.startsWith(${line})); if (el && el.dataset.row) el.focus(); else if (el) { const r = document.createRange(); r.setStart(el, 0); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } setTimeout(done, 50); }, 100); })`,
           );
           await new Promise((r) => setTimeout(r, 100));
           if (typed) await win.webContents.insertText(typed);
@@ -274,6 +311,12 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
             await new Promise((r) => setTimeout(r, 80));
           }
           await new Promise((r) => setTimeout(r, 200));
+        }
+        // ANUR_SCREENSHOT_PROBE evaluates an expression in the page and prints it.
+        const probe = process.env.ANUR_SCREENSHOT_PROBE;
+        if (probe) {
+          const result: unknown = await win.webContents.executeJavaScript(probe);
+          console.log(`probe: ${JSON.stringify(result)}`);
         }
         if (process.env.ANUR_SCREENSHOT_PALETTE) {
           win.webContents.sendInputEvent({ type: "keyDown", keyCode: "K", modifiers: ["meta"] });
