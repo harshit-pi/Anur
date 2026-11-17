@@ -10,7 +10,15 @@ let file: string;
 let seen: OutsideChange[];
 let watcher: DocWatcher;
 const bytes = (s: string) => new TextEncoder().encode(s);
+/** Quiet tests wait this long for nothing to happen. */
 const settle = () => new Promise((r) => setTimeout(r, 400));
+/** File events can lag under load: wait until one is seen, up to 3 s. */
+async function seenOne() {
+  for (let waited = 0; seen.length === 0 && waited < 3000; waited += 50) {
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  await new Promise((r) => setTimeout(r, 100));
+}
 
 beforeEach(() => {
   dir = realpathSync(mkdtempSync(path.join(tmpdir(), "anur-watch-")));
@@ -28,7 +36,7 @@ afterEach(() => {
 describe("watching the open doc", () => {
   it("reports a change made outside Anur, with the new text", async () => {
     writeFileSync(file, "# Plan\r\n\r\nFrom Obsidian.\r\n");
-    await settle();
+    await seenOne();
     expect(seen).toEqual([
       {
         kind: "changed",
@@ -50,13 +58,13 @@ describe("watching the open doc", () => {
     const tmp = path.join(dir, ".Plan.md.tmp");
     writeFileSync(tmp, "# Plan\n\nReplaced.\n");
     renameSync(tmp, file);
-    await settle();
+    await seenOne();
     expect(seen.map((c) => c.kind)).toEqual(["changed"]);
   });
 
   it("says when the doc is deleted or moved away", async () => {
     rmSync(file);
-    await settle();
+    await seenOne();
     expect(seen).toEqual([{ kind: "gone", path: "Plan.md" }]);
   });
 

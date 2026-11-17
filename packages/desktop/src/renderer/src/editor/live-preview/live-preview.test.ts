@@ -9,7 +9,8 @@ import {
   textStart,
 } from "./live-preview.ts";
 import { TableWidget } from "../table/table-widget.ts";
-import { CheckboxWidget, PropertiesWidget } from "./widgets.ts";
+import { PropertiesWidget } from "../properties/properties-widget.ts";
+import { CheckboxWidget } from "./widgets.ts";
 
 /** A state with the cursor at `cursor` (default: past the end, on no line of interest). */
 function stateOf(doc: string, cursor = doc.length) {
@@ -99,14 +100,16 @@ describe("live preview", () => {
     expect(widgetOf(doc, TableWidget, doc.indexOf("Score"))).toBeDefined();
   });
 
-  it("draws frontmatter as properties until the cursor enters it", () => {
+  it("draws frontmatter as properties, even with the cursor in it", () => {
     const doc = "---\ntitle: Plan\ntags: [a, b]\naliases:\n  - One\n---\n\n# Plan\n";
-    expect(widgetOf(doc, PropertiesWidget)?.props).toEqual([
+    const fields = (cursor?: number) =>
+      widgetOf(doc, PropertiesWidget, cursor)?.props.fields.map((f) => [f.key, f.values]);
+    expect(fields()).toEqual([
       ["title", ["Plan"]],
       ["tags", ["a", "b"]],
       ["aliases", ["One"]],
     ]);
-    expect(widgetOf(doc, PropertiesWidget, 5)).toBeUndefined();
+    expect(fields(5)).toEqual(fields());
   });
 
   it("marks a callout's lines and shows its kind as a label", () => {
