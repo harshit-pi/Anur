@@ -9,6 +9,7 @@ import {
   textStart,
 } from "./live-preview.ts";
 import { TableWidget } from "../table/table-widget.ts";
+import { CalloutLabelWidget, LanguageChipWidget } from "../chips/chip-widgets.ts";
 import { PropertiesWidget } from "../properties/properties-widget.ts";
 import { CheckboxWidget } from "./widgets.ts";
 
@@ -122,9 +123,16 @@ describe("live preview", () => {
     expect(hidden(doc)).toEqual(["> ", "[!warning]", "> "]);
   });
 
-  it("hides a code fence's marks but not its code", () => {
+  it("shows a code fence as a language chip, even with the cursor on it", () => {
     const doc = "```js\nlet a = 1;\n```\n\nend";
-    expect(hidden(doc)).toEqual(["```", "js", "```"]);
+    expect(hidden(doc)).toEqual(["```js", "```"]);
+    expect(hidden(doc, 1)).toEqual(["```js", "```"]);
+    expect(widgetOf(doc, LanguageChipWidget)?.info).toBe("js");
+  });
+
+  it("keeps a callout's type a chip, even with the cursor on it", () => {
+    const doc = "> [!tip] Rollback\n> body\n\nend";
+    expect(widgetOf(doc, CalloutLabelWidget, 4)?.kind).toBe("tip");
   });
 
   it("never changes the document", () => {
@@ -199,6 +207,16 @@ describe("an empty pair left by ⌘B", () => {
     });
     const after = state.update({ selection: { anchor: 0 } }).state;
     expect(after.doc.toString()).toBe("a  b");
+  });
+
+  it("leaves a code fence alone when the cursor moves through its backticks", () => {
+    const doc = "```\ncode\n```";
+    const state = EditorState.create({
+      doc,
+      selection: { anchor: 1 },
+      extensions: [markdownSupport(), livePreview],
+    });
+    expect(state.update({ selection: { anchor: 5 } }).state.doc.toString()).toBe(doc);
   });
 
   it("stays once typed into", () => {

@@ -20,13 +20,15 @@ async function seenOne() {
   await new Promise((r) => setTimeout(r, 100));
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   dir = realpathSync(mkdtempSync(path.join(tmpdir(), "anur-watch-")));
   file = path.join(dir, "Plan.md");
   writeFileSync(file, "# Plan\n");
   seen = [];
   watcher = new DocWatcher((_id, change) => seen.push(change), 50);
   watcher.watch(1, dir, "Plan.md", hashBytes(bytes("# Plan\n")));
+  // macOS delivers events to a new watcher only once it is running.
+  await new Promise((r) => setTimeout(r, 250));
 });
 afterEach(() => {
   watcher.stopAll();
