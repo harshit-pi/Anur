@@ -47,7 +47,7 @@ const ATOMS = new Set([
 ]);
 
 /** A piece of the stretch: one character, or a whole element kept as written. */
-type Piece = {
+export type Piece = {
   text: string;
   atom: boolean;
   styles: Set<Style>;
@@ -206,21 +206,23 @@ const PUNCT = /^[\p{P}\p{S}]+$/u;
 /**
  * A mark between punctuation inside a format and a word outside it
  * ("done.**next") doesn't read as a mark, so that punctuation steps out of
- * the format: "done**.next". Only the punctuation loses the style.
+ * the format: "done**.next". Only the punctuation, or the code or link, loses
+ * the style.
  */
 export function shedPunctuation(pieces: Piece[]): Piece[] {
   const out = pieces.map((p) => ({ ...p, styles: new Set(p.styles) }));
-  const punct = (p: Piece) => !p.atom && PUNCT.test(p.text);
+  // Code or a link counts by its edge: a backtick or bracket is punctuation.
+  const punct = (p: Piece, edge: string) => PUNCT.test(p.atom ? edge : p.text);
   for (let k = 0; k < out.length; k++) {
     const p = out[k] as Piece;
     const before = out[k - 1];
-    if (!punct(p) || !before || !WORD.test(before.text.slice(-1))) continue;
+    if (!punct(p, p.text.charAt(0)) || !before || !WORD.test(before.text.slice(-1))) continue;
     for (const st of [...p.styles]) if (!before.styles.has(st)) p.styles.delete(st);
   }
   for (let k = out.length - 1; k >= 0; k--) {
     const p = out[k] as Piece;
     const after = out[k + 1];
-    if (!punct(p) || !after || !WORD.test(after.text.charAt(0))) continue;
+    if (!punct(p, p.text.slice(-1)) || !after || !WORD.test(after.text.charAt(0))) continue;
     for (const st of [...p.styles]) if (!after.styles.has(st)) p.styles.delete(st);
   }
   return out;
@@ -493,4 +495,139 @@ export function insertMarkdown(
   // The caret: just after the last pasted character, in the rewritten stretch.
   const caret = ends[index + pasted.length - 1] ?? 0;
   return { from: s.from, to: s.to, text, pasted, caret };
+}
+
+/** A line's block markers: quote marks, a list marker and task box, a heading's hashes. */
+const BLOCK_PREFIX =
+  /^(?:[ \t]*(?:>[ \t]?|[-*+][ \t]+(?:\[[ xX]\][ \t]+)?|\d{1,9}[.)][ \t]+(?:\[[ xX]\][ \t]+)?|#{1,6}[ \t]+))*/;
+export const blockPrefix = (text: string) => BLOCK_PREFIX.exec(text)?.[0] ?? "";
+
+/** A line that must stand alone: a code fence or a table row. */
+const ALONE = /^[ \t]*(?:```|~~~|\|)/;
+const FENCE = /^[ \t]*(?:```|~~~)/;
+
+/**
+ * What each new line after a split carries from the line it was split
+ * from, as Enter would: its quote marks, and its list marker (the next
+ * number, an empty task box). A heading carries to the text after the
+ * cursor only.
+ */
+function carried(prefix: string) {
+  const quote = /^(?:[ \t]*>[ \t]?)*/.exec(prefix)?.[0] ?? "";
+  const rest = prefix.slice(quote.length);
+  const list = /^([ \t]*)([-*+]|(\d{1,9})([.)]))([ \t]+)(\[[ xX]\][ \t]+)?/.exec(rest);
+  const heading = /^#{1,6}[ \t]+/.exec(rest)?.[0] ?? "";
+  let n = list?.[3] ? Number(list[3]) : 0;
+  return {
+    quote,
+    heading,
+    next(): string {
+      if (!list) return quote;
+      const marker = list[3] ? `${String(++n)}${list[4] ?? "."}` : (list[2] ?? "-");
+      return `${quote}${list[1] ?? ""}${marker}${list[5] ?? " "}${list[6] ? "[ ] " : ""}`;
+    },
+  };
+}
+
+/** A rebuilt line to read back: where its text starts, and what it should show. */
+export type LineCheck = { line: number; prefix: number; pieces: Piece[] };
+
+/**
+ * A line split by several pasted lines, as Markdown: the first pasted line
+ * joins the text before the cursor, the last joins the text after it, and
+ * each is rewritten with its marks afresh, so no format is left half open
+ * across the break. Lines between go in as written. New lines carry the
+ * split line's quote and list markers, as Enter does; a code fence or table
+ * row pasted at either end gets a line of its own. Null when a link or code
+ * would be cut into, or the line isn't prose.
+ */
+export function insertLines(
+  state: EditorState,
+  at: number,
+  lines: string[],
+  removed: (pos: number) => boolean,
+  ownStyles = true,
+): {
+  from: number;
+  to: number;
+  lines: string[];
+  checks: LineCheck[];
+  caret: [number, number];
+} | null {
+  const line = state.doc.lineAt(at);
+  const prefix = blockPrefix(line.text);
+  const start = line.from + prefix.length;
+  const pieces = readPieces(state, start, line.to, -1, -1);
+  for (const p of pieces) {
+    if (!p.atom) continue;
+    let gone = 0;
+    for (let k = 0; k < p.text.length; k++) if (removed(p.pos + k)) gone++;
+    if (gone > 0 && gone < p.text.length) return null;
+  }
+  const kept = pieces.filter((p) => !removed(p.pos));
+  let index = kept.findIndex((p) => p.pos >= at);
+  if (index < 0) index = kept.length;
+  const before = kept.slice(0, index);
+  const after = kept.slice(index);
+  const context = stylesInside(state, at);
+  const pasted = (md: string) =>
+    piecesOf(md).map((p) => ({
+      ...p,
+      styles: new Set([...(ownStyles ? p.styles : []), ...context]),
+    }));
+  const carry = carried(prefix);
+  const out: string[] = [];
+  const checks: LineCheck[] = [];
+  const write = (lead: string, ps: Piece[], ends?: number[]) => {
+    const shed = shedPunctuation(ps);
+    checks.push({ line: out.length, prefix: lead.length, pieces: shed });
+    out.push(lead + writePieces(shed, ends));
+  };
+  const first = lines[0] ?? "";
+  const last = lines.at(-1) ?? "";
+  const n = lines.length;
+  // Which pasted lines sit inside a fenced code block: written as they are.
+  const inFence: boolean[] = [];
+  let open = false;
+  for (const l of lines) {
+    const fence = FENCE.test(l);
+    inFence.push(open || fence);
+    if (fence) open = !open;
+  }
+
+  // The first pasted line, joined to the text before the cursor.
+  if (ALONE.test(first) || inFence[0]) {
+    if (before.length > 0 || prefix !== "") write(prefix, before);
+    out.push(first);
+  } else {
+    const own = blockPrefix(first);
+    // Its own block markers stay only where nothing is before it.
+    const lead = before.length === 0 && prefix === "" ? own : prefix;
+    write(lead, [...before, ...pasted(first.slice(own.length))]);
+  }
+  // The lines between, as written; plain ones join the split line's list or quote.
+  for (let k = 1; k < n - 1; k++) {
+    const l = lines[k] ?? "";
+    if (inFence[k] || ALONE.test(l) || l.trim() === "") out.push(l);
+    else if (blockPrefix(l) !== "") out.push(l.startsWith(">") ? l : carry.quote + l);
+    else out.push(carry.next() + l);
+  }
+  // The last pasted line, joined to the text after the cursor.
+  let caret: [number, number];
+  if (ALONE.test(last) || inFence[n - 1]) {
+    out.push(last);
+    caret = [out.length - 1, last.length];
+    if (after.length > 0) write(carry.next() + carry.heading, after);
+  } else {
+    const own = blockPrefix(last);
+    const lead =
+      own !== ""
+        ? (last.startsWith(">") ? "" : carry.quote) + own
+        : carry.next() + (after.length > 0 ? carry.heading : "");
+    const mine = pasted(last.slice(own.length));
+    const ends: number[] = [];
+    write(lead, [...mine, ...after], ends);
+    caret = [out.length - 1, lead.length + (mine.length > 0 ? (ends[mine.length - 1] ?? 0) : 0)];
+  }
+  return { from: line.from, to: line.to, lines: out, checks, caret };
 }
