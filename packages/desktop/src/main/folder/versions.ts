@@ -76,6 +76,8 @@ export class SectionVersions {
     /** The text Anur last saved of each doc, kept on this install (2.23). */
     private readonly memory: LastSaved | null = null,
     private readonly sessionMs = 120_000,
+    /** Whether versions are written; IDs are tracked either way, since threads need them (2.25). */
+    private readonly recording: () => boolean = () => true,
   ) {
     this.anurDir = path.join(folder, ANUR_DIR);
     this.docIds = new DocIds(this.anurDir, device);
@@ -138,6 +140,28 @@ export class SectionVersions {
     return this.run(async () => {
       for (const rel of [...this.sessions.keys()]) await this.closeSession(rel);
     });
+  }
+
+  /**
+   * The IDs of the doc's sections for `text`, carried from what Anur knew,
+   * and the tree they belong to: what a thread is pinned to (3.1).
+   */
+  locate(
+    rel: string,
+    text: string,
+  ): Promise<{ doc: DocId; tree: SectionTree; ids: SectionId[] } | null> {
+    let found: { doc: DocId; tree: SectionTree; ids: SectionId[] } | null = null;
+    return this.run(async () => {
+      const known = this.known.get(rel);
+      if (known?.text === text) {
+        this.loaded ??= this.docIds.load();
+        await this.loaded;
+        found = { doc: await this.docIds.idFor(rel), tree: known.tree, ids: known.ids };
+        return;
+      }
+      const { doc, now } = await this.assign(rel, text, known ?? null);
+      if (now) found = { doc, tree: now.tree, ids: now.ids };
+    }).then(() => found);
   }
 
   /** The file changed outside Anur to `text`: a version for each section that changed. */
@@ -272,7 +296,7 @@ export class SectionVersions {
     summary: string,
   ): Promise<void> {
     const section = from.tree.sections[i];
-    if (!section) return;
+    if (!section || !this.recording()) return;
     const w = await JsonlWriter.open(
       path.join(this.anurDir, anurPaths.history(doc, id, this.device)),
       this.device,

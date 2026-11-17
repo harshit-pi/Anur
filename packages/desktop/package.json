@@ -6,6 +6,8 @@
   "description": "The Electron app: main, preload, renderer, index, agent host and MCP server.",
   "license": "Apache-2.0",
   "devDependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.107.3",
+    "@agentclientprotocol/sdk": "2.7.0",
     "@anur/core": "workspace:*",
     "@codemirror/autocomplete": "6.20.4",
     "@codemirror/commands": "6.11.1",

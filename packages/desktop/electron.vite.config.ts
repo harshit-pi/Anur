@@ -6,7 +6,20 @@ const root = path.resolve(import.meta.dirname, "..", "..");
 
 export default defineConfig({
   // Main bundles its dependencies, @anur/core's TypeScript source included.
-  main: { build: { externalizeDeps: false } },
+  // The agent host and the hook are entries of their own: the host runs in a
+  // utilityProcess, and the hook is run by Claude Code with Electron as Node.
+  main: {
+    build: {
+      externalizeDeps: false,
+      rolldownOptions: {
+        input: {
+          index: path.resolve(import.meta.dirname, "src/main/index.ts"),
+          "agent-host": path.resolve(import.meta.dirname, "src/agent/host-process.ts"),
+          hook: path.resolve(import.meta.dirname, "src/agent/hook.ts"),
+        },
+      },
+    },
+  },
   // A sandboxed preload can't load modules, so it is one CommonJS file.
   preload: {
     build: {
