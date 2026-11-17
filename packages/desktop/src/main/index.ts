@@ -1,4 +1,6 @@
+import { mkdtempSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { FORMAT_VERSION } from "@anur/core";
@@ -79,6 +81,39 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
   win.webContents.once("did-finish-load", () => {
     setTimeout(() => {
       void (async () => {
+        if (process.env.ANUR_SCREENSHOT_DRAG) {
+          // Drag the left divider 120px right and the right divider 100px left.
+          const [w] = win.getContentSize();
+          const drag = async (from: number, to: number) => {
+            const y = 400;
+            win.webContents.sendInputEvent({
+              type: "mouseDown",
+              x: from,
+              y,
+              button: "left",
+              clickCount: 1,
+            });
+            for (let x = from; from < to ? x <= to : x >= to; x += from < to ? 20 : -20) {
+              win.webContents.sendInputEvent({
+                type: "mouseMove",
+                x,
+                y,
+                modifiers: ["leftbuttondown"],
+              });
+              await new Promise((r) => setTimeout(r, 16));
+            }
+            win.webContents.sendInputEvent({
+              type: "mouseUp",
+              x: to,
+              y,
+              button: "left",
+              clickCount: 1,
+            });
+          };
+          await drag(48 + 260, 48 + 380);
+          await drag((w ?? 1440) - 300, (w ?? 1440) - 400);
+          await new Promise((r) => setTimeout(r, 200));
+        }
         if (process.env.ANUR_SCREENSHOT_PALETTE) {
           win.webContents.sendInputEvent({ type: "keyDown", keyCode: "K", modifiers: ["meta"] });
           await new Promise((r) => setTimeout(r, 300));
@@ -90,6 +125,11 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
     }, 800);
   });
 }
+
+// Checks run in a throwaway profile, so they never share storage or locks
+// with a copy of Anur that is already open.
+if (process.env.ANUR_SCREENSHOT)
+  app.setPath("userData", mkdtempSync(path.join(tmpdir(), "anur-check-")));
 
 // For checks: ANUR_THEME=light or dark overrides the system theme.
 const theme = process.env.ANUR_THEME;
