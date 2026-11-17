@@ -2,6 +2,7 @@ import { redo, undo } from "@codemirror/commands";
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import { type EditorView, WidgetType } from "@codemirror/view";
+import { followLinkIn } from "../link-click.ts";
 import { renderInline } from "../live-preview/inline.ts";
 import {
   type Align,
@@ -291,6 +292,12 @@ function apply(wrap: HTMLElement, action: Action, row: number, col: number) {
 
 function wire(wrap: HTMLElement, view: EditorView, addRow: HTMLElement, addCol: HTMLElement) {
   const current = () => live.get(wrap)?.table;
+
+  // A link in a cell that isn't being edited is followed, not typed into.
+  wrap.addEventListener("mousedown", (e) => {
+    const cell = (e.target as HTMLElement).closest<HTMLElement>("[data-row]");
+    followLinkIn(view, e, cell);
+  });
 
   wrap.addEventListener("focusin", (e) => {
     const cell = e.target as HTMLElement;
