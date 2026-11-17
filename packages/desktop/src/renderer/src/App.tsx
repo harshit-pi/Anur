@@ -27,6 +27,7 @@ export function App() {
   const [opening, setOpening] = useState<string | null>(null);
   const [docError, setDocError] = useState<string | null>(null);
   const [sections, setSections] = useState<SectionTree | null>(null);
+  const [source, setSource] = useState(false);
   const view = useRef<EditorView | null>(null);
   const onView = useCallback((v: EditorView | null) => {
     view.current = v;
@@ -96,6 +97,10 @@ export function App() {
         e.preventDefault();
         setPaletteOpen((o) => !o);
       }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "e") {
+        e.preventDefault();
+        setSource((s) => !s);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -120,7 +125,9 @@ export function App() {
       <Center
         folder={folder}
         selected={selected}
-        page={doc ? <Page doc={doc} onSections={setSections} onView={onView} /> : null}
+        page={
+          doc ? <Page doc={doc} source={source} onSections={setSections} onView={onView} /> : null
+        }
         opening={opening}
         docNote={doc?.note ?? null}
         docError={docError}
@@ -128,7 +135,15 @@ export function App() {
         onMerge={setMerging}
       />
       <RightSidebar sections={sections} onJump={jumpTo} />
-      <StatusBar version={version} folder={folder} docMode={doc?.mode ?? null} />
+      <StatusBar
+        version={version}
+        folder={folder}
+        docMode={doc?.mode ?? null}
+        source={source}
+        onToggleSource={() => {
+          setSource((s) => !s);
+        }}
+      />
       <Resizer
         side="left"
         width={widths.left}
