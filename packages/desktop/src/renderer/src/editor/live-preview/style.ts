@@ -24,6 +24,8 @@ const calloutRules: Record<string, Record<string, string>> = Object.fromEntries(
 export const livePreviewTheme = EditorView.theme({
   ".cm-lp-link": {
     color: "var(--blue)",
+    // A click follows it (2.22).
+    cursor: "pointer",
     textDecoration: "underline",
     textDecorationColor: "var(--blue-wash)",
     textUnderlineOffset: "3px",

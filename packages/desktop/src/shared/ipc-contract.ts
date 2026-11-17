@@ -105,6 +105,11 @@ export const ipcContract = {
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
+  /** Open a web or mail link in the system's browser or mail app. */
+  "link:open-external": {
+    request: z.object({ url: z.string().max(4096) }).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Put text on the clipboard, which works whether or not the window has focus. */
   "clipboard:write": {
     request: z.object({ text: z.string().max(100_000) }).strict(),
