@@ -13,6 +13,8 @@ import {
   PlusIcon,
   SearchIcon,
   SettingsIcon,
+  SidebarLeftIcon,
+  SidebarRightIcon,
 } from "./Icons.tsx";
 
 /**
@@ -21,10 +23,25 @@ import {
  */
 
 /** 1. Ribbon: Files, Search, Plugins, Settings. */
-export function Ribbon({ onCommand }: { onCommand: () => void }) {
+export function Ribbon({
+  filesOpen,
+  onFiles,
+  onCommand,
+}: {
+  filesOpen: boolean;
+  onFiles: () => void;
+  onCommand: () => void;
+}) {
   return (
     <nav className="ribbon" aria-label="Ribbon">
-      <button className="ribbon-button active" type="button" aria-label="Files" title="Files">
+      <button
+        className={`ribbon-button${filesOpen ? " active" : ""}`}
+        type="button"
+        aria-label="Files"
+        aria-pressed={filesOpen}
+        title={filesOpen ? "Hide files (⌘\\)" : "Show files (⌘\\)"}
+        onClick={onFiles}
+      >
         <FolderIcon />
       </button>
       <button
@@ -52,14 +69,17 @@ export function LeftSidebar({
   folder,
   selected,
   onSelect,
+  hidden,
 }: {
   folder: FolderState | null;
   selected: string | null;
   onSelect: (path: string) => void;
+  /** Collapsed: kept mounted, so folders stay expanded as they were. */
+  hidden: boolean;
 }) {
   if (!folder) {
     return (
-      <aside className="left-sidebar" aria-label="Files">
+      <aside className="left-sidebar" aria-label="Files" hidden={hidden}>
         <p className="sidebar-title truncate" title="No folder open">
           No folder open
         </p>
@@ -71,7 +91,7 @@ export function LeftSidebar({
     );
   }
   return (
-    <aside className="left-sidebar" aria-label="Files">
+    <aside className="left-sidebar" aria-label="Files" hidden={hidden}>
       <p className="sidebar-title truncate" title={folder.path}>
         {folder.name}
       </p>
@@ -88,10 +108,28 @@ export function LeftSidebar({
   );
 }
 
-/** 3. Tab bar: tabs, then Page and Map, then Ask. */
-export function TabBar() {
+/** 3. Tab bar: the files toggle, tabs, then Page and Map, Ask, and the section panel toggle. */
+export function TabBar({
+  open,
+  onToggle,
+}: {
+  open: Record<"left" | "right", boolean>;
+  onToggle: (side: "left" | "right") => void;
+}) {
   return (
     <header className="tab-bar" aria-label="Tabs">
+      <button
+        className="icon-button"
+        type="button"
+        aria-label={open.left ? "Hide the files panel" : "Show the files panel"}
+        aria-pressed={open.left}
+        title={open.left ? "Hide files (⌘\\)" : "Show files (⌘\\)"}
+        onClick={() => {
+          onToggle("left");
+        }}
+      >
+        <SidebarLeftIcon />
+      </button>
       <div className="tabs" role="tablist" aria-label="Open docs">
         <span className="quiet tab-empty">No docs open</span>
         <button
@@ -129,6 +167,18 @@ export function TabBar() {
       </div>
       <button className="ask-button" type="button" disabled title="Ask about the whole doc">
         Ask
+      </button>
+      <button
+        className="icon-button"
+        type="button"
+        aria-label={open.right ? "Hide the section panel" : "Show the section panel"}
+        aria-pressed={open.right}
+        title={open.right ? "Hide the section panel (⌥⌘\\)" : "Show the section panel (⌥⌘\\)"}
+        onClick={() => {
+          onToggle("right");
+        }}
+      >
+        <SidebarRightIcon />
       </button>
     </header>
   );
@@ -327,13 +377,15 @@ function Outline({ sections, onJump }: { sections: SectionTree; onJump: (index: 
 export function RightSidebar({
   sections,
   onJump,
+  hidden,
 }: {
   sections: SectionTree | null;
   onJump: (index: number) => void;
+  hidden: boolean;
 }) {
   const [tab, setTab] = useState<(typeof RIGHT_TABS)[number]>("Outline");
   return (
-    <aside className="right-sidebar" aria-label="Section details">
+    <aside className="right-sidebar" aria-label="Section details" hidden={hidden}>
       <div className="segmented wide" role="tablist" aria-label="Section details">
         {RIGHT_TABS.map((t) => (
           <button
