@@ -56,6 +56,22 @@ export const ipcContract = {
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
   },
+  /** Read one of the folder's docs for the page; iCloud docs are downloaded first. */
+  "doc:open": {
+    request: z.object({ path: z.string() }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("doc"),
+        path: z.string(),
+        /** The text with "\n" line endings. */
+        text: z.string(),
+        mode: z.enum(["editable", "read-only", "plain-text"]),
+        /** Something to tell the person once, such as mixed line endings. */
+        note: z.string().nullable(),
+      }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
   /** How a conflict copy would merge into its original, section by section. */
   "conflict:plan": {
     request: z.object({ copy: z.string() }).strict(),
