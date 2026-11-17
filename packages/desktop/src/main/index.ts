@@ -286,8 +286,10 @@ function createWindow(): BrowserWindow {
     win.show();
   });
 
-  if (devUrl) void win.loadURL(devUrl);
-  else void win.loadFile(path.join(here, "..", "renderer", "index.html"));
+  // Check runs mark the page with #check, which lets a probe reach the editor.
+  const hash = isCheck ? "#check" : "";
+  if (devUrl) void win.loadURL(devUrl + hash);
+  else void win.loadFile(path.join(here, "..", "renderer", "index.html"), { hash: hash.slice(1) });
   return win;
 }
 
