@@ -8,7 +8,8 @@ import {
   splitRow,
   textStart,
 } from "./live-preview.ts";
-import { CheckboxWidget, PropertiesWidget, TableWidget } from "./widgets.ts";
+import { TableWidget } from "../table/table-widget.ts";
+import { CheckboxWidget, PropertiesWidget } from "./widgets.ts";
 
 /** A state with the cursor at `cursor` (default: past the end, on no line of interest). */
 function stateOf(doc: string, cursor = doc.length) {
@@ -83,7 +84,7 @@ describe("live preview", () => {
     expect(hidden(doc)).toEqual(["- ", "- ", "[x] ", "- ", "[ ] "]);
   });
 
-  it("draws a table as a table until the cursor enters it", () => {
+  it("draws a table as a table, even with the cursor in it", () => {
     const doc = "Intro\n\n| Name | Score |\n| :--- | ---: |\n| **A** | 1 |\n| B \\| C | 2 |\n\nend";
     const table = widgetOf(doc, TableWidget);
     expect(table?.header).toEqual(["Name", "Score"]);
@@ -92,7 +93,7 @@ describe("live preview", () => {
       ["B \\| C", "2"],
     ]);
     expect(table?.align).toEqual(["left", "right"]);
-    expect(widgetOf(doc, TableWidget, doc.indexOf("Score"))).toBeUndefined();
+    expect(widgetOf(doc, TableWidget, doc.indexOf("Score"))).toBeDefined();
   });
 
   it("draws frontmatter as properties until the cursor enters it", () => {

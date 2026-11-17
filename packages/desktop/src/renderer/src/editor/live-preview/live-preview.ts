@@ -9,9 +9,10 @@ import {
   EmbedWidget,
   PropertiesWidget,
   RuleWidget,
-  TableWidget,
   TextWidget,
 } from "./widgets.ts";
+import { parseTable } from "../table/table-model.ts";
+import { TableWidget } from "../table/table-widget.ts";
 
 /**
  * Live preview (task 2.6): the page renders Markdown in place, as Obsidian
@@ -58,44 +59,7 @@ export function parseProperties(yaml: string): [string, string[]][] | null {
   return props;
 }
 
-/** A table row's cells, split at "|" but not at an escaped "\|". */
-export function splitRow(row: string): string[] {
-  let s = row.trim();
-  if (s.startsWith("|")) s = s.slice(1);
-  if (s.endsWith("|") && !s.endsWith("\\|")) s = s.slice(0, -1);
-  const cells: string[] = [];
-  let cur = "";
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charAt(i);
-    if (c === "\\" && s.charAt(i + 1) === "|") {
-      cur += "\\|";
-      i++;
-    } else if (c === "|") {
-      cells.push(cur.trim());
-      cur = "";
-    } else cur += c;
-  }
-  cells.push(cur.trim());
-  return cells;
-}
-
-function tableWidget(text: string): TableWidget | null {
-  const rows = text.split("\n").filter((l) => l.trim() !== "");
-  const [head, delim, ...body] = rows;
-  if (!head || !delim) return null;
-  const align = splitRow(delim).map((d) => {
-    const left = d.startsWith(":");
-    const right = d.endsWith(":");
-    return left && right
-      ? ("center" as const)
-      : right
-        ? ("right" as const)
-        : left
-          ? ("left" as const)
-          : null;
-  });
-  return new TableWidget(splitRow(head), body.map(splitRow), align);
-}
+export { splitRow } from "../table/table-model.ts";
 
 /**
  * The decorations for a state. Unfocused, nothing counts as under the cursor,
@@ -151,9 +115,13 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           return false;
         }
         case "Table": {
-          if (isActive(from, to)) return false;
-          const widget = tableWidget(text(from, to));
-          if (widget) out.push(Decoration.replace({ widget, block: true }).range(from, to));
+          // Never Markdown: its cells are typed into in place (2.9).
+          const table = parseTable(text(from, to));
+          if (table) {
+            out.push(
+              Decoration.replace({ widget: new TableWidget(table), block: true }).range(from, to),
+            );
+          }
           return false;
         }
         case "HorizontalRule":

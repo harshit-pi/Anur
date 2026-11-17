@@ -101,52 +101,6 @@ export class EmbedWidget extends WidgetType {
   }
 }
 
-/** A table drawn as a table: header, then rows, cells rendered inline. */
-export class TableWidget extends WidgetType {
-  constructor(
-    readonly header: string[],
-    readonly rows: string[][],
-    readonly align: ("left" | "center" | "right" | null)[],
-  ) {
-    super();
-  }
-  override eq(other: TableWidget) {
-    return (
-      JSON.stringify([other.header, other.rows, other.align]) ===
-      JSON.stringify([this.header, this.rows, this.align])
-    );
-  }
-  toDOM() {
-    const wrap = document.createElement("div");
-    wrap.className = "cm-lp-table-wrap";
-    const table = document.createElement("table");
-    table.className = "cm-lp-table";
-    const cell = (tag: "th" | "td", text: string, i: number) => {
-      const c = document.createElement(tag);
-      const a = this.align[i];
-      if (a) c.style.textAlign = a;
-      c.append(renderInline(text));
-      return c;
-    };
-    const head = table.createTHead().insertRow();
-    this.header.forEach((h, i) => {
-      head.append(cell("th", h, i));
-    });
-    const body = table.createTBody();
-    for (const row of this.rows) {
-      const tr = body.insertRow();
-      this.header.forEach((_, i) => {
-        tr.append(cell("td", row[i] ?? "", i));
-      });
-    }
-    wrap.append(table);
-    return wrap;
-  }
-  override ignoreEvent() {
-    return false;
-  }
-}
-
 /** Frontmatter drawn as a Properties box, as Obsidian shows it. */
 export class PropertiesWidget extends WidgetType {
   constructor(readonly props: [string, string[]][]) {
