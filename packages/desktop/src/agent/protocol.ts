@@ -1,3 +1,6 @@
+import type { AgentId } from "../shared/agents.ts";
+import type { Guard } from "./adapters.ts";
+
 /**
  * Messages between main and the agent host (Architecture, "Processes").
  * The host runs in its own utilityProcess, so a slow agent never freezes
@@ -7,10 +10,12 @@
 /** Everything the host needs to run one thread's session. */
 export type SessionSpec = {
   thread: string;
+  /** The agent the thread runs on now. */
+  agent: AgentId;
   /** The agent's working folder: the opened folder. */
   cwd: string;
-  /** Claude Code's per-session settings: Anur's hook and deny rules, passed through ACP. */
-  settings: Record<string, unknown>;
+  /** Anur's guard, which the agent's adapter puts into that agent's own settings. */
+  guard: Guard;
   /** The agent session to resume; null starts a new one. */
   resume: string | null;
   /** The hook's log for this thread, read for the thread check (3.2). */
@@ -26,8 +31,20 @@ export type SessionOption = {
 };
 
 export type ToMain =
-  | { type: "status"; connected: boolean; reason: string | null; agent: AgentVersions | null }
-  | { type: "session"; thread: string; session: string; event: "started" | "resumed" }
+  | {
+      type: "status";
+      id: AgentId;
+      connected: boolean;
+      reason: string | null;
+      agent: AgentVersions | null;
+    }
+  | {
+      type: "session";
+      thread: string;
+      session: string;
+      agent: AgentId;
+      event: "started" | "resumed";
+    }
   | { type: "options"; thread: string; options: SessionOption[] }
   | { type: "text"; thread: string; turn: string; text: string }
   | {
@@ -57,7 +74,7 @@ export type ToMain =
   | { type: "error"; thread: string; turn: string | null; message: string };
 
 export type ToHost =
-  | { type: "connect" }
+  | { type: "connect"; agent: AgentId }
   | { type: "prompt"; spec: SessionSpec; turn: string; text: string }
   | { type: "cancel"; thread: string }
   | { type: "permission"; request: string; option: string | null }

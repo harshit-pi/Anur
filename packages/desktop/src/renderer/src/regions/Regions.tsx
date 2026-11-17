@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
 import type { AgentStatus, FolderState } from "../../../shared/ipc-contract.ts";
+import { AGENTS } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { FileTree } from "./FileTree.tsx";
 import {
@@ -619,15 +620,22 @@ const SAVE_LABELS: Record<SaveStatus, string> = {
 function AgentState() {
   const [status, setStatus] = useState<AgentStatus | null>(null);
   useEffect(() => {
-    void anur.call("agent:status", { connect: false }).then(setStatus);
-    return anur.on("agent:status", setStatus);
+    let shown: string | null = null;
+    void anur.call("agent:status", { connect: false }).then((s) => {
+      shown = s.id;
+      setStatus(s);
+    });
+    // The default agent's status; another agent's doesn't replace it here.
+    return anur.on("agent:status", (s) => {
+      if (shown === null || s.id === shown) setStatus(s);
+    });
   }, []);
   const on = status?.connected === true;
   return (
     <span className="status-item" title={status?.reason ?? undefined}>
       <span className={`dot ${on ? "on" : "off"}`} aria-hidden="true" />
       {on
-        ? "Claude Code connected"
+        ? `${AGENTS[status.id].name} connected`
         : status?.connected === false
           ? "Agent not connected"
           : "Agent connects with the first thread"}

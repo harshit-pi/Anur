@@ -35,6 +35,12 @@ export const SessionLine = LineEnvelope.extend({
   /** The agent's own session ID, which the hook sees on every call. */
   session: z.string().min(1),
   event: z.enum(["started", "resumed", "rebuilt"]),
+  /**
+   * The agent the session runs on, such as "claude-code"; added within
+   * format 1, so a line without it is Claude Code's. A thread moved to
+   * another agent starts a new session there, rebuilt from its bundle and chat.
+   */
+  agent: z.string().min(1).max(64).optional(),
 });
 
 /** A turn starts with the versions in play, so a change in behaviour can be traced; it ends with why and what it cost. */

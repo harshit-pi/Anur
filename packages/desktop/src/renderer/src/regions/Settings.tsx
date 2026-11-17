@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FolderState } from "../../../shared/ipc-contract.ts";
+import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
+import type { AgentStatus } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { isCollapsed, setCollapsed } from "../editor/properties/properties-widget.ts";
 import { CloseIcon } from "./Icons.tsx";
@@ -21,7 +23,11 @@ const SECTIONS: { id: SettingsSection; label: string; group?: string }[] = [
   { id: "community", label: "Community plugins" },
 ];
 
-type MainSettings = { sectionHistory: boolean; commitAnur: boolean | null };
+type MainSettings = {
+  sectionHistory: boolean;
+  commitAnur: boolean | null;
+  defaultAgent: AgentId;
+};
 
 function Switch({
   on,
@@ -99,6 +105,15 @@ export function Settings({
       window.removeEventListener("keydown", onKey);
     };
   }, [onClose]);
+
+  const [status, setStatus] = useState<AgentStatus | null>(null);
+  useEffect(() => {
+    if (!main) return;
+    void anur.call("agent:status", { connect: false, agent: main.defaultAgent }).then(setStatus);
+    return anur.on("agent:status", (s) => {
+      if (s.id === main.defaultAgent) setStatus(s);
+    });
+  }, [main]);
 
   const change = (c: Partial<Omit<MainSettings, "commitAnur"> & { commitAnur: boolean }>) => {
     void anur.call("settings:set", c).then(setMain);
@@ -181,14 +196,56 @@ export function Settings({
           <>
             <h2>Agent</h2>
             <p className="settings-lede">
-              Anur runs your own Claude Code, with your sign-in, settings and plugins.
+              Anur runs your own agent, with your sign-in, settings and plugins. A thread keeps its
+              section's text and its chat in Anur, so you can move it to another agent and it
+              carries on from there.
             </p>
             <Row
-              title="Claude Code"
-              detail="Not connected. Threads, previews and Apply arrive with group 3 of the build; until then the page, outline and history work on their own."
+              title="Default agent"
+              detail="New threads run on this agent. Each thread can switch in the Think panel."
             >
-              <span className="settings-status">Not connected</span>
+              <select
+                className="settings-select"
+                aria-label="Default agent"
+                value={main?.defaultAgent ?? "claude-code"}
+                disabled={!main}
+                onChange={(e) => {
+                  const next = AGENT_IDS.find((id) => id === e.target.value);
+                  if (next) change({ defaultAgent: next });
+                }}
+              >
+                {AGENT_IDS.map((id) => (
+                  <option key={id} value={id} disabled={!AGENTS[id].runsThreads}>
+                    {AGENTS[id].runsThreads ? AGENTS[id].name : `${AGENTS[id].name} (not yet)`}
+                  </option>
+                ))}
+              </select>
             </Row>
+            {main ? (
+              <Row
+                title={AGENTS[main.defaultAgent].name}
+                detail={
+                  status?.connected === true
+                    ? `Connected: version ${status.agent?.agent ?? "unknown"}, through its ACP adapter ${status.agent?.adapter ?? ""}.`
+                    : status?.connected === false
+                      ? (status.reason ?? "Not connected.")
+                      : "Connects when a thread first needs it."
+                }
+              >
+                <span className="settings-status">
+                  {status?.connected === true
+                    ? "Connected"
+                    : status?.connected === false
+                      ? "Not connected"
+                      : "Not started"}
+                </span>
+              </Row>
+            ) : null}
+            {AGENT_IDS.filter((id) => !AGENTS[id].runsThreads).map((id) => (
+              <Row key={id} title={AGENTS[id].name} detail={AGENTS[id].why ?? ""}>
+                <span className="settings-status">Not yet</span>
+              </Row>
+            ))}
           </>
         );
       case "core":

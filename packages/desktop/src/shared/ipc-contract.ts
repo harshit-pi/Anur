@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { PreviewPart } from "@anur/core";
+import { AGENT_IDS } from "./agents.ts";
+
+const AgentIdSchema = z.enum(AGENT_IDS);
 import { INSERT_IDS } from "./insert-items.ts";
 
 /**
@@ -53,6 +56,8 @@ export const MenuEntry: z.ZodType<MenuEntry, MenuEntry> = z.lazy(() =>
 
 /** Whether threads can run, and why not (Architecture, "When the agent is not connected"). */
 export const AgentStatus = z.object({
+  /** Which agent this is about. */
+  id: AgentIdSchema,
   /** null until Anur has tried to connect. */
   connected: z.boolean().nullable(),
   reason: z.string().nullable(),
@@ -103,6 +108,8 @@ export const ThreadView = z.object({
   items: z.array(ThreadItem),
   /** The session's mode and model, once a session is open on this device. */
   options: z.array(SessionOption),
+  /** The agent the thread runs on: its last session's, or the one picked for its next turn. */
+  agent: AgentIdSchema,
 });
 export type ThreadView = z.infer<typeof ThreadView>;
 
@@ -207,13 +214,25 @@ export const ipcContract = {
   /** Settings main acts on (2.25): app-wide ones, and whether this window's folder commits `.anur/`. */
   "settings:get": {
     request: z.object({}).strict(),
-    response: z.object({ sectionHistory: z.boolean(), commitAnur: z.boolean().nullable() }),
+    response: z.object({
+      sectionHistory: z.boolean(),
+      commitAnur: z.boolean().nullable(),
+      defaultAgent: AgentIdSchema,
+    }),
   },
   "settings:set": {
     request: z
-      .object({ sectionHistory: z.boolean().optional(), commitAnur: z.boolean().optional() })
+      .object({
+        sectionHistory: z.boolean().optional(),
+        commitAnur: z.boolean().optional(),
+        defaultAgent: AgentIdSchema.optional(),
+      })
       .strict(),
-    response: z.object({ sectionHistory: z.boolean(), commitAnur: z.boolean().nullable() }),
+    response: z.object({
+      sectionHistory: z.boolean(),
+      commitAnur: z.boolean().nullable(),
+      defaultAgent: AgentIdSchema,
+    }),
   },
   /** Search the folder's docs, case ignored: each matching line (2.26). */
   "folder:search": {
@@ -364,7 +383,8 @@ export const ipcContract = {
 
   /** Whether threads can run; asking connects the agent once (3.1). */
   "agent:status": {
-    request: z.object({ connect: z.boolean() }).strict(),
+    /** Without an agent, the default one. */
+    request: z.object({ connect: z.boolean(), agent: AgentIdSchema.optional() }).strict(),
     response: AgentStatus,
   },
   /** The open doc's threads, each with its section's heading path in `text`. */
@@ -380,6 +400,8 @@ export const ipcContract = {
         text: z.string(),
         section: SectionRef,
         message: z.string().min(1).max(100_000),
+        /** The agent to run it on; the default agent when left out. */
+        agent: AgentIdSchema.optional(),
       })
       .strict(),
     response: z.discriminatedUnion("kind", [
@@ -401,6 +423,11 @@ export const ipcContract = {
       z.object({ kind: z.literal("sent") }),
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
+  },
+  /** Move a thread to another agent: its next turn starts there, from its bundle and chat. */
+  "thread:agent": {
+    request: z.object({ thread: z.string().max(200), agent: AgentIdSchema }).strict(),
+    response: z.object({}),
   },
   /** Pick the thread's mode or model; it holds for the thread's session from now on. */
   "thread:option": {

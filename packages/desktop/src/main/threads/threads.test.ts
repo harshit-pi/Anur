@@ -26,7 +26,12 @@ function fakeHub() {
   const sent: ToHost[] = [];
   const routes = new Map<string, (m: ToMain) => void>();
   const hub = {
-    status: { connected: true, reason: null, agent: { agent: "2.1.326", adapter: "0.107.3" } },
+    status: () => ({
+      id: "claude-code",
+      connected: true,
+      reason: null,
+      agent: { agent: "2.1.326", adapter: "0.107.3" },
+    }),
     route: (t: string, fn: (m: ToMain) => void) => routes.set(t, fn),
     drop: () => undefined,
     send: (m: ToHost) => sent.push(m),
@@ -35,7 +40,13 @@ function fakeHub() {
     const prompt = sent.filter((m) => m.type === "prompt").at(-1);
     if (prompt?.type !== "prompt") throw new Error("nothing was asked");
     const fn = routes.get(thread);
-    fn?.({ type: "session", thread, session, event: prompt.spec.resume ? "resumed" : "started" });
+    fn?.({
+      type: "session",
+      thread,
+      session,
+      agent: prompt.spec.agent,
+      event: prompt.spec.resume ? "resumed" : "started",
+    });
     fn?.({ type: "text", thread, turn: prompt.turn, text });
     fn?.({ type: "turn-end", thread, turn: prompt.turn, stopReason: "end_turn", usage: null });
     await new Promise((r) => setTimeout(r, 50));
@@ -68,6 +79,7 @@ async function setup() {
     locate: (rel, text) => versions.locate(rel, text),
     emit: (e) => events.push(e),
     previewsChanged: () => undefined,
+    defaultAgent: () => "claude-code",
   });
   const support = path.join(folder, "..", `${path.basename(folder)}-support`);
   return { folder, support, threads, sent, reply, tell, events };
@@ -241,6 +253,31 @@ describe("Threads", () => {
     const [preview] = await t.listPreviews("plan.md", typed);
     expect(preview?.parts.map((p) => p.path.at(-1))).toEqual(["Risks", "Budget"]);
     expect(preview?.parts[1]?.proposed).toBe("## Budget\n\nTwo people, part time, from May.\n");
+  });
+
+  it("moves a thread to another agent: a new session there, rebuilt from its bundle and chat", async () => {
+    const { threads: t, sent, reply } = await setup();
+    const r = await t.start("plan.md", DOC, risks, "Remember HERON.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    expect(r.thread.agent).toBe("claude-code");
+    await reply(r.thread.id, "OK.");
+    t.setAgent(r.thread.id, "codex");
+    await t.send(r.thread.id, "plan.md", DOC, "Which word?");
+    const moved = sent.filter((m) => m.type === "prompt").at(-1);
+    if (moved?.type !== "prompt") throw new Error("not asked");
+    expect(moved.spec.agent).toBe("codex");
+    expect(moved.spec.resume).toBeNull();
+    expect(moved.text).toContain("## This section: Plan > Risks");
+    expect(moved.text).toContain("The person: Remember HERON.\n\nYou: OK.");
+    await reply(r.thread.id, "HERON.", "codex-1");
+    const [listed] = await t.list("plan.md", DOC);
+    expect(listed?.agent).toBe("codex");
+    // Back on Claude Code, its old session can't hold what Codex said: rebuilt again.
+    t.setAgent(r.thread.id, "claude-code");
+    await t.send(r.thread.id, "plan.md", DOC, "And now?");
+    const back = sent.filter((m) => m.type === "prompt").at(-1);
+    expect(back?.type === "prompt" && back.spec.resume).toBeNull();
+    expect(back?.type === "prompt" && back.text).toContain("You: HERON.");
   });
 
   it("refuses a section that moved away", async () => {

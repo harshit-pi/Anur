@@ -122,6 +122,7 @@ function threadsFor(folder: FolderState): Threads | null {
           if (folders.current(id)?.path === folder.path) send(win, "thread:event", event);
         }
       },
+      defaultAgent: () => appSettings.get().defaultAgent,
       previewsChanged: (rel) => {
         for (const [id, win] of windows) {
           if (folders.current(id)?.path === folder.path)
@@ -302,17 +303,20 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return {
       sectionHistory: appSettings.get().sectionHistory,
       commitAnur: folder ? await commitsAnur(folder.path) : null,
+      defaultAgent: appSettings.get().defaultAgent,
     };
   },
-  "settings:set": async ({ sectionHistory, commitAnur }, { webContentsId }) => {
+  "settings:set": async ({ sectionHistory, commitAnur, defaultAgent }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (sectionHistory !== undefined) await appSettings.set({ sectionHistory });
+    if (defaultAgent !== undefined) await appSettings.set({ defaultAgent });
     if (commitAnur !== undefined && folder?.mode === "writable") {
       await setCommitsAnur(folder.path, commitAnur);
     }
     return {
       sectionHistory: appSettings.get().sectionHistory,
       commitAnur: folder ? await commitsAnur(folder.path) : null,
+      defaultAgent: appSettings.get().defaultAgent,
     };
   },
   "folder:search": async ({ query }, { webContentsId }) => {
@@ -355,18 +359,21 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     return planConflict(folder, copy);
   },
-  "agent:status": async ({ connect }) => (connect ? hub.connect() : hub.status),
+  "agent:status": async ({ connect, agent }) => {
+    const id = agent ?? appSettings.get().defaultAgent;
+    return connect ? hub.connect(id) : hub.status(id);
+  },
   "thread:list": async ({ path: doc, text }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     return { threads: t ? await t.list(doc, text) : [] };
   },
-  "thread:start": async ({ path: doc, text, section, message }, { webContentsId }) => {
+  "thread:start": async ({ path: doc, text, section, message, agent }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!folder || !t || !folder.docs.includes(doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
-    return t.start(doc, text, section, message);
+    return t.start(doc, text, section, message, agent);
   },
   "thread:send": async ({ thread, path: doc, text, message }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -404,6 +411,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
       thread,
     );
     return { kind: "ok" };
+  },
+  "thread:agent": ({ thread, agent }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (folder) threadsFor(folder)?.setAgent(thread, agent);
+    return {};
   },
   "thread:option": ({ thread, id, value }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
