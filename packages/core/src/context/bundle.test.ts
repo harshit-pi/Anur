@@ -28,9 +28,41 @@ Fall back to day 1 for new clients.
 const tree = buildSectionTree(DOC, { fileName: "notes.md" });
 const at = (name: string) => tree.sections.findIndex((s) => s.path.at(-1) === name);
 
+/** The outline, as the default falls back to past the budget. */
+const OUTLINE = ["ancestors-own-text", "section-subtree", "doc-outline"] as const;
+
 describe("buildBundle", () => {
+  it("sends, by default, the rest of the doc in full within the budget", () => {
+    const b = buildBundle({ text: DOC, tree, index: at("Problem"), docPath: "notes.md" });
+    expect(b.parts.map((p) => [p.kind, p.detail])).toEqual([
+      ["ancestor", "parent, its text"],
+      ["section", "this section, its text"],
+      ["full", "its text"],
+    ]);
+    expect(b.markdown).toContain("Fall back to day 1 for new clients.");
+    expect(b.markdown).not.toContain("Before you answer, read with anur_read_section");
+  });
+
+  it("falls back, by default, to the outline and the hint to fetch past the budget", () => {
+    const b = buildBundle({
+      text: DOC,
+      tree,
+      index: at("Problem"),
+      docPath: "notes.md",
+      budget: 10,
+    });
+    expect(b.parts.at(-1)?.kind).toBe("outline");
+    expect(b.markdown).toContain("Before you answer, read with anur_read_section");
+  });
+
   it("sends the parent's own text, the section's subtree and the whole doc's outline", () => {
-    const b = buildBundle({ text: DOC, tree, index: at("Pay day"), docPath: "notes.md" });
+    const b = buildBundle({
+      text: DOC,
+      tree,
+      index: at("Pay day"),
+      docPath: "notes.md",
+      rules: OUTLINE,
+    });
     expect(b.parts.map((p) => [p.kind, p.label, p.detail])).toEqual([
       ["ancestor", "Failed-payment notifications", "above, its text"],
       ["ancestor", "Retry timing", "parent, its text"],
@@ -50,7 +82,13 @@ describe("buildBundle", () => {
   });
 
   it("keeps a sibling's full text out, and its subsections' own lines in the outline", () => {
-    const b = buildBundle({ text: DOC, tree, index: at("Problem"), docPath: "notes.md" });
+    const b = buildBundle({
+      text: DOC,
+      tree,
+      index: at("Problem"),
+      docPath: "notes.md",
+      rules: OUTLINE,
+    });
     expect(b.markdown).not.toContain("Fall back to day 1");
     expect(b.parts.at(-1)?.text).toContain("    - Pay day: Use the client's pay day.");
   });
@@ -76,13 +114,25 @@ describe("buildBundle", () => {
   });
 
   it("never carries a sibling's full text", () => {
-    const b = buildBundle({ text: DOC, tree, index: at("Problem"), docPath: "notes.md" });
+    const b = buildBundle({
+      text: DOC,
+      tree,
+      index: at("Problem"),
+      docPath: "notes.md",
+      rules: OUTLINE,
+    });
     expect(b.markdown).not.toContain("Fall back to day 1");
     expect(b.markdown).toContain("Retry timing: Retry after 1, 3 and 7 days.");
   });
 
   it("gives every ancestor its own text only, for a deeper section", () => {
-    const b = buildBundle({ text: DOC, tree, index: at("Pay day"), docPath: "notes.md" });
+    const b = buildBundle({
+      text: DOC,
+      tree,
+      index: at("Pay day"),
+      docPath: "notes.md",
+      rules: OUTLINE,
+    });
     expect(b.parts.filter((p) => p.kind === "ancestor").map((p) => p.detail)).toEqual([
       "above, its text",
       "parent, its text",

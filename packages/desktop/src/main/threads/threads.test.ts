@@ -94,7 +94,7 @@ describe("Threads", () => {
     expect(r.kind).toBe("started");
     const prompt = sent.find((m) => m.type === "prompt");
     expect(prompt?.type === "prompt" && prompt.text).toContain("## This section: Plan > Risks");
-    expect(prompt?.type === "prompt" && prompt.text).toContain("- Budget: Two people.");
+    expect(prompt?.type === "prompt" && prompt.text).toContain("## Budget\n\nTwo people.");
     expect(prompt?.type === "prompt" && prompt.text).toMatch(/---\n\nIs the host a real risk\?$/);
     expect(prompt?.type === "prompt" && prompt.spec.resume).toBeNull();
   });
