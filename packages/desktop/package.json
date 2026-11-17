@@ -1,0 +1,10 @@
+{
+  "name": "@anur/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The Electron app: main, preload, renderer, index, agent host and MCP server.",
+  "dependencies": {
+    "@anur/core": "workspace:*"
+  }
+}

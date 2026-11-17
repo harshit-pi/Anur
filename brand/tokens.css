@@ -1,0 +1,52 @@
+/*
+ * Anur's colours and type. Light values come from the UI mocks
+ * (vault: raw/Anur Brainstorming Product/Research References/Anur UI mocks.html);
+ * dark values are their counterparts on a navy-slate ground.
+ *
+ * Each colour is light-dark(light, dark): the theme follows the system unless
+ * the app sets data-theme="light" or "dark" on <html>.
+ * Text colours pass WCAG AA (4.5:1) on --sheet and --paper in both themes;
+ * brand.test.ts in packages/desktop checks it.
+ */
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces */
+  --paper: light-dark(#eef1f4, #0e1420); /* the app background behind the page */
+  --sheet: light-dark(#ffffff, #151c2a); /* the page, panels and cards */
+  --hover: light-dark(#f5f7fa, #1b2334);
+  --rule: light-dark(#d8dee6, #2a3446); /* borders and dividers */
+
+  /* Text */
+  --ink: light-dark(#17223b, #e7ebf3); /* decided text and titles */
+  --ink2: light-dark(#3a4560, #c4cbd9); /* thread text */
+  --slate: light-dark(#5b6578, #a3acbd); /* secondary UI text */
+  --graphite: light-dark(#656e7b, #8f99ab); /* labels and counts; the mocks' #7a8494 failed AA */
+  --pencil: light-dark(#a9b1bd, #55607a); /* dashed outlines of threads and drafts; decorative */
+
+  /* Accent: previews and the one action on screen */
+  --blue: light-dark(#2a5bd7, #7fa2f5);
+  --blue-wash: light-dark(#e8eefc, #1c2a4a);
+
+  /* States */
+  --green: light-dark(#24734b, #6ccb98); /* applied, kept */
+  --green-wash: light-dark(#e6f4ec, #132e21);
+  --amber: light-dark(#8a5a00, #e8b65a); /* waiting, needs a look */
+  --amber-wash: light-dark(#fff4db, #33270e);
+  /* removed text, conflicts; the mocks' #c2412d failed AA on its wash */
+  --red: light-dark(#be402c, #f28b78);
+  --red-wash: light-dark(#fbe9e5, #3a1d18);
+
+  /* Type: the UI, the decided doc, and thinking (threads, in italic) */
+  --font-ui: "Avenir Next", "Avenir", sans-serif;
+  --font-doc: "Charter", serif;
+  --font-pen: "Iowan Old Style", serif;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}

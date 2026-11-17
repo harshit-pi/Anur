@@ -1,0 +1,10 @@
+{
+  "name": "@anur/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Sections, IDs, bundles, context and previews. No Electron, no React, no file system.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
