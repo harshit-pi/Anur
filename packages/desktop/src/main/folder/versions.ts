@@ -164,6 +164,43 @@ export class SectionVersions {
     }).then(() => found);
   }
 
+  /**
+   * A preview part is about to be applied: its version goes to History
+   * first, so a crash between the two leaves a record of what was meant (3.9).
+   */
+  applied(
+    rel: string,
+    section: SectionId,
+    text: string,
+    sectionPath: string[],
+    preview: string,
+    thread: string,
+  ): Promise<void> {
+    return this.run(async () => {
+      if (!this.recording()) return;
+      this.loaded ??= this.docIds.load();
+      await this.loaded;
+      const doc = await this.docIds.idFor(rel);
+      const w = await JsonlWriter.open(
+        path.join(this.anurDir, anurPaths.history(doc, section, this.device)),
+        this.device,
+      );
+      try {
+        await w.append({
+          kind: "version",
+          cause: "apply",
+          text,
+          path: sectionPath.length > 0 ? sectionPath : [path.basename(doc)],
+          summary: "Applied from a thread",
+          preview,
+          thread,
+        });
+      } finally {
+        await w.close();
+      }
+    });
+  }
+
   /** The file changed outside Anur to `text`: a version for each section that changed. */
   outside(rel: string, text: string): Promise<void> {
     return this.run(async () => {

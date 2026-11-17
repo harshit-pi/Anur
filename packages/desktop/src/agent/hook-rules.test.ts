@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { MESSAGES, decide, type HookConfig } from "./hook-rules.ts";
+import { MESSAGES, decide, toCopy, type HookConfig } from "./hook-rules.ts";
 
 const folder = "/Users/p/Vault";
 const config: HookConfig = {
@@ -8,10 +8,12 @@ const config: HookConfig = {
   anurDir: path.join(folder, ".anur"),
   thread: "t1",
   log: "/tmp/log",
+  copies: "/support/copies/t1",
+  copiesRoot: "/support/copies",
 };
 const resolve = (p: string, cwd: string) => path.resolve(cwd, p);
 const call = (tool_name: string, tool_input: Record<string, unknown>) =>
-  decide({ tool_name, tool_input, cwd: folder }, config, resolve);
+  decide({ tool_name, tool_input, cwd: folder }, config, resolve)?.reason ?? null;
 const bash = (command: string) => call("Bash", { command });
 
 describe("the hook's file tools", () => {
@@ -20,10 +22,29 @@ describe("the hook's file tools", () => {
     expect(call("Write", { file_path: `${folder}/.ANUR/x` })).toBe(MESSAGES.anur);
   });
 
-  it("lets the agent read any doc, and stops it writing one", () => {
-    expect(call("Read", { file_path: "notes/plan.md" })).toBeNull();
-    expect(call("Edit", { file_path: "notes/plan.md" })).toBe(MESSAGES.docWrite);
-    expect(call("Write", { file_path: `${folder}/new.md` })).toBe(MESSAGES.docWrite);
+  it("sends every read and edit of a doc to this thread's working copy, made from the doc", () => {
+    const d = decide(
+      { tool_name: "Edit", tool_input: { file_path: "notes/plan.md" }, cwd: folder },
+      config,
+      resolve,
+    );
+    expect(d).toEqual({
+      reason: toCopy("notes/plan.md", "/support/copies/t1/notes/plan.md"),
+      copy: { from: `${folder}/notes/plan.md`, to: "/support/copies/t1/notes/plan.md" },
+    });
+    expect(call("Read", { file_path: "notes/plan.md" })).toBe(
+      toCopy("notes/plan.md", "/support/copies/t1/notes/plan.md"),
+    );
+    expect(call("Write", { file_path: `${folder}/new.md` })).toBe(
+      toCopy("new.md", "/support/copies/t1/new.md"),
+    );
+  });
+
+  it("lets the agent use its own working copies, and keeps it out of other threads'", () => {
+    expect(call("Edit", { file_path: "/support/copies/t1/notes/plan.md" })).toBeNull();
+    expect(call("Read", { file_path: "/support/copies/t2/notes/plan.md" })).toBe(
+      MESSAGES.otherCopy,
+    );
   });
 
   it("leaves the person's other files alone: instruction files, dot-folders and code", () => {
@@ -61,10 +82,10 @@ describe("the hook's shell rules", () => {
   });
 
   it("blocks shell writes onto a doc, and lets git that only reads run", () => {
-    expect(bash("echo hi >> notes/plan.md")).toBe(MESSAGES.docWrite);
-    expect(bash("sed -i '' s/a/b/ plan.md")).toBe(MESSAGES.docWrite);
-    expect(bash("rm plan.md")).toBe(MESSAGES.docWrite);
-    expect(bash("git mv plan.md old.md")).toBe(MESSAGES.docWrite);
+    expect(bash("echo hi >> notes/plan.md")).toBe(MESSAGES.shellDocWrite);
+    expect(bash("sed -i '' s/a/b/ plan.md")).toBe(MESSAGES.shellDocWrite);
+    expect(bash("rm plan.md")).toBe(MESSAGES.shellDocWrite);
+    expect(bash("git mv plan.md old.md")).toBe(MESSAGES.shellDocWrite);
     expect(bash("git diff plan.md")).toBeNull();
     expect(bash("cat plan.md")).toBeNull();
     expect(bash("echo hi > /tmp/x.md")).toBeNull();

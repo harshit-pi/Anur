@@ -568,6 +568,16 @@ export function RightSidebar({
   think: React.ReactNode;
 }) {
   const [tab, setTab] = useState<(typeof RIGHT_TABS)[number]>("Outline");
+  // "Back to thinking" on a preview opens its thread here.
+  useEffect(() => {
+    const onThread = () => {
+      setTab("Think");
+    };
+    window.addEventListener("anur:open-thread", onThread);
+    return () => {
+      window.removeEventListener("anur:open-thread", onThread);
+    };
+  }, []);
   return (
     <aside className="right-sidebar" aria-label="Section details" hidden={hidden}>
       <div className="segmented wide" role="tablist" aria-label="Section details">

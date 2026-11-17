@@ -216,6 +216,36 @@ export function Think({
   const [agent, setAgent] = useState<AgentStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showText, setShowText] = useState(false);
+  /** Threads with a preview of this doc, for "Preview in doc". */
+  const [previewed, setPreviewed] = useState<Set<string>>(new Set());
+  const textNow = useRef(docText);
+  textNow.current = docText;
+
+  useEffect(() => {
+    setPreviewed(new Set());
+    if (!docPath) return;
+    let current = true;
+    const load = () => {
+      void anur.call("preview:list", { path: docPath, text: textNow.current() }).then((r) => {
+        if (current) setPreviewed(new Set(r.previews.map((p) => p.thread)));
+      });
+    };
+    load();
+    const off = anur.on("preview:changed", ({ path }) => {
+      if (path === docPath) load();
+    });
+    // Each Apply or rejection changes what is left: look again when the page says so.
+    const onThread = (e: Event) => {
+      const { thread } = (e as CustomEvent<{ thread: string }>).detail;
+      setOpen(thread);
+    };
+    window.addEventListener("anur:open-thread", onThread);
+    return () => {
+      current = false;
+      off();
+      window.removeEventListener("anur:open-thread", onThread);
+    };
+  }, [docPath]);
 
   useEffect(() => {
     void anur.call("agent:status", { connect: false }).then(setAgent);
@@ -343,6 +373,19 @@ export function Think({
         </div>
         {notConnected}
         {error ? <p className="think-error">{error}</p> : null}
+        {previewed.has(thread.id) && !thread.busy ? (
+          <button
+            type="button"
+            className="think-button primary think-preview"
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent("anur:show-preview", { detail: { thread: thread.id } }),
+              );
+            }}
+          >
+            Preview in doc
+          </button>
+        ) : null}
         <Composer
           placeholder="Reply in this thread"
           sendLabel="Send"

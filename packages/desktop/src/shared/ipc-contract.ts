@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PreviewPart } from "@anur/core";
 import { INSERT_IDS } from "./insert-items.ts";
 
 /**
@@ -92,6 +93,15 @@ export const ThreadView = z.object({
   items: z.array(ThreadItem),
 });
 export type ThreadView = z.infer<typeof ThreadView>;
+
+/** One thread's proposed changes to the open doc, one part per section (3.8). */
+export const PreviewView = z.object({
+  thread: z.string(),
+  /** The thread's question, which names the preview. */
+  title: z.string(),
+  parts: z.array(PreviewPart),
+});
+export type PreviewView = z.infer<typeof PreviewView>;
 
 /** The section a thread is about: its index in the page's tree and its heading path, to check it. */
 const SectionRef = z.object({ index: z.int().nonnegative(), path: z.array(z.string()).max(50) });
@@ -385,6 +395,39 @@ export const ipcContract = {
     request: z.object({ thread: z.string().max(200) }).strict(),
     response: z.object({}),
   },
+  /** The open doc's previews, each part with its section's heading path in `text`. */
+  "preview:list": {
+    request: z.object({ path: z.string().max(4096), text: z.string() }).strict(),
+    response: z.object({ previews: z.array(PreviewView) }),
+  },
+  /** What is left of a thread's preview of the doc, after a person rejected or applied parts of it. */
+  "preview:update": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        thread: z.string().max(200),
+        parts: z.array(PreviewPart).max(500),
+      })
+      .strict(),
+    response: z.object({}),
+  },
+  /** Before an Apply lands: its version, written to History first (3.9). */
+  "preview:apply": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        thread: z.string().max(200),
+        section: z.string().max(200),
+        applied: z.string(),
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
   /** The person's answer to one of the agent's own prompts; null declines. */
   "thread:permission": {
     request: z
@@ -412,6 +455,8 @@ export const ipcEvents = {
   "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
   /** The agent connected, or couldn't, and why. */
   "agent:status": AgentStatus,
+  /** A doc's previews changed, as when a thread's turn ended with edits. */
+  "preview:changed": z.object({ path: z.string() }),
   /** A thread changed: all of it, or a reply arriving piece by piece. */
   "thread:event": z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("thread"), path: z.string(), thread: ThreadView }),

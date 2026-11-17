@@ -68,6 +68,17 @@ describe("buildBundle", () => {
     expect(b.parts.map((p) => p.kind)).toEqual(["section"]);
   });
 
+  it("names the thread's working copy, when it has one", () => {
+    const b = buildBundle({
+      text: DOC,
+      tree,
+      index: at("Problem"),
+      docPath: "notes.md",
+      workingCopy: "/copies/t1/notes.md",
+    });
+    expect(b.markdown).toContain("Your working copy of `notes.md` is at `/copies/t1/notes.md`.");
+  });
+
   it("names the doc and the section in its header", () => {
     const b = buildBundle({ text: DOC, tree, index: 0, docPath: "notes.md" });
     expect(b.markdown).toContain("`notes.md`: **Failed-payment notifications**");

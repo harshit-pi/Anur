@@ -45,6 +45,8 @@ export type BundleInput = {
   index: number;
   /** The doc's path in the folder, for the header. */
   docPath: string;
+  /** Where this thread's working copy of the doc is; the header tells the agent to edit there. */
+  workingCopy?: string | null;
   rules?: readonly BundleRule[];
 };
 
@@ -74,6 +76,7 @@ export function buildBundle({
   tree,
   index,
   docPath,
+  workingCopy = null,
   rules = BUNDLE_RULES,
 }: BundleInput): Bundle {
   const section = tree.sections[index];
@@ -130,6 +133,12 @@ export function buildBundle({
     "Below is what this thread works from: the text of the sections above it, this section in full, and an outline of the sections beside it. Other sections' full text and other threads are not included, on purpose, so this discussion stays about this section.",
     "",
   ];
+  if (workingCopy) {
+    lines.push(
+      `Your working copy of \`${docPath}\` is at \`${workingCopy}\`. When the person asks you to change the doc, edit that file with your own tools; Anur shows your edits to them in place, section by section, and they apply what they want. The doc in the folder is the decided text and changes only when they apply. Shell commands such as \`git diff\` see the decided text, not your edits.`,
+      "",
+    );
+  }
   for (const part of parts) {
     if (part.kind === "ancestor") {
       lines.push(`## Above it: ${part.label}`, "", part.text || "(no text of its own)", "");

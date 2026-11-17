@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { FORMAT_VERSION } from "@anur/core";
+import { FORMAT_VERSION, PreviewPart } from "@anur/core";
 import {
   BrowserWindow,
   Menu,
@@ -120,6 +120,12 @@ function threadsFor(folder: FolderState): Threads | null {
       emit: (event) => {
         for (const [id, win] of windows) {
           if (folders.current(id)?.path === folder.path) send(win, "thread:event", event);
+        }
+      },
+      previewsChanged: (rel) => {
+        for (const [id, win] of windows) {
+          if (folders.current(id)?.path === folder.path)
+            send(win, "preview:changed", { path: rel });
         }
       },
     });
@@ -368,6 +374,36 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder || !t || !folder.docs.includes(doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
     return t.send(thread, doc, text, message);
+  },
+  "preview:list": async ({ path: doc, text }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    return { previews: t ? await t.listPreviews(doc, text) : [] };
+  },
+  "preview:update": async ({ path: doc, text, thread, parts }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (t && folder?.docs.includes(doc))
+      await t.updatePreview(doc, text, thread, PreviewPart.array().parse(parts));
+    return {};
+  },
+  "preview:apply": async ({ path: doc, text, thread, section, applied }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const ids = folder ? versionsFor(folder) : null;
+    if (!folder || !ids || !folder.docs.includes(doc))
+      return { kind: "refused", reason: "This folder is read-only." };
+    const at = await ids.locate(doc, text);
+    const i = at ? at.ids.indexOf(section as never) : -1;
+    if (!at || i < 0) return { kind: "refused", reason: "That section is gone." };
+    await ids.applied(
+      doc,
+      at.ids[i] as never,
+      applied,
+      at.tree.sections[i]?.path ?? [],
+      `p${thread}`,
+      thread,
+    );
+    return { kind: "ok" };
   },
   "thread:stop": ({ thread }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
