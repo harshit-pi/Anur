@@ -17,9 +17,11 @@ export class AnurSocket {
   private server: Server | null = null;
   private readonly tokens = new Map<string, ToolHandler>();
   readonly path: string;
+  private readonly dir: string;
 
   /** `dir` holds the socket; its path stays short, as Unix sockets need. */
-  constructor(private readonly dir: string) {
+  constructor(dir: string) {
+    this.dir = dir;
     this.path = path.join(dir, "s");
   }
 

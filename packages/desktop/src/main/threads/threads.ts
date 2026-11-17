@@ -8,7 +8,6 @@ import {
   ThreadLine,
   anurPaths,
   buildBundle,
-  buildSectionTree,
   compareLines,
   merge3,
   previewParts,
@@ -28,6 +27,9 @@ import { PreviewStore } from "./previews.ts";
 import { denyRulesOf, type DenyRule } from "../../agent/deny-rules.ts";
 import type { AnurSocket, ToolAnswer } from "./anur-socket.ts";
 import { TurnWatch, type DocChange } from "./turn-watch.ts";
+import { readSection } from "./read-section.ts";
+
+export { readSection } from "./read-section.ts";
 
 /**
  * One folder's threads (tasks 3.1, 3.4, 3.5). Each thread is one discussion
@@ -582,13 +584,16 @@ export class Threads {
       stopReason,
       usage,
     });
-    live.turn = null;
+    // The reply is on disk; the thread stays busy until its edits are a preview,
+    // so nothing reads it finished with its preview still missing.
     live.text = "";
-    live.pending = null;
+    live.tools = new Map();
     this.turnWatch.stop(thread);
     await this.mergeCopies(thread, live).catch((e: unknown) => {
       console.error("Anur couldn't turn the thread's edits into a preview:", e);
     });
+    live.turn = null;
+    live.pending = null;
     this.watchCopies(thread, live);
     await this.refresh(live.rel, live.docText, thread);
   }
@@ -936,47 +941,4 @@ async function listFiles(dir: string, prefix = ""): Promise<string[]> {
     else if (e.isFile()) out.push(rel);
   }
   return out;
-}
-
-/**
- * One section's own text by its heading, or its path from the title
- * ("Notifications > Retry timing"), with its subsections' headings listed.
- */
-export function readSection(
-  text: string,
-  rel: string,
-  wanted: string,
-  fromCopy: boolean,
-): ToolAnswer {
-  const tree = buildSectionTree(text, { fileName: path.basename(rel) });
-  const want = wanted
-    .split(">")
-    .map((p) => p.trim().toLowerCase())
-    .filter(Boolean);
-  const matches = tree.sections.filter((s) => {
-    const p = s.path.map((x) => x.toLowerCase());
-    return want.length <= p.length && want.every((w, i) => p[p.length - want.length + i] === w);
-  });
-  if (matches.length === 0) {
-    const headings = tree.sections.slice(1).map((s) => s.path.slice(1).join(" > "));
-    return {
-      error: `There's no section "${wanted}" in ${rel}. Its sections: ${headings.join("; ") || "none"}.`,
-    };
-  }
-  if (matches.length > 1)
-    return {
-      error: `"${wanted}" names more than one section in ${rel}: ${matches.map((s) => s.path.join(" > ")).join("; ")}. Give its path.`,
-    };
-  const s = matches[0];
-  if (!s) return { error: "No section." };
-  const own = text.slice(s.ownRange.from, s.ownRange.to).trimEnd();
-  const subs = s.children.map((c) => tree.sections[c]?.path.at(-1) ?? "").filter(Boolean);
-  return {
-    text: [
-      `${s.path.join(" > ")} (in ${rel}${fromCopy ? ", your working copy" : ""})`,
-      "",
-      own,
-      ...(subs.length > 0 ? ["", `Its subsections, not included: ${subs.join("; ")}.`] : []),
-    ].join("\n"),
-  };
 }

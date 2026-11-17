@@ -119,3 +119,34 @@ describe("buildBundle", () => {
     expect(b.parts.map((p) => p.kind)).toEqual(["section"]);
   });
 });
+
+describe("the full-text and fetch-hint variants", () => {
+  it("doc-full sends every other section in full, and falls back to the outline past the budget", () => {
+    const rules = ["ancestors-own-text", "section-subtree", "doc-full"] as const;
+    const full = buildBundle({ text: DOC, tree, index: at("Problem"), docPath: "notes.md", rules });
+    expect(full.parts.at(-1)?.kind).toBe("full");
+    expect(full.markdown).toContain("Fall back to day 1 for new clients.");
+    expect(full.markdown).toContain("the rest of the doc in full");
+    const tight = buildBundle({
+      text: DOC,
+      tree,
+      index: at("Problem"),
+      docPath: "notes.md",
+      rules,
+      budget: 20,
+    });
+    expect(tight.parts.at(-1)?.kind).toBe("outline");
+    expect(tight.markdown).not.toContain("Fall back to day 1");
+  });
+
+  it("fetch-hint asks the agent to read sections that could set a rule", () => {
+    const b = buildBundle({
+      text: DOC,
+      tree,
+      index: at("Problem"),
+      docPath: "notes.md",
+      rules: ["ancestors-own-text", "section-subtree", "doc-outline", "fetch-hint"],
+    });
+    expect(b.markdown).toContain("Before you answer, read with anur_read_section");
+  });
+});

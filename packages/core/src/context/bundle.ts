@@ -12,7 +12,7 @@ import type { SectionTree } from "../sections/tree.ts";
 
 /** One part of the bundle, as the reads line lists it. */
 export type BundlePart = {
-  kind: "ancestor" | "section" | "siblings" | "outline";
+  kind: "ancestor" | "section" | "siblings" | "outline" | "full";
   /** What the reads line says it is: the section's heading, "Sibling sections" or "The rest of the doc". */
   label: string;
   /** How much of it: "its text", "its outline". */
@@ -35,7 +35,14 @@ export type BundleRule =
    * call away; decided text is the current doc, never another thread's chat
    * (decided 2026-11-17).
    */
-  | "doc-outline";
+  | "doc-outline"
+  /**
+   * Every other section in full: its heading and its own text, in the
+   * doc's order. Past the budget it falls back to the outline.
+   */
+  | "doc-full"
+  /** The header asks the agent to read any section that could set a rule for its answer. */
+  | "fetch-hint";
 
 /** The rules for a thread on one section, in the order their parts are sent. */
 export const BUNDLE_RULES: readonly BundleRule[] = [
@@ -55,7 +62,15 @@ export type BundleInput = {
   /** Where this thread's working copy of the doc is; the header tells the agent to edit there. */
   workingCopy?: string | null;
   rules?: readonly BundleRule[];
+  /**
+   * How many characters "doc-full" may add before it falls back to the
+   * outline: about a third of a 200,000-token context window.
+   */
+  budget?: number;
 };
+
+/** About a third of a 200,000-token context window, at roughly four characters a token. */
+export const FULL_TEXT_BUDGET = 240_000;
 
 const slice = (text: string, r: Range) => text.slice(r.from, r.to).trim();
 
@@ -85,6 +100,7 @@ export function buildBundle({
   docPath,
   workingCopy = null,
   rules = BUNDLE_RULES,
+  budget = FULL_TEXT_BUDGET,
 }: BundleInput): Bundle {
   const section = tree.sections[index];
   if (!section) throw new Error(`no section at index ${String(index)}`);
@@ -113,7 +129,9 @@ export function buildBundle({
         detail: "this section, its text",
         text: slice(text, section.subtreeRange),
       });
-    } else if (rule === "doc-outline") {
+    } else if (rule === "fetch-hint") {
+      // Only the header changes; see below.
+    } else if (rule === "doc-outline" || rule === "doc-full") {
       const own = new Set<number>();
       const mark = (i: number) => {
         own.add(i);
@@ -133,7 +151,27 @@ export function buildBundle({
         const first = firstLine(text, tree, node.index);
         return [`${indent}- ${name}${first ? `: ${first}` : ""}`];
       });
-      if (rows.length > 1) {
+      // The rest in full, where the rule asks for it and the budget allows.
+      const full =
+        rule === "doc-full"
+          ? tree.sections
+              .filter((node) => !own.has(node.index) && !above.has(node.index))
+              .map((node) => {
+                const heading = `${"#".repeat(Math.min(6, Math.max(1, node.path.length)))} ${node.path.at(-1) ?? ""}`;
+                const body = bodyOf(text, tree, node.index);
+                return body ? `${heading}\n\n${body}` : heading;
+              })
+              .join("\n\n")
+          : null;
+      if (full !== null && full.length <= budget) {
+        if (full)
+          parts.push({
+            kind: "full",
+            label: "The rest of the doc",
+            detail: "its text",
+            text: full,
+          });
+      } else if (rows.length > 1) {
         parts.push({
           kind: "outline",
           label: "The rest of the doc",
@@ -165,7 +203,14 @@ export function buildBundle({
     `# Anur: a thread on one section`,
     "",
     `This thread is about one section of the doc \`${docPath}\`: **${where}**.`,
-    "Below is what this thread works from: the text of the sections above it, this section in full, and the rest of the doc as an outline, each section's heading and first line. Any section's full text is one call away with Anur's anur_read_section tool. Other threads' discussions are never included, on purpose, so this one stays about this section.",
+    parts.some((p) => p.kind === "full")
+      ? "Below is what this thread works from: the text of the sections above it, this section in full, and the rest of the doc in full. Other threads' discussions are never included, on purpose, so this one stays about this section."
+      : "Below is what this thread works from: the text of the sections above it, this section in full, and the rest of the doc as an outline, each section's heading and first line. Any section's full text is one call away with Anur's anur_read_section tool. Other threads' discussions are never included, on purpose, so this one stays about this section.",
+    ...(rules.includes("fetch-hint") && !parts.some((p) => p.kind === "full")
+      ? [
+          "Before you answer, read with anur_read_section any section in the outline whose text could set a rule for your answer, such as a rule on wording, format or channels; the outline shows first lines only.",
+        ]
+      : []),
     "",
   ];
   if (workingCopy) {
@@ -181,6 +226,8 @@ export function buildBundle({
       lines.push(`## This section: ${where}`, "", part.text || "(empty)", "");
     } else if (part.kind === "outline") {
       lines.push("## The whole doc, as an outline", "", part.text, "");
+    } else if (part.kind === "full") {
+      lines.push("## The rest of the doc, in full", "", part.text, "");
     } else {
       lines.push("## Sections beside it, as an outline", "", part.text, "");
     }
