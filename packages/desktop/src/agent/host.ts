@@ -2,12 +2,20 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
-import type { AgentVersions, SessionSpec, ToHost, ToMain } from "./protocol.ts";
+import { checkedIn, hookSaw } from "./check-log.ts";
+import type { AgentVersions, SessionOption, SessionSpec, ToHost, ToMain } from "./protocol.ts";
+import { selfTest } from "./self-test.ts";
 
 /**
  * The agent host (task 3.1): Anur as an ACP client of the person's own
  * Claude Code, one session per thread. It runs in its own utilityProcess;
  * main sends it `ToHost` messages and routes its `ToMain` ones.
+ *
+ * Threads run only while the thread check passes (3.2): the hook passes its
+ * sample calls before the agent connects, every session's start hook checks
+ * in before the first prompt, and every tool call the agent reports as done
+ * passed through the hook. A miss stops the turn and threads, until the
+ * check passes again.
  */
 
 export type HostEnv = {
@@ -17,6 +25,8 @@ export type HostEnv = {
   /** The ACP adapter's entry file. */
   adapter: string;
   adapterVersion: string;
+  /** Anur's hook program, which the self-test runs before the agent connects. */
+  hook: string;
   /** Finds the person's `claude`, with their shell's PATH; null when not installed. */
   locate: () => Promise<{ claude: string | null; version: string | null; path: string }>;
 };
@@ -36,6 +46,10 @@ export class AgentHost {
   /** The turn running in each session, so updates reach the right thread. */
   private readonly running = new Map<string, Turn>();
   private readonly permissions = new Map<string, (option: string | null) => void>();
+  /** Each session's hook log, to match its tool calls against. */
+  private readonly hookLogs = new Map<string, string>();
+  /** Each thread's chosen mode and model, applied to its session whenever one starts. */
+  private readonly chosen = new Map<string, Map<string, string>>();
 
   constructor(
     private readonly send: (m: ToMain) => void,
@@ -60,6 +74,9 @@ export class AgentHost {
       case "close":
         this.sessions.delete(m.thread);
         return;
+      case "option":
+        void this.setOption(m.thread, m.id, m.value);
+        return;
     }
   }
 
@@ -83,6 +100,11 @@ export class AgentHost {
   }
 
   private async start(): Promise<boolean> {
+    const failed = selfTest(this.env.node, this.env.nodeEnv, this.env.hook);
+    if (failed)
+      return this.fail(
+        `Threads are off: Anur's safety check failed, because ${failed}. Nothing was sent to the agent.`,
+      );
     const found = await this.env.locate();
     if (!found.claude)
       return this.fail(
@@ -150,26 +172,32 @@ export class AgentHost {
     if (live) return live;
     const meta = { claudeCode: { options: { settings: spec.settings } } };
     if (spec.resume) {
+      let loaded: unknown;
       try {
-        await conn.agent.request(acp.methods.agent.session.load, {
+        loaded = await conn.agent.request(acp.methods.agent.session.load, {
           sessionId: spec.resume,
           cwd: spec.cwd,
           mcpServers: [],
           _meta: meta,
         });
-        this.sessions.set(spec.thread, spec.resume);
-        this.send({ type: "session", thread: spec.thread, session: spec.resume, event: "resumed" });
-        return spec.resume;
       } catch {
         throw new ResumeFailed();
       }
+      await this.opened(
+        conn,
+        spec,
+        spec.resume,
+        (loaded as { configOptions?: unknown } | null)?.configOptions ?? null,
+      );
+      this.send({ type: "session", thread: spec.thread, session: spec.resume, event: "resumed" });
+      return spec.resume;
     }
     const created = await conn.agent.request(acp.methods.agent.session.new, {
       cwd: spec.cwd,
       mcpServers: [],
       _meta: meta,
     });
-    this.sessions.set(spec.thread, created.sessionId);
+    await this.opened(conn, spec, created.sessionId, created.configOptions ?? null);
     this.send({
       type: "session",
       thread: spec.thread,
@@ -177,6 +205,50 @@ export class AgentHost {
       event: "started",
     });
     return created.sessionId;
+  }
+
+  /**
+   * A session is open: its start hook must have checked in, or the hooks
+   * aren't running and the thread must not start. Then the thread's chosen
+   * mode and model are set.
+   */
+  private async opened(
+    conn: acp.ClientConnection,
+    spec: SessionSpec,
+    sessionId: string,
+    options: unknown,
+  ): Promise<void> {
+    if (!(await checkedIn(spec.hookLog, sessionId))) {
+      await conn.agent
+        .request(acp.methods.agent.session.close, { sessionId })
+        .catch(() => undefined);
+      throw new CheckFailed(
+        "Anur's hook didn't check in when the session started, so the thread can't keep other threads out. A setting may turn hooks off, such as disableAllHooks or allowManagedHooksOnly.",
+      );
+    }
+    this.sessions.set(spec.thread, sessionId);
+    this.hookLogs.set(sessionId, spec.hookLog);
+    let current = optionsOf(options);
+    for (const [id, value] of this.chosen.get(spec.thread) ?? []) {
+      const res = await conn.agent
+        .request(acp.methods.agent.session.setConfigOption, { sessionId, configId: id, value })
+        .catch(() => null);
+      if (res) current = optionsOf(res.configOptions);
+    }
+    if (current.length > 0) this.send({ type: "options", thread: spec.thread, options: current });
+  }
+
+  /** The person picked a mode or model for the thread. */
+  private async setOption(thread: string, id: string, value: string): Promise<void> {
+    const mine = this.chosen.get(thread) ?? new Map<string, string>();
+    mine.set(id, value);
+    this.chosen.set(thread, mine);
+    const sessionId = this.sessions.get(thread);
+    if (!sessionId || this.state.kind !== "connected") return;
+    const res = await this.state.conn.agent
+      .request(acp.methods.agent.session.setConfigOption, { sessionId, configId: id, value })
+      .catch(() => null);
+    if (res) this.send({ type: "options", thread, options: optionsOf(res.configOptions) });
   }
 
   private async prompt(spec: SessionSpec, turn: string, text: string): Promise<void> {
@@ -193,7 +265,10 @@ export class AgentHost {
       sessionId = await this.session(conn, spec);
     } catch (e) {
       if (e instanceof ResumeFailed) fail("resume-failed");
-      else fail(`The agent couldn't start this thread: ${messageOf(e)}`);
+      else if (e instanceof CheckFailed) {
+        fail(e.message);
+        this.fail(e.message);
+      } else fail(`The agent couldn't start this thread: ${messageOf(e)}`);
       return;
     }
     this.running.set(sessionId, { thread: spec.thread, turn });
@@ -252,7 +327,25 @@ export class AgentHost {
         status: u.status ?? "pending",
         input: u.rawInput ?? null,
       });
+      if (u.status === "completed") void this.matchCall(params.sessionId, t, u.toolCallId);
+    } else if (u.sessionUpdate === "config_option_update") {
+      this.send({ type: "options", thread: t.thread, options: optionsOf(u.configOptions) });
     }
+  }
+
+  /** A tool call the agent finished must have passed through the hook first. */
+  private async matchCall(sessionId: string, t: Turn, toolUse: string): Promise<void> {
+    const log = this.hookLogs.get(sessionId);
+    if (!log || (await hookSaw(log, toolUse))) return;
+    const reason =
+      "A tool call ran without passing through Anur's hook, so the turn stopped and threads are off until the check passes again.";
+    if (this.state.kind === "connected")
+      await this.state.conn.agent.notify(acp.methods.agent.session.cancel, { sessionId });
+    this.send({ type: "error", thread: t.thread, turn: t.turn, message: reason });
+    this.running.delete(sessionId);
+    this.sessions.clear();
+    if (this.state.kind === "connected") this.state.child.kill();
+    this.fail(reason);
   }
 
   private askPermission(
@@ -281,5 +374,37 @@ export class AgentHost {
 }
 
 class ResumeFailed extends Error {}
+class CheckFailed extends Error {}
+
+/** The mode and model choices from ACP's session config options. */
+function optionsOf(raw: unknown): SessionOption[] {
+  if (!Array.isArray(raw)) return [];
+  return (raw as Record<string, unknown>[]).flatMap((o) => {
+    if (o.type !== "select" || (o.category !== "mode" && o.category !== "model")) return [];
+    const choices = Array.isArray(o.options)
+      ? (o.options as Record<string, unknown>[]).flatMap((c) =>
+          typeof c.value === "string"
+            ? [
+                {
+                  value: c.value,
+                  name: typeof c.name === "string" ? c.name : c.value,
+                  description: typeof c.description === "string" ? c.description : null,
+                },
+              ]
+            : [],
+        )
+      : [];
+    return typeof o.id === "string" && typeof o.currentValue === "string"
+      ? [
+          {
+            id: o.id,
+            name: typeof o.name === "string" ? o.name : o.id,
+            current: o.currentValue,
+            choices,
+          },
+        ]
+      : [];
+  });
+}
 
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));

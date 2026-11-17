@@ -196,7 +196,7 @@ export function Page({
      * its version written to History first, then one editor transaction, so
      * ⌘Z and the toast's Undo both take it back.
      */
-    const applyPreviewPart = async (thread: string, part: PreviewPart) => {
+    const applyPreviewPart = async (thread: string, part: PreviewPart, force = false) => {
       const conflict = () => {
         flash(
           "This section changed where the preview did. Ask in the thread again, and it works from the new text.",
@@ -210,7 +210,7 @@ export function Page({
         return;
       }
       const current = editor.state.sliceDoc(s.subtreeRange.from, s.subtreeRange.to);
-      const made = applyPart(current, part);
+      const made = applyPart(current, part, force);
       if (made.kind === "conflict") {
         conflict();
         return;
@@ -230,7 +230,7 @@ export function Page({
       const s2 = sectionFor(editor.state, part.path);
       if (!s2) return;
       const now = editor.state.sliceDoc(s2.subtreeRange.from, s2.subtreeRange.to);
-      const again = now === current ? made : applyPart(now, part);
+      const again = now === current ? made : applyPart(now, part, force);
       if (again.kind === "conflict") {
         conflict();
         return;
@@ -266,8 +266,22 @@ export function Page({
       );
     };
     const actions: PreviewActions = {
-      apply: (thread, part) => {
-        void applyPreviewPart(thread, part);
+      apply: (thread, part, force) => {
+        void applyPreviewPart(thread, part, force);
+      },
+      refresh: (thread, part) => {
+        const section = part.path.at(-1) ?? "the section";
+        void anur
+          .call("thread:send", {
+            thread,
+            path: doc.path,
+            text: editor.state.doc.toString(),
+            message: `I've changed "${section}" since your edit. Make your edit again on the text as it is now.`,
+          })
+          .then((r) => {
+            if (r.kind === "refused") flash(r.reason, null, 6000);
+            else window.dispatchEvent(new CustomEvent("anur:open-thread", { detail: { thread } }));
+          });
       },
       reject: (thread, part, edits) => {
         const left = withPart(thread, sectionKey(part.path), rejectHunks(part, edits));

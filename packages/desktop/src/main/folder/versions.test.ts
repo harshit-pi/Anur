@@ -136,4 +136,28 @@ describe("section versions", () => {
       "Plan",
     ]);
   });
+
+  it("write an Apply once: the typing session it lands in doesn't record it again", async () => {
+    const f = folder();
+    const v = new SectionVersions(f, "dev1");
+    await v.opened("Plan.md", DOC);
+    const applied = DOC.replace("The host is untested.", "The host passed its tests.");
+    const at = await v.locate("Plan.md", DOC);
+    const risks = at?.ids[1];
+    if (!risks) throw new Error("no section");
+    await v.applied(
+      "Plan.md",
+      risks,
+      "## Risks\n\nThe host passed its tests.\n",
+      ["Plan", "Risks"],
+      "pt1",
+      "t1",
+    );
+    await v.saved("Plan.md", applied);
+    await v.endAll();
+    expect((await versionsIn(f)).filter(([p]) => p === "Plan > Risks").map(([, c]) => c)).toEqual([
+      "apply",
+      "start",
+    ]);
+  });
 });

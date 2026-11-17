@@ -106,9 +106,11 @@ export function rejectHunks<P extends Pick<PreviewPart, "base" | "proposed">>(
 export function applyPart(
   current: string,
   part: Pick<PreviewPart, "base" | "proposed">,
+  /** The person chose the thread's version where both changed the same lines. */
+  force = false,
 ): { kind: "ok"; text: string } | { kind: "conflict" } {
   const merged = merge3(part.base, current, part.proposed, "theirs");
-  return merged.conflicts > 0 ? { kind: "conflict" } : { kind: "ok", text: merged.text };
+  return merged.conflicts > 0 && !force ? { kind: "conflict" } : { kind: "ok", text: merged.text };
 }
 
 /**

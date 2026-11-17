@@ -248,6 +248,8 @@ export class SectionVersions {
           await this.write(doc, id, before, was, "typing", "Before the change made outside Anur");
         }
       }
+      // An Apply already wrote this text (3.15): typing that only carried it isn't a new version.
+      if (cause === "typing" && (await this.latest(doc, id)) === subtreeOf(now, i)) continue;
       await this.write(doc, id, now, i, cause, summary);
     }
   }
