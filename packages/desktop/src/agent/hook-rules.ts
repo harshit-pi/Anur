@@ -1,4 +1,5 @@
 import path from "node:path";
+import { denies, type DenyRule } from "./deny-rules.ts";
 
 /**
  * What Anur's hook allows a thread's agent to do (Context, "The person's
@@ -22,6 +23,8 @@ export type HookConfig = {
   copies: string;
   /** Every thread's working copies; the others' are off limits. */
   copiesRoot: string;
+  /** The person's own deny rules for docs, held to apply to their working copies too (3.3). */
+  denies?: DenyRule[];
 };
 
 /** A refusal, and the working copy to make first when it sends the agent to one. */
@@ -51,6 +54,9 @@ export function isDoc(abs: string, folder: string): boolean {
   return !INSTRUCTION_FILES.has(lower(path.basename(abs)));
 }
 
+/** Tools that only read a file; every other file tool edits. */
+const READ_TOOLS = new Set(["Read", "NotebookRead"]);
+
 export const MESSAGES = {
   anur: "Anur: .anur/ holds every other thread and is off limits to this one.",
   recursive:
@@ -58,6 +64,8 @@ export const MESSAGES = {
   gitClean:
     "Anur: git clean -x would delete .anur/, where every thread lives. Add -e .anur to keep it.",
   otherCopy: "Anur: that is another thread's working copy, and off limits to this one.",
+  ownRule: (rule: string, rel: string) =>
+    `Your own settings deny this (${rule}), and that holds for the working copy of ${rel} too.`,
   shellDocWrite:
     "Anur: a shell command can't write a doc. Edit the doc's working copy with your Edit tool: read the doc first, and Anur gives you its working copy's path.",
 } as const;
@@ -80,6 +88,13 @@ export function decide(call: ToolCall, config: HookConfig, resolve: Resolver): D
     if (inside(abs, config.anurDir)) return refuse(MESSAGES.anur);
     if (inside(abs, config.copiesRoot) && !inside(abs, config.copies))
       return refuse(MESSAGES.otherCopy);
+    // A working copy is held to the person's own rules for the doc it copies.
+    if (inside(abs, config.copies) && abs !== config.copies) {
+      const rel = path.relative(config.copies, abs);
+      const kind = READ_TOOLS.has(call.tool_name) ? "read" : "edit";
+      const rule = denies(config.denies ?? [], kind, path.join(config.folder, rel));
+      if (rule) return refuse(MESSAGES.ownRule(rule.rule, rel));
+    }
     if (isDoc(abs, config.folder)) {
       const rel = path.relative(config.folder, abs);
       const copy = path.join(config.copies, rel);

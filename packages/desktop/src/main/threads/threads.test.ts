@@ -280,6 +280,23 @@ describe("Threads", () => {
     expect(back?.type === "prompt" && back.text).toContain("You: HERON.");
   });
 
+  it("merges an edit that background work makes to the copy after the turn ended", async () => {
+    const { support, threads: t, reply } = await setup();
+    const r = await t.start("plan.md", DOC, risks, "Tighten the risk.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const copy = path.join(support, "agent", "copies", r.thread.id, "plan.md");
+    await writeFile(copy, DOC.replace("The host is untested.", "The host has no tests yet."));
+    await reply(r.thread.id, "Done; a background check is still running.");
+    // The background work edits the copy again, after the turn.
+    await writeFile(
+      copy,
+      DOC.replace("The host is untested.", "The host has no tests yet; CI is red."),
+    );
+    await new Promise((res) => setTimeout(res, 1500));
+    const [preview] = await t.listPreviews("plan.md", DOC);
+    expect(preview?.parts[0]?.proposed).toContain("The host has no tests yet; CI is red.");
+  });
+
   it("refuses a section that moved away", async () => {
     const { threads: t } = await setup();
     expect(await t.start("plan.md", DOC, { index: 1, path: ["Plan", "Gone"] }, "Hm?")).toEqual({

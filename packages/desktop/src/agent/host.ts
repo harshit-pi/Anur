@@ -244,7 +244,7 @@ export class AgentHost {
         loaded = await conn.agent.request(acp.methods.agent.session.load, {
           sessionId: spec.resume,
           cwd: spec.cwd,
-          mcpServers: [],
+          mcpServers: mcpOf(spec),
           _meta: meta,
         });
       } catch {
@@ -266,7 +266,11 @@ export class AgentHost {
       return spec.resume;
     }
     const created = await conn.agent
-      .request(acp.methods.agent.session.new, { cwd: spec.cwd, mcpServers: [], _meta: meta })
+      .request(acp.methods.agent.session.new, {
+        cwd: spec.cwd,
+        mcpServers: mcpOf(spec),
+        _meta: meta,
+      })
       .catch((e: unknown) => {
         throw signInRequired(e) ? new SignInRequired() : e;
       });
@@ -568,6 +572,12 @@ export class AgentHost {
 }
 
 class ResumeFailed extends Error {}
+
+/** Anur's own MCP server for the session, when it has one. */
+const mcpOf = (spec: SessionSpec): acp.McpServer[] =>
+  spec.mcp
+    ? [{ name: "anur", command: spec.mcp.command, args: spec.mcp.args, env: spec.mcp.env }]
+    : [];
 class SignInRequired extends Error {}
 
 /** ACP's "auth required": the agent isn't signed in. */
