@@ -1,4 +1,6 @@
 import { useState } from "react";
+import type { FolderState } from "../../../shared/ipc-contract.ts";
+import { FileTree } from "./FileTree.tsx";
 import {
   BackIcon,
   ChevronDownIcon,
@@ -45,16 +47,37 @@ export function Ribbon({ onCommand }: { onCommand: () => void }) {
 }
 
 /** 2. Left sidebar: the folder's files, or search. */
-export function LeftSidebar() {
+export function LeftSidebar({
+  folder,
+  selected,
+  onSelect,
+}: {
+  folder: FolderState | null;
+  selected: string | null;
+  onSelect: (path: string) => void;
+}) {
+  if (!folder) {
+    return (
+      <aside className="left-sidebar" aria-label="Files">
+        <p className="sidebar-title truncate" title="No folder open">
+          No folder open
+        </p>
+        <p className="quiet">
+          Open a folder of Markdown files, such as a repo or an Obsidian vault. Anur works on the
+          files as they are.
+        </p>
+      </aside>
+    );
+  }
   return (
     <aside className="left-sidebar" aria-label="Files">
-      <p className="sidebar-title truncate" title="No folder open">
-        No folder open
+      <p className="sidebar-title truncate" title={folder.path}>
+        {folder.name}
       </p>
-      <p className="quiet">
-        Open a folder of Markdown files, such as a repo or an Obsidian vault. Anur works on the
-        files as they are.
-      </p>
+      <FileTree docs={folder.docs} selected={selected} onSelect={onSelect} />
+      {folder.truncated ? (
+        <p className="quiet">This folder has more files than Anur lists; some are left out.</p>
+      ) : null}
     </aside>
   );
 }
@@ -106,7 +129,15 @@ export function TabBar() {
 }
 
 /** 4. Center: the page or the map, per tab, under the path row. */
-export function Center() {
+export function Center({
+  folder,
+  selected,
+  onOpenFolder,
+}: {
+  folder: FolderState | null;
+  selected: string | null;
+  onOpenFolder: () => void;
+}) {
   return (
     <main className="center">
       <div className="path-row">
@@ -116,7 +147,9 @@ export function Center() {
         <button className="icon-button" type="button" aria-label="Forward" disabled>
           <ForwardIcon />
         </button>
-        <span className="path quiet">No doc</span>
+        <span className="path quiet truncate" title={selected ?? undefined}>
+          {selected ? selected.replace(/\.md$/i, "").split("/").join(" / ") : "No doc"}
+        </span>
         <div className="path-actions">
           <button
             className="icon-button"
@@ -131,13 +164,32 @@ export function Center() {
           </button>
         </div>
       </div>
-      <div className="page-empty">
-        <h1>Open a folder to start</h1>
-        <p>
-          Anur reads the Markdown files already in it. Your docs stay plain files that open in any
-          editor.
-        </p>
-      </div>
+      {folder?.mode === "read-only" ? (
+        <div className="banner" role="status">
+          <strong>Read-only.</strong> {folder.reason}
+        </div>
+      ) : null}
+      {folder ? (
+        <div className="page-empty">
+          <h1>{selected ? "Docs open in the next step" : "Pick a doc"}</h1>
+          <p>
+            {selected
+              ? "The editor arrives with task 2.5; for now Anur lists the folder's files."
+              : `${String(folder.docs.length)} Markdown files in ${folder.name}. Pick one on the left.`}
+          </p>
+        </div>
+      ) : (
+        <div className="page-empty">
+          <h1>Open a folder to start</h1>
+          <p>
+            Anur reads the Markdown files already in it. Your docs stay plain files that open in any
+            editor.
+          </p>
+          <button className="primary-button" type="button" onClick={onOpenFolder}>
+            Open folder <span className="kbd">⌘O</span>
+          </button>
+        </div>
+      )}
     </main>
   );
 }
@@ -179,14 +231,22 @@ export function RightSidebar() {
 }
 
 /** 6. Status bar: agent connection, saved state, thread count. */
-export function StatusBar({ version }: { version: string | null }) {
+export function StatusBar({
+  version,
+  folder,
+}: {
+  version: string | null;
+  folder: FolderState | null;
+}) {
   return (
     <footer className="status-bar" aria-label="Status">
       <span className="status-item">
         <span className="dot off" aria-hidden="true" />
         Agent not connected
       </span>
-      <span className="status-item">Nothing to save</span>
+      <span className="status-item">
+        {folder?.mode === "read-only" ? "Read-only folder" : "Nothing to save"}
+      </span>
       <span className="status-spacer" />
       <span className="status-item">No threads</span>
       {version ? <span className="status-item quiet">Anur {version}</span> : null}

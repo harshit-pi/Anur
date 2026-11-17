@@ -3,8 +3,12 @@ import { ipcContract, type Channel, type Request, type Response } from "../share
 /** The parts of an IPC event main needs to decide whether to trust it. */
 export type SenderInfo = { webContentsId: number; frameUrl: string | null };
 
+/** Which window a request came from, for handlers that act on that window. */
+export type CallContext = { webContentsId: number };
+
 export type Handler<C extends Channel> = (
   request: Request<C>,
+  context: CallContext,
 ) => Response<C> | Promise<Response<C>>;
 
 export class IpcRefused extends Error {}
@@ -26,7 +30,9 @@ export function guarded<C extends Channel>(
     const parsed = request.safeParse(raw);
     if (!parsed.success)
       throw new IpcRefused(`${channel}: refused, the request doesn't match its schema`);
-    const result = await handler(parsed.data as Request<C>);
+    const result = await handler(parsed.data as Request<C>, {
+      webContentsId: sender.webContentsId,
+    });
     return response.parse(result) as Response<C>;
   };
 }
