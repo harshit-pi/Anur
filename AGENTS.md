@@ -14,6 +14,7 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 - `pnpm check` runs everything CI runs: typecheck, lint, format check and tests.
 - `pnpm test`, `pnpm lint`, `pnpm typecheck` and `pnpm format` run one step each.
 - `pnpm --filter @anur/desktop dev` runs the app with live reload; `build` then `start` runs the built app.
+- `pnpm --filter @anur/desktop package` builds an unsigned `Anur.app` in `packages/desktop/dist/mac-arm64/`; signing and notarising come with group 13.
 - `ANUR_SCREENSHOT=<file.png>` saves the first window and quits, in a throwaway profile; `ANUR_SCREENSHOT_PALETTE=1` opens the palette first, `ANUR_SCREENSHOT_DRAG=1` drags both dividers first (`=narrow` to their minimum), and `ANUR_THEME=light` or `dark` overrides the system theme, `ANUR_OPEN_FOLDER=<path>` opens a folder, `ANUR_CHECK_HOME=<path>` stands in for the home folder (to fake an iCloud path), and `ANUR_SCREENSHOT_CLICK="A,B"` clicks buttons by their text first.
 
 ## Git

@@ -29,9 +29,17 @@ const rendererUrl = () =>
   devUrl ?? pathToFileURL(path.join(here, "..", "renderer", "index.html")).href;
 const senders = trustedSenders(rendererUrl);
 
-// Checks run in a throwaway profile, so they never share storage or locks
-// with a copy of Anur that is already open.
-if (isCheck) app.setPath("userData", mkdtempSync(path.join(tmpdir(), "anur-check-")));
+// The app is called Anur. Its profile lives in "Anur Desktop", since
+// "Anur" in Application Support belongs to the Mac on the Go app. Checks run
+// in a throwaway profile, so they never share storage or locks with a copy
+// of Anur that is already open.
+app.setName("Anur");
+app.setPath(
+  "userData",
+  isCheck
+    ? mkdtempSync(path.join(tmpdir(), "anur-check-"))
+    : path.join(app.getPath("appData"), "Anur Desktop"),
+);
 
 // For checks: ANUR_THEME=light or dark overrides the system theme.
 const theme = process.env.ANUR_THEME;
@@ -258,6 +266,10 @@ void app.whenReady().then(async () => {
     callback(false);
   });
   registerIpc();
+  // A built app takes its icon from its bundle; in dev, show the diamond in the Dock too.
+  if (!app.isPackaged && process.platform === "darwin") {
+    app.dock?.setIcon(path.join(here, "..", "..", "build", "icon.png"));
+  }
   Menu.setApplicationMenu(
     buildMenu({
       openFolder: () => {
