@@ -28,6 +28,7 @@ import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
+import { createDoc, searchFolder } from "./folder/search.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
@@ -274,6 +275,21 @@ const handlers: { [C in Channel]: Handler<C> } = {
       sectionHistory: appSettings.get().sectionHistory,
       commitAnur: folder ? await commitsAnur(folder.path) : null,
     };
+  },
+  "folder:search": async ({ query }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { matches: [], truncated: false, skipped: 0 };
+    return searchFolder(folder, query);
+  },
+  "doc:create": async ({ path: requested }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    const made = await createDoc(folder, requested);
+    if (made.kind === "failed") return made;
+    const now = await folders.refresh(webContentsId);
+    return now
+      ? { kind: "created", path: made.path, folder: now }
+      : { kind: "failed", reason: "The folder closed." };
   },
   "link:open-external": async ({ url }) => {
     // Only the web and mail: a link in a doc never runs anything on this Mac.

@@ -37,6 +37,7 @@ import { loadOpen, loadWidths, saveOpen, saveWidths, type Side } from "./layout/
 import { anur } from "./bridge.ts";
 import { CommandPalette } from "./regions/CommandPalette.tsx";
 import { Settings, type SettingsSection } from "./regions/Settings.tsx";
+import { newDocPath } from "./layout/new-doc.ts";
 import { MergeDialog } from "./regions/MergeDialog.tsx";
 import {
   Center,
@@ -145,6 +146,42 @@ export function App() {
     savedViews.current.set(key, saved);
   }, []);
 
+  /** The left sidebar shows the files or search (2.26). */
+  const [sidebar, setSidebar] = useState<"files" | "search">("files");
+  const [searchFocus, setSearchFocus] = useState(0);
+  const showSearch = useCallback(() => {
+    setSidebar("search");
+    setSearchFocus((n) => n + 1);
+    setOpen((o) => {
+      if (o.left) return o;
+      const next = { ...o, left: true };
+      saveOpen(window.localStorage, next);
+      return next;
+    });
+  }, []);
+  /** A new doc beside the open one, named as typed or Untitled, opened at once. */
+  const newDoc = useCallback(
+    (name: string) => {
+      if (!folder || folder.mode !== "writable") return;
+      const path = newDocPath(folder.docs, selected, name);
+      void anur.call("doc:create", { path }).then((r) => {
+        if (r.kind === "created") {
+          setFolder(r.folder);
+          openDoc(r.path, false);
+        } else console.warn("Anur couldn't make the doc:", r.reason);
+      });
+    },
+    [folder, selected, openDoc],
+  );
+  const newDocNow = useRef(newDoc);
+  newDocNow.current = newDoc;
+  /** A line search found, selected once its doc is open on the page. */
+  const [pendingLine, setPendingLine] = useState<{
+    path: string;
+    line: number;
+    column: number;
+    length: number;
+  } | null>(null);
   /** A heading a link asked for, scrolled to once its doc's sections are in. */
   const [pendingHeading, setPendingHeading] = useState<{ path: string; heading: string } | null>(
     null,
@@ -253,6 +290,21 @@ export function App() {
     setPendingHeading(null);
     if (index >= 0) jumpTo(index);
   }, [pendingHeading, doc, sections, jumpTo]);
+  // A search result's line: once its doc is on the page, select the match there.
+  useEffect(() => {
+    if (!pendingLine || doc?.path !== pendingLine.path || !sections) return;
+    const v = view.current;
+    setPendingLine(null);
+    if (!v || pendingLine.line > v.state.doc.lines) return;
+    const line = v.state.doc.line(pendingLine.line);
+    const from = Math.min(line.to, line.from + pendingLine.column);
+    const to = Math.min(line.to, from + pendingLine.length);
+    v.dispatch({
+      selection: { anchor: from, head: to },
+      effects: EditorView.scrollIntoView(from, { y: "center" }),
+    });
+    v.focus();
+  }, [pendingLine, doc, sections]);
   const [widths, setWidths] = useState(() => loadWidths(window.localStorage));
   const [open, setOpen] = useState(() => loadOpen(window.localStorage));
   const toggle = useCallback((side: Side) => {
@@ -312,6 +364,14 @@ export function App() {
         e.preventDefault();
         setSettings((s) => (s ? null : "general"));
       }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        showSearch();
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        newDocNow.current("");
+      }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((o) => !o);
@@ -330,7 +390,7 @@ export function App() {
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, [toggle]);
+  }, [toggle, showSearch]);
 
   return (
     <div
@@ -357,12 +417,18 @@ export function App() {
         onListTabs={listTabs}
       />
       <Ribbon
-        filesOpen={open.left}
+        filesOpen={open.left && sidebar === "files"}
         onFiles={() => {
-          toggle("left");
+          if (open.left && sidebar === "search") setSidebar("files");
+          else {
+            setSidebar("files");
+            toggle("left");
+          }
         }}
-        onCommand={() => {
-          setPaletteOpen(true);
+        searchOpen={open.left && sidebar === "search"}
+        onSearch={() => {
+          if (open.left && sidebar === "search") toggle("left");
+          else showSearch();
         }}
         onSettings={() => {
           setSettings("general");
@@ -377,6 +443,18 @@ export function App() {
         onSelect={openDoc}
         hidden={!open.left}
         reveal={reveal}
+        search={
+          sidebar === "search"
+            ? {
+                focus: searchFocus,
+                onOpenLine: (path, line, column, length) => {
+                  setPendingLine({ path, line, column, length });
+                  openDoc(path, false);
+                },
+                onNewDoc: newDoc,
+              }
+            : null
+        }
       />
       <Center
         folder={shown}
@@ -460,6 +538,13 @@ export function App() {
         onClose={() => {
           setPaletteOpen(false);
         }}
+        onNewDoc={
+          folder?.mode === "writable"
+            ? () => {
+                newDoc("");
+              }
+            : null
+        }
       />
       {settings ? (
         <Settings

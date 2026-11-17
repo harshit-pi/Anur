@@ -3,6 +3,7 @@ import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
 import type { FolderState } from "../../../shared/ipc-contract.ts";
 import { FileTree } from "./FileTree.tsx";
+import { SearchPanel } from "./SearchPanel.tsx";
 import {
   BackIcon,
   ChevronDownIcon,
@@ -31,13 +32,15 @@ import { PROVIDERS, cloudSummary, markNoticeSeen, noticeSeen } from "./cloud-not
 export function Ribbon({
   filesOpen,
   onFiles,
-  onCommand,
+  searchOpen,
+  onSearch,
   onSettings,
   onPlugins,
 }: {
   filesOpen: boolean;
   onFiles: () => void;
-  onCommand: () => void;
+  searchOpen: boolean;
+  onSearch: () => void;
   onSettings: () => void;
   onPlugins: () => void;
 }) {
@@ -54,11 +57,12 @@ export function Ribbon({
         <FolderIcon />
       </button>
       <button
-        className="ribbon-button"
+        className={`ribbon-button${searchOpen ? " active" : ""}`}
         type="button"
         aria-label="Search"
-        title="Search"
-        onClick={onCommand}
+        aria-pressed={searchOpen}
+        title="Search (⇧⌘F)"
+        onClick={onSearch}
       >
         <SearchIcon />
       </button>
@@ -92,10 +96,17 @@ export function LeftSidebar({
   onSelect,
   hidden,
   reveal,
+  search,
 }: {
   folder: FolderState | null;
   selected: string | null;
   onSelect: (path: string, inNewTab: boolean) => void;
+  /** Search in place of the files (2.26), with what it needs; null shows the files. */
+  search: {
+    focus: number;
+    onOpenLine: (path: string, line: number, column: number, length: number) => void;
+    onNewDoc: (name: string) => void;
+  } | null;
   /** Collapsed: kept mounted, so folders stay expanded as they were. */
   hidden: boolean;
   /** Changes whenever a tab is pressed or a doc comes into focus: reveal it in the tree. */
@@ -112,6 +123,19 @@ export function LeftSidebar({
           Open a folder of Markdown files, such as a repo or an Obsidian vault. Anur works on the
           files as they are.
         </p>
+      </aside>
+    );
+  }
+  if (search) {
+    return (
+      <aside className="left-sidebar" aria-label="Search" hidden={hidden}>
+        <SearchPanel
+          folder={folder}
+          focus={search.focus}
+          onOpen={onSelect}
+          onOpenLine={search.onOpenLine}
+          onNewDoc={search.onNewDoc}
+        />
       </aside>
     );
   }
