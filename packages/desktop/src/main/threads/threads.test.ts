@@ -107,7 +107,7 @@ describe("Threads", () => {
     const [listed] = await t.list("plan.md", DOC);
     expect(listed?.path).toEqual(["Plan", "Risks"]);
     expect(listed?.busy).toBe(false);
-    expect(listed?.reads.map((x) => x.label)).toEqual(["Plan", "Risks", "Sibling sections"]);
+    expect(listed?.reads.map((x) => x.label)).toEqual(["Plan", "Risks", "The rest of the doc"]);
     expect(listed?.items.flatMap((i) => (i.kind === "message" ? [i.text] : []))).toEqual([
       "Is the host a real risk?",
       "Yes, until it is tested.",

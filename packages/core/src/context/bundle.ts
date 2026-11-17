@@ -12,8 +12,8 @@ import type { SectionTree } from "../sections/tree.ts";
 
 /** One part of the bundle, as the reads line lists it. */
 export type BundlePart = {
-  kind: "ancestor" | "section" | "siblings";
-  /** What the reads line says it is: the section's heading, or "Sibling sections". */
+  kind: "ancestor" | "section" | "siblings" | "outline";
+  /** What the reads line says it is: the section's heading, "Sibling sections" or "The rest of the doc". */
   label: string;
   /** How much of it: "its text", "its outline". */
   detail: string;
@@ -28,13 +28,20 @@ export type BundleRule =
   /** The section's whole subtree. */
   | "section-subtree"
   /** Each sibling's heading and first line. */
-  | "siblings-outline";
+  | "siblings-outline"
+  /**
+   * The whole doc as an outline: every section's heading and first line,
+   * where this section sits marked. Its full text, and its inputs, are one
+   * call away; decided text is the current doc, never another thread's chat
+   * (decided 2026-11-17).
+   */
+  | "doc-outline";
 
 /** The rules for a thread on one section, in the order their parts are sent. */
 export const BUNDLE_RULES: readonly BundleRule[] = [
   "ancestors-own-text",
   "section-subtree",
-  "siblings-outline",
+  "doc-outline",
 ];
 
 export type BundleInput = {
@@ -106,6 +113,34 @@ export function buildBundle({
         detail: "this section, its text",
         text: slice(text, section.subtreeRange),
       });
+    } else if (rule === "doc-outline") {
+      const own = new Set<number>();
+      const mark = (i: number) => {
+        own.add(i);
+        for (const c of tree.sections[i]?.children ?? []) mark(c);
+      };
+      mark(index);
+      const above = new Set(ancestors);
+      const rows = tree.sections.flatMap((node) => {
+        // This section's subsections are given in full already.
+        if (own.has(node.index) && node.index !== index) return [];
+        const indent = "  ".repeat(Math.max(0, node.path.length - 1));
+        const name = node.path.at(-1) ?? "";
+        if (node.index === index) return [`${indent}- **${name}** (this section, given in full)`];
+        if (node.index === 0 && above.has(0))
+          return [`- ${name} (the doc's title, its text given)`];
+        if (above.has(node.index)) return [`${indent}- ${name} (above it, its text given)`];
+        const first = firstLine(text, tree, node.index);
+        return [`${indent}- ${name}${first ? `: ${first}` : ""}`];
+      });
+      if (rows.length > 1) {
+        parts.push({
+          kind: "outline",
+          label: "The rest of the doc",
+          detail: "its outline",
+          text: rows.join("\n"),
+        });
+      }
     } else if (section.parent !== null) {
       const siblings = (tree.sections[section.parent]?.children ?? []).filter((c) => c !== index);
       if (siblings.length > 0) {
@@ -130,7 +165,7 @@ export function buildBundle({
     `# Anur: a thread on one section`,
     "",
     `This thread is about one section of the doc \`${docPath}\`: **${where}**.`,
-    "Below is what this thread works from: the text of the sections above it, this section in full, and an outline of the sections beside it. Other sections' full text and other threads are not included, on purpose, so this discussion stays about this section.",
+    "Below is what this thread works from: the text of the sections above it, this section in full, and the rest of the doc as an outline, each section's heading and first line. Any section's full text is one call away with Anur's anur_read_section tool. Other threads' discussions are never included, on purpose, so this one stays about this section.",
     "",
   ];
   if (workingCopy) {
@@ -144,6 +179,8 @@ export function buildBundle({
       lines.push(`## Above it: ${part.label}`, "", part.text || "(no text of its own)", "");
     } else if (part.kind === "section") {
       lines.push(`## This section: ${where}`, "", part.text || "(empty)", "");
+    } else if (part.kind === "outline") {
+      lines.push("## The whole doc, as an outline", "", part.text, "");
     } else {
       lines.push("## Sections beside it, as an outline", "", part.text, "");
     }

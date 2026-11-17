@@ -10,7 +10,7 @@ import type { CloudProvider } from "./cloud.ts";
  *   that way, so this pattern is only offered in an iCloud folder, and the
  *   person decides.
  * - Dropbox: `Notes (conflicted copy 2026-11-17).md`, or with a name:
- *   `Notes (Harshit's conflicted copy 2026-11-17).md`.
+ *   `Notes (Sam's conflicted copy 2026-11-17).md`.
  */
 export type ConflictCopy = { original: string; copy: string; service: "icloud" | "dropbox" };
 
