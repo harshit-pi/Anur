@@ -1,4 +1,4 @@
-import type { EditorView } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import type { SectionTree } from "@anur/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FolderState } from "../../shared/ipc-contract.ts";
@@ -60,7 +60,12 @@ export function App() {
       const target = sections?.sections[index]?.headingRange;
       const v = view.current;
       if (!target || !v) return;
-      v.dispatch({ selection: { anchor: target.from }, scrollIntoView: true });
+      // The heading lands at the top of the page, as in Obsidian, rather than
+      // wherever the least scrolling would leave it.
+      v.dispatch({
+        selection: { anchor: target.from },
+        effects: EditorView.scrollIntoView(target.from, { y: "start", yMargin: 24 }),
+      });
       v.focus();
     },
     [sections],
