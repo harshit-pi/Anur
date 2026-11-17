@@ -26,6 +26,7 @@ import {
   setPinned,
   ungroup,
   updateGroup,
+  renamePaths,
   type Tabs,
 } from "./tabs.ts";
 
@@ -272,5 +273,11 @@ describe("moving, pinning and grouping tabs", () => {
         );
       }
     }
+  });
+
+  it("follow docs renamed or moved in the files panel, back and forward too", () => {
+    let t = open(open(noTabs, "a.md"), "b.md");
+    t = renamePaths(t, [{ from: "a.md", to: "Ideas/a.md" }]);
+    expect(t.tabs[0]?.history).toEqual(["Ideas/a.md", "b.md"]);
   });
 });

@@ -109,6 +109,8 @@ describe("a folder in iCloud", () => {
       folder: {
         cloud: "icloud",
         gitInCloud: true,
+        folders: [],
+        times: {},
         conflicts: [{ original: "Notes.md", copy: "Notes 2.md", service: "icloud" }],
       },
     });

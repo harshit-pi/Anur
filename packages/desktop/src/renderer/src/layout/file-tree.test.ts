@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildTree, docCount } from "./file-tree.ts";
+import { buildTree, docCount, dropTarget, freeName, renamed } from "./file-tree.ts";
 
 describe("the file tree", () => {
   it("nests docs under their folders, folders first, names without .md", () => {
@@ -20,5 +20,44 @@ describe("the file tree", () => {
 
   it("is empty for a folder with no docs", () => {
     expect(buildTree([])).toEqual([]);
+  });
+
+  it("shows empty folders, and sorts docs by name either way or by time", () => {
+    const docs = ["a.md", "B.md", "c.md"];
+    const names = (t: ReturnType<typeof buildTree>) => t.map((n) => n.name);
+    expect(names(buildTree(docs, ["Empty"]))).toEqual(["Empty", "a", "B", "c"]);
+    expect(names(buildTree(docs, ["Empty", "Zed"], "name-desc"))).toEqual([
+      "Zed",
+      "Empty",
+      "c",
+      "B",
+      "a",
+    ]);
+    const times = { "a.md": [3, 1], "B.md": [1, 3], "c.md": [2, 2] } as const;
+    expect(names(buildTree(docs, [], "modified", times))).toEqual(["a", "c", "B"]);
+    expect(names(buildTree(docs, [], "created", times))).toEqual(["B", "c", "a"]);
+  });
+});
+
+describe("files panel names", () => {
+  it("pick a free name, case ignored", () => {
+    expect(freeName(["Notes/Untitled.md"], "Notes", "Untitled", ".md")).toBe("Notes/Untitled 2.md");
+    expect(freeName(["new folder"], "", "New folder")).toBe("New folder 2");
+  });
+
+  it("say where a drop lands, never inside itself or where it is", () => {
+    expect(dropTarget("Plan.md", "Ideas")).toBe("Ideas/Plan.md");
+    expect(dropTarget("Ideas/Plan.md", "")).toBe("Plan.md");
+    expect(dropTarget("Ideas/Plan.md", "Ideas")).toBeNull();
+    expect(dropTarget("Ideas", "Ideas/Deep")).toBeNull();
+    expect(dropTarget("Ideas", "Ideas")).toBeNull();
+  });
+
+  it("turn a typed name into a path beside the old one", () => {
+    expect(renamed("Ideas/Plan.md", "Plan B", false)).toBe("Ideas/Plan B.md");
+    expect(renamed("Ideas/Plan.md", " a/b: c ", false)).toBe("Ideas/a b c.md");
+    expect(renamed("Ideas", "Thoughts", true)).toBe("Thoughts");
+    expect(renamed("Ideas/Plan.md", "  ", false)).toBeNull();
+    expect(renamed("Plan.md", "..hidden", false)).toBe("hidden.md");
   });
 });

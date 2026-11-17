@@ -20,6 +20,8 @@ function folder(): FolderState {
     truncated: false,
     cloud: null,
     gitInCloud: false,
+    folders: [],
+    times: {},
     offloaded: ["Cloud.md"],
     conflicts: [],
   };

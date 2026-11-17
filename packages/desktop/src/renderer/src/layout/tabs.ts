@@ -296,6 +296,16 @@ export function cycle(t: Tabs, step: 1 | -1): Tabs {
   return next ? { ...t, active: next.id } : t;
 }
 
+/** Docs renamed or moved in the files panel: every tab's history follows them. */
+export function renamePaths(t: Tabs, moves: readonly { from: string; to: string }[]): Tabs {
+  if (moves.length === 0) return t;
+  const map = new Map(moves.map((m) => [m.from, m.to]));
+  return {
+    ...t,
+    tabs: t.tabs.map((tab) => ({ ...tab, history: tab.history.map((p) => map.get(p) ?? p) })),
+  };
+}
+
 /**
  * Keep only docs the folder still has: a tab's history drops the rest, and a
  * tab whose own doc is gone closes.

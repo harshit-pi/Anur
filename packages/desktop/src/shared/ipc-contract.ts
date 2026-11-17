@@ -21,6 +21,10 @@ export const FolderState = z.object({
   reason: z.string().nullable(),
   /** Its Markdown files, relative paths with forward slashes, sorted. */
   docs: z.array(z.string()),
+  /** Folders holding docs at any depth, and empty ones; relative, sorted. */
+  folders: z.array(z.string()),
+  /** Each doc's last change and creation times, in ms, for sorting. */
+  times: z.record(z.string(), z.tuple([z.number(), z.number()])),
   /** True when the folder had more files than Anur lists. */
   truncated: z.boolean(),
   /** The sync service that keeps the folder, if any. */
@@ -305,6 +309,44 @@ export const ipcContract = {
     request: z.object({ path: z.string().max(1024) }).strict(),
     response: z.discriminatedUnion("kind", [
       z.object({ kind: z.literal("created"), path: z.string(), folder: FolderState }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /** A new, empty folder in the folder (files panel). */
+  "folder:create": {
+    request: z.object({ path: z.string().max(1024) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("created"), path: z.string(), folder: FolderState }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /** Rename or move a doc or a folder; its docs keep their IDs, threads and history. */
+  "file:move": {
+    request: z.object({ from: z.string().max(1024), to: z.string().max(1024) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("moved"),
+        to: z.string(),
+        /** Each doc that moved, from its old path to its new one. */
+        docs: z.array(z.object({ from: z.string(), to: z.string() })),
+        folder: FolderState,
+      }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /** A copy of a doc beside it, named "<name> copy". */
+  "file:duplicate": {
+    request: z.object({ path: z.string().max(1024) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("created"), path: z.string(), folder: FolderState }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /** Move a doc or a folder to the system Trash, where Finder can put it back. */
+  "file:trash": {
+    request: z.object({ path: z.string().max(1024) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("trashed"), docs: z.array(z.string()), folder: FolderState }),
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
