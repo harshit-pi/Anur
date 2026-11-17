@@ -42,7 +42,15 @@ const COLOR_NAMES: Record<Group["color"], string> = {
 };
 
 /** A drag under way: the tab, how far it has moved, and the tab it would land before. */
-type Drag = { id: string; startX: number; dx: number; before: string | null; moved: boolean };
+type Drag = {
+  id: string;
+  startX: number;
+  dx: number;
+  before: string | null;
+  /** The group under the dragged tab, null over an ungrouped tab, undefined in a gap. */
+  over: string | null | undefined;
+  moved: boolean;
+};
 
 /**
  * 3. Tab bar: the files toggle, tabs, then Page and Map, Ask, and the section
@@ -93,7 +101,7 @@ export function TabBar({
 
   const startDrag = (e: PointerEvent<HTMLDivElement>, id: string) => {
     if (e.button !== 0 || (e.target as HTMLElement).closest(".tab-close")) return;
-    setDrag({ id, startX: e.clientX, dx: 0, before: null, moved: false });
+    setDrag({ id, startX: e.clientX, dx: 0, before: null, over: undefined, moved: false });
   };
   const dragMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!drag) return;
@@ -114,13 +122,22 @@ export function TabBar({
       const r = n.getBoundingClientRect();
       return centre < r.left + r.width / 2;
     });
-    setDrag({ ...drag, dx, moved: true, before: before?.dataset.id ?? null });
+    // What sits under the dragged tab's centre decides its group.
+    const hit = [...(strip.current?.querySelectorAll<HTMLElement>(".tab, .group-chip") ?? [])].find(
+      (n) => {
+        if (n.dataset.id === drag.id) return false;
+        const r = n.getBoundingClientRect();
+        return centre >= r.left && centre <= r.right;
+      },
+    );
+    const over = pinned ? null : hit ? (hit.dataset.group ?? null) : undefined;
+    setDrag({ ...drag, dx, moved: true, before: before?.dataset.id ?? null, over });
   };
   const endDrag = () => {
     if (!drag) return;
     setDrag(null);
     if (!drag.moved) return;
-    onChange((t) => move(t, drag.id, drag.before));
+    onChange((t) => move(t, drag.id, drag.before, drag.over));
     onSelectTab(drag.id);
   };
 
@@ -228,6 +245,7 @@ export function TabBar({
                     group={group}
                     count={tabs.tabs.filter((x) => x.group === group.id).length}
                     naming={naming === group.id}
+                    target={Boolean(drag?.moved && drag.over === group.id)}
                     onToggle={() => {
                       onChange((x) => foldGroup(x, group.id, !group.folded));
                     }}
@@ -246,6 +264,7 @@ export function TabBar({
                   <div
                     role="tab"
                     data-id={t.id}
+                    data-group={t.group}
                     aria-selected={t.id === active}
                     className={[
                       "tab",
@@ -374,6 +393,7 @@ function GroupChip({
   group,
   count,
   naming,
+  target,
   onToggle,
   onMenu,
   onName,
@@ -382,12 +402,14 @@ function GroupChip({
   group: Group;
   count: number;
   naming: boolean;
+  /** A dragged tab would join this group. */
+  target: boolean;
   onToggle: () => void;
   onMenu: () => void;
   onName: (name: string) => void;
   onNamed: () => void;
 }) {
-  const className = `group-chip group-${group.color}${group.name ? "" : " unnamed"}`;
+  const className = `group-chip group-${group.color}${group.name ? "" : " unnamed"}${target ? " drop-target" : ""}`;
   if (naming) {
     return (
       <input
@@ -419,6 +441,7 @@ function GroupChip({
   return (
     <button
       type="button"
+      data-group={group.id}
       className={`${className}${group.folded ? " folded" : ""}`}
       aria-expanded={!group.folded}
       aria-label={`${label}, ${String(count)} ${count === 1 ? "tab" : "tabs"}`}
