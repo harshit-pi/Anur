@@ -54,3 +54,4 @@ export {
   ToolLine,
   TurnLine,
 } from "./threads/index.ts";
+export { PreviewFile, PreviewPart, currentPreview, encodePreviewFile } from "./previews/index.ts";

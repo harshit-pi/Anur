@@ -2,7 +2,9 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { ThreadLine, anurPaths } from "@anur/core";
+import { PreviewFile, ThreadLine, anurPaths, encodePreviewFile } from "@anur/core";
+import { readFile } from "node:fs/promises";
+import { writeFileAtomic } from "./anur-folder.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { JsonlWriter, readJsonlFile } from "./jsonl-writer.ts";
 
@@ -35,5 +37,33 @@ describe("on disk", () => {
       { kind: "session", session: "abc", event: "started" },
       { kind: "message", turn: "u1", role: "person", text: "Hi" },
     ]);
+  });
+
+  it("round-trips a preview file, its base included, at its own path", async () => {
+    const preview = PreviewFile.parse({
+      id: "p1",
+      thread: "t1",
+      changeSet: "cs1",
+      at: "2026-11-17T01:00:00.000Z",
+      dev: "dev1",
+      summary: "Shorter retries",
+      kind: "edit",
+      doc: "d1",
+      newDocPath: null,
+      parts: [
+        {
+          section: "s1",
+          path: ["T", "Retry"],
+          base: "## Retry\n\nOld.\n",
+          proposed: "## Retry\n\nNew.\n",
+        },
+      ],
+    });
+    const file = path.join(dir, ".anur", anurPaths.preview("d1", "dev1", "p1"));
+    await import("node:fs/promises").then((fs) =>
+      fs.mkdir(path.dirname(file), { recursive: true }),
+    );
+    await writeFileAtomic(file, encodePreviewFile(preview));
+    expect(PreviewFile.parse(JSON.parse(await readFile(file, "utf8")))).toEqual(preview);
   });
 });
