@@ -14,6 +14,12 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 - `pnpm check` runs everything CI runs: typecheck, lint, format check and tests.
 - `pnpm test`, `pnpm lint`, `pnpm typecheck` and `pnpm format` run one step each.
 
+## Git
+
+- `main` takes changes only through pull requests with CI passing; a GitHub ruleset enforces it, and a pre-push hook stops a local push to `main` early.
+- Work on a branch, such as `task/1.4-section-tree`, and open a PR; a person merges it.
+- The pre-commit hook fixes and checks staged files with ESLint and Prettier, then type-checks the whole workspace.
+
 ## Layout
 
 - `packages/core`: sections, IDs, bundles, context and previews. No Electron, no React, no file system; ESLint and its `tsconfig` both reject them.

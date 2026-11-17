@@ -1,0 +1,4 @@
+# Fix and check only the staged files, then type-check the whole workspace:
+# tsc can't check single files against the project's settings.
+pnpm exec lint-staged
+pnpm typecheck
