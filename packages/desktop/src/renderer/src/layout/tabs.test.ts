@@ -15,6 +15,17 @@ import {
   saveTabs,
   select,
   titleOf,
+  closeGroup,
+  closeOthers,
+  closeToRight,
+  foldGroup,
+  joinGroup,
+  leaveGroup,
+  move,
+  newGroup,
+  setPinned,
+  ungroup,
+  updateGroup,
   type Tabs,
 } from "./tabs.ts";
 
@@ -102,5 +113,146 @@ describe("tabs", () => {
     expect(loadTabs(storage, "/Other", ["a.md"])).toEqual(noTabs);
     storage.setItem("anur.tabs:/Vault", "{broken");
     expect(loadTabs(storage, "/Vault", ["a.md"])).toEqual(noTabs);
+  });
+});
+
+/** Tabs a…e, each showing `<id>.md`, with c active. */
+function five(): Tabs {
+  const tabs = ["a", "b", "c", "d", "e"].map((id) => ({ id, history: [`${id}.md`], index: 0 }));
+  return { tabs, active: "c", groups: [] };
+}
+const ids = (t: Tabs) => t.tabs.map((x) => x.id).join("");
+/** Ids with each group's tabs in brackets and pins marked with ^. */
+const shape = (t: Tabs) =>
+  t.tabs
+    .map((x, i) => {
+      const prev = t.tabs[i - 1]?.group;
+      const next = t.tabs[i + 1]?.group;
+      const open = x.group && x.group !== prev ? "[" : "";
+      const shut = x.group && x.group !== next ? "]" : "";
+      return `${open}${x.pinned ? "^" : ""}${x.id}${shut}`;
+    })
+    .join("");
+function grouped(t: Tabs, members: string[]) {
+  const first = newGroup(t, members[0] ?? "");
+  let next = first.tabs;
+  for (const id of members.slice(1)) next = joinGroup(next, id, first.group ?? "");
+  return { tabs: next, group: first.group ?? "" };
+}
+
+describe("moving, pinning and grouping tabs", () => {
+  it("move a tab before another, or to the end", () => {
+    expect(ids(move(five(), "e", "b"))).toBe("aebcd");
+    expect(ids(move(five(), "a", null))).toBe("bcdea");
+    expect(ids(move(five(), "c", "c"))).toBe("abcde");
+  });
+
+  it("pinned tabs go to the left and stay among the pins", () => {
+    let t = setPinned(five(), "d", true);
+    expect(shape(t)).toBe("^dabce");
+    t = setPinned(t, "b", true);
+    expect(shape(t)).toBe("^d^bace");
+    expect(shape(move(t, "e", "d"))).toBe("^d^beac");
+    expect(shape(move(t, "d", null))).toBe("^b^dace");
+    expect(shape(setPinned(t, "d", false))).toBe("^bdace");
+  });
+
+  it("a link in a pinned tab opens in a new tab", () => {
+    const t = open(setPinned(five(), "c", true), "x.md");
+    expect(docsOf(t)).toEqual(["c.md", "x.md", "a.md", "b.md", "d.md", "e.md"]);
+    expect(t.active).toBe(t.tabs[1]?.id);
+  });
+
+  it("groups keep their tabs together, joined, left and dropped into", () => {
+    const { tabs, group } = grouped(five(), ["b", "d"]);
+    expect(shape(tabs)).toBe("a[bd]ce");
+    expect(tabs.groups.map((g) => g.color)).toEqual(["blue"]);
+    expect(shape(move(tabs, "e", "d"))).toBe("a[bed]c");
+    expect(shape(move(tabs, "d", null))).toBe("a[b]ced");
+    expect(shape(move(tabs, "b", "c"))).toBe("a[db]ce");
+    expect(shape(leaveGroup(tabs, "b"))).toBe("a[d]bce");
+    expect(shape(ungroup(tabs, group))).toBe("abdce");
+    expect(newGroup(tabs, "e").tabs.groups.map((g) => g.color)).toEqual(["blue", "green"]);
+    expect(updateGroup(tabs, group, { name: "Design" }).groups[0]?.name).toBe("Design");
+  });
+
+  it("pinning a grouped tab takes it out of the group, and an empty group goes", () => {
+    const { tabs } = grouped(five(), ["b"]);
+    const t = setPinned(tabs, "b", true);
+    expect(shape(t)).toBe("^bacde");
+    expect(t.groups).toEqual([]);
+  });
+
+  it("a new tab joins the active tab's group", () => {
+    const { tabs } = grouped(five(), ["c", "d"]);
+    const t = newTab(tabs);
+    expect(shape(t).replace(/t\d+-\d+/, "n")).toBe("ab[cnd]e");
+  });
+
+  it("folding the active tab's group moves focus to the next tab on show; ⌃Tab skips it", () => {
+    const { tabs, group } = grouped(five(), ["c", "d"]);
+    const t = foldGroup(tabs, group, true);
+    expect(t.active).toBe("e");
+    expect(cycle(t, -1).active).toBe("b");
+    expect(foldGroup(t, group, false).active).toBe("e");
+  });
+
+  it("close others, to the right and a whole group, keeping pins", () => {
+    const t = setPinned(five(), "a", true);
+    expect(ids(closeOthers(t, "c"))).toBe("ac");
+    expect(ids(closeToRight(t, "c"))).toBe("abc");
+    const g = grouped(t, ["c", "d"]);
+    const closed = closeGroup(g.tabs, g.group);
+    expect(ids(closed)).toBe("abe");
+    expect(closed.active).toBe("e");
+    expect(closed.groups).toEqual([]);
+  });
+
+  it("pins, groups and folds are remembered", () => {
+    const storage = memory();
+    const g = grouped(setPinned(five(), "a", true), ["d", "e"]);
+    const t = foldGroup(
+      updateGroup(g.tabs, g.group, { name: "Later", color: "amber" }),
+      g.group,
+      true,
+    );
+    saveTabs(storage, "/f", t);
+    const back = loadTabs(storage, "/f", ["a.md", "b.md", "c.md", "d.md", "e.md"]);
+    expect(shape(back)).toBe("^abc[de]");
+    expect(back.groups).toEqual([{ id: g.group, name: "Later", color: "amber", folded: true }]);
+  });
+
+  it("any run of moves, pins and groups keeps pins first and each group in one piece", () => {
+    let seed = 7;
+    const rand = (n: number) => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed % n;
+    };
+    for (let run = 0; run < 200; run++) {
+      let t = five();
+      for (let step = 0; step < 30; step++) {
+        const pick = () => t.tabs[rand(t.tabs.length)]?.id ?? "a";
+        const g = t.groups[rand(Math.max(1, t.groups.length))]?.id;
+        const op = rand(7);
+        if (op === 0) t = move(t, pick(), rand(4) === 0 ? null : pick());
+        else if (op === 1) t = setPinned(t, pick(), rand(2) === 0);
+        else if (op === 2) t = newGroup(t, pick()).tabs;
+        else if (op === 3 && g) t = joinGroup(t, pick(), g);
+        else if (op === 4) t = leaveGroup(t, pick());
+        else if (op === 5 && g) t = foldGroup(t, g, rand(2) === 0);
+        else t = move(t, pick(), pick());
+        expect(t.tabs.length).toBe(5);
+        const pins = t.tabs.map((x) => Boolean(x.pinned));
+        expect(pins.indexOf(false) === -1 || !pins.slice(pins.indexOf(false)).includes(true)).toBe(
+          true,
+        );
+        expect(t.tabs.every((x) => !x.pinned || !x.group)).toBe(true);
+        const runs = t.tabs.map((x) => x.group).filter((x, i, a) => x && x !== a[i - 1]);
+        expect(new Set(runs).size).toBe(runs.length);
+        expect(new Set(t.tabs.map((x) => x.group).filter(Boolean))).toEqual(
+          new Set(t.groups.map((x) => x.id)),
+        );
+      }
+    }
   });
 });
