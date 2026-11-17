@@ -1,5 +1,6 @@
 import { EditorSelection, type ChangeSpec, type EditorState } from "@codemirror/state";
 import type { Command, EditorView, KeyBinding } from "@codemirror/view";
+import { flipStyle, styleOfMark } from "./inline-format.ts";
 
 /**
  * Formatting commands for the page (task 2.8), with the shortcuts Google
@@ -40,67 +41,46 @@ export function setHeading(level: number): Command {
 const WORD = /[\p{L}\p{N}_'’-]/u;
 
 /**
- * Wrap or unwrap the selection in a mark such as "**", as Google Docs does
- * with bold. With nothing selected: at the closing edge of that mark, step
- * out of it; inside a word, format the word; anywhere else, leave an empty
+ * Bold, italic or strikethrough, as Google Docs does them (inline-format.ts):
+ * a selection flips that style on the words it covers, however it meets the
+ * hidden marks. With nothing selected: at the closing edge of that style,
+ * step out of it; inside a word, flip the word; anywhere else, leave an empty
  * pair for the next words, which goes away if the cursor leaves it empty.
  */
 export function toggleMark(mark: string): Command {
   return (view) => {
     const { state } = view;
+    const style = styleOfMark(mark);
+    if (!style) return false;
     const n = mark.length;
-    view.dispatch(
-      state.changeByRange((r) => {
-        if (r.empty) {
-          const pos = r.head;
-          const ahead = state.sliceDoc(pos, pos + n);
-          const beyond = state.sliceDoc(pos + n, pos + n + 1);
-          if (ahead === mark && beyond !== mark.charAt(0)) {
-            return { range: EditorSelection.cursor(pos + n) };
-          }
-          const line = state.doc.lineAt(pos);
-          let start = pos;
-          let end = pos;
-          while (start > line.from && WORD.test(state.sliceDoc(start - 1, start))) start--;
-          while (end < line.to && WORD.test(state.sliceDoc(end, end + 1))) end++;
-          if (start < pos && end > pos) {
-            return {
-              changes: [
-                { from: start, insert: mark },
-                { from: end, insert: mark },
-              ],
-              range: EditorSelection.cursor(pos + n),
-            };
-          }
-        }
-        const before = state.sliceDoc(r.from - n, r.from);
-        const after = state.sliceDoc(r.to, r.to + n);
-        if (before === mark && after === mark) {
-          return {
-            changes: [
-              { from: r.from - n, to: r.from },
-              { from: r.to, to: r.to + n },
-            ],
-            range: EditorSelection.range(r.from - n, r.to - n),
-          };
-        }
-        const inner = state.sliceDoc(r.from, r.to);
-        if (inner.length >= 2 * n && inner.startsWith(mark) && inner.endsWith(mark)) {
-          return {
-            changes: { from: r.from, to: r.to, insert: inner.slice(n, -n) },
-            range: EditorSelection.range(r.from, r.to - 2 * n),
-          };
-        }
-        return {
-          changes: [
-            { from: r.from, insert: mark },
-            { from: r.to, insert: mark },
-          ],
-          range: EditorSelection.range(r.from + n, r.to + n),
-        };
-      }),
-      { userEvent: "input.format" },
-    );
+    const main = state.selection.main;
+    if (state.selection.ranges.length === 1 && main.empty) {
+      const pos = main.head;
+      const ahead = state.sliceDoc(pos, pos + n);
+      const beyond = state.sliceDoc(pos + n, pos + n + 1);
+      if (ahead === mark && beyond !== mark.charAt(0)) {
+        view.dispatch({ selection: { anchor: pos + n } });
+        return true;
+      }
+      const line = state.doc.lineAt(pos);
+      let start = pos;
+      let end = pos;
+      while (start > line.from && WORD.test(state.sliceDoc(start - 1, start))) start--;
+      while (end < line.to && WORD.test(state.sliceDoc(end, end + 1))) end++;
+      if (start < pos && end > pos) {
+        const changes = flipStyle(state, style, [EditorSelection.range(start, end)]);
+        if (changes.length) view.dispatch({ changes, userEvent: "input.format" });
+        return true;
+      }
+      view.dispatch({
+        changes: { from: pos, insert: mark + mark },
+        selection: { anchor: pos + n },
+        userEvent: "input.format",
+      });
+      return true;
+    }
+    const changes = flipStyle(state, style);
+    if (changes.length) view.dispatch({ changes, userEvent: "input.format" });
     return true;
   };
 }

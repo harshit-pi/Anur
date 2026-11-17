@@ -2,6 +2,7 @@ import { EditorSelection, EditorState, type TransactionSpec } from "@codemirror/
 import type { Command, EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
 import { insertLink, setHeading, toggleList, toggleMark, toggleTask } from "./commands.ts";
+import { markdownSupport } from "./sections.ts";
 
 /** Run a command on a doc with the selection marked by "|" (cursor) or "[" and "]". */
 function run(command: Command, marked: string) {
@@ -11,6 +12,8 @@ function run(command: Command, marked: string) {
   let state = EditorState.create({
     doc,
     selection: EditorSelection.range(from, to),
+    // ⌘B and friends read styles from the Markdown parse.
+    extensions: [markdownSupport()],
   });
   const view = {
     get state() {

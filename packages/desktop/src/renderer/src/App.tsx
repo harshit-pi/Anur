@@ -81,6 +81,10 @@ export function App() {
   const view = useRef<EditorView | null>(null);
   const onView = useCallback((v: EditorView | null) => {
     view.current = v;
+    // Check runs only: a probe can set a selection exactly as a mouse would.
+    if (window.location.hash === "#check") {
+      (window as unknown as { anurView?: EditorView | null }).anurView = v;
+    }
   }, []);
 
   // Open the picked doc; an offloaded one downloads from iCloud first.
