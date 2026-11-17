@@ -87,4 +87,53 @@ describe("section versions", () => {
     await v.opened("Plan.md", `${DOC}\n<<<<<<< HEAD\na\n=======\nb\n>>>>>>> theirs\n`);
     expect(await versionsIn(f)).toEqual([]);
   });
+
+  it("store sections changed while the doc was closed as outside versions", async () => {
+    const f = folder();
+    const saved = new Map<string, string>();
+    const memory = {
+      read: (rel: string) => Promise.resolve(saved.get(rel) ?? null),
+      write: (rel: string, text: string) => {
+        saved.set(rel, text);
+        return Promise.resolve();
+      },
+    };
+    await new SectionVersions(f, "dev1", undefined, memory).opened("Plan.md", DOC);
+    // Closed; a pull changes Risks; the doc opens again in a new run.
+    const pulled = DOC.replace("untested", "tested by CI");
+    await new SectionVersions(f, "dev1", undefined, memory).opened("Plan.md", pulled);
+    const outside = (await versionsIn(f)).filter(([, c]) => c === "outside");
+    expect(outside).toEqual([["Plan > Risks", "outside", "## Risks\n\nThe host is tested by CI."]]);
+    // Opening it again unchanged records nothing more.
+    await new SectionVersions(f, "dev1", undefined, memory).opened("Plan.md", pulled);
+    expect((await versionsIn(f)).filter(([, c]) => c === "outside")).toHaveLength(1);
+  });
+
+  it("store one typing version per editing session, for the sections typed in", async () => {
+    const f = folder();
+    const v = new SectionVersions(f, "dev1", undefined, null, 30);
+    await v.opened("Plan.md", DOC);
+    await v.saved("Plan.md", DOC.replace("untested", "untested on"));
+    await v.saved("Plan.md", DOC.replace("untested", "untested on Linux"));
+    await new Promise((r) => setTimeout(r, 80));
+    const typing = (await versionsIn(f)).filter(([, c]) => c === "typing");
+    expect(typing).toEqual([
+      ["Plan > Risks", "typing", "## Risks\n\nThe host is untested on Linux."],
+    ]);
+  });
+
+  it("end a session when asked, and store nothing for typing undone back", async () => {
+    const f = folder();
+    const v = new SectionVersions(f, "dev1");
+    await v.opened("Plan.md", DOC);
+    await v.saved("Plan.md", DOC.replace("Monday", "Tuesday"));
+    await v.saved("Plan.md", DOC);
+    await v.endSession("Plan.md");
+    expect((await versionsIn(f)).filter(([, c]) => c === "typing")).toEqual([]);
+    await v.saved("Plan.md", DOC.replace("Monday", "Tuesday"));
+    await v.endAll();
+    expect((await versionsIn(f)).filter(([, c]) => c === "typing").map(([p]) => p)).toEqual([
+      "Plan",
+    ]);
+  });
 });

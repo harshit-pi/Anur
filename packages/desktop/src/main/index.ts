@@ -30,7 +30,7 @@ import { readEmbeddedBase } from "./folder/bases.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
-import { SectionVersions } from "./folder/versions.ts";
+import { SectionVersions, lastSavedIn } from "./folder/versions.ts";
 import { loadDeviceId } from "../device/device-id.ts";
 import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
@@ -71,15 +71,22 @@ const windows = new Map<number, BrowserWindow>();
 let folders: FolderService;
 let journal: Journal;
 let device: string | null = null;
+/** The doc each window shows, so leaving it ends its typing session. */
+const shownDoc = new Map<number, string>();
 /** Section versions (2.21), one writer per open folder; none for a read-only folder. */
 const versions = new Map<string, SectionVersions>();
 function versionsFor(folder: FolderState): SectionVersions | null {
   if (!device || folder.mode !== "writable") return null;
   let v = versions.get(folder.path);
   if (!v) {
-    v = new SectionVersions(folder.path, device, (e) => {
-      console.error("Anur couldn't record section versions:", e);
-    });
+    v = new SectionVersions(
+      folder.path,
+      device,
+      (e) => {
+        console.error("Anur couldn't record section versions:", e);
+      },
+      lastSavedIn(app.getPath("userData"), folder.path),
+    );
     versions.set(folder.path, v);
   }
   return v;
@@ -158,6 +165,10 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     const opened = await openDoc(folder, requested);
     if (opened.kind === "doc") {
+      // Moving to another doc ends the typing session on the one before (2.24).
+      const before = shownDoc.get(webContentsId);
+      if (before && before !== opened.path) void versionsFor(folder)?.endSession(before);
+      shownDoc.set(webContentsId, opened.path);
       docWatcher.watch(webContentsId, folder.path, opened.path, opened.hash);
       if (opened.mode === "editable") void versionsFor(folder)?.opened(opened.path, opened.text);
     } else docWatcher.stop(webContentsId);
@@ -317,6 +328,10 @@ function createWindow(): BrowserWindow {
   windows.set(id, win);
   senders.add(id);
   win.on("closed", () => {
+    const folder = folders.current(id);
+    const shown = shownDoc.get(id);
+    if (folder && shown) void versionsFor(folder)?.endSession(shown);
+    shownDoc.delete(id);
     windows.delete(id);
     docWatcher.stop(id);
     senders.remove(id);
@@ -531,7 +546,17 @@ app.on("second-instance", () => {
   }
 });
 
-app.on("will-quit", () => {
+// Quitting ends every typing session first, so its versions are written (2.24).
+let sessionsEnded = false;
+app.on("will-quit", (event) => {
+  if (!sessionsEnded && versions.size > 0) {
+    event.preventDefault();
+    sessionsEnded = true;
+    void Promise.all([...versions.values()].map((v) => v.endAll())).finally(() => {
+      app.quit();
+    });
+    return;
+  }
   docWatcher.stopAll();
   void folders.closeAll();
 });
