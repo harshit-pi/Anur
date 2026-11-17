@@ -16,6 +16,7 @@ import {
   SidebarLeftIcon,
   SidebarRightIcon,
 } from "./Icons.tsx";
+import type { SaveStatus } from "../editor/autosave.ts";
 import { PROVIDERS, cloudSummary, markNoticeSeen, noticeSeen } from "./cloud-notice.ts";
 
 /**
@@ -403,17 +404,27 @@ export function RightSidebar({
   );
 }
 
+const SAVE_LABELS: Record<SaveStatus, string> = {
+  saved: "Saved",
+  editing: "Edited",
+  saving: "Saving…",
+  "changed-outside": "Not saved: changed outside Anur",
+  failed: "Not saved",
+};
+
 /** 6. Status bar: agent connection, saved state, thread count. */
 export function StatusBar({
   version,
   folder,
   docMode,
+  saveStatus,
   source,
   onToggleSource,
 }: {
   version: string | null;
   folder: FolderState | null;
   docMode: "editable" | "read-only" | "plain-text" | null;
+  saveStatus: SaveStatus | null;
   source: boolean;
   onToggleSource: () => void;
 }) {
@@ -425,7 +436,7 @@ export function StatusBar({
       </span>
       <span className="status-item">
         {docMode === "editable"
-          ? "Viewing only: editing arrives with autosave"
+          ? SAVE_LABELS[saveStatus ?? "saved"]
           : docMode === "read-only"
             ? "Read-only"
             : docMode === "plain-text"
