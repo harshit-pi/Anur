@@ -17,6 +17,7 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - Constraints in the title's own text and in a further section's first line were kept every time, both ways.
 - A constraint past a further section's first line was kept every time in the long chat and never in Anur's threads: the outline carries first lines only, and the eval gives the agent no tools to fetch more.
 - What to change in the bundle in answer is open; see the decision that follows this result.
+- Second result, five runs each way (`evals/context/results/2026-11-17T23-24-06-575Z.json`): the deep rule was kept 5/5 with the rest of the doc in full (`doc-full`) and 5/5 with the outline plus a hint to fetch (`fetch-hint`, with `anur_read_section`; 3 to 4 reads a run), against 0/5 with the outline alone. No way leaked the rejected option this time, so the eval needs harder pollution cases to tell the ways apart there.
 
 ## Agents sit behind an adapter (2026-11-17)
 

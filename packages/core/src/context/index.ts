@@ -1,5 +1,6 @@
 export {
   BUNDLE_RULES,
+  FULL_TEXT_BUDGET,
   buildBundle,
   type Bundle,
   type BundleInput,
