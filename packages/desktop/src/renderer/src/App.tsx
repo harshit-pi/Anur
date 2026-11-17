@@ -1,9 +1,15 @@
 import type { EditorView } from "@codemirror/view";
 import type { SectionTree } from "@anur/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import { Page, type OpenDoc } from "./editor/Page.tsx";
 import { Resizer } from "./layout/Resizer.tsx";
+import {
+  isDownloaded,
+  markDownloaded,
+  noneDownloaded,
+  withDownloaded,
+} from "./layout/downloaded.ts";
 import { loadOpen, loadWidths, saveOpen, saveWidths, type Side } from "./layout/panel-widths.ts";
 import { anur } from "./bridge.ts";
 import { CommandPalette } from "./regions/CommandPalette.tsx";
@@ -28,6 +34,16 @@ export function App() {
   const [docError, setDocError] = useState<string | null>(null);
   const [sections, setSections] = useState<SectionTree | null>(null);
   const [source, setSource] = useState(false);
+  const [downloaded, setDownloaded] = useState(noneDownloaded);
+  // Read inside the open effect without making it a dependency: marking a doc
+  // downloaded must not close and reopen the doc being read.
+  const downloadedNow = useRef(downloaded);
+  downloadedNow.current = downloaded;
+  /** The folder as shown: docs opened since it was listed aren't cloud-only. */
+  const shown = useMemo(
+    () => (folder ? withDownloaded(folder, downloaded) : null),
+    [folder, downloaded],
+  );
   const view = useRef<EditorView | null>(null);
   const onView = useCallback((v: EditorView | null) => {
     view.current = v;
@@ -43,12 +59,20 @@ export function App() {
       return;
     }
     let current = true;
-    setOpening(folder?.offloaded.includes(selected) ? "Downloading from iCloud…" : "Opening…");
+    const inCloud =
+      folder?.offloaded.includes(selected) &&
+      !isDownloaded(downloadedNow.current, folder.path, selected);
+    setOpening(inCloud ? "Downloading from iCloud…" : "Opening…");
     void anur.call("doc:open", { path: selected }).then((r) => {
       if (!current) return;
       setOpening(null);
-      if (r.kind === "doc") setDoc(r);
-      else setDocError(r.reason);
+      if (r.kind === "doc") {
+        setDoc(r);
+        if (folder?.offloaded.includes(selected)) {
+          const path = folder.path;
+          setDownloaded((d) => markDownloaded(d, path, selected));
+        }
+      } else setDocError(r.reason);
     });
     return () => {
       current = false;
@@ -138,9 +162,9 @@ export function App() {
           setPaletteOpen(true);
         }}
       />
-      <LeftSidebar folder={folder} selected={selected} onSelect={setSelected} hidden={!open.left} />
+      <LeftSidebar folder={shown} selected={selected} onSelect={setSelected} hidden={!open.left} />
       <Center
-        folder={folder}
+        folder={shown}
         selected={selected}
         page={
           doc ? <Page doc={doc} source={source} onSections={setSections} onView={onView} /> : null
@@ -154,7 +178,7 @@ export function App() {
       <RightSidebar sections={sections} onJump={jumpTo} hidden={!open.right} />
       <StatusBar
         version={version}
-        folder={folder}
+        folder={shown}
         docMode={doc?.mode ?? null}
         source={source}
         onToggleSource={() => {
