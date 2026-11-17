@@ -13,6 +13,7 @@ import {
 } from "../shared/ipc-contract.ts";
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
+import { openDoc } from "./folder/open-doc.ts";
 import { readRecent } from "./folder/recent.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
 import { buildMenu } from "./menu.ts";
@@ -106,6 +107,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!win) return { kind: "cancelled" };
     const outcome = await chooseFolder(win);
     return outcome.kind === "elsewhere" ? { kind: "elsewhere" } : outcome;
+  },
+  "doc:open": async ({ path: requested }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    return openDoc(folder, requested);
   },
   "conflict:plan": async ({ copy }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

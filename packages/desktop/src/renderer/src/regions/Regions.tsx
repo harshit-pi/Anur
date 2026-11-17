@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import type { SectionTree } from "@anur/core";
 import type { FolderState } from "../../../shared/ipc-contract.ts";
 import { FileTree } from "./FileTree.tsx";
 import {
@@ -201,11 +202,21 @@ function FolderNotices({
 export function Center({
   folder,
   selected,
+  page,
+  opening,
+  docNote,
+  docError,
   onOpenFolder,
   onMerge,
 }: {
   folder: FolderState | null;
   selected: string | null;
+  /** The open doc's page, once it has loaded. */
+  page: ReactNode;
+  /** What is happening while a doc loads, such as a download from iCloud. */
+  opening: string | null;
+  docNote: string | null;
+  docError: string | null;
   onOpenFolder: () => void;
   onMerge: (copy: string) => void;
 }) {
@@ -241,13 +252,27 @@ export function Center({
           <strong>Read-only.</strong> {folder.reason}
         </div>
       ) : null}
-      {folder ? (
+      {docNote ? (
+        <div className="banner" role="status">
+          {docNote}
+        </div>
+      ) : null}
+      {docError ? (
+        <div className="banner" role="alert">
+          {docError}
+        </div>
+      ) : null}
+      {page ? (
+        page
+      ) : opening ? (
         <div className="page-empty">
-          <h1>{selected ? "Docs open in the next step" : "Pick a doc"}</h1>
+          <p className="quiet">{opening}</p>
+        </div>
+      ) : folder ? (
+        <div className="page-empty">
+          <h1>Pick a doc</h1>
           <p>
-            {selected
-              ? "The editor arrives with task 2.5; for now Anur lists the folder's files."
-              : `${String(folder.docs.length)} Markdown files in ${folder.name}. Pick one on the left.`}
+            {`${String(folder.docs.length)} Markdown files in ${folder.name}. Pick one on the left.`}
           </p>
         </div>
       ) : (
@@ -273,8 +298,39 @@ const RIGHT_EMPTY: Record<(typeof RIGHT_TABS)[number], string> = {
   History: "Earlier versions of the section you're in show here.",
 };
 
+/** The open doc's headings, from the editor's own parse; a click scrolls the page there. */
+function Outline({ sections, onJump }: { sections: SectionTree; onJump: (index: number) => void }) {
+  const headed = sections.sections.filter((s) => s.headingRange);
+  if (headed.length === 0) return <p className="quiet">This doc has no headings yet.</p>;
+  return (
+    <ul className="outline" aria-label="Outline">
+      {headed.map((s) => (
+        <li key={s.index}>
+          <button
+            type="button"
+            className="tree-row"
+            style={{ paddingLeft: 8 + (s.path.length - 1) * 14 }}
+            title={s.path.join(" › ")}
+            onClick={() => {
+              onJump(s.index);
+            }}
+          >
+            <span className="truncate">{s.path.at(-1)}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** 5. Right sidebar: Outline, Think and History. */
-export function RightSidebar() {
+export function RightSidebar({
+  sections,
+  onJump,
+}: {
+  sections: SectionTree | null;
+  onJump: (index: number) => void;
+}) {
   const [tab, setTab] = useState<(typeof RIGHT_TABS)[number]>("Outline");
   return (
     <aside className="right-sidebar" aria-label="Section details">
@@ -295,9 +351,13 @@ export function RightSidebar() {
           </button>
         ))}
       </div>
-      <p className="quiet" role="tabpanel">
-        {RIGHT_EMPTY[tab]}
-      </p>
+      <div role="tabpanel" className="tab-panel">
+        {tab === "Outline" && sections ? (
+          <Outline sections={sections} onJump={onJump} />
+        ) : (
+          <p className="quiet">{RIGHT_EMPTY[tab]}</p>
+        )}
+      </div>
     </aside>
   );
 }
@@ -306,9 +366,11 @@ export function RightSidebar() {
 export function StatusBar({
   version,
   folder,
+  docMode,
 }: {
   version: string | null;
   folder: FolderState | null;
+  docMode: "editable" | "read-only" | "plain-text" | null;
 }) {
   return (
     <footer className="status-bar" aria-label="Status">
@@ -317,7 +379,15 @@ export function StatusBar({
         Agent not connected
       </span>
       <span className="status-item">
-        {folder?.mode === "read-only" ? "Read-only folder" : "Nothing to save"}
+        {docMode === "editable"
+          ? "Viewing only: editing arrives with autosave"
+          : docMode === "read-only"
+            ? "Read-only"
+            : docMode === "plain-text"
+              ? "Plain text, read-only"
+              : folder?.mode === "read-only"
+                ? "Read-only folder"
+                : "Nothing to save"}
       </span>
       <span className="status-spacer" />
       <span className="status-item">No threads</span>

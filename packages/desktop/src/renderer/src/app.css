@@ -641,3 +641,24 @@ body.resizing * {
   opacity: 0.6;
   cursor: default;
 }
+
+/* The page: CodeMirror fills the center under the path row. */
+.page {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.page .cm-editor {
+  height: 100%;
+}
+
+.tab-panel {
+  margin-top: 12px;
+}
+
+.outline {
+  margin: 0 -8px;
+  padding: 0;
+  list-style: none;
+}
