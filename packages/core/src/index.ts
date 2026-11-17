@@ -122,3 +122,12 @@ export {
   type MergePlan,
 } from "./sync/index.ts";
 export { applyEol, detectEol, normalizeEol, type Eol, type EolReport } from "./text/index.ts";
+export {
+  baseAsMarkdown,
+  propertiesOf,
+  readBase,
+  type BaseCell,
+  type BaseResult,
+  type BaseView,
+  type NoteFacts,
+} from "./bases/index.ts";

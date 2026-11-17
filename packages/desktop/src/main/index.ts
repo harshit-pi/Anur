@@ -25,6 +25,7 @@ import {
 } from "../shared/ipc-contract.ts";
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
+import { readEmbeddedBase } from "./folder/bases.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
@@ -197,6 +198,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
         },
       });
     }),
+  "base:read": async ({ target, from }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    return readEmbeddedBase(folder, target, from);
+  },
   "link:open-external": async ({ url }) => {
     // Only the web and mail: a link in a doc never runs anything on this Mac.
     if (!/^(https?:|mailto:)/i.test(url)) return { ok: false };

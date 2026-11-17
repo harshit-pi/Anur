@@ -14,6 +14,7 @@ const SKIP_DIRS = new Set(["node_modules"]);
 export async function listDocs(
   root: string,
   max = MAX_DOCS,
+  ext = ".md",
 ): Promise<{ docs: string[]; truncated: boolean }> {
   const docs: string[] = [];
   let truncated = false;
@@ -31,7 +32,7 @@ export async function listDocs(
       const childRel = rel ? `${rel}/${e.name}` : e.name;
       if (e.isDirectory()) {
         if (!SKIP_DIRS.has(e.name)) await walk(childRel);
-      } else if (e.isFile() && e.name.toLowerCase().endsWith(".md")) {
+      } else if (e.isFile() && e.name.toLowerCase().endsWith(ext)) {
         if (docs.length >= max) {
           truncated = true;
           return;
