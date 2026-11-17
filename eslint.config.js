@@ -52,6 +52,27 @@ export default defineConfig(
     },
   },
   {
+    // The renderer is sandboxed with no Node: it reaches everything through the preload.
+    files: ["packages/desktop/src/renderer/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: ["electron", "fs", "path", "child_process", "os", "crypto"].map((name) => ({
+            name,
+            message: "the renderer has no Node or Electron; ask main through window.anur.",
+          })),
+          patterns: [
+            {
+              group: ["node:*"],
+              message: "the renderer has no Node; ask main through window.anur.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["**/*.js", "**/*.mjs"],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: { globals: globals.node },
