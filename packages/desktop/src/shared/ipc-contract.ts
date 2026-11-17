@@ -147,6 +147,26 @@ export const ipcContract = {
       .strict(),
     response: z.object({ sectionHistory: z.boolean(), commitAnur: z.boolean().nullable() }),
   },
+  /** Search the folder's docs, case ignored: each matching line (2.26). */
+  "folder:search": {
+    request: z.object({ query: z.string().max(500) }).strict(),
+    response: z.object({
+      matches: z.array(
+        z.object({ path: z.string(), line: z.int(), column: z.int(), text: z.string() }),
+      ),
+      truncated: z.boolean(),
+      /** Docs left out because their bytes are still in iCloud. */
+      skipped: z.int(),
+    }),
+  },
+  /** Make a new doc at a Markdown path in the folder, with its title as its first line (2.26). */
+  "doc:create": {
+    request: z.object({ path: z.string().max(1024) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("created"), path: z.string(), folder: FolderState }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
   /** Open a web or mail link in the system's browser or mail app. */
   "link:open-external": {
     request: z.object({ url: z.string().max(4096) }).strict(),
