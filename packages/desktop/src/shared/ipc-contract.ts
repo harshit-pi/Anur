@@ -87,6 +87,41 @@ export const ipcContract = {
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
+  /** Keep the person's version of lines a change made outside Anur overlapped (2.18). */
+  "journal:keep": {
+    request: z
+      .object({
+        path: z.string(),
+        mine: z.string().max(1_000_000),
+        theirs: z.string().max(1_000_000),
+        before: z.string().max(10_000),
+        after: z.string().max(10_000),
+      })
+      .strict(),
+    response: z.object({ id: z.string() }),
+  },
+  /** Typing kept for a doc, oldest first. */
+  "journal:list": {
+    request: z.object({ path: z.string() }).strict(),
+    response: z.object({
+      entries: z.array(
+        z.object({
+          id: z.string(),
+          path: z.string(),
+          mine: z.string(),
+          theirs: z.string(),
+          before: z.string(),
+          after: z.string(),
+          at: z.string(),
+        }),
+      ),
+    }),
+  },
+  /** Forget kept typing, once put back or dismissed. */
+  "journal:drop": {
+    request: z.object({ id: z.string() }).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Show a native context menu at the pointer; resolves with the chosen item's id, or null. */
   "menu:popup": {
     request: z

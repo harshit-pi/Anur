@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffSpan, mergeOutside } from "./outside.ts";
+import { diffSpan, mergeOutside, putBack } from "./outside.ts";
 
 const BASE = "# Plan\n\nIntro line.\n\n## Retry\n\nThree tries.\n";
 
@@ -21,7 +21,11 @@ describe("a change made outside Anur", () => {
   it("takes the file's version when unsaved typing overlaps it", () => {
     const mine = BASE.replace("Three tries.", "Three tries, mine.");
     const theirs = BASE.replace("Three tries.", "Five tries.");
-    expect(mergeOutside(BASE, mine, theirs)).toEqual({ text: theirs, clash: true });
+    const r = mergeOutside(BASE, mine, theirs);
+    expect(r.text).toBe(theirs);
+    expect(r.clash).toBe(true);
+    expect(r.kept?.mine).toBe("Three tries, mine.");
+    expect(r.kept?.theirs).toBe("Five tries.");
   });
 
   it("is no clash when both made the same change", () => {
@@ -35,5 +39,35 @@ describe("the span between two texts", () => {
     expect(diffSpan("abcdef", "abXYef")).toEqual({ from: 2, to: 4, insert: "XY" });
     expect(diffSpan("same", "same")).toBeNull();
     expect(diffSpan("ab", "abc")).toEqual({ from: 2, to: 2, insert: "c" });
+  });
+});
+
+describe("putting kept typing back", () => {
+  it("replaces the file's version of the lines with the person's", () => {
+    const mine = BASE.replace("Three tries.", "Three tries, mine.");
+    const theirs = BASE.replace("Three tries.", "Five tries.");
+    const { kept } = mergeOutside(BASE, mine, theirs);
+    if (!kept) throw new Error("expected a clash");
+    const span = putBack(theirs, kept);
+    expect(span && theirs.slice(0, span.from) + span.insert + theirs.slice(span.to)).toBe(mine);
+  });
+
+  it("finds the place by its surroundings when the lines appear twice", () => {
+    const base = "## A\n\nSame.\n\n## B\n\nSame.\n";
+    const mine = base.replace("## B\n\nSame.", "## B\n\nMine.");
+    const theirs = base.replace("## B\n\nSame.", "## B\n\nTheirs.");
+    const { kept } = mergeOutside(base, mine, theirs);
+    if (!kept) throw new Error("expected a clash");
+    const doc = theirs.replace("## A\n\nSame.", "## A\n\nTheirs.");
+    const span = putBack(doc, kept);
+    expect(span && doc.slice(0, span.from) + span.insert + doc.slice(span.to)).toBe(
+      "## A\n\nTheirs.\n\n## B\n\nMine.\n",
+    );
+  });
+
+  it("gives up when the file's version is gone", () => {
+    expect(
+      putBack("Something else.", { mine: "a", theirs: "b", before: "", after: "" }),
+    ).toBeNull();
   });
 });
