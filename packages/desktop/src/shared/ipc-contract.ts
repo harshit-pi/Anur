@@ -168,6 +168,10 @@ export const ipcEvents = {
     z.object({ kind: z.literal("gone"), path: z.string() }),
     z.object({ kind: z.literal("unreadable"), path: z.string(), reason: z.string() }),
   ]),
+  /** A menu-bar command for the window's page and tabs. */
+  "app:command": z.object({
+    command: z.enum(["tab-new", "tab-close", "back", "forward", "tab-next", "tab-prev"]),
+  }),
   /** Insert in the menu bar: put this block where the page's cursor is. */
   "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
 } as const;

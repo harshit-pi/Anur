@@ -9,6 +9,7 @@ export function buildMenu(actions: {
   openFolder: () => void;
   newWindow: () => void;
   insert: (id: InsertId) => void;
+  command: (c: "tab-new" | "tab-close" | "back" | "forward" | "tab-next" | "tab-prev") => void;
   isDev: boolean;
 }): Menu {
   const mac = process.platform === "darwin";
@@ -17,10 +18,28 @@ export function buildMenu(actions: {
     {
       label: "File",
       submenu: [
+        {
+          id: "tab-new",
+          label: "New Tab",
+          accelerator: "CmdOrCtrl+T",
+          click: () => {
+            actions.command("tab-new");
+          },
+        },
         { label: "New Window", accelerator: "CmdOrCtrl+Shift+N", click: actions.newWindow },
         { label: "Open Folder…", accelerator: "CmdOrCtrl+O", click: actions.openFolder },
         { type: "separator" },
-        mac ? { role: "close" } : { role: "quit" },
+        {
+          id: "tab-close",
+          label: "Close Tab",
+          accelerator: "CmdOrCtrl+W",
+          click: () => {
+            actions.command("tab-close");
+          },
+        },
+        mac
+          ? { role: "close", label: "Close Window", accelerator: "CmdOrCtrl+Shift+W" }
+          : { role: "quit" },
       ],
     },
     { role: "editMenu" },
@@ -55,6 +74,44 @@ export function buildMenu(actions: {
         { role: "zoomOut" },
         { type: "separator" },
         { role: "togglefullscreen" },
+      ],
+    },
+    {
+      label: "Go",
+      submenu: [
+        {
+          id: "go-back",
+          label: "Back",
+          accelerator: "CmdOrCtrl+Alt+Left",
+          click: () => {
+            actions.command("back");
+          },
+        },
+        {
+          id: "go-forward",
+          label: "Forward",
+          accelerator: "CmdOrCtrl+Alt+Right",
+          click: () => {
+            actions.command("forward");
+          },
+        },
+        { type: "separator" },
+        {
+          id: "tab-next",
+          label: "Next Tab",
+          accelerator: "Ctrl+Tab",
+          click: () => {
+            actions.command("tab-next");
+          },
+        },
+        {
+          id: "tab-prev",
+          label: "Previous Tab",
+          accelerator: "Ctrl+Shift+Tab",
+          click: () => {
+            actions.command("tab-prev");
+          },
+        },
       ],
     },
     { role: "windowMenu" },
