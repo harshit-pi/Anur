@@ -13,4 +13,4 @@
 - Two light colours differ from the mocks so they pass AA: `--graphite` is `#656E7B` (was `#7A8494`) and `--red` is `#BE402C` (was `#C2412D`).
 - `--pencil` stays below 3:1; it only decorates thread outlines whose text already identifies them.
 - Type has three roles: Avenir Next for the UI, Charter for decided text, and Iowan Old Style in italic for thinking.
-- Re-export the icon at release time as an `.icns` for macOS from `app-icon-1024.png`.
+- `packages/desktop/build/icon.png` is the app icon on macOS's grid: the rounded square scaled to 824px on a transparent 1024px canvas, so it sits level with other apps in the Dock. electron-builder makes the `.icns` from it.

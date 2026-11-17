@@ -3,3 +3,5 @@ packages:
 allowBuilds:
   electron: true
   esbuild: true
+  # Windows installers only; Anur builds for macOS first.
+  electron-winstaller: false
