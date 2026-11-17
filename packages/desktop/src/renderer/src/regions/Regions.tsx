@@ -48,7 +48,9 @@ export function Ribbon({ onCommand }: { onCommand: () => void }) {
 export function LeftSidebar() {
   return (
     <aside className="left-sidebar" aria-label="Files">
-      <p className="sidebar-title">No folder open</p>
+      <p className="sidebar-title truncate" title="No folder open">
+        No folder open
+      </p>
       <p className="quiet">
         Open a folder of Markdown files, such as a repo or an Obsidian vault. Anur works on the
         files as they are.
@@ -160,6 +162,7 @@ export function RightSidebar() {
             role="tab"
             aria-selected={tab === t}
             className={tab === t ? "segment selected" : "segment"}
+            title={t}
             onClick={() => {
               setTab(t);
             }}

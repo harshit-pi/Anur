@@ -82,7 +82,8 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
     setTimeout(() => {
       void (async () => {
         if (process.env.ANUR_SCREENSHOT_DRAG) {
-          // Drag the left divider 120px right and the right divider 100px left.
+          // Drag the left divider 120px right and the right divider 100px left,
+          // or, with ANUR_SCREENSHOT_DRAG=narrow, both panels to their narrowest.
           const [w] = win.getContentSize();
           const drag = async (from: number, to: number) => {
             const y = 400;
@@ -110,8 +111,15 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
               clickCount: 1,
             });
           };
-          await drag(48 + 260, 48 + 380);
-          await drag((w ?? 1440) - 300, (w ?? 1440) - 400);
+          const width = w ?? 1440;
+          if (process.env.ANUR_SCREENSHOT_DRAG === "narrow") {
+            // Both panels down to their narrowest.
+            await drag(48 + 260, 40);
+            await drag(width - 300, width - 20);
+          } else {
+            await drag(48 + 260, 48 + 380);
+            await drag(width - 300, width - 400);
+          }
           await new Promise((r) => setTimeout(r, 200));
         }
         if (process.env.ANUR_SCREENSHOT_PALETTE) {
