@@ -44,11 +44,18 @@ export type BundleRule =
   /** The header asks the agent to read any section that could set a rule for its answer. */
   | "fetch-hint";
 
-/** The rules for a thread on one section, in the order their parts are sent. */
+/**
+ * The rules for a thread on one section, in the order their parts are sent:
+ * the rest of the doc in full within the budget, else as an outline with a
+ * hint to read any section that could set a rule. Chosen after the context
+ * eval (decided 2026-11-17): the outline alone lost rules past a section's
+ * first line; full text and a fetch hint each kept them every time.
+ */
 export const BUNDLE_RULES: readonly BundleRule[] = [
   "ancestors-own-text",
   "section-subtree",
-  "doc-outline",
+  "doc-full",
+  "fetch-hint",
 ];
 
 export type BundleInput = {

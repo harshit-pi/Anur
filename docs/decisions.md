@@ -4,11 +4,12 @@ Engineering decisions made while building Anur, newest first, each with why. The
 
 ## What a thread reads (2026-11-17)
 
-- A thread on a section gets: the own text of every section above it, its own section in full (subsections included), and **the whole doc as an outline**, each other section's heading and first line, with its place marked.
-- Any section's full text is one call away through Anur's MCP tool `anur_read_section`; inputs, when they land, are a second call away too.
+- A thread on a section gets: the own text of every section above it, its own section in full (subsections included), and **the rest of the doc in full**, every other section's heading and own text.
+- Past a budget, about a third of a 200,000-token context window (`FULL_TEXT_BUDGET`), the rest falls back to an outline, each section's heading and first line, and the header asks the agent to read, with `anur_read_section`, any section that could set a rule for its answer.
 - Another thread's chat is never included. Decided text is the current doc, so it isn't pollution; discussion is.
-- The parts are chosen by `BUNDLE_RULES` in `packages/core/src/context/bundle.ts`, held as data, so a variant is a change to that list. `siblings-outline` is the older variant, kept for the eval.
-- Because a thread may read any decided text, Claude Code reading the whole working copy before an Edit is accepted, not worked around. The alternative, a working copy holding only what the thread was given, keeps context tighter and long docs cheaper, but needs a partial file stitched back into the doc and stops edits to sections outside it. The whole-file copy keeps edits to any section simple; its costs, tokens and focus on long docs, are what the context eval measures. Revisit if the eval shows focus suffering.
+- The parts are chosen by `BUNDLE_RULES` in `packages/core/src/context/bundle.ts`, held as data: `ancestors-own-text`, `section-subtree`, `doc-full`, `fetch-hint`. `doc-outline` and `siblings-outline` stay as variants for the eval.
+- Why full text: the context eval's outline-only bundle lost a rule written past a section's first line every time; full text and an outline with a fetch hint each kept it every time, and full text needed no extra calls.
+- Because a thread may read any decided text, Claude Code reading the whole working copy before an Edit is accepted, not worked around. The alternative, a working copy holding only what the thread was given, would need a partial file stitched back into the doc and would stop edits to sections outside it.
 
 ## The context eval's first result (2026-11-17)
 
