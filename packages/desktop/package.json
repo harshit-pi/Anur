@@ -20,10 +20,11 @@
   },
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "pnpm ensure-electron && electron-vite dev",
     "build": "electron-vite build",
-    "start": "electron-vite preview",
-    "package": "electron-vite build && electron-builder --mac --dir"
+    "start": "pnpm ensure-electron && electron-vite preview",
+    "package": "electron-vite build && electron-builder --mac --dir",
+    "ensure-electron": "node node_modules/electron/install.js"
   },
   "productName": "Anur"
 }
