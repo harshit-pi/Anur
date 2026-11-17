@@ -10,7 +10,7 @@ Work follows the build tasks, group by group:
 | ----- | --------------------------------- | --------------------------- |
 | 0     | Spike: drive Claude Code over ACP | Done; all seven claims held |
 | 1     | Skeleton and schema               | Done                        |
-| 2     | One page                          | 2.1 to 2.18 done            |
+| 2     | One page                          | 2.1 to 2.18 and 2.22 done   |
 | 3     | One thread, one section           |                             |
 | 4     | Context per section               |                             |
 

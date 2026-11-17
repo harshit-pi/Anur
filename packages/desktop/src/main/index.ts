@@ -197,6 +197,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
         },
       });
     }),
+  "link:open-external": async ({ url }) => {
+    // Only the web and mail: a link in a doc never runs anything on this Mac.
+    if (!/^(https?:|mailto:)/i.test(url)) return { ok: false };
+    await shell.openExternal(url);
+    return { ok: true };
+  },
   "clipboard:write": async ({ text }) => {
     await systemClipboard.writeText(text);
     return { ok: true };

@@ -10,6 +10,7 @@ import { CloseIcon } from "../regions/Icons.tsx";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { formattingKeymap } from "./commands.ts";
 import { insertMenu } from "./insert-menu.ts";
+import { type ClickedLink, linkClicks } from "./link-click.ts";
 import { editLink, linkEditor } from "./link-editor.ts";
 import { livePreview } from "./live-preview/live-preview.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
@@ -51,6 +52,7 @@ export function Page({
   onSections,
   onView,
   onSaveStatus,
+  onOpenLink,
 }: {
   doc: OpenDoc;
   /** The folder's docs, for "[[" links. */
@@ -59,7 +61,11 @@ export function Page({
   onSections: (tree: SectionTree | null) => void;
   onView: (view: EditorView | null) => void;
   onSaveStatus: (status: SaveStatus | null, detail: string | null) => void;
+  /** Follow a clicked link; returns what to tell the person when it goes nowhere. */
+  onOpenLink: (link: ClickedLink, inNewTab: boolean) => string | null;
 }) {
+  const openLinkNow = useRef(onOpenLink);
+  openLinkNow.current = onOpenLink;
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const preview = useRef(new Compartment());
@@ -122,6 +128,16 @@ export function Page({
                 pageHighlight,
                 preview.current.of(previewFor(sourceNow.current)),
                 ...(editable ? [insertMenu(docsNow.current), linkEditor] : []),
+                linkClicks((link, inNewTab) => {
+                  const problem = openLinkNow.current(link, inNewTab);
+                  if (problem) {
+                    setNotice({ text: problem, undo: null });
+                    clearTimeout(noticeTimer);
+                    noticeTimer = setTimeout(() => {
+                      setNotice(null);
+                    }, 6000);
+                  }
+                }),
               ]
             : []),
           EditorView.contentAttributes.of({ "aria-label": `Page: ${fileName}` }),

@@ -6,7 +6,9 @@ import type { SaveStatus } from "./editor/autosave.ts";
 import { Page, type OpenDoc } from "./editor/Page.tsx";
 import { insertById } from "./editor/insert-menu.ts";
 import { Resizer } from "./layout/Resizer.tsx";
+import { headingKey, resolveHref, resolveWiki } from "./layout/links.ts";
 import { DOC_ITEM, folderMenu, sectionAt, wikiLinkTo } from "./layout/path-row.ts";
+import type { ClickedLink } from "./editor/link-click.ts";
 import {
   back,
   canGoBack,
@@ -126,6 +128,30 @@ export function App() {
   const openDoc = useCallback((path: string, inNewTab: boolean) => {
     setTabs((t) => openInTab(t, path, inNewTab));
   }, []);
+  /** A heading a link asked for, scrolled to once its doc's sections are in. */
+  const [pendingHeading, setPendingHeading] = useState<{ path: string; heading: string } | null>(
+    null,
+  );
+  /** Follow a link clicked on the page; returns what to say when it goes nowhere. */
+  const openLink = useCallback(
+    (link: ClickedLink, inNewTab: boolean): string | null => {
+      if (!folder || !selected) return null;
+      const target =
+        link.kind === "wiki"
+          ? resolveWiki(folder.docs, selected, link.target, link.heading)
+          : resolveHref(folder.docs, selected, link.href);
+      if (target.kind === "web") {
+        void anur.call("link:open-external", { url: target.url });
+        return null;
+      }
+      if (target.kind === "missing") return `No doc called “${target.name}” in this folder.`;
+      if (target.heading) setPendingHeading({ path: target.path, heading: target.heading });
+      if (target.path !== selected || inNewTab) openDoc(target.path, inNewTab);
+      return null;
+    },
+    [folder, selected, openDoc],
+  );
+
   /** A breadcrumb: what the folder it names holds; picking a doc opens it here. */
   const showFolder = useCallback(
     (inside: string) => {
@@ -201,6 +227,15 @@ export function App() {
     },
     [sections],
   );
+  // A link's heading: once its doc is open and parsed, scroll to it.
+  useEffect(() => {
+    // Wait until the page shows that doc: until then, the sections are the old doc's.
+    if (!pendingHeading || doc?.path !== pendingHeading.path || !sections) return;
+    const want = headingKey(pendingHeading.heading);
+    const index = sections.sections.findIndex((s) => headingKey(s.path.at(-1) ?? "") === want);
+    setPendingHeading(null);
+    if (index >= 0) jumpTo(index);
+  }, [pendingHeading, doc, sections, jumpTo]);
   const [widths, setWidths] = useState(() => loadWidths(window.localStorage));
   const [open, setOpen] = useState(() => loadOpen(window.localStorage));
   const toggle = useCallback((side: Side) => {
@@ -328,6 +363,7 @@ export function App() {
               onSections={setSections}
               onView={onView}
               onSaveStatus={onSaveStatus}
+              onOpenLink={openLink}
             />
           ) : null
         }
