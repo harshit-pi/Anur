@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
 import type { AgentStatus, FolderState } from "../../../shared/ipc-contract.ts";
@@ -7,7 +7,6 @@ import { anur } from "../bridge.ts";
 import { FileTree } from "./FileTree.tsx";
 import {
   BackIcon,
-  ChevronDownIcon,
   CloseIcon,
   CollapseAllIcon,
   FolderIcon,
@@ -15,11 +14,8 @@ import {
   LinkIcon,
   MoreIcon,
   PluginsIcon,
-  PlusIcon,
   SearchIcon,
   SettingsIcon,
-  SidebarLeftIcon,
-  SidebarRightIcon,
 } from "./Icons.tsx";
 import type { SaveStatus } from "../editor/autosave.ts";
 import { PROVIDERS, cloudSummary, markNoticeSeen, noticeSeen } from "./cloud-notice.ts";
@@ -150,157 +146,6 @@ export function LeftSidebar({
         <p className="quiet">This folder has more files than Anur lists; some are left out.</p>
       ) : null}
     </aside>
-  );
-}
-
-/** 3. Tab bar: the files toggle, tabs, then Page and Map, Ask, and the section panel toggle. */
-export function TabBar({
-  open,
-  onToggle,
-  tabs,
-  active,
-  onSelectTab,
-  onCloseTab,
-  onNewTab,
-  onListTabs,
-}: {
-  open: Record<"left" | "right", boolean>;
-  onToggle: (side: "left" | "right") => void;
-  tabs: { id: string; title: string; path: string | null }[];
-  active: string | null;
-  onSelectTab: (id: string) => void;
-  onCloseTab: (id: string) => void;
-  onNewTab: () => void;
-  onListTabs: () => void;
-}) {
-  // ⌄ shows once the tabs no longer fit.
-  const strip = useRef<HTMLDivElement>(null);
-  const [overflowing, setOverflowing] = useState(false);
-  useEffect(() => {
-    const el = strip.current;
-    if (!el) return;
-    const check = () => {
-      setOverflowing(el.scrollWidth > el.clientWidth + 1);
-    };
-    check();
-    const observer = new ResizeObserver(check);
-    observer.observe(el);
-    return () => {
-      observer.disconnect();
-    };
-  }, [tabs.length]);
-  // The active tab scrolls into view, as after ⌃Tab or picking from ⌄.
-  useEffect(() => {
-    strip.current
-      ?.querySelector(".tab.active")
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [active]);
-  return (
-    <header className="tab-bar" aria-label="Tabs">
-      <button
-        className="icon-button"
-        type="button"
-        aria-label={open.left ? "Hide the files panel" : "Show the files panel"}
-        aria-pressed={open.left}
-        title={open.left ? "Hide files (⌘\\)" : "Show files (⌘\\)"}
-        onClick={() => {
-          onToggle("left");
-        }}
-      >
-        <SidebarLeftIcon />
-      </button>
-      <div className="tabs" role="tablist" aria-label="Open docs">
-        <div className="tab-strip" ref={strip}>
-          {tabs.length === 0 ? <span className="quiet tab-empty">No docs open</span> : null}
-          {tabs.map((t) => (
-            <div
-              key={t.id}
-              role="tab"
-              aria-selected={t.id === active}
-              className={t.id === active ? "tab active" : "tab"}
-              title={t.path ?? "New tab"}
-              onMouseDown={(e) => {
-                // Middle-click closes, as in a browser.
-                if (e.button === 1) {
-                  e.preventDefault();
-                  onCloseTab(t.id);
-                }
-              }}
-            >
-              <button
-                type="button"
-                className="tab-title truncate"
-                onClick={() => {
-                  onSelectTab(t.id);
-                }}
-              >
-                {t.title}
-              </button>
-              <button
-                type="button"
-                className="tab-close"
-                aria-label={`Close ${t.title}`}
-                title="Close tab (⌘W)"
-                onClick={() => {
-                  onCloseTab(t.id);
-                }}
-              >
-                <CloseIcon />
-              </button>
-            </div>
-          ))}
-        </div>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="New tab"
-          title="New tab (⌘T)"
-          onClick={onNewTab}
-        >
-          <PlusIcon />
-        </button>
-        {overflowing ? (
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="List all tabs"
-            title="List all tabs"
-            onClick={onListTabs}
-          >
-            <ChevronDownIcon />
-          </button>
-        ) : null}
-      </div>
-      <div className="segmented" role="radiogroup" aria-label="View">
-        <button
-          type="button"
-          role="radio"
-          aria-checked="true"
-          className="segment selected"
-          disabled
-        >
-          Page
-        </button>
-        <button type="button" role="radio" aria-checked="false" className="segment" disabled>
-          Map
-        </button>
-      </div>
-      <button className="ask-button" type="button" disabled title="Ask about the whole doc">
-        Ask
-      </button>
-      <button
-        className="icon-button"
-        type="button"
-        aria-label={open.right ? "Hide the section panel" : "Show the section panel"}
-        aria-pressed={open.right}
-        title={open.right ? "Hide the section panel (⌥⌘\\)" : "Show the section panel (⌥⌘\\)"}
-        onClick={() => {
-          onToggle("right");
-        }}
-      >
-        <SidebarRightIcon />
-      </button>
-    </header>
   );
 }
 

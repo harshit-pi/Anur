@@ -16,15 +16,14 @@ import {
   close,
   currentDoc,
   cycle,
-  docOf,
   forward,
+  listItems,
   loadTabs,
   newTab,
   noTabs,
   open as openInTab,
   saveTabs,
   select,
-  titleOf,
   type Tabs,
 } from "./layout/tabs.ts";
 import {
@@ -40,14 +39,8 @@ import { Think } from "./regions/Think.tsx";
 import { Settings, type SettingsSection } from "./regions/Settings.tsx";
 import { newDocPath } from "./layout/new-doc.ts";
 import { MergeDialog } from "./regions/MergeDialog.tsx";
-import {
-  Center,
-  LeftSidebar,
-  Ribbon,
-  RightSidebar,
-  StatusBar,
-  TabBar,
-} from "./regions/Regions.tsx";
+import { Center, LeftSidebar, Ribbon, RightSidebar, StatusBar } from "./regions/Regions.tsx";
+import { TabBar } from "./regions/TabBar.tsx";
 
 export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -261,11 +254,7 @@ export function App() {
   const listTabs = useCallback(() => {
     void anur
       .call("menu:popup", {
-        items: tabs.tabs.map((t) => ({
-          id: t.id,
-          label: titleOf(t),
-          checked: t.id === tabs.active,
-        })),
+        items: listItems(tabs),
       })
       .then(({ id }) => {
         if (id) setTabs((t) => select(t, id));
@@ -429,14 +418,11 @@ export function App() {
       <TabBar
         open={open}
         onToggle={toggle}
-        tabs={tabs.tabs.map((t) => ({ id: t.id, title: titleOf(t), path: docOf(t) }))}
-        active={tabs.active}
+        tabs={tabs}
+        onChange={setTabs}
         onSelectTab={(id) => {
           setTabs((t) => select(t, id));
           setReveal((n) => n + 1);
-        }}
-        onCloseTab={(id) => {
-          setTabs((t) => close(t, id));
         }}
         onNewTab={() => {
           setTabs((t) => newTab(t));

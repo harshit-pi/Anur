@@ -116,3 +116,10 @@ export const CollapseAllIcon = (p: IconProps) => (
     <path d="M5 2.75l3 3 3-3M5 13.25l3-3 3 3" />
   </Svg>
 );
+
+export const DocIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 1.75h5.25L12.5 5v9.25H4z" />
+    <path d="M9 1.75V5h3.5" />
+  </Svg>
+);
