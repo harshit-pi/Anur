@@ -9,3 +9,11 @@ export {
   ownText,
   subtreeText,
 } from "./section.ts";
+export {
+  buildSectionTree,
+  resolveHeading,
+  toSectionRecords,
+  type SectionNode,
+  type SectionTree,
+  type TreeLink,
+} from "./tree.ts";

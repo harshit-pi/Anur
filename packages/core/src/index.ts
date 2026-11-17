@@ -21,4 +21,10 @@ export {
   formatPath,
   ownText,
   subtreeText,
+  buildSectionTree,
+  resolveHeading,
+  toSectionRecords,
+  type SectionNode,
+  type SectionTree,
+  type TreeLink,
 } from "./sections/index.ts";
