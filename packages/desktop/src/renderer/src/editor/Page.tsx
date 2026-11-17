@@ -12,6 +12,7 @@ import { editLink, linkEditor } from "./link-editor.ts";
 import { livePreview } from "./live-preview/live-preview.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { diffSpan, mergeOutside } from "./outside.ts";
+import { settled, track } from "./pending-saves.ts";
 import { markdownSupport, sectionsOf } from "./sections.ts";
 import { pageHighlight, pageTheme } from "./theme.ts";
 
@@ -154,6 +155,28 @@ export function Page({
         setNotice(null);
       }, 12_000);
     };
+    // The page may be rebuilt long after the doc was read, as when the dev
+    // server hot-reloads it: read it again, once any save from the page it
+    // replaces has landed, and start from what the file has now.
+    let closed = false;
+    void settled()
+      .then(() => anur.call("doc:open", { path: doc.path }))
+      .then((r) => {
+        if (closed || r.kind !== "doc" || r.hash === doc.hash) return;
+        const untouched = editor.state.doc.toString() === doc.text;
+        if (untouched && r.text !== doc.text) {
+          const span = diffSpan(doc.text, r.text);
+          if (span) {
+            editor.dispatch({
+              changes: span,
+              annotations: Transaction.addToHistory.of(false),
+              userEvent: "outside",
+            });
+          }
+          saver?.rebase(r.hash, r.text);
+        } else if (untouched) saver?.rebase(r.hash, r.text);
+        else fold(r.text, r.hash);
+      });
     const offOutside = anur.on("doc:changed", (change) => {
       if (change.path !== doc.path) return;
       if (change.kind === "changed") fold(change.text, change.hash);
@@ -181,8 +204,9 @@ export function Page({
       offOutside();
       clearTimeout(sectionsTimer);
       clearTimeout(noticeTimer);
-      // Switching docs saves what was typed in this one.
-      void saver?.flush();
+      // Switching docs saves what was typed in this one; the next page waits for it.
+      closed = true;
+      if (saver) track(saver.flush());
       view.current = null;
       onView(null);
       editor.destroy();
