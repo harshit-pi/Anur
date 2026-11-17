@@ -51,6 +51,25 @@ export const pageTheme = EditorView.theme({
     color: "var(--graphite)",
   },
   ".cm-completionMatchedText": { textDecoration: "none", fontWeight: "650" },
+  // A link's address, in a pop-up under the link (2.11).
+  ".cm-tooltip.cm-lp-link-editor": {
+    border: "1px solid var(--rule)",
+    borderRadius: "8px",
+    backgroundColor: "var(--sheet)",
+    boxShadow: "var(--shadow)",
+    padding: "6px",
+  },
+  ".cm-lp-link-editor input": {
+    width: "320px",
+    font: "13px var(--font-ui)",
+    color: "var(--ink)",
+    background: "var(--paper)",
+    border: "1px solid var(--rule)",
+    borderRadius: "5px",
+    padding: "5px 8px",
+    outline: "none",
+  },
+  ".cm-lp-link-editor input:focus": { borderColor: "var(--blue)" },
   "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": {
     backgroundColor: "var(--blue-wash) !important",
   },

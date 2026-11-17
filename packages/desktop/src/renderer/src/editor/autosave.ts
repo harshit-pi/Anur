@@ -5,7 +5,7 @@ import type { Response } from "../../../shared/ipc-contract.ts";
  * an input method is still composing, one save at a time. Each save is a
  * compare-and-swap against the hash of what was last read or written; if the
  * file changed outside Anur, saving stops and says so, and nothing on disk is
- * overwritten. Until outside changes reload the page (2.13), the person
+ * overwritten. Until outside changes reload the page (2.17), the person
  * reloads it themselves.
  */
 

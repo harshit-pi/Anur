@@ -37,13 +37,42 @@ export function setHeading(level: number): Command {
   };
 }
 
-/** Wrap or unwrap the selection in a mark such as "**"; with nothing selected, leave the cursor between the marks. */
+const WORD = /[\p{L}\p{N}_'’-]/u;
+
+/**
+ * Wrap or unwrap the selection in a mark such as "**", as Google Docs does
+ * with bold. With nothing selected: at the closing edge of that mark, step
+ * out of it; inside a word, format the word; anywhere else, leave an empty
+ * pair for the next words, which goes away if the cursor leaves it empty.
+ */
 export function toggleMark(mark: string): Command {
   return (view) => {
     const { state } = view;
     const n = mark.length;
     view.dispatch(
       state.changeByRange((r) => {
+        if (r.empty) {
+          const pos = r.head;
+          const ahead = state.sliceDoc(pos, pos + n);
+          const beyond = state.sliceDoc(pos + n, pos + n + 1);
+          if (ahead === mark && beyond !== mark.charAt(0)) {
+            return { range: EditorSelection.cursor(pos + n) };
+          }
+          const line = state.doc.lineAt(pos);
+          let start = pos;
+          let end = pos;
+          while (start > line.from && WORD.test(state.sliceDoc(start - 1, start))) start--;
+          while (end < line.to && WORD.test(state.sliceDoc(end, end + 1))) end++;
+          if (start < pos && end > pos) {
+            return {
+              changes: [
+                { from: start, insert: mark },
+                { from: end, insert: mark },
+              ],
+              range: EditorSelection.cursor(pos + n),
+            };
+          }
+        }
         const before = state.sliceDoc(r.from - n, r.from);
         const after = state.sliceDoc(r.to, r.to + n);
         if (before === mark && after === mark) {
@@ -76,7 +105,7 @@ export function toggleMark(mark: string): Command {
   };
 }
 
-/** Make the selection a link and put the cursor where the address goes. Needs a selection, so ⌘K with none opens the palette. */
+/** Make the selection a link; its pop-up then asks for the address. Needs a selection, so ⌘K with none opens the palette. */
 export const insertLink: Command = (view) => {
   const { state } = view;
   if (state.selection.ranges.every((r) => r.empty)) return false;
@@ -84,10 +113,10 @@ export const insertLink: Command = (view) => {
     state.changeByRange((r) => {
       if (r.empty) return { range: r };
       const text = state.sliceDoc(r.from, r.to);
-      const insert = `[${text}]()`;
+      // The cursor stays in the link's text; its pop-up asks for the address.
       return {
-        changes: { from: r.from, to: r.to, insert },
-        range: EditorSelection.cursor(r.from + insert.length - 1),
+        changes: { from: r.from, to: r.to, insert: `[${text}]()` },
+        range: EditorSelection.cursor(r.from + 1 + text.length),
       };
     }),
     { userEvent: "input.format" },

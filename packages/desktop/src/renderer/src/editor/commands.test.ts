@@ -50,10 +50,22 @@ describe("formatting commands", () => {
     expect(r.sel).toEqual([4, 4]);
   });
 
-  it("⌘K makes a selection a link with the cursor at the address", () => {
+  it("⌘B inside a word makes the word bold", () => {
+    const r = run(toggleMark("**"), "a wo|rd here");
+    expect(r.text).toBe("a **word** here");
+    expect(r.sel).toEqual([6, 6]);
+  });
+
+  it("⌘B at the end of bold text steps out of it", () => {
+    const r = run(toggleMark("**"), "a **bold|** word");
+    expect(r.text).toBe("a **bold** word");
+    expect(r.sel).toEqual([10, 10]);
+  });
+
+  it("⌘K makes a selection a link, the cursor staying in its text", () => {
     const r = run(insertLink, "see [the plan] now");
     expect(r.text).toBe("see [the plan]() now");
-    expect(r.sel).toEqual([15, 15]);
+    expect(r.sel).toEqual([13, 13]);
     expect(run(insertLink, "no| selection").handled).toBe(false);
   });
 
