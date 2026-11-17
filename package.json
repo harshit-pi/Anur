@@ -13,13 +13,16 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test"
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "26.6.6",
     "eslint": "10.15.0",
     "globals": "17.14.0",
+    "husky": "9.1.7",
+    "lint-staged": "17.6.1",
     "prettier": "3.10.1",
     "typescript": "6.0.3",
     "typescript-eslint": "8.73.0",
