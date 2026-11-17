@@ -1,6 +1,7 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { listDocs } from "./list-docs.ts";
+import { readWebImage } from "./web-images.ts";
 
 /**
  * An image a doc embeds (task 2.27), found the way Obsidian finds one:
@@ -87,8 +88,11 @@ export async function findImage(
 }
 
 export async function readImage(root: string, target: string, from: string): Promise<ImageOutcome> {
+  if (/^https?:\/\//i.test(target)) {
+    return readWebImage(target.trim());
+  }
   if (/^[a-z][a-z0-9+.-]*:/i.test(target))
-    return { kind: "failed", reason: "Images from the web aren't drawn yet." };
+    return { kind: "failed", reason: "Only images in this folder or on the web are drawn." };
   let decoded = target;
   try {
     decoded = decodeURIComponent(target);

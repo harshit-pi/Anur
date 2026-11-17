@@ -2,7 +2,7 @@ import { Prec, type EditorState } from "@codemirror/state";
 import { EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
 import type { Response } from "../../../../shared/ipc-contract.ts";
 import { pagePath } from "../bases/base-widget.ts";
-import { EmbedWidget } from "../chips/chip-widgets.ts";
+import { EmbedWidget, openPathEditor } from "../chips/chip-widgets.ts";
 
 /**
  * An image a doc embeds, alone on its line, drawn as the image (task 2.27):
@@ -33,6 +33,33 @@ export function sizeOf(alias: string | null): { width: number; height: number | 
 
 export const isImagePath = (p: string) =>
   /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(p.split(/[?#]/)[0] ?? "");
+
+/** A web address: drawn as an image when Markdown marks it as one, whatever its ending (2.28). */
+export const isWebAddress = (p: string) => /^https?:\/\//i.test(p.trim());
+
+/**
+ * Ask main for an image, drawing what was read before at once, then again
+ * whenever the window comes back to the front. Returns the stop function.
+ */
+function watchImage(view: EditorView, target: string, draw: (r: Read) => void): () => void {
+  const from = view.state.facet(pagePath);
+  const key = `${from}\0${target}`;
+  const load = () => {
+    void import("../../bridge.ts")
+      .then(({ anur }) => anur.call("image:read", { target, from }))
+      .then((r) => {
+        cache.set(key, r);
+        draw(r);
+      });
+  };
+  const known = cache.get(key);
+  if (known) draw(known);
+  load();
+  window.addEventListener("focus", load);
+  return () => {
+    window.removeEventListener("focus", load);
+  };
+}
 
 /** The embed's line with its width set: `|400` added or changed, Obsidian's way. */
 export function withWidth(line: string, width: number): string | null {
@@ -134,9 +161,8 @@ export class ImageWidget extends WidgetType {
       handle.addEventListener("pointerup", up);
     });
 
-    const from = view.state.facet(pagePath);
-    const key = `${from}\0${this.target}`;
-    const draw = (r: Read) => {
+    frame.hidden = true;
+    const stop = watchImage(view, this.target, (r) => {
       if (r.kind === "image") {
         img.src = r.dataUrl;
         frame.hidden = false;
@@ -146,27 +172,13 @@ export class ImageWidget extends WidgetType {
         note.textContent = r.reason;
       }
       view.requestMeasure();
-    };
-    const load = () => {
-      void import("../../bridge.ts")
-        .then(({ anur }) => anur.call("image:read", { target: this.target, from }))
-        .then((r) => {
-          cache.set(key, r);
-          draw(r);
-        });
-    };
-    const known = cache.get(key);
-    if (known) draw(known);
-    else frame.hidden = true;
-    load();
-    window.addEventListener("focus", load);
-    reloads.set(wrap, load);
+    });
+    stops.set(wrap, stop);
     return wrap;
   }
 
   override destroy(dom: HTMLElement) {
-    const load = reloads.get(dom);
-    if (load) window.removeEventListener("focus", load);
+    stops.get(dom)?.();
   }
 
   override ignoreEvent() {
@@ -174,7 +186,69 @@ export class ImageWidget extends WidgetType {
   }
 }
 
-const reloads = new WeakMap<HTMLElement, () => void>();
+/**
+ * An image inside a line of text (2.29), drawn in the line at its height, or
+ * at the width its embed gives. Until it loads, or if it can't, its path chip
+ * shows instead; a click on the image opens the same path pop-up.
+ */
+export class InlineImageWidget extends WidgetType {
+  constructor(
+    readonly target: string,
+    readonly alt: string,
+    readonly size: { width: number; height: number | null } | null,
+  ) {
+    super();
+  }
+  override eq(other: InlineImageWidget) {
+    return (
+      other.target === this.target &&
+      other.alt === this.alt &&
+      other.size?.width === this.size?.width &&
+      other.size?.height === this.size?.height
+    );
+  }
+
+  toDOM(view: EditorView) {
+    const wrap = document.createElement("span");
+    wrap.className = "cm-lp-inline-image";
+    wrap.contentEditable = "false";
+    const img = document.createElement("img");
+    img.alt = this.alt || this.target;
+    img.draggable = false;
+    img.title = this.target;
+    img.hidden = true;
+    if (this.size) {
+      img.classList.add("sized");
+      img.style.width = `${String(this.size.width)}px`;
+      if (this.size.height) img.style.height = `${String(this.size.height)}px`;
+    }
+    const chip = new EmbedWidget(this.target).toDOM(view);
+    wrap.append(img, chip);
+    img.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      openPathEditor(view, wrap);
+    });
+    const stop = watchImage(view, this.target, (r) => {
+      const drawn = r.kind === "image";
+      if (drawn) img.src = r.dataUrl;
+      img.hidden = !drawn;
+      chip.hidden = drawn;
+      chip.title = drawn ? "Change the path" : r.reason;
+    });
+    stops.set(wrap, stop);
+    return wrap;
+  }
+
+  override destroy(dom: HTMLElement) {
+    stops.get(dom)?.();
+  }
+
+  override ignoreEvent() {
+    return true;
+  }
+}
+
+const stops = new WeakMap<HTMLElement, () => void>();
 
 /** An image shows as selected while the selection covers its whole line. */
 export const imageSelection = ViewPlugin.define((view) => {

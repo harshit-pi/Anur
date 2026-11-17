@@ -11,7 +11,13 @@ import {
   TextWidget,
 } from "./widgets.ts";
 import { BaseWidget } from "../bases/base-widget.ts";
-import { ImageWidget, isImagePath, sizeOf } from "../images/image-widget.ts";
+import {
+  ImageWidget,
+  InlineImageWidget,
+  isImagePath,
+  isWebAddress,
+  sizeOf,
+} from "../images/image-widget.ts";
 import {
   CalloutLabelWidget,
   CopyCodeWidget,
@@ -258,14 +264,10 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
             const label = url ? text(url.from, url.to) : text(from, to);
             const line = doc.lineAt(from);
             // An image alone on its line is drawn as the image (2.27); its path stays on a chip.
-            if (
-              url &&
-              isImagePath(label) &&
-              line.from === from &&
-              line.text.trimEnd() === text(from, to)
-            ) {
-              const alt = /^!\[([^\]]*)\]/.exec(text(from, to))?.[1] ?? "";
-              const [altText, sized] = alt.split("|");
+            const drawable = url && (isImagePath(label) || isWebAddress(label));
+            const alt = /^!\[([^\]]*)\]/.exec(text(from, to))?.[1] ?? "";
+            const [altText, sized] = alt.split("|");
+            if (drawable && line.from === from && line.text.trimEnd() === text(from, to)) {
               out.push(
                 Decoration.replace({
                   widget: new ImageWidget(label, altText ?? "", sizeOf(sized ?? null)),
@@ -274,7 +276,14 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
               );
               return false;
             }
-            out.push(Decoration.replace({ widget: new EmbedWidget(label) }).range(from, to));
+            // Inside a line of text it's drawn in the line (2.29).
+            out.push(
+              Decoration.replace({
+                widget: drawable
+                  ? new InlineImageWidget(label, altText ?? "", sizeOf(sized ?? null))
+                  : new EmbedWidget(label),
+              }).range(from, to),
+            );
           }
           return false;
         case "WikiEmbed":
@@ -309,9 +318,16 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
               );
               return false;
             }
+            const alias = children(node, "WikiLinkAlias")[0];
             out.push(
               Decoration.replace({
-                widget: new EmbedWidget(target ? text(target.from, target.to) : ""),
+                widget: isImagePath(name)
+                  ? new InlineImageWidget(
+                      name,
+                      "",
+                      sizeOf(alias ? text(alias.from, alias.to) : null),
+                    )
+                  : new EmbedWidget(target ? text(target.from, target.to) : ""),
               }).range(from, to),
             );
           }

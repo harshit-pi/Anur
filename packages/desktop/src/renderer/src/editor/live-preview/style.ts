@@ -136,6 +136,17 @@ export const livePreviewTheme = EditorView.theme({
     color: "var(--graphite)",
   },
   ".cm-lp-image-note:empty": { display: "none" },
+  // An image inside a line of text (2.29): the line's height unless its embed gives a width.
+  ".cm-lp-inline-image img": {
+    height: "1.4em",
+    width: "auto",
+    maxWidth: "100%",
+    verticalAlign: "-0.3em",
+    borderRadius: "3px",
+    cursor: "pointer",
+  },
+  ".cm-lp-inline-image img.sized": { height: "auto", verticalAlign: "middle" },
+  ".cm-lp-inline-image img[hidden], .cm-lp-inline-image [hidden]": { display: "none" },
   ".cm-lp-base": { margin: "6px 0 10px", fontFamily: "var(--font-ui)", fontSize: "13px" },
   ".cm-lp-base-head": {
     display: "flex",

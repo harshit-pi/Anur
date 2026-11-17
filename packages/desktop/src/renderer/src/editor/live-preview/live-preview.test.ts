@@ -9,6 +9,7 @@ import {
   textStart,
 } from "./live-preview.ts";
 import { BaseWidget } from "../bases/base-widget.ts";
+import { ImageWidget, InlineImageWidget } from "../images/image-widget.ts";
 import { TableWidget } from "../table/table-widget.ts";
 import { CalloutLabelWidget, CopyCodeWidget, LanguageChipWidget } from "../chips/chip-widgets.ts";
 import { PropertiesWidget } from "../properties/properties-widget.ts";
@@ -104,6 +105,25 @@ describe("live preview", () => {
       "Ideas.base#Refined",
     );
     expect(widgetOf("See ![[Ideas.base]] here\n\nend", BaseWidget)).toBeUndefined();
+  });
+
+  it("draws a web image alone on its line as the image, whatever its address ends in", () => {
+    const doc = "Intro\n\n![a cat|300](https://example.com/photo?id=7)\n\nend";
+    const w = widgetOf(doc, ImageWidget);
+    expect(w?.target).toBe("https://example.com/photo?id=7");
+    expect(w?.size).toEqual({ width: 300, height: null });
+  });
+
+  it("draws an image inside a line of text in the line, and keeps a chip for anything else", () => {
+    const md = widgetOf("See ![logo](img/logo.png) here.\n\nend", InlineImageWidget);
+    expect(md?.target).toBe("img/logo.png");
+    const wiki = widgetOf("Icon ![[peacock.webp|40]] here.\n\nend", InlineImageWidget);
+    expect(wiki?.target).toBe("peacock.webp");
+    expect(wiki?.size).toEqual({ width: 40, height: null });
+    const web = widgetOf("A ![](https://example.com/a.svg) b\n\nend", InlineImageWidget);
+    expect(web?.target).toBe("https://example.com/a.svg");
+    expect(widgetOf("A ![[Notes.pdf]] b\n\nend", InlineImageWidget)).toBeUndefined();
+    expect(widgetOf("![[peacock.webp]]\n\nend", InlineImageWidget)).toBeUndefined();
   });
 
   it("puts a copy button on a fenced code block's first line", () => {
