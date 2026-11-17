@@ -18,6 +18,16 @@ export const FolderState = z.object({
   docs: z.array(z.string()),
   /** True when the folder had more files than Anur lists. */
   truncated: z.boolean(),
+  /** The sync service that keeps the folder, if any. */
+  cloud: z.enum(["icloud", "dropbox", "onedrive", "google-drive", "cloud"]).nullable(),
+  /** A git repo inside a synced folder: sync is a known cause of git lock-file failures. */
+  gitInCloud: z.boolean(),
+  /** Docs whose bytes are still in iCloud; Anur fetches them before reading. */
+  offloaded: z.array(z.string()),
+  /** Sync conflict copies, each offered as a merge into its original. */
+  conflicts: z.array(
+    z.object({ original: z.string(), copy: z.string(), service: z.enum(["icloud", "dropbox"]) }),
+  ),
 });
 export type FolderState = z.infer<typeof FolderState>;
 
@@ -44,6 +54,54 @@ export const ipcContract = {
       z.object({ kind: z.literal("cancelled") }),
       z.object({ kind: z.literal("elsewhere") }),
       z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** How a conflict copy would merge into its original, section by section. */
+  "conflict:plan": {
+    request: z.object({ copy: z.string() }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("plan"),
+        original: z.string(),
+        copy: z.string(),
+        parts: z.array(
+          z.discriminatedUnion("kind", [
+            z.object({ kind: z.literal("same"), path: z.array(z.string()), text: z.string() }),
+            z.object({
+              kind: z.literal("differs"),
+              path: z.array(z.string()),
+              original: z.string(),
+              copy: z.string(),
+            }),
+            z.object({
+              kind: z.literal("only-original"),
+              path: z.array(z.string()),
+              text: z.string(),
+            }),
+            z.object({ kind: z.literal("only-copy"), path: z.array(z.string()), text: z.string() }),
+          ]),
+        ),
+        /** The two files as planned; the merge is refused if either changes before it runs. */
+        hashes: z.object({ original: z.string(), copy: z.string() }),
+      }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /** Write the merge into the original, then move the copy to the Trash. */
+  "conflict:merge": {
+    request: z
+      .object({
+        copy: z.string(),
+        hashes: z.object({ original: z.string(), copy: z.string() }),
+        choices: z.record(
+          z.string().regex(/^\d+$/),
+          z.union([z.enum(["original", "copy"]), z.boolean()]),
+        ),
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("merged"), folder: FolderState }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
 } as const;

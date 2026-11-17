@@ -109,3 +109,15 @@ export {
   type NewSection,
   type OldSection,
 } from "./ids/index.ts";
+export {
+  PROVIDER_NAME,
+  applyMerge,
+  cloudProviderOf,
+  findConflictCopies,
+  planConflictMerge,
+  type CloudProvider,
+  type ConflictCopy,
+  type MergeChoices,
+  type MergePart,
+  type MergePlan,
+} from "./sync/index.ts";

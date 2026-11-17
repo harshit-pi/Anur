@@ -4,6 +4,7 @@ import { Resizer } from "./layout/Resizer.tsx";
 import { loadWidths, saveWidths, type Side } from "./layout/panel-widths.ts";
 import { anur } from "./bridge.ts";
 import { CommandPalette } from "./regions/CommandPalette.tsx";
+import { MergeDialog } from "./regions/MergeDialog.tsx";
 import {
   Center,
   LeftSidebar,
@@ -18,6 +19,7 @@ export function App() {
   const [version, setVersion] = useState<string | null>(null);
   const [folder, setFolder] = useState<FolderState | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [merging, setMerging] = useState<string | null>(null);
   const [widths, setWidths] = useState(() => loadWidths(window.localStorage));
   const setWidth = (side: Side) => (width: number) => {
     setWidths((w) => {
@@ -71,7 +73,7 @@ export function App() {
         }}
       />
       <LeftSidebar folder={folder} selected={selected} onSelect={setSelected} />
-      <Center folder={folder} selected={selected} onOpenFolder={openFolder} />
+      <Center folder={folder} selected={selected} onOpenFolder={openFolder} onMerge={setMerging} />
       <RightSidebar />
       <StatusBar version={version} folder={folder} />
       <Resizer
@@ -86,6 +88,14 @@ export function App() {
         offset={widths.right}
         onChange={setWidth("right")}
       />
+      {merging ? (
+        <MergeDialog
+          copy={merging}
+          onClose={() => {
+            setMerging(null);
+          }}
+        />
+      ) : null}
       <CommandPalette
         open={paletteOpen}
         onClose={() => {

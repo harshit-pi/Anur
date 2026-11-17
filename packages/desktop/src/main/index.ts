@@ -4,13 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { FORMAT_VERSION } from "@anur/core";
-import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, session } from "electron";
+import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, session, shell } from "electron";
 import {
   CHANNELS,
   type Channel,
   type EventName,
   type EventPayload,
 } from "../shared/ipc-contract.ts";
+import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readRecent } from "./folder/recent.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
@@ -97,6 +98,23 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!win) return { kind: "cancelled" };
     const outcome = await chooseFolder(win);
     return outcome.kind === "elsewhere" ? { kind: "elsewhere" } : outcome;
+  },
+  "conflict:plan": async ({ copy }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    return planConflict(folder, copy);
+  },
+  "conflict:merge": async (request, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    if (folder.mode === "read-only") return { kind: "failed", reason: "This folder is read-only." };
+    const result = await mergeConflict(folder, request, (file) => shell.trashItem(file));
+    if (!result.ok) return { kind: "failed", reason: result.reason };
+    const fresh = await folders.refresh(webContentsId);
+    if (!fresh) return { kind: "failed", reason: "The folder closed during the merge." };
+    const win = windows.get(webContentsId);
+    if (win) send(win, "folder:changed", fresh);
+    return { kind: "merged", folder: fresh };
   },
 };
 
@@ -230,7 +248,11 @@ if (!isCheck && !app.requestSingleInstanceLock()) app.quit();
 
 app.enableSandbox();
 void app.whenReady().then(async () => {
-  folders = new FolderService(app.getPath("userData"));
+  // Checks can set ANUR_CHECK_HOME, so a sample folder can stand in for one in iCloud.
+  folders = new FolderService(
+    app.getPath("userData"),
+    isCheck ? (process.env.ANUR_CHECK_HOME ?? undefined) : undefined,
+  );
   // No page in Anur needs the camera, microphone, location or notifications.
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
     callback(false);
