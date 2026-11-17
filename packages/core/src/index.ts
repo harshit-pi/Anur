@@ -99,4 +99,13 @@ export {
   type SectionIdEvent,
   type SectionIdState,
   type SectionToSave,
+  MATCH_BAR,
+  SUGGEST_BAR,
+  hasConflictMarkers,
+  matchSections,
+  sectionBodies,
+  similarity,
+  type MatchResult,
+  type NewSection,
+  type OldSection,
 } from "./ids/index.ts";

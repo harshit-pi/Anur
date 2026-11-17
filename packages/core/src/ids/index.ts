@@ -25,3 +25,14 @@ export {
   type SectionIdState,
   type SectionToSave,
 } from "./section-ids.ts";
+export {
+  MATCH_BAR,
+  SUGGEST_BAR,
+  hasConflictMarkers,
+  matchSections,
+  sectionBodies,
+  similarity,
+  type MatchResult,
+  type NewSection,
+  type OldSection,
+} from "./matcher.ts";
