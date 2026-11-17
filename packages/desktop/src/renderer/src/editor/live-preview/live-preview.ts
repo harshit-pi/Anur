@@ -7,10 +7,11 @@ import {
   CalloutLabelWidget,
   CheckboxWidget,
   EmbedWidget,
-  PropertiesWidget,
   RuleWidget,
   TextWidget,
 } from "./widgets.ts";
+import { parseFields } from "../properties/properties-model.ts";
+import { PropertiesWidget } from "../properties/properties-widget.ts";
 import { parseTable } from "../table/table-model.ts";
 import { TableWidget } from "../table/table-widget.ts";
 
@@ -38,25 +39,7 @@ function activeLines(state: EditorState): Set<number> {
 
 /** Frontmatter as key and values; null when it isn't simple enough to show as properties. */
 export function parseProperties(yaml: string): [string, string[]][] | null {
-  const props: [string, string[]][] = [];
-  const unquote = (s: string) => s.trim().replace(/^(["'])(.*)\1$/, "$2");
-  for (const raw of yaml.split("\n")) {
-    if (raw.trim() === "" || raw.trim().startsWith("#")) continue;
-    const item = /^\s+-\s+(.*)$/.exec(raw);
-    const last = props.at(-1);
-    if (item?.[1] !== undefined && last) {
-      last[1].push(unquote(item[1]));
-      continue;
-    }
-    const kv = /^([A-Za-z0-9_][\w.-]*)\s*:\s*(.*)$/.exec(raw);
-    if (!kv?.[1]) return null;
-    const value = kv[2]?.trim() ?? "";
-    if (value === "") props.push([kv[1], []]);
-    else if (value.startsWith("[") && value.endsWith("]") && !value.startsWith("[[")) {
-      props.push([kv[1], value.slice(1, -1).split(",").map(unquote).filter(Boolean)]);
-    } else props.push([kv[1], [unquote(value)]]);
-  }
-  return props;
+  return parseFields(yaml)?.fields.map((f) => [f.key, f.values]) ?? null;
 }
 
 export { splitRow } from "../table/table-model.ts";
@@ -102,9 +85,10 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
 
       switch (name) {
         case "Frontmatter": {
-          if (touches(from, to)) return false;
+          // Never YAML on the page: its fields are typed into in place (2.13).
+          // YAML too intricate to show as fields stays as written.
           const body = text(from, to).split("\n").slice(1, -1).join("\n");
-          const props = parseProperties(body);
+          const props = parseFields(body);
           if (props)
             out.push(
               Decoration.replace({ widget: new PropertiesWidget(props), block: true }).range(

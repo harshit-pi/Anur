@@ -1,6 +1,5 @@
 import { type EditorView, WidgetType } from "@codemirror/view";
 import { toggleTask } from "../commands.ts";
-import { renderInline } from "./inline.ts";
 
 /**
  * What live preview draws in place of Markdown source. Widgets only show the
@@ -98,46 +97,6 @@ export class EmbedWidget extends WidgetType {
     const image = /\.(png|jpe?g|gif|svg|webp)$/i.test(this.target);
     s.textContent = `${image ? "Image" : "Embed"}: ${this.target}`;
     return s;
-  }
-}
-
-/** Frontmatter drawn as a Properties box, as Obsidian shows it. */
-export class PropertiesWidget extends WidgetType {
-  constructor(readonly props: [string, string[]][]) {
-    super();
-  }
-  override eq(other: PropertiesWidget) {
-    return JSON.stringify(other.props) === JSON.stringify(this.props);
-  }
-  toDOM() {
-    const box = document.createElement("div");
-    box.className = "cm-lp-properties";
-    const title = document.createElement("div");
-    title.className = "cm-lp-properties-title";
-    title.textContent = "Properties";
-    box.append(title);
-    for (const [key, values] of this.props) {
-      const row = document.createElement("div");
-      row.className = "cm-lp-property";
-      const k = document.createElement("span");
-      k.className = "cm-lp-property-key";
-      k.textContent = key;
-      const v = document.createElement("span");
-      v.className = "cm-lp-property-value";
-      values.forEach((value, i) => {
-        const chip = document.createElement("span");
-        chip.className = values.length > 1 || key === "tags" ? "cm-lp-tag" : "";
-        chip.append(renderInline(value));
-        v.append(chip);
-        if (i < values.length - 1 && !chip.className) v.append(document.createTextNode(", "));
-      });
-      row.append(k, v);
-      box.append(row);
-    }
-    return box;
-  }
-  override ignoreEvent() {
-    return false;
   }
 }
 
