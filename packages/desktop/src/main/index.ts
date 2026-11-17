@@ -4,19 +4,85 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { FORMAT_VERSION } from "@anur/core";
-import { BrowserWindow, app, ipcMain, nativeTheme, session } from "electron";
-import { CHANNELS, type Channel } from "../shared/ipc-contract.ts";
+import { BrowserWindow, Menu, app, dialog, ipcMain, nativeTheme, session } from "electron";
+import {
+  CHANNELS,
+  type Channel,
+  type EventName,
+  type EventPayload,
+} from "../shared/ipc-contract.ts";
+import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
+import { readRecent } from "./folder/recent.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
+import { buildMenu } from "./menu.ts";
 
 /**
- * The main process stays thin (Architecture, "Processes"): windows, menus and
- * routing checked messages. Parsing, the index and agents run elsewhere.
+ * The main process stays thin (Architecture, "Processes"): windows, menus,
+ * the folder lock and routing checked messages. Parsing, the index and
+ * agents run elsewhere.
  */
 const here = import.meta.dirname;
 const devUrl = process.env.ELECTRON_RENDERER_URL;
+const isCheck = Boolean(process.env.ANUR_SCREENSHOT);
 const rendererUrl = () =>
   devUrl ?? pathToFileURL(path.join(here, "..", "renderer", "index.html")).href;
 const senders = trustedSenders(rendererUrl);
+
+// Checks run in a throwaway profile, so they never share storage or locks
+// with a copy of Anur that is already open.
+if (isCheck) app.setPath("userData", mkdtempSync(path.join(tmpdir(), "anur-check-")));
+
+// For checks: ANUR_THEME=light or dark overrides the system theme.
+const theme = process.env.ANUR_THEME;
+if (theme === "light" || theme === "dark") nativeTheme.themeSource = theme;
+
+const windows = new Map<number, BrowserWindow>();
+let folders: FolderService;
+
+function send<E extends EventName>(win: BrowserWindow, event: E, payload: EventPayload<E>) {
+  if (!win.isDestroyed()) win.webContents.send(event, payload);
+}
+
+/** Open a folder: in its own window if it is open already, in a new window if this one has a folder. */
+async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOutcome> {
+  let target = win;
+  if (folders.current(win.webContents.id)) target = createWindow();
+  const outcome = await folders.open(target.webContents.id, folder);
+  if (outcome.kind === "opened") {
+    target.setTitle(outcome.folder.name);
+    target.setRepresentedFilename(outcome.folder.path);
+    send(target, "folder:changed", outcome.folder);
+    return outcome;
+  }
+  if (target !== win) target.close();
+  if (outcome.kind === "elsewhere") {
+    const other = windows.get(outcome.windowId);
+    if (other) {
+      if (other.isMinimized()) other.restore();
+      other.focus();
+    }
+  }
+  return outcome;
+}
+
+async function chooseFolder(win: BrowserWindow): Promise<OpenOutcome | { kind: "cancelled" }> {
+  const picked = await dialog.showOpenDialog(win, {
+    title: "Open a folder",
+    buttonLabel: "Open",
+    properties: ["openDirectory", "createDirectory"],
+  });
+  const [folder] = picked.filePaths;
+  if (picked.canceled || !folder) return { kind: "cancelled" };
+  const outcome = await openFolderIn(win, folder);
+  if (outcome.kind === "refused") {
+    await dialog.showMessageBox(win, {
+      type: "warning",
+      message: "Anur can't open this folder",
+      detail: outcome.reason,
+    });
+  }
+  return outcome;
+}
 
 const handlers: { [C in Channel]: Handler<C> } = {
   "app:info": () => ({
@@ -25,11 +91,20 @@ const handlers: { [C in Channel]: Handler<C> } = {
     formatVersion: FORMAT_VERSION,
     platform: process.platform as "darwin" | "win32" | "linux",
   }),
+  "folder:current": (_req, { webContentsId }) => folders.current(webContentsId),
+  "folder:choose": async (_req, { webContentsId }) => {
+    const win = windows.get(webContentsId);
+    if (!win) return { kind: "cancelled" };
+    const outcome = await chooseFolder(win);
+    return outcome.kind === "elsewhere" ? { kind: "elsewhere" } : outcome;
+  },
 };
 
 function registerIpc() {
   for (const channel of CHANNELS) {
-    const run = guarded(channel, handlers[channel], (s) => senders.isTrusted(s));
+    const run = guarded(channel, handlers[channel] as Handler<typeof channel>, (s) =>
+      senders.isTrusted(s),
+    );
     ipcMain.handle(channel, (event, raw) =>
       run({ webContentsId: event.sender.id, frameUrl: event.senderFrame?.url ?? null }, raw),
     );
@@ -56,9 +131,12 @@ function createWindow(): BrowserWindow {
     },
   });
   const id = win.webContents.id;
+  windows.set(id, win);
   senders.add(id);
   win.on("closed", () => {
+    windows.delete(id);
     senders.remove(id);
+    void folders.close(id);
   });
 
   // The window only ever shows Anur's own page; links open nowhere until
@@ -74,6 +152,10 @@ function createWindow(): BrowserWindow {
   if (devUrl) void win.loadURL(devUrl);
   else void win.loadFile(path.join(here, "..", "renderer", "index.html"));
   return win;
+}
+
+function focusedOrNew(): BrowserWindow {
+  return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? createWindow();
 }
 
 /** For checks: ANUR_SCREENSHOT=<file.png> saves the first window once drawn, then quits. */
@@ -113,7 +195,6 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
           };
           const width = w ?? 1440;
           if (process.env.ANUR_SCREENSHOT_DRAG === "narrow") {
-            // Both panels down to their narrowest.
             await drag(48 + 260, 40);
             await drag(width - 300, width - 20);
           } else {
@@ -121,6 +202,16 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
             await drag(width - 300, width - 400);
           }
           await new Promise((r) => setTimeout(r, 200));
+        }
+        const clicks = process.env.ANUR_SCREENSHOT_CLICK;
+        if (clicks) {
+          // Click buttons by the start of their visible text, in order, such as "Engineering,Archive,Old".
+          for (const label of clicks.split(",")) {
+            await win.webContents.executeJavaScript(
+              `[...document.querySelectorAll("button")].find((b) => b.textContent.trim().startsWith(${JSON.stringify(label)}))?.click()`,
+            );
+            await new Promise((r) => setTimeout(r, 150));
+          }
         }
         if (process.env.ANUR_SCREENSHOT_PALETTE) {
           win.webContents.sendInputEvent({ type: "keyDown", keyCode: "K", modifiers: ["meta"] });
@@ -130,32 +221,62 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
         await writeFile(file, image.toPNG());
         app.quit();
       })();
-    }, 800);
+    }, 1200);
   });
 }
 
-// Checks run in a throwaway profile, so they never share storage or locks
-// with a copy of Anur that is already open.
-if (process.env.ANUR_SCREENSHOT)
-  app.setPath("userData", mkdtempSync(path.join(tmpdir(), "anur-check-")));
-
-// For checks: ANUR_THEME=light or dark overrides the system theme.
-const theme = process.env.ANUR_THEME;
-if (theme === "light" || theme === "dark") nativeTheme.themeSource = theme;
+// One copy of Anur at a time; a second launch brings the first forward.
+if (!isCheck && !app.requestSingleInstanceLock()) app.quit();
 
 app.enableSandbox();
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
+  folders = new FolderService(app.getPath("userData"));
   // No page in Anur needs the camera, microphone, location or notifications.
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
     callback(false);
   });
   registerIpc();
+  Menu.setApplicationMenu(
+    buildMenu({
+      openFolder: () => {
+        void chooseFolder(focusedOrNew());
+      },
+      newWindow: () => {
+        createWindow();
+      },
+      isDev: Boolean(devUrl),
+    }),
+  );
+
   const win = createWindow();
   const shot = process.env.ANUR_SCREENSHOT;
   if (shot) screenshotThenQuit(win, shot);
+
+  // Reopen a folder: ANUR_OPEN_FOLDER for checks, otherwise the last one opened.
+  const reopen =
+    process.env.ANUR_OPEN_FOLDER ??
+    (isCheck ? undefined : (await readRecent(app.getPath("userData")))[0]);
+  if (reopen) {
+    win.webContents.once("did-finish-load", () => {
+      void openFolderIn(win, reopen);
+    });
+  }
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on("second-instance", () => {
+  const win = BrowserWindow.getAllWindows()[0];
+  if (win) {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  }
+});
+
+app.on("will-quit", () => {
+  void folders.closeAll();
 });
 
 app.on("window-all-closed", () => {

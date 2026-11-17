@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { FolderState } from "../../shared/ipc-contract.ts";
 import { Resizer } from "./layout/Resizer.tsx";
 import { loadWidths, saveWidths, type Side } from "./layout/panel-widths.ts";
 import { anur } from "./bridge.ts";
@@ -15,6 +16,8 @@ import {
 export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
+  const [folder, setFolder] = useState<FolderState | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
   const [widths, setWidths] = useState(() => loadWidths(window.localStorage));
   const setWidth = (side: Side) => (width: number) => {
     setWidths((w) => {
@@ -27,6 +30,17 @@ export function App() {
   useEffect(() => {
     void anur.call("app:info", {}).then((info) => {
       setVersion(info.version);
+    });
+    void anur.call("folder:current", {}).then(setFolder);
+    return anur.on("folder:changed", (f) => {
+      setFolder(f);
+      setSelected(null);
+    });
+  }, []);
+
+  const openFolder = useCallback(() => {
+    void anur.call("folder:choose", {}).then((r) => {
+      if (r.kind === "opened") setFolder(r.folder);
     });
   }, []);
 
@@ -56,10 +70,10 @@ export function App() {
           setPaletteOpen(true);
         }}
       />
-      <LeftSidebar />
-      <Center />
+      <LeftSidebar folder={folder} selected={selected} onSelect={setSelected} />
+      <Center folder={folder} selected={selected} onOpenFolder={openFolder} />
       <RightSidebar />
-      <StatusBar version={version} />
+      <StatusBar version={version} folder={folder} />
       <Resizer
         side="left"
         width={widths.left}
