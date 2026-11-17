@@ -100,6 +100,42 @@ export const livePreviewTheme = EditorView.theme({
   },
   ".cm-lp-conflict-keep:hover": { borderColor: "var(--blue)", color: "var(--blue)" },
   // An embedded base (bases/base-widget.ts): tabs for its views over a table.
+  ".cm-lp-image": {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: "6px",
+    margin: "8px 0 12px",
+  },
+  ".cm-lp-image-frame": { position: "relative", maxWidth: "100%", lineHeight: "0" },
+  ".cm-lp-image img": {
+    maxWidth: "100%",
+    height: "auto",
+    borderRadius: "6px",
+    cursor: "pointer",
+  },
+  ".cm-lp-image.selected img": { outline: "2px solid var(--blue)", outlineOffset: "2px" },
+  ".cm-lp-image-handle": {
+    position: "absolute",
+    right: "-5px",
+    bottom: "-5px",
+    width: "12px",
+    height: "12px",
+    border: "2px solid var(--sheet)",
+    borderRadius: "50%",
+    background: "var(--blue)",
+    cursor: "nwse-resize",
+    opacity: "0",
+  },
+  ".cm-lp-image-frame:hover .cm-lp-image-handle, .cm-lp-image.selected .cm-lp-image-handle": {
+    opacity: "1",
+  },
+  ".cm-lp-image-note": {
+    fontFamily: "var(--font-ui)",
+    fontSize: "13px",
+    color: "var(--graphite)",
+  },
+  ".cm-lp-image-note:empty": { display: "none" },
   ".cm-lp-base": { margin: "6px 0 10px", fontFamily: "var(--font-ui)", fontSize: "13px" },
   ".cm-lp-base-head": {
     display: "flex",

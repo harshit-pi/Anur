@@ -11,6 +11,7 @@ import {
   TextWidget,
 } from "./widgets.ts";
 import { BaseWidget } from "../bases/base-widget.ts";
+import { ImageWidget, isImagePath, sizeOf } from "../images/image-widget.ts";
 import {
   CalloutLabelWidget,
   CopyCodeWidget,
@@ -255,6 +256,24 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           {
             const url = children(node, "URL")[0];
             const label = url ? text(url.from, url.to) : text(from, to);
+            const line = doc.lineAt(from);
+            // An image alone on its line is drawn as the image (2.27); its path stays on a chip.
+            if (
+              url &&
+              isImagePath(label) &&
+              line.from === from &&
+              line.text.trimEnd() === text(from, to)
+            ) {
+              const alt = /^!\[([^\]]*)\]/.exec(text(from, to))?.[1] ?? "";
+              const [altText, sized] = alt.split("|");
+              out.push(
+                Decoration.replace({
+                  widget: new ImageWidget(label, altText ?? "", sizeOf(sized ?? null)),
+                  block: true,
+                }).range(line.from, line.to),
+              );
+              return false;
+            }
             out.push(Decoration.replace({ widget: new EmbedWidget(label) }).range(from, to));
           }
           return false;
@@ -272,6 +291,21 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
                   line.from,
                   line.to,
                 ),
+              );
+              return false;
+            }
+            // An image alone on its line is drawn as the image (2.27); its path stays on a chip.
+            if (isImagePath(name) && line.from === from && line.text.trimEnd() === text(from, to)) {
+              const alias = children(node, "WikiLinkAlias")[0];
+              out.push(
+                Decoration.replace({
+                  widget: new ImageWidget(
+                    name,
+                    "",
+                    sizeOf(alias ? text(alias.from, alias.to) : null),
+                  ),
+                  block: true,
+                }).range(line.from, line.to),
               );
               return false;
             }

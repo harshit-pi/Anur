@@ -30,6 +30,7 @@ import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
+import { readImage, saveImage } from "./folder/images.ts";
 import { createDoc, searchFolder } from "./folder/search.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
@@ -315,6 +316,23 @@ const handlers: { [C in Channel]: Handler<C> } = {
         },
       });
     }),
+  "image:read": async ({ target, from }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    return readImage(folder.path, target, from);
+  },
+  "image:save": async ({ from, name, type, data }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || folder.mode !== "writable" || !folder.docs.includes(from))
+      return { kind: "failed", reason: "Images can be kept only in a folder Anur can write to." };
+    const saved = await saveImage(folder.path, from, name, type, Buffer.from(data, "base64"));
+    if (saved.kind === "saved") {
+      const fresh = await folders.refresh(webContentsId);
+      const win = windows.get(webContentsId);
+      if (win && fresh) send(win, "folder:changed", fresh);
+    }
+    return saved;
+  },
   "base:read": async ({ target, from }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };

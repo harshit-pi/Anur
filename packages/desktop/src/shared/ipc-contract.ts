@@ -205,6 +205,30 @@ export const ipcContract = {
    * An embedded Obsidian base, `![[Ideas.base]]` or `![[Ideas.base#View]]`,
    * worked out over the folder's notes: each view as a table. Read-only.
    */
+  /** An image a doc embeds, found as Obsidian finds it and read as a data URL (2.27). */
+  "image:read": {
+    request: z.object({ target: z.string().max(1024), from: z.string().max(4096) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("image"), path: z.string(), dataUrl: z.string() }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /** Keep a pasted or dropped image in the folder, where Obsidian would put it (2.27). */
+  "image:save": {
+    request: z
+      .object({
+        from: z.string().max(4096),
+        name: z.string().max(255),
+        type: z.string().max(50),
+        /** The image's bytes, base64. */
+        data: z.string().max(36_000_000),
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("saved"), path: z.string(), name: z.string() }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
   "base:read": {
     request: z.object({ target: z.string().max(1024), from: z.string().max(4096) }).strict(),
     response: z.discriminatedUnion("kind", [
