@@ -79,6 +79,16 @@ export const ThreadItem = z.discriminatedUnion("kind", [
 ]);
 export type ThreadItem = z.infer<typeof ThreadItem>;
 
+/** A choice the agent offers for a thread's session: its mode or its model (3.5). */
+export const SessionOption = z.object({
+  id: z.string(),
+  name: z.string(),
+  current: z.string(),
+  choices: z.array(
+    z.object({ value: z.string(), name: z.string(), description: z.string().nullable() }),
+  ),
+});
+
 /** A thread on one section: what it is about, what it read, and what was said. */
 export const ThreadView = z.object({
   id: z.string(),
@@ -91,6 +101,8 @@ export const ThreadView = z.object({
   /** What the agent reads in this thread: the bundle's parts, as the reads line lists them. */
   reads: z.array(z.object({ label: z.string(), detail: z.string() })),
   items: z.array(ThreadItem),
+  /** The session's mode and model, once a session is open on this device. */
+  options: z.array(SessionOption),
 });
 export type ThreadView = z.infer<typeof ThreadView>;
 
@@ -389,6 +401,13 @@ export const ipcContract = {
       z.object({ kind: z.literal("sent") }),
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
+  },
+  /** Pick the thread's mode or model; it holds for the thread's session from now on. */
+  "thread:option": {
+    request: z
+      .object({ thread: z.string().max(200), id: z.string().max(100), value: z.string().max(200) })
+      .strict(),
+    response: z.object({}),
   },
   /** Stop the thread's running turn. */
   "thread:stop": {

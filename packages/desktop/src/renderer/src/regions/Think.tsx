@@ -386,6 +386,42 @@ export function Think({
             Preview in doc
           </button>
         ) : null}
+        {thread.options.length > 0 ? (
+          <div className="think-options">
+            {thread.options.map((o) => (
+              <label key={o.id} className="think-option">
+                <span className="quiet">{o.name}</span>
+                <select
+                  value={o.current}
+                  disabled={thread.busy}
+                  title={o.choices.find((c) => c.value === o.current)?.description ?? undefined}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setThreads((ts) =>
+                      ts.map((t) =>
+                        t.id === thread.id
+                          ? {
+                              ...t,
+                              options: t.options.map((x) =>
+                                x.id === o.id ? { ...x, current: value } : x,
+                              ),
+                            }
+                          : t,
+                      ),
+                    );
+                    void anur.call("thread:option", { thread: thread.id, id: o.id, value });
+                  }}
+                >
+                  {o.choices.map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+        ) : null}
         <Composer
           placeholder="Reply in this thread"
           sendLabel="Send"

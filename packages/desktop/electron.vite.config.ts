@@ -16,6 +16,11 @@ export default defineConfig({
           index: path.resolve(import.meta.dirname, "src/main/index.ts"),
           "agent-host": path.resolve(import.meta.dirname, "src/agent/host-process.ts"),
           hook: path.resolve(import.meta.dirname, "src/agent/hook.ts"),
+          // The ACP adapter, bundled whole, so the packaged app carries it in out/.
+          "acp-adapter": path.resolve(
+            import.meta.dirname,
+            "node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js",
+          ),
         },
       },
     },

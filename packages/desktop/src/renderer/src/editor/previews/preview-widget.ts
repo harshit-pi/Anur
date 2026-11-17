@@ -6,7 +6,13 @@ import {
   type EditorState,
 } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
-import { buildSectionTree, partHunks, type PreviewPart, type SectionTree } from "@anur/core";
+import {
+  applyPart,
+  buildSectionTree,
+  partHunks,
+  type PreviewPart,
+  type SectionTree,
+} from "@anur/core";
 import type { PreviewView } from "../../../../shared/ipc-contract.ts";
 import { inlineRuns } from "../../layout/inline-markdown.ts";
 
@@ -18,7 +24,9 @@ import { inlineRuns } from "../../layout/inline-markdown.ts";
  */
 
 export type PreviewActions = {
-  apply: (thread: string, part: PreviewPart) => void;
+  apply: (thread: string, part: PreviewPart, force?: boolean) => void;
+  /** Ask the thread to make its edit again on the section as it is now (3.10). */
+  refresh: (thread: string, part: PreviewPart) => void;
   reject: (thread: string, part: PreviewPart, edits: number[]) => void;
   back: (thread: string) => void;
 };
@@ -111,7 +119,19 @@ function decorations(state: EditorState): DecorationSet {
       }),
     });
     if (!chosen) continue;
-    const body = new BodyWidget(chosen.thread, chosen.title, chosen.part, pick.changes, key);
+    // Shown on the section as it is now: the preview follows newer typing (3.10).
+    const current = state.sliceDoc(s.subtreeRange.from, s.subtreeRange.to);
+    const made = applyPart(current, chosen.part);
+    const shownPart =
+      made.kind === "ok" ? { ...chosen.part, base: current, proposed: made.text } : chosen.part;
+    const body = new BodyWidget(
+      chosen.thread,
+      chosen.title,
+      shownPart,
+      pick.changes,
+      key,
+      made.kind === "conflict",
+    );
     const from = Math.min(heading.to + 1, state.doc.length);
     const end = s.subtreeRange.to;
     const last = end > from ? state.doc.lineAt(Math.max(from, end - 1)) : null;
@@ -195,6 +215,8 @@ class BodyWidget extends WidgetType {
     readonly part: PreviewPart,
     readonly changes: boolean,
     readonly key: string,
+    /** Newer typing changed lines the preview changes too. */
+    readonly clash: boolean,
   ) {
     super();
   }
@@ -202,6 +224,7 @@ class BodyWidget extends WidgetType {
     return (
       o.thread === this.thread &&
       o.changes === this.changes &&
+      o.clash === this.clash &&
       o.part.proposed === this.part.proposed &&
       o.part.base === this.part.base
     );
@@ -241,8 +264,20 @@ class BodyWidget extends WidgetType {
     });
     toggle.append(box, " Show changes");
     const back = button("Back to thinking", false, () => actions?.back(this.thread));
-    const apply = button("Apply", true, () => actions?.apply(this.thread, this.part));
-    foot.append(note, toggle, back, apply);
+    if (this.clash) {
+      note.textContent =
+        "You've since changed lines this preview changes too. Ask the thread to redo its edit on your text, or use its version of those lines.";
+      const again = button("Ask the thread again", false, () =>
+        actions?.refresh(this.thread, this.part),
+      );
+      const force = button("Use the thread's version", true, () =>
+        actions?.apply(this.thread, this.part, true),
+      );
+      foot.append(note, back, again, force);
+    } else {
+      const apply = button("Apply", true, () => actions?.apply(this.thread, this.part));
+      foot.append(note, toggle, back, apply);
+    }
     wrap.append(foot);
     return wrap;
   }

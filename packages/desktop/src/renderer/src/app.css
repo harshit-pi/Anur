@@ -1505,3 +1505,28 @@ body.resizing * {
 .think-working {
   font-style: italic;
 }
+
+.think-options {
+  display: flex;
+  gap: 8px;
+}
+
+.think-option {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.think-option select {
+  width: 100%;
+  padding: 4px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}

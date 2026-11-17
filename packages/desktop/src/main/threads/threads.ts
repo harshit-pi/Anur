@@ -17,7 +17,7 @@ import {
   type SectionTree,
 } from "@anur/core";
 import type { EventPayload, ThreadItem, ThreadView } from "../../shared/ipc-contract.ts";
-import type { SessionSpec, ToMain } from "../../agent/protocol.ts";
+import type { SessionOption, SessionSpec, ToMain } from "../../agent/protocol.ts";
 import { JsonlWriter, readJsonlFile } from "../../vault/jsonl-writer.ts";
 import type { AgentHub } from "./hub.ts";
 import { PreviewStore } from "./previews.ts";
@@ -77,6 +77,8 @@ const newTurnId = () => `u${randomBytes(6).toString("hex")}`;
 export class Threads {
   private readonly live = new Map<string, Live>();
   private readonly writers = new Map<string, Promise<JsonlWriter>>();
+  /** Each thread's session choices, as the agent last reported them. */
+  private readonly options = new Map<string, SessionOption[]>();
   readonly previews: PreviewStore;
 
   constructor(private readonly d: ThreadDeps) {
@@ -184,6 +186,7 @@ export class Threads {
       busy: Boolean(live?.turn),
       reads,
       items,
+      options: this.options.get(thread) ?? [],
     };
     return view;
   }
@@ -379,6 +382,7 @@ export class Threads {
       thread,
       cwd: this.d.folder,
       resume,
+      hookLog: path.join(dir, `${thread}.log.jsonl`),
       settings: {
         hooks: {
           SessionStart: [{ hooks: [hook] }],
@@ -486,8 +490,24 @@ export class Threads {
     await rm(dir, { recursive: true, force: true });
   }
 
+  /** The person picked a mode or model for the thread. */
+  setOption(thread: string, id: string, value: string): void {
+    const now = this.options.get(thread);
+    if (now)
+      this.options.set(
+        thread,
+        now.map((o) => (o.id === id ? { ...o, current: value } : o)),
+      );
+    this.d.hub.send({ type: "option", thread, id, value });
+  }
+
   private async onHost(thread: string, m: ToMain): Promise<void> {
     const live = this.live.get(thread);
+    if (m.type === "options") {
+      this.options.set(thread, m.options);
+      if (live) await this.refresh(live.rel, live.docText, thread);
+      return;
+    }
     if (!live?.turn) return;
     switch (m.type) {
       case "session":

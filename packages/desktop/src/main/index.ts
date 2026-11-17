@@ -405,6 +405,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
     );
     return { kind: "ok" };
   },
+  "thread:option": ({ thread, id, value }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (folder) threadsFor(folder)?.setOption(thread, id, value);
+    return {};
+  },
   "thread:stop": ({ thread }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (folder) threadsFor(folder)?.stop(thread);

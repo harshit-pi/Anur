@@ -13,11 +13,22 @@ export type SessionSpec = {
   settings: Record<string, unknown>;
   /** The agent session to resume; null starts a new one. */
   resume: string | null;
+  /** The hook's log for this thread, read for the thread check (3.2). */
+  hookLog: string;
+};
+
+/** A choice the agent offers for its session, such as its mode or its model (3.5). */
+export type SessionOption = {
+  id: string;
+  name: string;
+  current: string;
+  choices: { value: string; name: string; description: string | null }[];
 };
 
 export type ToMain =
   | { type: "status"; connected: boolean; reason: string | null; agent: AgentVersions | null }
   | { type: "session"; thread: string; session: string; event: "started" | "resumed" }
+  | { type: "options"; thread: string; options: SessionOption[] }
   | { type: "text"; thread: string; turn: string; text: string }
   | {
       type: "tool";
@@ -50,6 +61,7 @@ export type ToHost =
   | { type: "prompt"; spec: SessionSpec; turn: string; text: string }
   | { type: "cancel"; thread: string }
   | { type: "permission"; request: string; option: string | null }
+  | { type: "option"; thread: string; id: string; value: string }
   | { type: "close"; thread: string };
 
 export type AgentVersions = { agent: string; adapter: string };
