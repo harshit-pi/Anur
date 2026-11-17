@@ -4,3 +4,10 @@
  * number opens the folder read-only.
  */
 export const FORMAT_VERSION = 1;
+
+export {
+  markdownExtensions,
+  markdownParser,
+  readWikiLink,
+  type WikiLink,
+} from "./markdown/index.ts";

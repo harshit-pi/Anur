@@ -6,5 +6,10 @@
   "description": "Sections, IDs, bundles, context and previews. No Electron, no React, no file system.",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@lezer/common": "1.5.5",
+    "@lezer/highlight": "1.2.5",
+    "@lezer/markdown": "1.8.1"
   }
 }
