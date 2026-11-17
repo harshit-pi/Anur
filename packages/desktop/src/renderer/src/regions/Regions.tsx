@@ -32,10 +32,14 @@ export function Ribbon({
   filesOpen,
   onFiles,
   onCommand,
+  onSettings,
+  onPlugins,
 }: {
   filesOpen: boolean;
   onFiles: () => void;
   onCommand: () => void;
+  onSettings: () => void;
+  onPlugins: () => void;
 }) {
   return (
     <nav className="ribbon" aria-label="Ribbon">
@@ -59,10 +63,22 @@ export function Ribbon({
         <SearchIcon />
       </button>
       <div className="ribbon-spacer" />
-      <button className="ribbon-button" type="button" aria-label="Plugins" title="Plugins">
+      <button
+        className="ribbon-button"
+        type="button"
+        aria-label="Plugins"
+        title="Plugins"
+        onClick={onPlugins}
+      >
         <PluginsIcon />
       </button>
-      <button className="ribbon-button" type="button" aria-label="Settings" title="Settings">
+      <button
+        className="ribbon-button"
+        type="button"
+        aria-label="Settings"
+        title="Settings (⌘,)"
+        onClick={onSettings}
+      >
         <SettingsIcon />
       </button>
     </nav>

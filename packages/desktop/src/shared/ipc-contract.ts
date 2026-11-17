@@ -136,6 +136,17 @@ export const ipcContract = {
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
+  /** Settings main acts on (2.25): app-wide ones, and whether this window's folder commits `.anur/`. */
+  "settings:get": {
+    request: z.object({}).strict(),
+    response: z.object({ sectionHistory: z.boolean(), commitAnur: z.boolean().nullable() }),
+  },
+  "settings:set": {
+    request: z
+      .object({ sectionHistory: z.boolean().optional(), commitAnur: z.boolean().optional() })
+      .strict(),
+    response: z.object({ sectionHistory: z.boolean(), commitAnur: z.boolean().nullable() }),
+  },
   /** Open a web or mail link in the system's browser or mail app. */
   "link:open-external": {
     request: z.object({ url: z.string().max(4096) }).strict(),
