@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { INSERT_IDS } from "./insert-items.ts";
 
 /**
  * Every message between the renderer and main, with its schema
@@ -161,6 +162,8 @@ export const ipcContract = {
 export const ipcEvents = {
   /** This window's folder changed, as when opened from the menu. */
   "folder:changed": FolderState.nullable(),
+  /** Insert in the menu bar: put this block where the page's cursor is. */
+  "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
 } as const;
 
 export type Channel = keyof typeof ipcContract;

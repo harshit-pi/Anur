@@ -1,4 +1,5 @@
 import { Menu, type MenuItemConstructorOptions } from "electron";
+import { INSERT_ITEMS, type InsertId } from "../shared/insert-items.ts";
 
 /**
  * The application menu. Electron's own Edit roles are kept so copy, paste
@@ -7,6 +8,7 @@ import { Menu, type MenuItemConstructorOptions } from "electron";
 export function buildMenu(actions: {
   openFolder: () => void;
   newWindow: () => void;
+  insert: (id: InsertId) => void;
   isDev: boolean;
 }): Menu {
   const mac = process.platform === "darwin";
@@ -22,6 +24,22 @@ export function buildMenu(actions: {
       ],
     },
     { role: "editMenu" },
+    {
+      // Each block with its "/" command beneath it and its shortcut beside it.
+      // The page handles the shortcuts itself, so they are shown, not registered.
+      label: "Insert",
+      submenu: INSERT_ITEMS.map((item) => ({
+        id: `insert-${item.id}`,
+        label: item.label,
+        sublabel: item.slash,
+        ...("accelerator" in item
+          ? { accelerator: item.accelerator, registerAccelerator: false }
+          : {}),
+        click: () => {
+          actions.insert(item.id);
+        },
+      })),
+    },
     {
       label: "View",
       submenu: [

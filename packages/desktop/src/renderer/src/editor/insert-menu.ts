@@ -7,6 +7,7 @@ import {
 } from "@codemirror/autocomplete";
 import { EditorSelection, Facet, type Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
+import { INSERT_ITEMS, type InsertId } from "../../../shared/insert-items.ts";
 import { blankTable } from "./table/table-model.ts";
 import { focusTableWhenDrawn } from "./table/table-widget.ts";
 
@@ -70,39 +71,47 @@ function block(text: string, cursorOffset: number | "end", after?: (from: number
   };
 }
 
-const ITEMS: Completion[] = [
-  {
-    label: "Table",
-    detail: "3 × 3",
-    apply: block(blankTable(3, 2), 0, (from) => {
-      focusTableWhenDrawn(from, 0, 0);
-    }),
+type Apply = (view: EditorView, c: Completion, from: number, to: number) => void;
+
+/** What each item does, given the range of what was typed to ask for it. */
+const APPLY: Record<InsertId, Apply> = {
+  table: block(blankTable(3, 2), 0, (from) => {
+    focusTableWhenDrawn(from, 0, 0);
+  }),
+  h1: onLine(() => ({ prefix: "# " })),
+  h2: onLine(() => ({ prefix: "## " })),
+  h3: onLine(() => ({ prefix: "### " })),
+  body: onLine(() => ({ prefix: "" })),
+  bullets: onLine(() => ({ prefix: "- " })),
+  numbers: onLine(() => ({ prefix: "1. " })),
+  tasks: onLine(() => ({ prefix: "- [ ] " })),
+  note: onLine(() => ({ prefix: "> [!note] " })),
+  tip: onLine(() => ({ prefix: "> [!tip] " })),
+  warning: onLine(() => ({ prefix: "> [!warning] " })),
+  code: block("```\n\n```", 4),
+  divider: block("---", "end"),
+  link: (view, _c, from, to) => {
+    view.dispatch({
+      changes: { from, to, insert: "[[]]" },
+      selection: { anchor: from + 2 },
+      userEvent: "input.complete",
+    });
+    startCompletion(view);
   },
-  { label: "Heading 1", detail: "⌘⌥1", apply: onLine(() => ({ prefix: "# " })) },
-  { label: "Heading 2", detail: "⌘⌥2", apply: onLine(() => ({ prefix: "## " })) },
-  { label: "Heading 3", detail: "⌘⌥3", apply: onLine(() => ({ prefix: "### " })) },
-  { label: "Body text", detail: "⌘⌥0", apply: onLine(() => ({ prefix: "" })) },
-  { label: "Bulleted list", detail: "⌘⇧8", apply: onLine(() => ({ prefix: "- " })) },
-  { label: "Numbered list", detail: "⌘⇧7", apply: onLine(() => ({ prefix: "1. " })) },
-  { label: "Task list", apply: onLine(() => ({ prefix: "- [ ] " })) },
-  { label: "Callout: note", apply: onLine(() => ({ prefix: "> [!note] " })) },
-  { label: "Callout: tip", apply: onLine(() => ({ prefix: "> [!tip] " })) },
-  { label: "Callout: warning", apply: onLine(() => ({ prefix: "> [!warning] " })) },
-  { label: "Code block", apply: block("```\n\n```", 4) },
-  { label: "Divider", apply: block("---", "end") },
-  {
-    label: "Link to a doc",
-    detail: "[[",
-    apply: (view, _c, from, to) => {
-      view.dispatch({
-        changes: { from, to, insert: "[[]]" },
-        selection: { anchor: from + 2 },
-        userEvent: "input.complete",
-      });
-      startCompletion(view);
-    },
-  },
-];
+};
+
+const ITEMS: (Completion & { id: InsertId })[] = INSERT_ITEMS.map((item) => ({
+  id: item.id,
+  label: item.label,
+  detail: "keys" in item ? item.keys : "detail" in item ? item.detail : "",
+  apply: APPLY[item.id],
+}));
+
+/** Insert from the menu bar: the block goes where the cursor is. */
+export function insertById(view: EditorView, id: InsertId): void {
+  const pos = view.state.selection.main.head;
+  APPLY[id](view, { label: id }, pos, pos);
+}
 
 /** "/" at the start of a line or after a space, then letters. */
 export function slashMenu(context: CompletionContext): CompletionResult | null {
@@ -118,12 +127,7 @@ export function slashMenu(context: CompletionContext): CompletionResult | null {
     ...item,
     boost: 99 - i,
     apply: (view: EditorView, c: Completion, f: number, t: number) => {
-      (item.apply as (v: EditorView, c: Completion, f: number, t: number) => void)(
-        view,
-        c,
-        f - 1,
-        t,
-      );
+      APPLY[item.id](view, c, f - 1, t);
     },
   }));
   return { from, options, validFor: /^[\w ]*$/ };
