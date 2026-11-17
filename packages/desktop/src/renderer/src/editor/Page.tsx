@@ -6,6 +6,7 @@ import type { SectionTree } from "@anur/core";
 import { useEffect, useRef } from "react";
 import { anur } from "../bridge.ts";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
+import { formattingKeymap } from "./commands.ts";
 import { livePreview } from "./live-preview/live-preview.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { markdownSupport, sectionsOf } from "./sections.ts";
@@ -62,7 +63,11 @@ export function Page({
           EditorState.readOnly.of(!editable),
           EditorView.lineWrapping,
           history(),
-          keymap.of([...(markdownDoc ? markdownKeymap : []), ...historyKeymap, ...defaultKeymap]),
+          keymap.of([
+            ...(markdownDoc ? [...formattingKeymap, ...markdownKeymap] : []),
+            ...historyKeymap,
+            ...defaultKeymap,
+          ]),
           pageTheme,
           ...(markdownDoc
             ? [markdownSupport(), pageHighlight, preview.current.of(previewFor(sourceNow.current))]

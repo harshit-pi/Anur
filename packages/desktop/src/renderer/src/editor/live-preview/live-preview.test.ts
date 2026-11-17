@@ -1,7 +1,13 @@
 import { EditorSelection, EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { markdownSupport } from "../sections.ts";
-import { buildLivePreview, parseProperties, splitRow } from "./live-preview.ts";
+import {
+  buildLivePreview,
+  livePreview,
+  parseProperties,
+  splitRow,
+  textStart,
+} from "./live-preview.ts";
 import { CheckboxWidget, PropertiesWidget, TableWidget } from "./widgets.ts";
 
 /** A state with the cursor at `cursor` (default: past the end, on no line of interest). */
@@ -42,10 +48,15 @@ describe("live preview", () => {
     expect(hidden(doc)).toEqual(["## ", "**", "**", "*", "*", "`", "`", "~~", "~~"]);
   });
 
-  it("shows the source on the line the cursor is on", () => {
-    const doc = "## Title\n\nSome **bold** here.\n";
-    expect(hidden(doc, 3)).toEqual(["**", "**"]);
-    expect(hidden(doc, 15)).toEqual(["## "]);
+  it("shows an element's marks only while the cursor touches it", () => {
+    const doc = "## Title\n\nSome **bold** and *it* here.\n";
+    // In the heading: its "## " stays hidden, as everything else.
+    expect(hidden(doc, 3)).toEqual(["## ", "**", "**", "*", "*"]);
+    // Inside "bold": only its own marks show.
+    const inBold = doc.indexOf("bold") + 1;
+    expect(hidden(doc, inBold)).toEqual(["## ", "*", "*"]);
+    // Elsewhere on the same line: all marks stay hidden.
+    expect(hidden(doc, doc.indexOf("here"))).toEqual(["## ", "**", "**", "*", "*"]);
   });
 
   it("shows a Markdown link as its text", () => {
@@ -69,7 +80,7 @@ describe("live preview", () => {
       .map((d) => d.widget)
       .filter((w): w is CheckboxWidget => w instanceof CheckboxWidget);
     expect(boxes.map((b) => b.checked)).toEqual([true, false]);
-    expect(hidden(doc)).toEqual(["-", "- ", "[x]", "- ", "[ ]"]);
+    expect(hidden(doc)).toEqual(["- ", "- ", "[x] ", "- ", "[ ] "]);
   });
 
   it("draws a table as a table until the cursor enters it", () => {
@@ -138,5 +149,36 @@ describe("table rows", () => {
   it("split at pipes but not escaped ones", () => {
     expect(splitRow("| a | b \\| c |")).toEqual(["a", "b \\| c"]);
     expect(splitRow("a|b")).toEqual(["a", "b"]);
+  });
+});
+
+describe("the cursor and hidden prefixes", () => {
+  const withPreview = (doc: string) =>
+    EditorState.create({ doc, extensions: [markdownSupport(), livePreview] });
+
+  it("finds where a line's text starts past its hidden prefix", () => {
+    const doc = "## Title\n> quoted\n- item\n- [ ] task\nplain\n";
+    const state = withPreview(doc);
+    const at = (s: string) => doc.indexOf(s);
+    expect(textStart(state, at("## "))).toBe(at("Title"));
+    expect(textStart(state, at("> "))).toBe(at("quoted"));
+    expect(textStart(state, at("- item"))).toBe(at("item"));
+    expect(textStart(state, at("- [ ]"))).toBe(at("task"));
+    expect(textStart(state, at("plain"))).toBeNull();
+  });
+
+  it("moves a cursor placed before a heading's marks to its text", () => {
+    const doc = "Intro\n## Title\n";
+    const state = withPreview(doc);
+    const tr = state.update({ selection: { anchor: doc.indexOf("##") } });
+    expect(tr.state.selection.main.head).toBe(doc.indexOf("Title"));
+  });
+
+  it("moving left from a heading's text goes to the line before", () => {
+    const doc = "Intro\n## Title\n";
+    const start = doc.indexOf("Title");
+    const state = withPreview(doc).update({ selection: { anchor: start } }).state;
+    const tr = state.update({ selection: { anchor: doc.indexOf("##") } });
+    expect(tr.state.selection.main.head).toBe(doc.indexOf("\n"));
   });
 });

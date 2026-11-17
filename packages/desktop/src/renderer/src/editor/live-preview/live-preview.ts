@@ -1,5 +1,5 @@
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
-import { StateEffect, StateField, type EditorState, type Range } from "@codemirror/state";
+import { EditorState, RangeSet, StateEffect, StateField, type Range } from "@codemirror/state";
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import {
@@ -105,12 +105,16 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
   const tree = ensureSyntaxTree(state, state.doc.length, 200) ?? syntaxTree(state);
   const doc = state.doc;
   const active = focused ? activeLines(state) : new Set<number>();
+  /** Block elements still show source on the lines a cursor is on. */
   const isActive = (from: number, to: number) => {
     const a = doc.lineAt(from).number;
     const b = doc.lineAt(to).number;
     for (let n = a; n <= b; n++) if (active.has(n)) return true;
     return false;
   };
+  /** Inline elements show their marks only while a cursor touches the element itself (2.8). */
+  const touches = (from: number, to: number) =>
+    focused && state.selection.ranges.some((r) => r.from <= to && r.to >= from);
   const out: Range<Decoration>[] = [];
   const text = (from: number, to: number) => doc.sliceString(from, to);
   /** Hide a mark and the spaces after it on the same line. */
@@ -134,7 +138,7 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
 
       switch (name) {
         case "Frontmatter": {
-          if (isActive(from, to)) return false;
+          if (touches(from, to)) return false;
           const body = text(from, to).split("\n").slice(1, -1).join("\n");
           const props = parseProperties(body);
           if (props)
@@ -176,31 +180,34 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
               : "cm-lp-quote";
             out.push(line(cls).range(doc.line(n).from));
           }
-          if (kind && callout && !active.has(firstLine.number)) {
-            const start = firstLine.from + firstLine.text.indexOf("[!");
-            const end = firstLine.from + callout[0].length;
+          const start = firstLine.from + firstLine.text.indexOf("[!");
+          const end = firstLine.from + (callout?.[0].length ?? 0);
+          if (kind && callout && !touches(start, end)) {
             out.push(
               Decoration.replace({ widget: new CalloutLabelWidget(kind) }).range(start, end),
             );
           }
           return;
         }
+        // A heading's "#"s, a quote's ">" and a list's marker never show
+        // (2.8): the cursor steps over them, and Backspace removes them whole.
         case "QuoteMark":
-          if (!isActive(from, to)) hideWithSpace(from, to);
+          hideWithSpace(from, to);
           return;
         case "HeaderMark": {
-          if (isActive(from, to)) return;
           const parent = node.parent?.name ?? "";
           if (parent.startsWith("SetextHeading")) out.push(hide.range(from, to));
           else hideWithSpace(from, to);
           return;
         }
         case "EmphasisMark":
-        case "StrikethroughMark":
-          if (!isActive(from, to)) out.push(hide.range(from, to));
+        case "StrikethroughMark": {
+          const element = node.parent ?? node;
+          if (!touches(element.from, element.to)) out.push(hide.range(from, to));
           return;
+        }
         case "InlineCode": {
-          if (isActive(from, to)) return false;
+          if (touches(from, to)) return false;
           const marks = children(node, "CodeMark");
           const [open, close] = [marks[0], marks.at(-1)];
           if (open && close && open !== close) {
@@ -211,7 +218,7 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
         }
         case "Link": {
           // Descends, so bold or code inside the link text renders too.
-          if (isActive(from, to)) return;
+          if (touches(from, to)) return;
           const marks = children(node, "LinkMark");
           const url = children(node, "URL")[0];
           const open = marks[0];
@@ -223,14 +230,14 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           return;
         }
         case "Image":
-          if (!isActive(from, to)) {
+          if (!touches(from, to)) {
             const url = children(node, "URL")[0];
             const label = url ? text(url.from, url.to) : text(from, to);
             out.push(Decoration.replace({ widget: new EmbedWidget(label) }).range(from, to));
           }
           return false;
         case "WikiEmbed":
-          if (!isActive(from, to)) {
+          if (!touches(from, to)) {
             const target = children(node, "WikiLinkTarget")[0];
             out.push(
               Decoration.replace({
@@ -240,7 +247,7 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           }
           return false;
         case "WikiLink": {
-          if (isActive(from, to)) return false;
+          if (touches(from, to)) return false;
           const target = children(node, "WikiLinkTarget")[0];
           const heading = children(node, "WikiLinkHeading")[0];
           const alias = children(node, "WikiLinkAlias")[0];
@@ -269,20 +276,22 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           return false;
         }
         case "ListMark": {
-          if (isActive(from, to)) return;
           const listName = node.parent?.parent?.name;
           const task = node.parent ? children(node.parent, "Task")[0] : undefined;
           if (listName === "BulletList" && !task) {
-            out.push(Decoration.replace({ widget: new BulletWidget() }).range(from, to));
+            const space = text(to, to + 1) === " " ? 1 : 0;
+            out.push(Decoration.replace({ widget: new BulletWidget() }).range(from, to + space));
           } else if (task) out.push(hide.range(from, to + (text(to, to + 1) === " " ? 1 : 0)));
           return;
         }
-        case "TaskMarker":
-          if (!isActive(from, to)) {
-            const checked = /x/i.test(text(from, to));
-            out.push(Decoration.replace({ widget: new CheckboxWidget(checked) }).range(from, to));
-          }
+        case "TaskMarker": {
+          const checked = /x/i.test(text(from, to));
+          const space = text(to, to + 1) === " " ? 1 : 0;
+          out.push(
+            Decoration.replace({ widget: new CheckboxWidget(checked) }).range(from, to + space),
+          );
           return;
+        }
         default:
           return;
       }
@@ -294,8 +303,26 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
 
 const setFocused = StateEffect.define<boolean>();
 
-const previewField = StateField.define<{ focused: boolean; decorations: DecorationSet }>({
-  create: (state) => ({ focused: false, decorations: buildLivePreview(state, false) }),
+type Preview = { focused: boolean; decorations: DecorationSet; atomic: RangeSet<Decoration> };
+
+/** What live preview hides or replaces: the cursor treats each as one unit. */
+function atomicOf(decorations: DecorationSet): RangeSet<Decoration> {
+  const ranges: Range<Decoration>[] = [];
+  decorations.between(0, Number.MAX_SAFE_INTEGER, (from, to, deco) => {
+    if (to > from && (deco.spec as { class?: string }).class === undefined) {
+      ranges.push(deco.range(from, to));
+    }
+  });
+  return RangeSet.of(ranges, true);
+}
+
+function preview(state: EditorState, focused: boolean): Preview {
+  const decorations = buildLivePreview(state, focused);
+  return { focused, decorations, atomic: atomicOf(decorations) };
+}
+
+const previewField = StateField.define<Preview>({
+  create: (state) => preview(state, false),
   update(value, tr) {
     let focused = value.focused;
     for (const e of tr.effects) if (e.is(setFocused)) focused = e.value;
@@ -304,13 +331,55 @@ const previewField = StateField.define<{ focused: boolean; decorations: Decorati
       tr.docChanged ||
       tr.selection ||
       syntaxTree(tr.startState) !== syntaxTree(tr.state);
-    return stale ? { focused, decorations: buildLivePreview(tr.state, focused) } : value;
+    return stale ? preview(tr.state, focused) : value;
   },
-  provide: (field) => EditorView.decorations.from(field, (v) => v.decorations),
+  provide: (field) => [
+    EditorView.decorations.from(field, (v) => v.decorations),
+    EditorView.atomicRanges.of((view) => view.state.field(field).atomic),
+  ],
+});
+
+/**
+ * Where a line's text starts once its hidden prefix ("## ", "> ", "- [ ] ")
+ * is skipped, or null when it has none. A cursor never rests before such a
+ * prefix, so typing at the start of a heading types into the heading.
+ */
+export function textStart(state: EditorState, lineFrom: number): number | null {
+  const { atomic } = state.field(previewField);
+  const line = state.doc.lineAt(lineFrom);
+  let pos = line.from;
+  while (pos < line.to && /[ \t]/.test(state.sliceDoc(pos, pos + 1))) pos++;
+  let moved = false;
+  for (;;) {
+    let next = -1;
+    atomic.between(pos, pos, (from, to) => {
+      if (from === pos && to > next) next = to;
+    });
+    if (next <= pos) break;
+    pos = next;
+    moved = true;
+  }
+  return moved ? pos : null;
+}
+
+const skipPrefix = EditorState.transactionFilter.of((tr) => {
+  if (tr.docChanged || !tr.selection) return tr;
+  const sel = tr.selection;
+  if (sel.ranges.length !== 1 || !sel.main.empty) return tr;
+  const head = sel.main.head;
+  const line = tr.state.doc.lineAt(head);
+  if (head !== line.from) return tr;
+  const start = textStart(tr.state, line.from);
+  if (start === null) return tr;
+  // Moving left from the text's start goes on to the line before, as in a doc.
+  const before = tr.startState.selection.main.head;
+  const target = before === start && line.from > 0 ? line.from - 1 : start;
+  return [tr, { selection: { anchor: target }, sequential: true }];
 });
 
 /** Live preview for a page: the decorations, kept in step with focus. */
 export const livePreview = [
   previewField,
+  skipPrefix,
   EditorView.focusChangeEffect.of((_, focusing) => setFocused.of(focusing)),
 ];

@@ -46,6 +46,7 @@ export const livePreviewTheme = EditorView.theme({
     margin: "0 0.45em 0 0",
     verticalAlign: "-1px",
     accentColor: "var(--blue)",
+    cursor: "pointer",
     opacity: "1",
   },
   ".cm-lp-quote": {

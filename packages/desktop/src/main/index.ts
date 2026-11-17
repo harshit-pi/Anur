@@ -246,21 +246,22 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
           // Click buttons by the start of their visible text (or, for an icon, its label), in order, such as "Engineering,Archive,Old".
           for (const label of clicks.split(",")) {
             await win.webContents.executeJavaScript(
-              `[...document.querySelectorAll("button")].find((b) => (b.textContent.trim() || b.getAttribute("aria-label") || "").startsWith(${JSON.stringify(label)}))?.click()`,
+              `[...document.querySelectorAll("button, input[type=checkbox]")].find((b) => (b.textContent.trim() || b.getAttribute("aria-label") || "").startsWith(${JSON.stringify(label)}))?.click()`,
             );
             await new Promise((r) => setTimeout(r, 150));
           }
         }
         // ANUR_SCREENSHOT_TYPE types text into the page, at the start of the
-        // ANUR_SCREENSHOT_LINE-th line drawn on the page (1-based); ANUR_SCREENSHOT_KEYS then presses
+        // line ANUR_SCREENSHOT_LINE names; ANUR_SCREENSHOT_KEYS then presses
         // keys such as "meta+alt+2,Tab". The quit that follows the screenshot
         // also checks that pending typing is saved before the window closes.
         const typed = process.env.ANUR_SCREENSHOT_TYPE;
         const keys = process.env.ANUR_SCREENSHOT_KEYS;
         if (typed !== undefined || keys) {
-          const line = Number(process.env.ANUR_SCREENSHOT_LINE ?? "1");
+          // The line drawn on the page whose text starts with ANUR_SCREENSHOT_LINE.
+          const line = JSON.stringify(process.env.ANUR_SCREENSHOT_LINE ?? "");
           await win.webContents.executeJavaScript(
-            `(() => { document.querySelector(".cm-content")?.focus(); const el = document.querySelectorAll(".cm-line")[${String(line - 1)}]; if (!el) return; const r = document.createRange(); r.setStart(el, 0); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); })()`,
+            `new Promise((done) => { document.querySelector(".cm-content")?.focus(); setTimeout(() => { const el = [...document.querySelectorAll(".cm-line")].find((l) => l.textContent.startsWith(${line})); if (el) { const r = document.createRange(); r.setStart(el, 0); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } done(); }, 100); })`,
           );
           await new Promise((r) => setTimeout(r, 100));
           if (typed) await win.webContents.insertText(typed);
