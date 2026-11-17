@@ -297,6 +297,28 @@ describe("Threads", () => {
     expect(preview?.parts[0]?.proposed).toContain("The host has no tests yet; CI is red.");
   });
 
+  it("flags a doc changed outside Anur during the turn, and reverts it", async () => {
+    const { folder, threads: t, reply } = await setup();
+    await writeFile(path.join(folder, "plan.md"), DOC);
+    const r = await t.start("plan.md", DOC, risks, "Thinking about risks.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    // Something else, such as a git checkout, rewrites the doc mid-turn.
+    await writeFile(path.join(folder, "plan.md"), DOC.replace("Two people.", "Three people."));
+    await new Promise((res) => setTimeout(res, 800));
+    await reply(r.thread.id, "OK.");
+    const [listed] = await t.list("plan.md", DOC);
+    const flag = listed?.items.find((i) => i.kind === "changed");
+    expect(flag).toMatchObject({
+      kind: "changed",
+      path: "plan.md",
+      canRevert: true,
+      reverted: false,
+    });
+    if (flag?.kind !== "changed") throw new Error("no flag");
+    const back = t.revertFor(r.thread.id, flag.id);
+    expect(back).toMatchObject({ kind: "ok", rel: "plan.md", before: DOC });
+  });
+
   it("refuses a section that moved away", async () => {
     const { threads: t } = await setup();
     expect(await t.start("plan.md", DOC, { index: 1, path: ["Plan", "Gone"] }, "Hm?")).toEqual({

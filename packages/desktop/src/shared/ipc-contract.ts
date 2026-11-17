@@ -101,6 +101,15 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     status: z.string(),
   }),
   z.object({ kind: z.literal("error"), turn: z.string(), text: z.string() }),
+  /** A doc written by something else while this thread's turn ran (3.11). */
+  z.object({
+    kind: z.literal("changed"),
+    turn: z.string(),
+    id: z.string(),
+    path: z.string(),
+    canRevert: z.boolean(),
+    reverted: z.boolean(),
+  }),
 ]);
 export type ThreadItem = z.infer<typeof ThreadItem>;
 
@@ -508,6 +517,14 @@ export const ipcContract = {
       .strict(),
     response: z.object({}),
   },
+  /** Put back a doc that changed while the thread's turn ran, as it was before that change. */
+  "thread:revert": {
+    request: z.object({ thread: z.string().max(200), id: z.string().max(100) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("reverted") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
   /** Stop the thread's running turn. */
   "thread:stop": {
     request: z.object({ thread: z.string().max(200) }).strict(),
@@ -577,6 +594,8 @@ export const ipcEvents = {
   "agent:auth": AgentSignIn,
   /** An agent's mode and model choices were read again. */
   "agent:options": z.object({ agent: AgentIdSchema, options: z.array(SessionOption) }),
+  /** Put this text on the open doc's page, as a Revert asks; the page saves it. */
+  "doc:replace": z.object({ path: z.string(), text: z.string() }),
   /** A doc's previews changed, as when a thread's turn ended with edits. */
   "preview:changed": z.object({ path: z.string() }),
   /** A thread changed: all of it, or a reply arriving piece by piece. */

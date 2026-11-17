@@ -1,5 +1,5 @@
 import { mkdtempSync } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -31,6 +31,7 @@ import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
 import { readImage, saveImage } from "./folder/images.ts";
+import { writeFileAtomic } from "../vault/anur-folder.ts";
 import { createDoc, searchFolder } from "./folder/search.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
@@ -254,6 +255,8 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (saved.kind === "saved") {
       docWatcher.setHash(webContentsId, request.path, saved.hash);
       void versionsFor(folder)?.saved(request.path, request.text);
+      // Anur's own save: never flagged as a change made during a thread's turn.
+      threadsFor(folder)?.ownWrite(request.path, request.text);
     }
     return saved;
   },
@@ -376,6 +379,8 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     const made = await createDoc(folder, requested);
     if (made.kind === "failed") return made;
+    const madeText = await readFile(path.join(folder.path, made.path), "utf8").catch(() => null);
+    if (madeText !== null) threadsFor(folder)?.ownWrite(made.path, madeText);
     const now = await folders.refresh(webContentsId);
     return now
       ? { kind: "created", path: made.path, folder: now }
@@ -495,6 +500,34 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (folder) threadsFor(folder)?.setOption(thread, id, value);
     return {};
+  },
+  "thread:revert": async ({ thread, id }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !t) return { kind: "refused", reason: "No folder Anur can write to is open." };
+    const r = t.revertFor(thread, id);
+    if (r.kind === "refused") return r;
+    const full = path.join(folder.path, r.rel);
+    const now = await readFile(full, "utf8").catch(() => null);
+    if (now !== r.after)
+      return {
+        kind: "refused",
+        reason: `${r.rel} has changed again since. Open it and use its History to go back.`,
+      };
+    // An open doc is written by its page, so Undo covers the Revert; a closed one by main.
+    const pages = [...shownDoc].filter(
+      ([win, rel]) => rel === r.rel && folders.current(win)?.path === folder.path,
+    );
+    if (pages.length > 0) {
+      for (const [win] of pages) {
+        const w = windows.get(win);
+        if (w) send(w, "doc:replace", { path: r.rel, text: r.before });
+      }
+    } else {
+      await writeFileAtomic(full, r.before);
+    }
+    t.reverted(thread, id);
+    return { kind: "reverted" };
   },
   "thread:stop": ({ thread }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
