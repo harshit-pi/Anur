@@ -2,6 +2,12 @@
 
 How people and agents work in this repo. Keep it short; it grows as the build does.
 
+## Read first
+
+- [`docs/decisions.md`](docs/decisions.md): the engineering decisions made so far, each with why.
+- [`docs/patterns.md`](docs/patterns.md): how things are done here: IPC channels, changing the doc, widgets, the agent layer, checking a change in the real app, tests, and gotchas.
+- A PR that makes a decision or a pattern, or changes one, updates these files in the same PR.
+
 ## Source of truth
 
 - The design is in the AnurObsidian vault, `raw/Anur Brainstorming Product/Design/`. Read `- Index Design.md` first, then the page for the part you touch.
@@ -20,7 +26,7 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 ## Git
 
 - `main` takes changes only through pull requests with CI passing; a GitHub ruleset enforces it, and a pre-push hook stops a local push to `main` early.
-- Work on a branch, such as `task/1.4-section-tree`, and open a PR; a person merges it.
+- Work on a branch, such as `task/1.4-section-tree`, open a PR, and turn on auto-merge (`gh pr merge --auto --squash`): it squash-merges once CI passes. Never force-push.
 - The pre-commit hook fixes and checks staged files with ESLint and Prettier, then type-checks the whole workspace.
 
 ## Layout
