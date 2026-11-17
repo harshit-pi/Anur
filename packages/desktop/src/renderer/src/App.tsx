@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import type { SaveStatus } from "./editor/autosave.ts";
 import { Page, type OpenDoc } from "./editor/Page.tsx";
+import { insertById } from "./editor/insert-menu.ts";
 import { Resizer } from "./layout/Resizer.tsx";
 import {
   isDownloaded,
@@ -124,10 +125,20 @@ export function App() {
       setVersion(info.version);
     });
     void anur.call("folder:current", {}).then(setFolder);
-    return anur.on("folder:changed", (f) => {
+    const offInsert = anur.on("editor:insert", ({ id }) => {
+      const v = view.current;
+      if (!v || v.state.readOnly) return;
+      v.focus();
+      insertById(v, id);
+    });
+    const offFolder = anur.on("folder:changed", (f) => {
       setFolder(f);
       setSelected(null);
     });
+    return () => {
+      offInsert();
+      offFolder();
+    };
   }, []);
 
   const openFolder = useCallback(() => {

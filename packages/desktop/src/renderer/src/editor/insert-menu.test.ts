@@ -2,7 +2,7 @@ import { CompletionContext, type Completion } from "@codemirror/autocomplete";
 import { EditorState, type TransactionSpec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
-import { docLinks, folderDocs, slashMenu } from "./insert-menu.ts";
+import { docLinks, folderDocs, insertById, slashMenu } from "./insert-menu.ts";
 
 const stateAt = (doc: string, docs: string[] = []) =>
   EditorState.create({ doc, selection: { anchor: doc.length }, extensions: folderDocs.of(docs) });
@@ -85,5 +85,32 @@ describe("[[ links", () => {
       ["Retry", "Product"],
       ["Personas", undefined],
     ]);
+  });
+});
+
+describe("Insert in the menu bar", () => {
+  const at = (doc: string, pos: number) => {
+    let state = EditorState.create({ doc, selection: { anchor: pos } });
+    const view = {
+      get state() {
+        return state;
+      },
+      dispatch(spec: TransactionSpec) {
+        state = state.update(spec).state;
+      },
+    } as unknown as EditorView;
+    return { view, text: () => state.doc.toString() };
+  };
+
+  it("puts a block at the cursor, splitting the line there", () => {
+    const v = at("Intro text\nNext", 5);
+    insertById(v.view, "divider");
+    expect(v.text()).toBe("Intro\n\n---\n\ntext\nNext");
+  });
+
+  it("turns the cursor's line into a heading", () => {
+    const v = at("Title here", 3);
+    insertById(v.view, "h2");
+    expect(v.text()).toBe("## Title here");
   });
 });

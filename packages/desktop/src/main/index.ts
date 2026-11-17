@@ -318,6 +318,12 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
           }
           await new Promise((r) => setTimeout(r, 200));
         }
+        // ANUR_SCREENSHOT_MENU clicks a menu-bar item by its id, such as "insert-table".
+        const menuItem = process.env.ANUR_SCREENSHOT_MENU;
+        if (menuItem) {
+          Menu.getApplicationMenu()?.getMenuItemById(menuItem)?.click();
+          await new Promise((r) => setTimeout(r, 400));
+        }
         // ANUR_SCREENSHOT_PROBE evaluates an expression in the page and prints it.
         const probe = process.env.ANUR_SCREENSHOT_PROBE;
         if (probe) {
@@ -362,6 +368,10 @@ void app.whenReady().then(async () => {
       },
       newWindow: () => {
         createWindow();
+      },
+      insert: (id) => {
+        const win = BrowserWindow.getFocusedWindow();
+        if (win) send(win, "editor:insert", { id });
       },
       isDev: Boolean(devUrl),
     }),
