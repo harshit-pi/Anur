@@ -32,6 +32,7 @@ import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
 import { SectionVersions } from "./folder/versions.ts";
 import { loadDeviceId } from "../device/device-id.ts";
+import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
 import { readRecent } from "./folder/recent.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
@@ -83,6 +84,7 @@ function versionsFor(folder: FolderState): SectionVersions | null {
   }
   return v;
 }
+let recovery: RecoveryStore;
 /** Each window's open doc, watched for changes made outside Anur (2.17). */
 const docWatcher = new DocWatcher((windowId, change) => {
   const folder = folders.current(windowId);
@@ -170,6 +172,21 @@ const handlers: { [C in Channel]: Handler<C> } = {
       void versionsFor(folder)?.saved(request.path, request.text);
     }
     return saved;
+  },
+  "recovery:write": async ({ path: doc, text, saved }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder?.docs.includes(doc)) return { ok: false };
+    await recovery.write(folder.path, doc, { text, saved });
+    return { ok: true };
+  },
+  "recovery:clear": async ({ path: doc }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (folder) await recovery.clear(folder.path, doc);
+    return { ok: Boolean(folder) };
+  },
+  "recovery:read": async ({ path: doc }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    return { entry: folder?.docs.includes(doc) ? await recovery.read(folder.path, doc) : null };
   },
   "journal:keep": async (entry, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -453,6 +470,7 @@ void app.whenReady().then(async () => {
     console.error("Anur couldn't read this install's device ID:", e);
     return null;
   });
+  recovery = new RecoveryStore(app.getPath("userData"));
   folders = new FolderService(
     app.getPath("userData"),
     isCheck ? (process.env.ANUR_CHECK_HOME ?? undefined) : undefined,

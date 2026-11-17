@@ -236,6 +236,65 @@ export function Page({
     // server hot-reloads it: read it again, once any save from the page it
     // replaces has landed, and start from what the file has now.
     let closed = false;
+
+    // The crash journal (2.20): every two seconds, typing not yet saved is
+    // written to app support; once it's saved, that copy goes.
+    let journaled = false;
+    let lastJournaled = "";
+    const journalTimer = setInterval(() => {
+      if (!saver || closed) return;
+      if (saver.dirty) {
+        const text = editor.state.doc.toString();
+        if (text === lastJournaled) return;
+        lastJournaled = text;
+        journaled = true;
+        void anur.call("recovery:write", { path: doc.path, text, saved: saver.saved });
+      } else if (journaled) {
+        journaled = false;
+        lastJournaled = "";
+        void anur.call("recovery:clear", { path: doc.path });
+      }
+    }, 2000);
+
+    /** Typing journaled before Anur closed without saving it: fold it back in. */
+    const restore = (entry: { text: string; saved: string }) => {
+      if (closed || !saver) return;
+      const now = editor.state.doc.toString();
+      if (entry.text === now) {
+        void anur.call("recovery:clear", { path: doc.path });
+        return;
+      }
+      // The entry is this page's now: once the restored typing saves, it goes.
+      journaled = true;
+      const { text: merged, kept: clashed } = mergeOutside(entry.saved, entry.text, now);
+      const span = diffSpan(now, merged);
+      // On the undo stack: the restored typing is the person's own.
+      if (span) editor.dispatch({ changes: span, userEvent: "restore.crash" });
+      if (clashed) {
+        void anur.call("journal:keep", { path: doc.path, ...clashed }).then(({ id }) => {
+          if (!closed && id) {
+            setKept((k) => [
+              ...k,
+              { ...clashed, id, path: doc.path, at: new Date().toISOString() },
+            ]);
+          }
+        });
+      }
+      if (!span) return;
+      setNotice({
+        text: "Typing from before Anur closed is back on the page.",
+        undo: () => {
+          const back = diffSpan(editor.state.doc.toString(), now);
+          if (back) editor.dispatch({ changes: back, userEvent: "input.restore" });
+          setNotice(null);
+        },
+      });
+      clearTimeout(noticeTimer);
+      noticeTimer = setTimeout(() => {
+        setNotice(null);
+      }, 12_000);
+    };
+
     void settled()
       .then(() => anur.call("doc:open", { path: doc.path }))
       .then((r) => {
@@ -253,6 +312,10 @@ export function Page({
           saver?.rebase(r.hash, r.text);
         } else if (untouched) saver?.rebase(r.hash, r.text);
         else fold(r.text, r.hash);
+      })
+      .then(() => (editable ? anur.call("recovery:read", { path: doc.path }) : { entry: null }))
+      .then(({ entry }) => {
+        if (entry) restore(entry);
       });
     const offOutside = anur.on("doc:changed", (change) => {
       if (change.path !== doc.path) return;
@@ -301,9 +364,17 @@ export function Page({
       offOutside();
       clearTimeout(sectionsTimer);
       clearTimeout(noticeTimer);
+      clearInterval(journalTimer);
       // Switching docs saves what was typed in this one; the next page waits for it.
       closed = true;
-      if (saver) track(saver.flush());
+      if (saver) {
+        const s = saver;
+        track(
+          s.flush().then(() => {
+            if (journaled && !s.dirty) void anur.call("recovery:clear", { path: doc.path });
+          }),
+        );
+      }
       const sel = editor.state.selection.main;
       editor.scrollDOM.removeEventListener("scroll", onScroll);
       onLeaveNow.current(key, {

@@ -164,6 +164,29 @@ export const ipcContract = {
       .strict(),
     response: z.object({ id: z.string() }),
   },
+  /** The crash journal (2.20): a page's unsaved text, written every two seconds while it has some. */
+  "recovery:write": {
+    request: z
+      .object({
+        path: z.string(),
+        text: z.string().max(20_000_000),
+        saved: z.string().max(20_000_000),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Typing is saved: nothing to recover. */
+  "recovery:clear": {
+    request: z.object({ path: z.string() }).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Typing journaled before a crash, for the page that opens the doc next. */
+  "recovery:read": {
+    request: z.object({ path: z.string() }).strict(),
+    response: z.object({
+      entry: z.object({ text: z.string(), saved: z.string(), at: z.string() }).nullable(),
+    }),
+  },
   /** Typing kept for a doc, oldest first. */
   "journal:list": {
     request: z.object({ path: z.string() }).strict(),
