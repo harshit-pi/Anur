@@ -185,6 +185,7 @@ export function App() {
           doc ? (
             <Page
               doc={doc}
+              docs={folder?.docs ?? []}
               source={source}
               onSections={setSections}
               onView={onView}

@@ -7,6 +7,7 @@ import { useEffect, useRef } from "react";
 import { anur } from "../bridge.ts";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { formattingKeymap } from "./commands.ts";
+import { insertMenu } from "./insert-menu.ts";
 import { livePreview } from "./live-preview/live-preview.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { markdownSupport, sectionsOf } from "./sections.ts";
@@ -30,12 +31,15 @@ export type OpenDoc = {
  */
 export function Page({
   doc,
+  docs,
   source,
   onSections,
   onView,
   onSaveStatus,
 }: {
   doc: OpenDoc;
+  /** The folder's docs, for "[[" links. */
+  docs: readonly string[];
   source: boolean;
   onSections: (tree: SectionTree | null) => void;
   onView: (view: EditorView | null) => void;
@@ -46,6 +50,9 @@ export function Page({
   const preview = useRef(new Compartment());
   const sourceNow = useRef(source);
   sourceNow.current = source;
+  // Read when a doc opens; a folder's list changing doesn't reopen the doc.
+  const docsNow = useRef(docs);
+  docsNow.current = docs;
   const previewFor = (src: boolean) => (src ? [] : [livePreview, livePreviewTheme]);
 
   useEffect(() => {
@@ -70,7 +77,12 @@ export function Page({
           ]),
           pageTheme,
           ...(markdownDoc
-            ? [markdownSupport(), pageHighlight, preview.current.of(previewFor(sourceNow.current))]
+            ? [
+                markdownSupport(),
+                pageHighlight,
+                preview.current.of(previewFor(sourceNow.current)),
+                ...(editable ? [insertMenu(docsNow.current)] : []),
+              ]
             : []),
           EditorView.contentAttributes.of({ "aria-label": `Page: ${fileName}` }),
           EditorView.updateListener.of((u) => {

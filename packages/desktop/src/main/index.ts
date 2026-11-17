@@ -301,7 +301,13 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
             `new Promise((done) => { document.querySelector(".cm-content")?.focus(); setTimeout(() => { const el = [...document.querySelectorAll(".cm-line, [data-row]")].find((l) => l.textContent.startsWith(${line})); if (el && el.dataset.row) el.focus(); else if (el) { const r = document.createRange(); r.setStart(el, 0); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); } setTimeout(done, 50); }, 100); })`,
           );
           await new Promise((r) => setTimeout(r, 100));
-          if (typed) await win.webContents.insertText(typed);
+          // One keystroke per character, as typing is, so typing-only features react.
+          for (const ch of typed ?? "") {
+            win.webContents.sendInputEvent({ type: "char", keyCode: ch });
+            await new Promise((r) => setTimeout(r, 15));
+          }
+          // Let anything typing opened, such as the insert menu, appear first.
+          if (typed && keys) await new Promise((r) => setTimeout(r, 300));
           for (const combo of keys ? keys.split(",") : []) {
             const parts = combo.split("+");
             const keyCode = parts.pop() ?? "";
