@@ -7,6 +7,8 @@ export function FileTree({
   offloaded = [],
   selected,
   onSelect,
+  reveal = 0,
+  collapse = 0,
 }: {
   docs: readonly string[];
   /** Docs whose bytes are still in iCloud: marked, and fetched when opened. */
@@ -14,12 +16,17 @@ export function FileTree({
   selected: string | null;
   /** ⌘-click opens the doc in a new tab. */
   onSelect: (path: string, inNewTab: boolean) => void;
+  /** Changes when a tab is pressed: reveal the doc in focus, even if it hasn't changed. */
+  reveal?: number;
+  /** Changes when Collapse All is pressed. */
+  collapse?: number;
 }) {
   const tree = useMemo(() => buildTree(docs), [docs]);
   const inCloud = useMemo(() => new Set(offloaded), [offloaded]);
   const [open, setOpen] = useState<Set<string>>(() => new Set());
   // The tree follows the doc in focus (2.15): its folders open, and its row
-  // scrolls into view, whether a click, a tab, back or forward brought it.
+  // scrolls into view, whether a click, a tab, back or forward brought it,
+  // and again whenever its tab is pressed, as in an IDE.
   const list = useRef<HTMLUListElement>(null);
   useEffect(() => {
     if (!selected) return;
@@ -29,7 +36,10 @@ export function FileTree({
     requestAnimationFrame(() => {
       list.current?.querySelector(".tree-row.selected")?.scrollIntoView({ block: "nearest" });
     });
-  }, [selected]);
+  }, [selected, reveal]);
+  useEffect(() => {
+    if (collapse > 0) setOpen(new Set());
+  }, [collapse]);
   const toggle = (path: string) => {
     setOpen((s) => {
       const next = new Set(s);

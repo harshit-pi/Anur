@@ -6,6 +6,7 @@ import {
   BackIcon,
   ChevronDownIcon,
   CloseIcon,
+  CollapseAllIcon,
   FolderIcon,
   ForwardIcon,
   LinkIcon,
@@ -73,13 +74,17 @@ export function LeftSidebar({
   selected,
   onSelect,
   hidden,
+  reveal,
 }: {
   folder: FolderState | null;
   selected: string | null;
   onSelect: (path: string, inNewTab: boolean) => void;
   /** Collapsed: kept mounted, so folders stay expanded as they were. */
   hidden: boolean;
+  /** Changes whenever a tab is pressed or a doc comes into focus: reveal it in the tree. */
+  reveal: number;
 }) {
+  const [collapse, setCollapse] = useState(0);
   if (!folder) {
     return (
       <aside className="left-sidebar" aria-label="Files" hidden={hidden}>
@@ -95,14 +100,29 @@ export function LeftSidebar({
   }
   return (
     <aside className="left-sidebar" aria-label="Files" hidden={hidden}>
-      <p className="sidebar-title truncate" title={folder.path}>
-        {folder.name}
-      </p>
+      <div className="sidebar-head">
+        <p className="sidebar-title truncate" title={folder.path}>
+          {folder.name}
+        </p>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Collapse all folders"
+          title="Collapse all"
+          onClick={() => {
+            setCollapse((n) => n + 1);
+          }}
+        >
+          <CollapseAllIcon />
+        </button>
+      </div>
       <FileTree
         docs={folder.docs}
         offloaded={folder.offloaded}
         selected={selected}
         onSelect={onSelect}
+        reveal={reveal}
+        collapse={collapse}
       />
       {folder.truncated ? (
         <p className="quiet">This folder has more files than Anur lists; some are left out.</p>
