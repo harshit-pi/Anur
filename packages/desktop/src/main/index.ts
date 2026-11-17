@@ -21,6 +21,7 @@ import {
   type Channel,
   type EventName,
   type EventPayload,
+  type FolderState,
   type MenuEntry,
 } from "../shared/ipc-contract.ts";
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
@@ -29,6 +30,8 @@ import { readEmbeddedBase } from "./folder/bases.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
+import { SectionVersions } from "./folder/versions.ts";
+import { loadDeviceId } from "../device/device-id.ts";
 import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
 import { readRecent } from "./folder/recent.ts";
@@ -67,9 +70,26 @@ if (theme === "light" || theme === "dark") nativeTheme.themeSource = theme;
 const windows = new Map<number, BrowserWindow>();
 let folders: FolderService;
 let journal: Journal;
+let device: string | null = null;
+/** Section versions (2.21), one writer per open folder; none for a read-only folder. */
+const versions = new Map<string, SectionVersions>();
+function versionsFor(folder: FolderState): SectionVersions | null {
+  if (!device || folder.mode !== "writable") return null;
+  let v = versions.get(folder.path);
+  if (!v) {
+    v = new SectionVersions(folder.path, device, (e) => {
+      console.error("Anur couldn't record section versions:", e);
+    });
+    versions.set(folder.path, v);
+  }
+  return v;
+}
 let recovery: RecoveryStore;
 /** Each window's open doc, watched for changes made outside Anur (2.17). */
 const docWatcher = new DocWatcher((windowId, change) => {
+  const folder = folders.current(windowId);
+  if (folder && change.kind === "changed")
+    void versionsFor(folder)?.outside(change.path, change.text);
   const win = windows.get(windowId);
   if (win) send(win, "doc:changed", change);
 });
@@ -137,16 +157,20 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     const opened = await openDoc(folder, requested);
-    if (opened.kind === "doc")
+    if (opened.kind === "doc") {
       docWatcher.watch(webContentsId, folder.path, opened.path, opened.hash);
-    else docWatcher.stop(webContentsId);
+      if (opened.mode === "editable") void versionsFor(folder)?.opened(opened.path, opened.text);
+    } else docWatcher.stop(webContentsId);
     return opened;
   },
   "doc:save": async (request, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     const saved = await saveDoc(folder, request);
-    if (saved.kind === "saved") docWatcher.setHash(webContentsId, request.path, saved.hash);
+    if (saved.kind === "saved") {
+      docWatcher.setHash(webContentsId, request.path, saved.hash);
+      void versionsFor(folder)?.saved(request.path, request.text);
+    }
     return saved;
   },
   "recovery:write": async ({ path: doc, text, saved }, { webContentsId }) => {
@@ -442,6 +466,10 @@ app.enableSandbox();
 void app.whenReady().then(async () => {
   // Checks can set ANUR_CHECK_HOME, so a sample folder can stand in for one in iCloud.
   journal = new Journal(app.getPath("userData"));
+  device = await loadDeviceId(app.getPath("userData")).catch((e: unknown) => {
+    console.error("Anur couldn't read this install's device ID:", e);
+    return null;
+  });
   recovery = new RecoveryStore(app.getPath("userData"));
   folders = new FolderService(
     app.getPath("userData"),
