@@ -1,4 +1,11 @@
-import { appendFileSync, readFileSync, realpathSync } from "node:fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+} from "node:fs";
 import path from "node:path";
 import { decide, type HookConfig } from "./hook-rules.ts";
 
@@ -9,6 +16,8 @@ import { decide, type HookConfig } from "./hook-rules.ts";
  *
  * It logs every call, so the agent host can check that each completed tool
  * call passed through it (3.2), and refuses what `hook-rules.ts` refuses.
+ * When it sends the agent to a doc's working copy, it makes that copy first,
+ * from the doc as it is on disk (3.6).
  */
 
 type HookInput = {
@@ -52,7 +61,7 @@ function main(): void {
   }
   if (input.hook_event_name !== "PreToolUse" || !input.tool_name) return;
 
-  const reason = decide(
+  const decision = decide(
     {
       tool_name: input.tool_name,
       tool_input: input.tool_input ?? {},
@@ -65,15 +74,19 @@ function main(): void {
     event: "tool",
     toolUse: input.tool_use_id ?? null,
     tool: input.tool_name,
-    refused: reason,
+    refused: decision?.reason ?? null,
   });
-  if (reason) {
+  if (decision?.copy && !existsSync(decision.copy.to)) {
+    mkdirSync(path.dirname(decision.copy.to), { recursive: true });
+    copyFileSync(decision.copy.from, decision.copy.to);
+  }
+  if (decision) {
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput: {
           hookEventName: "PreToolUse",
           permissionDecision: "deny",
-          permissionDecisionReason: reason,
+          permissionDecisionReason: decision.reason,
         },
       }),
     );

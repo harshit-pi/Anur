@@ -320,6 +320,21 @@ export function App() {
       return next;
     });
   }, []);
+  // "Back to thinking" on a preview needs the section panel open.
+  useEffect(() => {
+    const onThread = () => {
+      setOpen((o) => {
+        if (o.right) return o;
+        const next = { ...o, right: true };
+        saveOpen(window.localStorage, next);
+        return next;
+      });
+    };
+    window.addEventListener("anur:open-thread", onThread);
+    return () => {
+      window.removeEventListener("anur:open-thread", onThread);
+    };
+  }, []);
   const setWidth = (side: Side) => (width: number) => {
     setWidths((w) => {
       const next = { ...w, [side]: width };

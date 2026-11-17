@@ -2,7 +2,14 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdownKeymap } from "@codemirror/lang-markdown";
 import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
-import { conflictsIn, type SectionTree } from "@anur/core";
+import {
+  applyPart,
+  conflictsIn,
+  merge3,
+  rejectHunks,
+  type PreviewPart,
+  type SectionTree,
+} from "@anur/core";
 import { useEffect, useRef, useState } from "react";
 import type { Response } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
@@ -20,6 +27,16 @@ import { diffSpan, mergeOutside, putBack } from "./outside.ts";
 import { settled, track } from "./pending-saves.ts";
 import { markdownSupport, sectionsOf } from "./sections.ts";
 import { pageHighlight, pageTheme } from "./theme.ts";
+import {
+  previewActions,
+  previewExtension,
+  previewState,
+  sectionFor,
+  sectionKey,
+  setPreviews,
+  showPreview,
+  type PreviewActions,
+} from "./previews/preview-widget.ts";
 
 type KeptEntry = Response<"journal:list">["entries"][number];
 
@@ -133,6 +150,155 @@ export function Page({
         setKept(entries);
       });
     }
+    const flash = (text: string, undo: (() => void) | null, ms: number) => {
+      setNotice({ text, undo });
+      clearTimeout(noticeTimer);
+      noticeTimer = setTimeout(() => {
+        setNotice(null);
+      }, ms);
+    };
+    const threadsOn = markdownDoc && editable;
+
+    /** The doc's previews from its threads, shown in place (3.8). */
+    const loadPreviews = () => {
+      if (!threadsOn) return;
+      void anur
+        .call("preview:list", { path: doc.path, text: editor.state.doc.toString() })
+        .then(({ previews }) => {
+          if (!closed) editor.dispatch({ effects: setPreviews.of(previews) });
+        });
+    };
+    /** The thread's preview, with the section's part replaced by `part`, or dropped when null. */
+    const withPart = (thread: string, key: string, part: PreviewPart | null) => {
+      const all = editor.state.field(previewState).previews;
+      const parts = (all.find((p) => p.thread === thread)?.parts ?? []).flatMap((p) =>
+        sectionKey(p.path) === key ? (part ? [part] : []) : [p],
+      );
+      editor.dispatch({
+        effects: setPreviews.of(
+          all
+            .map((p) => (p.thread === thread ? { ...p, parts } : p))
+            .filter((p) => p.parts.length > 0),
+        ),
+      });
+      return parts;
+    };
+    const savePreview = (thread: string, parts: PreviewPart[]) =>
+      anur.call("preview:update", {
+        path: doc.path,
+        text: editor.state.doc.toString(),
+        thread,
+        parts,
+      });
+
+    /**
+     * Apply (3.9): the part's changes merged onto the section as it is now,
+     * its version written to History first, then one editor transaction, so
+     * ⌘Z and the toast's Undo both take it back.
+     */
+    const applyPreviewPart = async (thread: string, part: PreviewPart) => {
+      const conflict = () => {
+        flash(
+          "This section changed where the preview did. Ask in the thread again, and it works from the new text.",
+          null,
+          9000,
+        );
+      };
+      const s = sectionFor(editor.state, part.path);
+      if (!s || !part.section) {
+        flash("That section isn't on the page any more.", null, 6000);
+        return;
+      }
+      const current = editor.state.sliceDoc(s.subtreeRange.from, s.subtreeRange.to);
+      const made = applyPart(current, part);
+      if (made.kind === "conflict") {
+        conflict();
+        return;
+      }
+      const r = await anur.call("preview:apply", {
+        path: doc.path,
+        text: editor.state.doc.toString(),
+        thread,
+        section: part.section,
+        applied: made.text,
+      });
+      if (r.kind === "refused") {
+        flash(r.reason, null, 6000);
+        return;
+      }
+      // Typing may have landed while History was written: apply onto the section as it is now.
+      const s2 = sectionFor(editor.state, part.path);
+      if (!s2) return;
+      const now = editor.state.sliceDoc(s2.subtreeRange.from, s2.subtreeRange.to);
+      const again = now === current ? made : applyPart(now, part);
+      if (again.kind === "conflict") {
+        conflict();
+        return;
+      }
+      const before = editor.state.field(previewState).previews.find((p) => p.thread === thread);
+      editor.dispatch({
+        changes: { from: s2.subtreeRange.from, to: s2.subtreeRange.to, insert: again.text },
+        userEvent: "apply",
+      });
+      const after = editor.state.doc;
+      const remaining = withPart(thread, sectionKey(part.path), null);
+      await savePreview(thread, remaining);
+      flash(
+        `Applied to ${part.path.at(-1) ?? "the section"}.`,
+        () => {
+          // Back to the text before Apply, keeping any typing since in the section.
+          const s3 = sectionFor(editor.state, part.path);
+          if (s3) {
+            const nowText = editor.state.sliceDoc(s3.subtreeRange.from, s3.subtreeRange.to);
+            const back =
+              editor.state.doc === after ? now : merge3(again.text, nowText, now, "ours").text;
+            editor.dispatch({
+              changes: { from: s3.subtreeRange.from, to: s3.subtreeRange.to, insert: back },
+              userEvent: "apply.undo",
+            });
+          }
+          if (before) {
+            void savePreview(thread, before.parts).then(loadPreviews);
+          }
+          setNotice(null);
+        },
+        8000,
+      );
+    };
+    const actions: PreviewActions = {
+      apply: (thread, part) => {
+        void applyPreviewPart(thread, part);
+      },
+      reject: (thread, part, edits) => {
+        const left = withPart(thread, sectionKey(part.path), rejectHunks(part, edits));
+        void savePreview(thread, left);
+      },
+      back: (thread) => {
+        window.dispatchEvent(new CustomEvent("anur:open-thread", { detail: { thread } }));
+      },
+    };
+    /** "Preview in doc" from a thread: show its version of each section, at the first. */
+    const onShowPreview = (e: Event) => {
+      const { thread } = (e as CustomEvent<{ thread: string }>).detail;
+      const preview = editor.state.field(previewState).previews.find((p) => p.thread === thread);
+      if (!preview) return;
+      editor.dispatch({
+        effects: preview.parts.map((part) =>
+          showPreview.of({ key: sectionKey(part.path), shown: { thread, changes: false } }),
+        ),
+      });
+      const first = preview.parts[0];
+      const s = first ? sectionFor(editor.state, first.path) : null;
+      if (s)
+        editor.dispatch({
+          effects: EditorView.scrollIntoView(s.subtreeRange.from, { y: "start", yMargin: 40 }),
+        });
+    };
+    window.addEventListener("anur:show-preview", onShowPreview);
+    const offPreviews = anur.on("preview:changed", ({ path }) => {
+      if (path === doc.path) loadPreviews();
+    });
+
     const editor = new EditorView({
       parent: host.current,
       state: EditorState.create({
@@ -168,6 +334,7 @@ export function Page({
               ]
             : []),
           pagePath.of(doc.path),
+          ...(threadsOn ? [previewExtension, previewActions.of(actions)] : []),
           EditorView.contentAttributes.of({ "aria-label": `Page: ${fileName}` }),
           EditorView.updateListener.of((u) => {
             if (u.selectionSet || u.docChanged) onCursorRef.current?.(u.state.selection.main.head);
@@ -366,11 +533,14 @@ export function Page({
       });
     }
     view.current = editor;
+    loadPreviews();
     setConflicts(markdownDoc ? conflictsIn(doc.text).length : 0);
     onView(editor);
     onSections(markdownDoc ? sectionsOf(editor.state, fileName) : null);
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
+      window.removeEventListener("anur:show-preview", onShowPreview);
+      offPreviews();
       offOutside();
       clearTimeout(sectionsTimer);
       clearTimeout(noticeTimer);

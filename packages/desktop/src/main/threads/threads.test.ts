@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -67,8 +67,10 @@ async function setup() {
     node: "/x/node",
     locate: (rel, text) => versions.locate(rel, text),
     emit: (e) => events.push(e),
+    previewsChanged: () => undefined,
   });
-  return { folder, threads, sent, reply, tell, events };
+  const support = path.join(folder, "..", `${path.basename(folder)}-support`);
+  return { folder, support, threads, sent, reply, tell, events };
 }
 
 const risks = { index: 1, path: ["Plan", "Risks"] };
@@ -193,6 +195,52 @@ describe("Threads", () => {
       turn: asked.turn,
       text: "Claude Code isn't installed.",
     });
+  });
+
+  it("gives each turn a working copy, named in the bundle, and turns its edits into a preview", async () => {
+    const { support, threads: t, sent, reply } = await setup();
+    const r = await t.start("plan.md", DOC, risks, "Tighten the risk.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const copy = path.join(support, "agent", "copies", r.thread.id, "plan.md");
+    const asked = sent.find((m) => m.type === "prompt");
+    expect(asked?.type === "prompt" && asked.text).toContain(`is at \`${copy}\``);
+    expect(await readFile(copy, "utf8")).toBe(DOC);
+    // The agent edits its copy, then the turn ends.
+    await writeFile(copy, DOC.replace("The host is untested.", "The host has no tests yet."));
+    await reply(r.thread.id, "Done.");
+    const [preview] = await t.listPreviews("plan.md", DOC);
+    expect(preview?.title).toBe("Tighten the risk.");
+    expect(preview?.parts.map((p) => [p.path, p.base, p.proposed])).toEqual([
+      [
+        ["Plan", "Risks"],
+        "## Risks\n\nThe host is untested.\n\n",
+        "## Risks\n\nThe host has no tests yet.\n\n",
+      ],
+    ]);
+  });
+
+  it("starts the next turn's copy from the doc with the preview made, and merges onto newer typing", async () => {
+    const { support, threads: t, reply } = await setup();
+    const r = await t.start("plan.md", DOC, risks, "Tighten the risk.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const copy = path.join(support, "agent", "copies", r.thread.id, "plan.md");
+    const once = DOC.replace("The host is untested.", "The host has no tests yet.");
+    await writeFile(copy, once);
+    await reply(r.thread.id, "Done.");
+    // The person typed in Budget meanwhile; the next turn's copy has both.
+    const typed = DOC.replace("Two people.", "Two people, part time.");
+    await t.send(r.thread.id, "plan.md", typed, "And the budget line?");
+    expect(await readFile(copy, "utf8")).toBe(
+      once.replace("Two people.", "Two people, part time."),
+    );
+    await writeFile(
+      copy,
+      (await readFile(copy, "utf8")).replace("part time.", "part time, from May."),
+    );
+    await reply(r.thread.id, "Done.");
+    const [preview] = await t.listPreviews("plan.md", typed);
+    expect(preview?.parts.map((p) => p.path.at(-1))).toEqual(["Risks", "Budget"]);
+    expect(preview?.parts[1]?.proposed).toBe("## Budget\n\nTwo people, part time, from May.\n");
   });
 
   it("refuses a section that moved away", async () => {

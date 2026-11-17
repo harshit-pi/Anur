@@ -57,7 +57,18 @@ export {
   ToolLine,
   TurnLine,
 } from "./threads/index.ts";
-export { PreviewFile, PreviewPart, currentPreview, encodePreviewFile } from "./previews/index.ts";
+export {
+  PreviewFile,
+  PreviewPart,
+  applyPart,
+  currentPreview,
+  encodePreviewFile,
+  partHunks,
+  previewParts,
+  rejectHunks,
+  withPreview,
+  type SectionSpan,
+} from "./previews/index.ts";
 export {
   ApplyResultLine,
   HistoryLine,
@@ -124,7 +135,19 @@ export {
   type MergePart,
   type MergePlan,
 } from "./sync/index.ts";
-export { applyEol, detectEol, normalizeEol, type Eol, type EolReport } from "./text/index.ts";
+export {
+  applyEol,
+  applyHunks,
+  detectEol,
+  diffLines,
+  merge3,
+  normalizeEol,
+  splitLines,
+  type Eol,
+  type EolReport,
+  type Hunk,
+  type Merge3,
+} from "./text/index.ts";
 export {
   baseAsMarkdown,
   propertiesOf,

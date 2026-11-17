@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   ANUR_DIR,
@@ -7,7 +7,11 @@ import {
   anurPaths,
   buildBundle,
   compareLines,
+  merge3,
+  previewParts,
+  withPreview,
   type DocId,
+  type PreviewPart,
   type KnownThreadLine,
   type SectionId,
   type SectionTree,
@@ -16,12 +20,18 @@ import type { EventPayload, ThreadItem, ThreadView } from "../../shared/ipc-cont
 import type { SessionSpec, ToMain } from "../../agent/protocol.ts";
 import { JsonlWriter, readJsonlFile } from "../../vault/jsonl-writer.ts";
 import type { AgentHub } from "./hub.ts";
+import { PreviewStore } from "./previews.ts";
 
 /**
  * One folder's threads (tasks 3.1, 3.4, 3.5). Each thread is one discussion
  * on one section, run in its own agent session. Every message and tool call
  * is kept in `.anur/docs/<doc>/threads/<thread>/<device>.jsonl`; nothing a
  * thread said is thrown away.
+ *
+ * Each turn works on a working copy of the doc (3.6): the doc with this
+ * thread's preview made, at a path the bundle names. When the turn ends, the
+ * agent's own changes to the copy are merged onto the doc as it is then,
+ * and become the thread's preview, one part per section.
  */
 
 type Located = { doc: DocId; tree: SectionTree; ids: SectionId[] };
@@ -38,10 +48,13 @@ export type ThreadDeps = {
   /** Section IDs for a doc's text, as the page's sections carry them. */
   locate: (rel: string, text: string) => Promise<Located | null>;
   emit: (event: EventPayload<"thread:event">) => void;
+  /** A doc's previews changed, so the page shows them again. */
+  previewsChanged: (rel: string) => void;
 };
 
 /** What a running thread holds in memory: the turn in flight and what it has said so far. */
 type Live = {
+  threadId: string;
   doc: DocId;
   rel: string;
   turn: string | null;
@@ -54,6 +67,8 @@ type Live = {
   pending: { message: string; docText: string } | null;
   /** The doc's text as the page last sent it: the editor's, unsaved typing included. */
   docText: string;
+  /** The working copy's text when the turn started, to find what the agent changed. */
+  copyStart: string | null;
 };
 
 const newThreadId = () => `t${randomBytes(9).toString("hex")}`;
@@ -62,8 +77,20 @@ const newTurnId = () => `u${randomBytes(6).toString("hex")}`;
 export class Threads {
   private readonly live = new Map<string, Live>();
   private readonly writers = new Map<string, Promise<JsonlWriter>>();
+  readonly previews: PreviewStore;
 
-  constructor(private readonly d: ThreadDeps) {}
+  constructor(private readonly d: ThreadDeps) {
+    this.previews = new PreviewStore(d.folder, d.device);
+  }
+
+  /** Every thread's working copies live here, outside the folder; each thread has its own. */
+  private get copiesRoot() {
+    return path.join(this.d.appSupport, "agent", "copies");
+  }
+
+  private copiesOf(thread: string) {
+    return path.join(this.copiesRoot, thread);
+  }
 
   private threadsDir(doc: DocId) {
     return path.join(this.d.folder, ANUR_DIR, anurPaths.doc(doc), "threads");
@@ -222,6 +249,7 @@ export class Threads {
     let live = this.live.get(thread);
     if (live?.turn) return { kind: "refused", reason: "Wait for the reply, or stop it first." };
     live ??= {
+      threadId: thread,
       doc,
       rel,
       turn: null,
@@ -231,6 +259,7 @@ export class Threads {
       lastBundle: null,
       pending: null,
       docText: text,
+      copyStart: null,
     };
     live.rel = rel;
     live.docText = text;
@@ -258,6 +287,7 @@ export class Threads {
     // This device's last session for the thread, if any: sessions live on the machine that ran them.
     const session = lines.filter((l) => l.kind === "session" && l.dev === this.d.device).at(-1);
     const resume = session?.kind === "session" ? session.session : null;
+    await this.makeWorkingCopy(thread, live, at);
     const prompt = this.promptFor(
       at,
       start.section,
@@ -295,7 +325,13 @@ export class Threads {
   ): string | null {
     const index = at.ids.indexOf(section);
     if (index < 0) return null;
-    const bundle = buildBundle({ text, tree: at.tree, index, docPath: rel }).markdown;
+    const bundle = buildBundle({
+      text,
+      tree: at.tree,
+      index,
+      docPath: rel,
+      workingCopy: path.join(this.copiesOf(live.threadId), rel),
+    }).markdown;
     const parts: string[] = [];
     if (rebuildFrom) {
       parts.push(bundle);
@@ -329,6 +365,8 @@ export class Threads {
         anurDir,
         thread,
         log: path.join(dir, `${thread}.log.jsonl`),
+        copies: this.copiesOf(thread),
+        copiesRoot: this.copiesRoot,
       }),
     );
     const hook = {
@@ -347,7 +385,11 @@ export class Threads {
           PreToolUse: [{ matcher: "*", hooks: [hook] }],
         },
         // "//abs/path" is the absolute-path form of a permission rule.
-        permissions: { deny: ["Read", "Edit", "Write"].map((t) => `${t}(/${anurDir}/**)`) },
+        permissions: {
+          deny: ["Read", "Edit", "Write"].map((t) => `${t}(/${anurDir}/**)`),
+          // The working copies are part of the agent's workspace, as the folder is.
+          additionalDirectories: [this.copiesOf(thread)],
+        },
       },
     };
   }
@@ -379,7 +421,69 @@ export class Threads {
     live.turn = null;
     live.text = "";
     live.pending = null;
+    await this.mergeCopies(thread, live).catch((e: unknown) => {
+      console.error("Anur couldn't turn the thread's edits into a preview:", e);
+    });
     await this.refresh(live.rel, live.docText, thread);
+  }
+
+  /** Where each part's section is in the doc, by section ID. */
+  private static byId(at: Located) {
+    return (part: PreviewPart) => {
+      const i = part.section ? at.ids.indexOf(part.section) : -1;
+      return i >= 0 ? (at.tree.sections[i]?.subtreeRange ?? null) : null;
+    };
+  }
+
+  private static spans(at: Located) {
+    return at.tree.sections.map((s, i) => ({
+      id: at.ids[i] as SectionId,
+      path: s.path,
+      subtreeRange: s.subtreeRange,
+    }));
+  }
+
+  /** The doc with this thread's preview made, written where the agent will edit it. */
+  private async makeWorkingCopy(thread: string, live: Live, at: Located): Promise<void> {
+    const dir = this.copiesOf(thread);
+    await rm(dir, { recursive: true, force: true });
+    const preview = await this.previews.read(at.doc, thread);
+    const start = withPreview(live.docText, preview?.parts ?? [], Threads.byId(at));
+    const copy = path.join(dir, live.rel);
+    await mkdir(path.dirname(copy), { recursive: true });
+    await writeFile(copy, start);
+    live.copyStart = start;
+  }
+
+  /**
+   * The turn is over: what the agent changed in each working copy is merged
+   * onto that doc as it is now, with the thread's preview, and becomes the
+   * thread's new preview of it.
+   */
+  private async mergeCopies(thread: string, live: Live): Promise<void> {
+    const dir = this.copiesOf(thread);
+    const files = await listFiles(dir);
+    for (const rel of files) {
+      const copy = await readFile(path.join(dir, rel), "utf8").catch(() => null);
+      if (copy === null || !rel.toLowerCase().endsWith(".md")) continue;
+      const own = rel === live.rel;
+      // The thread's own doc: the page's text. Another doc: the file, as the hook copied it.
+      const decided = own
+        ? live.docText
+        : await readFile(path.join(this.d.folder, rel), "utf8").catch(() => null);
+      if (decided === null) continue;
+      const start = own ? (live.copyStart ?? decided) : decided;
+      if (copy === start) continue;
+      const at = await this.d.locate(rel, decided);
+      if (!at) continue;
+      const existing = await this.previews.read(at.doc, thread);
+      const current = withPreview(decided, existing?.parts ?? [], Threads.byId(at));
+      const proposed = merge3(start, current, copy, "theirs").text;
+      await this.previews.write(at.doc, thread, previewParts(decided, proposed, Threads.spans(at)));
+      this.d.previewsChanged(rel);
+    }
+    live.copyStart = null;
+    await rm(dir, { recursive: true, force: true });
   }
 
   private async onHost(thread: string, m: ToMain): Promise<void> {
@@ -399,7 +503,10 @@ export class Threads {
         return;
       case "tool": {
         const prev = live.tools.get(m.toolUse);
-        const title = m.title || prev?.title || "A tool";
+        // A path into the working copies reads as what it is: the working copy of that doc.
+        const title = (m.title || prev?.title || "A tool")
+          .split(`${this.copiesOf(thread)}/`)
+          .join("working copy of ");
         live.tools.set(m.toolUse, { title, status: m.status });
         this.d.emit({
           kind: "tool",
@@ -470,6 +577,33 @@ export class Threads {
     }
   }
 
+  /** The doc's previews, each part's heading path as it is in `text`. */
+  async listPreviews(rel: string, text: string) {
+    const at = await this.d.locate(rel, text);
+    if (!at) return [];
+    const previews = await this.previews.list(at.doc);
+    return Promise.all(
+      previews.map(async (p) => {
+        const start = (await this.linesOf(at.doc, p.thread)).find((l) => l.kind === "thread");
+        return {
+          thread: p.thread,
+          title: start?.kind === "thread" ? start.title : "A thread",
+          parts: p.parts.map((part) => {
+            const i = part.section ? at.ids.indexOf(part.section) : -1;
+            return { ...part, path: at.tree.sections[i]?.path ?? part.path };
+          }),
+        };
+      }),
+    );
+  }
+
+  async updatePreview(rel: string, text: string, thread: string, parts: PreviewPart[]) {
+    const at = await this.d.locate(rel, text);
+    if (!at) return;
+    const now = await this.previews.read(at.doc, thread);
+    await this.previews.write(at.doc, thread, parts, now?.summary ?? null);
+  }
+
   /** Close every file this folder's threads write. */
   async close(): Promise<void> {
     for (const w of this.writers.values()) await (await w).close().catch(() => undefined);
@@ -479,3 +613,20 @@ export class Threads {
 }
 
 const KNOWN = new Set(["thread", "session", "turn", "message", "tool", "state"]);
+
+/** Every file under `dir`, relative to it, with forward slashes. */
+async function listFiles(dir: string, prefix = ""): Promise<string[]> {
+  let entries;
+  try {
+    entries = await readdir(path.join(dir, prefix), { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const e of entries) {
+    const rel = prefix ? `${prefix}/${e.name}` : e.name;
+    if (e.isDirectory()) out.push(...(await listFiles(dir, rel)));
+    else if (e.isFile()) out.push(rel);
+  }
+  return out;
+}
