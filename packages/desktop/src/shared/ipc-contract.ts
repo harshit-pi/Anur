@@ -105,6 +105,37 @@ export const ipcContract = {
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
+  /**
+   * An embedded Obsidian base, `![[Ideas.base]]` or `![[Ideas.base#View]]`,
+   * worked out over the folder's notes: each view as a table. Read-only.
+   */
+  "base:read": {
+    request: z.object({ target: z.string().max(1024), from: z.string().max(4096) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("base"),
+        path: z.string(),
+        /** The view the embed names after "#", if any. */
+        view: z.string().nullable(),
+        views: z.array(
+          z.object({
+            name: z.string(),
+            columns: z.array(z.object({ id: z.string(), label: z.string() })),
+            rows: z.array(
+              z.object({
+                path: z.string(),
+                cells: z.array(z.object({ text: z.string(), link: z.string().nullable() })),
+              }),
+            ),
+          }),
+        ),
+        problems: z.array(z.string()),
+        /** Notes left out because their bytes are still in iCloud. */
+        skipped: z.number(),
+      }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
   /** Open a web or mail link in the system's browser or mail app. */
   "link:open-external": {
     request: z.object({ url: z.string().max(4096) }).strict(),
