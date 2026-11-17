@@ -5,12 +5,14 @@ import { EditorView, keymap } from "@codemirror/view";
 import type { SectionTree } from "@anur/core";
 import { useEffect, useRef, useState } from "react";
 import { anur } from "../bridge.ts";
+import { CloseIcon } from "../regions/Icons.tsx";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { formattingKeymap } from "./commands.ts";
 import { insertMenu } from "./insert-menu.ts";
 import { editLink, linkEditor } from "./link-editor.ts";
 import { livePreview } from "./live-preview/live-preview.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
+import { editorFilter } from "./editor-filter.ts";
 import { diffSpan, mergeOutside } from "./outside.ts";
 import { settled, track } from "./pending-saves.ts";
 import { markdownSupport, sectionsOf } from "./sections.ts";
@@ -75,6 +77,7 @@ export function Page({
         doc: doc.text,
         extensions: [
           EditorState.readOnly.of(!editable),
+          editorFilter,
           EditorView.lineWrapping,
           history(),
           keymap.of([
@@ -237,7 +240,7 @@ export function Page({
               setNotice(null);
             }}
           >
-            ×
+            <CloseIcon />
           </button>
         </div>
       ) : null}

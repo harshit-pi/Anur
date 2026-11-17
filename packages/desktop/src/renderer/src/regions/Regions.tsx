@@ -5,6 +5,7 @@ import { FileTree } from "./FileTree.tsx";
 import {
   BackIcon,
   ChevronDownIcon,
+  CloseIcon,
   FolderIcon,
   ForwardIcon,
   LinkIcon,
@@ -202,7 +203,7 @@ export function TabBar({
                   onCloseTab(t.id);
                 }}
               >
-                ×
+                <CloseIcon />
               </button>
             </div>
           ))}
@@ -288,7 +289,7 @@ function FolderNotices({
               setDismissed(true);
             }}
           >
-            ×
+            <CloseIcon />
           </button>
         </div>
       ) : null}
