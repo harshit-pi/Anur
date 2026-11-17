@@ -10,7 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { NotDownloaded, readDocText, type ReadDeps } from "../../vault/icloud.ts";
+import { NotDownloaded, readDocBytes, type ReadDeps } from "../../vault/icloud.ts";
 import { mergeConflict, planConflict } from "./conflicts.ts";
 import { FolderService } from "./folder-service.ts";
 
@@ -40,18 +40,21 @@ const write = (rel: string, text: string) => {
   writeFileSync(p, text);
 };
 
+const bytes = (s: string) => new TextEncoder().encode(s);
+const text = (b: Uint8Array) => new TextDecoder().decode(b);
+
 describe("reading a doc iCloud has offloaded", () => {
   const fake = (over: Partial<ReadDeps>): ReadDeps => ({
     isDataless: () => Promise.resolve(false),
     download: () => Promise.resolve(),
-    read: () => Promise.resolve("# Doc\n"),
+    read: () => Promise.resolve(bytes("# Doc\n")),
     size: () => Promise.resolve(6),
     ...over,
   });
 
   it("downloads it first, then reads its text", async () => {
     let inCloud = true;
-    const text = await readDocText(
+    const got = await readDocBytes(
       "/v/Doc.md",
       fake({
         isDataless: () => Promise.resolve(inCloud),
@@ -59,21 +62,21 @@ describe("reading a doc iCloud has offloaded", () => {
           inCloud = false;
           return Promise.resolve();
         },
-        read: () => Promise.resolve(inCloud ? "" : "# Doc\n"),
+        read: () => Promise.resolve(bytes(inCloud ? "" : "# Doc\n")),
       }),
     );
-    expect(text).toBe("# Doc\n");
+    expect(text(got)).toBe("# Doc\n");
   });
 
   it("never takes a read that comes back empty for an empty doc", async () => {
     await expect(
-      readDocText("/v/Doc.md", fake({ read: () => Promise.resolve("") })),
+      readDocBytes("/v/Doc.md", fake({ read: () => Promise.resolve(bytes("")) })),
     ).rejects.toBeInstanceOf(NotDownloaded);
   });
 
   it("says so when iCloud can't send it", async () => {
     await expect(
-      readDocText(
+      readDocBytes(
         "/v/Doc.md",
         fake({
           isDataless: () => Promise.resolve(true),
@@ -85,9 +88,11 @@ describe("reading a doc iCloud has offloaded", () => {
 
   it("reads a doc that really is empty", async () => {
     expect(
-      await readDocText(
-        "/v/Empty.md",
-        fake({ read: () => Promise.resolve(""), size: () => Promise.resolve(0) }),
+      text(
+        await readDocBytes(
+          "/v/Empty.md",
+          fake({ read: () => Promise.resolve(bytes("")), size: () => Promise.resolve(0) }),
+        ),
       ),
     ).toBe("");
   });
@@ -166,6 +171,35 @@ describe("merging a conflict copy on disk", () => {
     });
     expect(readFileSync(path.join(vault, "Retry.md"), "utf8")).toContain("Typed after the plan.");
     expect(existsSync(path.join(vault, "Retry 2.md"))).toBe(true);
+  });
+
+  it("keeps a Windows-ending original Windows-ending, and refuses a file that isn't UTF-8", async () => {
+    write("Crlf.md", "# Retry\r\n\r\n## Timing\r\n\r\nOne hour.\r\n");
+    write("Crlf 2.md", "# Retry\r\n\r\n## Timing\r\n\r\nThirty minutes.\r\n");
+    writeFileSync(
+      path.join(vault, "Latin.md"),
+      Buffer.from([0x23, 0x20, 0x43, 0x61, 0x66, 0xe9, 0x0a]),
+    );
+    writeFileSync(
+      path.join(vault, "Latin 2.md"),
+      Buffer.from([0x23, 0x20, 0x43, 0x61, 0x66, 0xe9, 0x21, 0x0a]),
+    );
+    const r = await new FolderService(appSupport, home).open(1, vault);
+    if (r.kind !== "opened") throw new Error("expected the folder to open");
+    const plan = await planConflict(r.folder, "Crlf 2.md");
+    if (plan.kind !== "plan") throw new Error(plan.reason);
+    await mergeConflict(
+      r.folder,
+      { copy: "Crlf 2.md", hashes: plan.hashes, choices: { "1": "copy" } },
+      () => Promise.resolve(),
+    );
+    expect(readFileSync(path.join(vault, "Crlf.md"), "utf8")).toBe(
+      "# Retry\r\n\r\n## Timing\r\n\r\nThirty minutes.\r\n",
+    );
+    expect(await planConflict(r.folder, "Latin 2.md")).toMatchObject({
+      kind: "failed",
+      reason: expect.stringMatching(/isn't UTF-8/) as unknown,
+    });
   });
 
   it("only merges copies the folder listed", async () => {

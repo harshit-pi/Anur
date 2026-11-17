@@ -121,3 +121,4 @@ export {
   type MergePart,
   type MergePlan,
 } from "./sync/index.ts";
+export { applyEol, detectEol, normalizeEol, type Eol, type EolReport } from "./text/index.ts";

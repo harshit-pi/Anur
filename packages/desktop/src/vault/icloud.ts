@@ -60,23 +60,23 @@ export class NotDownloaded extends Error {}
 export type ReadDeps = {
   isDataless: (file: string) => Promise<boolean>;
   download: (file: string) => Promise<void>;
-  read: (file: string) => Promise<string>;
+  read: (file: string) => Promise<Uint8Array>;
   size: (file: string) => Promise<number>;
 };
 
 const realDeps: ReadDeps = {
   isDataless,
   download: (file) => downloadFromICloud(file),
-  read: (file) => readFile(file, "utf8"),
+  read: (file) => readFile(file),
   size: async (file) => (await stat(file)).size,
 };
 
 /**
- * A doc's text, fetching it from iCloud first if it is offloaded. A read that
+ * A doc's bytes, fetching it from iCloud first if it is offloaded. A read that
  * comes back empty while the file says it has bytes counts as not downloaded,
- * never as an empty doc.
+ * never as an empty doc. `readDoc` in doc-file.ts decodes them.
  */
-export async function readDocText(file: string, deps: ReadDeps = realDeps): Promise<string> {
+export async function readDocBytes(file: string, deps: ReadDeps = realDeps): Promise<Uint8Array> {
   for (let attempt = 0; attempt < 2; attempt++) {
     if (await deps.isDataless(file)) {
       try {
@@ -90,8 +90,8 @@ export async function readDocText(file: string, deps: ReadDeps = realDeps): Prom
         );
       }
     }
-    const [text, size] = await Promise.all([deps.read(file), deps.size(file)]);
-    if (text !== "" || size === 0) return text;
+    const [bytes, size] = await Promise.all([deps.read(file), deps.size(file)]);
+    if (bytes.length > 0 || size === 0) return bytes;
   }
   throw new NotDownloaded(
     `${path.basename(file)} read as empty though it has content; it may still be in iCloud`,

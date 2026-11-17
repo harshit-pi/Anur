@@ -2,16 +2,22 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { applyMerge, normalizeDocPath, planConflictMerge, type MergeChoices } from "@anur/core";
 import type { FolderState, Response } from "../../shared/ipc-contract.ts";
-import { writeFileAtomic } from "../../vault/anur-folder.ts";
-import { readDocText } from "../../vault/icloud.ts";
+import { readDoc, writeDoc, type DocFile } from "../../vault/doc-file.ts";
 
 /**
  * Merging a sync conflict copy into its original (task 2.3). The person sees
  * the plan section by section and picks; the merge writes the original in
- * one atomic step, refuses if either file changed since the plan, and moves
- * the copy to the Trash, never deleting it outright.
+ * one atomic step, with its own line endings and byte-order mark, refuses if
+ * either file changed since the plan, and moves the copy to the Trash, never
+ * deleting it outright. A file Anur can't write safely, such as one that
+ * isn't UTF-8, is never merged.
  */
-const hash = (text: string) => createHash("sha256").update(text).digest("hex");
+
+/** Fingerprints a file as written: its text, line ending and byte-order mark. */
+const hash = (doc: DocFile) =>
+  createHash("sha256")
+    .update(`${doc.eol}\u0000${String(doc.bom)}\u0000${doc.text}`)
+    .digest("hex");
 
 function pairFor(folder: FolderState, copy: string) {
   const norm = normalizeDocPath(copy);
@@ -24,23 +30,34 @@ function pairFor(folder: FolderState, copy: string) {
   };
 }
 
+/** Both files, decoded; refuses either one Anur can't write safely. */
+async function readPair(files: { original: string; copy: string }) {
+  const [original, copy] = await Promise.all([readDoc(files.original), readDoc(files.copy)]);
+  for (const [doc, file] of [
+    [original, files.original],
+    [copy, files.copy],
+  ] as const) {
+    if (doc.mode !== "editable") {
+      throw new Error(`${path.basename(file)}: ${doc.note ?? "Anur can't merge it"}`);
+    }
+  }
+  return { original, copy };
+}
+
 export async function planConflict(
   folder: FolderState,
   copy: string,
 ): Promise<Response<"conflict:plan">> {
   try {
     const files = pairFor(folder, copy);
-    const [original, copyText] = await Promise.all([
-      readDocText(files.original),
-      readDocText(files.copy),
-    ]);
-    const plan = planConflictMerge(original, copyText);
+    const docs = await readPair(files);
+    const plan = planConflictMerge(docs.original.text, docs.copy.text);
     return {
       kind: "plan",
       original: files.pair.original,
       copy: files.pair.copy,
       parts: plan.parts,
-      hashes: { original: hash(original), copy: hash(copyText) },
+      hashes: { original: hash(docs.original), copy: hash(docs.copy) },
     };
   } catch (e) {
     return { kind: "failed", reason: (e as Error).message };
@@ -58,11 +75,11 @@ export async function mergeConflict(
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   try {
     const files = pairFor(folder, request.copy);
-    const [original, copyText] = await Promise.all([
-      readDocText(files.original),
-      readDocText(files.copy),
-    ]);
-    if (hash(original) !== request.hashes.original || hash(copyText) !== request.hashes.copy) {
+    const docs = await readPair(files);
+    if (
+      hash(docs.original) !== request.hashes.original ||
+      hash(docs.copy) !== request.hashes.copy
+    ) {
       return {
         ok: false,
         reason: "One of the two files changed since you reviewed the merge. Review it again.",
@@ -71,10 +88,8 @@ export async function mergeConflict(
     const choices: MergeChoices = Object.fromEntries(
       Object.entries(request.choices).map(([k, v]) => [Number(k), v]),
     );
-    await writeFileAtomic(
-      files.original,
-      applyMerge(planConflictMerge(original, copyText), choices),
-    );
+    const merged = applyMerge(planConflictMerge(docs.original.text, docs.copy.text), choices);
+    await writeDoc(files.original, merged, docs.original);
     await trash(files.copy);
     return { ok: true };
   } catch (e) {
