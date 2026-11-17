@@ -33,3 +33,12 @@ export {
   segment,
   type FolderAccess,
 } from "./anur-folder/index.ts";
+export {
+  LineEnvelope,
+  compareLines,
+  encodeLine,
+  mergeLines,
+  nextStamp,
+  parseJsonl,
+  type ParsedJsonl,
+} from "./jsonl/index.ts";
