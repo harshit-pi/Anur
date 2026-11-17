@@ -111,7 +111,10 @@ export class PropertiesWidget extends WidgetType {
         const remove = document.createElement("button");
         remove.type = "button";
         remove.className = "cm-lp-property-remove";
-        remove.textContent = "×";
+        // The same cross as elsewhere in the app, drawn rather than typed.
+        remove.innerHTML =
+          '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><path d="M4.75 4.75l6.5 6.5M11.25 4.75l-6.5 6.5"/></svg>';
+        remove.setAttribute("aria-label", `Remove ${f.key}`);
         remove.title = `Remove ${f.key}`;
         remove.dataset.remove = String(row);
         line.append(remove);

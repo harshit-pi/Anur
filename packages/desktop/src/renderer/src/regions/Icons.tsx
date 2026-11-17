@@ -102,3 +102,10 @@ export const SidebarRightIcon = (p: IconProps) => (
     <path d="M10 2.75v10.5" />
   </Svg>
 );
+
+/** A close or dismiss cross, drawn so it sits in the middle of its button. */
+export const CloseIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4.75 4.75l6.5 6.5M11.25 4.75l-6.5 6.5" />
+  </Svg>
+);

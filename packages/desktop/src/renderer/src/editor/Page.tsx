@@ -5,6 +5,7 @@ import { EditorView, keymap } from "@codemirror/view";
 import type { SectionTree } from "@anur/core";
 import { useEffect, useRef, useState } from "react";
 import { anur } from "../bridge.ts";
+import { CloseIcon } from "../regions/Icons.tsx";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { formattingKeymap } from "./commands.ts";
 import { insertMenu } from "./insert-menu.ts";
@@ -239,7 +240,7 @@ export function Page({
               setNotice(null);
             }}
           >
-            ×
+            <CloseIcon />
           </button>
         </div>
       ) : null}
