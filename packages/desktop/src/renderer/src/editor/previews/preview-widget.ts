@@ -263,7 +263,7 @@ class BodyWidget extends WidgetType {
       });
     });
     toggle.append(box, " Show changes");
-    const back = button("Back to thinking", false, () => actions?.back(this.thread));
+    const back = button("Keep discussing", false, () => actions?.back(this.thread));
     if (this.clash) {
       note.textContent =
         "You've since changed lines this preview changes too. Ask the thread to redo its edit on your text, or use its version of those lines.";

@@ -320,9 +320,15 @@ export function App() {
       return next;
     });
   }, []);
-  // "Back to thinking" on a preview needs the section panel open.
+  /**
+   * A thread to open in Think, as "Keep discussing" on a preview asks. Held
+   * here, so it reaches Think however the panel was showing when it came.
+   */
+  const [threadRequest, setThreadRequest] = useState<{ thread: string; n: number } | null>(null);
   useEffect(() => {
-    const onThread = () => {
+    const onThread = (e: Event) => {
+      const { thread } = (e as CustomEvent<{ thread: string }>).detail;
+      setThreadRequest((r) => ({ thread, n: (r?.n ?? 0) + 1 }));
       setOpen((o) => {
         if (o.right) return o;
         const next = { ...o, right: true };
@@ -507,6 +513,7 @@ export function App() {
         sections={sections}
         onJump={jumpTo}
         hidden={!open.right}
+        showThink={threadRequest?.n ?? 0}
         think={
           <Think
             docPath={doc && sections ? doc.path : null}
@@ -514,6 +521,7 @@ export function App() {
             tree={sections}
             section={sections?.sections[cursorSection] ?? sections?.sections[0] ?? null}
             writable={folder?.mode === "writable" && doc?.mode === "editable"}
+            request={threadRequest}
           />
         }
       />
