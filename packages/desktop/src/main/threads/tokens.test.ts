@@ -29,7 +29,17 @@ describe("a thread's tokens", () => {
     expect(tokensOf(lines)).toEqual({
       used: 4 + 668 + 66_786 + 28_515 + 6 + 1_365 + 118_794 + 31_291,
       context: 6 + 1_365 + 118_794 + 31_291,
+      first: 4 + 668 + 66_786 + 28_515,
+      window: null,
     });
+  });
+
+  it("takes the context and window from the agent's own report when it gave one", () => {
+    const withContext = {
+      ...end({ input: 6, output: 1_365, cacheRead: 118_794, cacheWrite: 31_291 }),
+      context: { used: 150_000, size: 200_000 },
+    } as KnownThreadLine;
+    expect(tokensOf([withContext])).toMatchObject({ context: 150_000, window: 200_000 });
   });
 
   it("is unknown until the agent reports usage", () => {

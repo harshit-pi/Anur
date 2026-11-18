@@ -2395,7 +2395,43 @@ body.resizing * {
   opacity: 0.6;
 }
 
-.think-tokens {
-  margin: -4px 0 0;
+/* The size meter (4.9): tokens used, and how full the context is. */
+.think-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: -4px;
   font-size: 12px;
+}
+
+.think-meter-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.think-meter-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--rule);
+  overflow: hidden;
+}
+
+.think-meter-bar i {
+  display: block;
+  height: 100%;
+  background: var(--slate);
+}
+
+.think-meter-bar i.full {
+  background: var(--amber);
+}
+
+.think-meter-note {
+  margin: 0;
+  color: var(--ink);
+}
+
+.think-meter-note .think-more {
+  display: inline;
 }

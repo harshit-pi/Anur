@@ -522,6 +522,11 @@ export class AgentHost {
       if (u.status === "completed") void this.matchCall(agent, params.sessionId, t, u.toolCallId);
     } else if (u.sessionUpdate === "config_option_update") {
       this.send({ type: "options", thread: t.thread, options: optionsOf(u.configOptions) });
+    } else if ((u.sessionUpdate as string) === "usage_update") {
+      // How full the session's context is, and the model's window (4.9).
+      const { used, size } = u as unknown as { used?: unknown; size?: unknown };
+      if (typeof used === "number" && typeof size === "number" && size > 0)
+        this.send({ type: "context", ...t, used, size });
     }
   }
 

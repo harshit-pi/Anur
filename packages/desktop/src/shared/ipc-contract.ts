@@ -165,7 +165,16 @@ export const ThreadView = z.object({
    * Tokens from the agent's usage reports (4.10): all the thread has used,
    * and how big its context was on the last turn; null before any report.
    */
-  tokens: z.object({ used: z.int().nonnegative(), context: z.int().nonnegative() }).nullable(),
+  tokens: z
+    .object({
+      used: z.int().nonnegative(),
+      context: z.int().nonnegative(),
+      /** The context after the first turn: the meter counts growth from here (4.9). */
+      first: z.int().nonnegative(),
+      /** The model's window, as the agent reported it; null when it never did. */
+      window: z.int().positive().nullable(),
+    })
+    .nullable(),
   agent: AgentIdSchema,
 });
 export type ThreadView = z.infer<typeof ThreadView>;
