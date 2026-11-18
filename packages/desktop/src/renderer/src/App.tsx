@@ -67,6 +67,8 @@ import {
 import { TabBar } from "./regions/TabBar.tsx";
 import { SkillCard } from "./regions/SkillCard.tsx";
 import { OpenerCard } from "./regions/OpenerCard.tsx";
+import { Tour } from "./regions/Tour.tsx";
+import { TOUR } from "./layout/tour.ts";
 import { MapView } from "./regions/MapView.tsx";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
@@ -97,6 +99,10 @@ export function App() {
   const markedAt = useRef(0);
   /** Page or Map in the centre (task 7). */
   const [centerView, setCenterView] = useState<"page" | "map">("page");
+  /** The tour's step while it runs (null otherwise), and Help → Show the Tour Again. */
+  const [tourStep, setTourStep] = useState<number | null>(null);
+  const [tourAsked, setTourAsked] = useState(0);
+  const tourChecked = useRef(false);
   const centerNow = useRef(centerView);
   centerNow.current = centerView;
   const sectionsNow = useRef(sections);
@@ -755,6 +761,38 @@ export function App() {
   }, [pendingLine, doc, sections]);
   const [widths, setWidths] = useState(() => loadWidths(window.localStorage));
   const [open, setOpen] = useState(() => loadOpen(window.localStorage));
+  const docReady = doc !== null && sections !== null;
+  // The tour starts once, the first time a doc is open, unless it's been seen.
+  useEffect(() => {
+    if (!docReady || tourChecked.current) return;
+    tourChecked.current = true;
+    void anur.call("tour:status", {}).then((t) => {
+      if (t.show) setTourStep(0);
+    });
+  }, [docReady]);
+  useEffect(() => {
+    if (tourAsked > 0 && docReady) setTourStep(0);
+    // Only a new ask: a doc opening later doesn't start it.
+  }, [tourAsked]);
+  // Each step shows its part: the view it needs, and its side panel open.
+  useEffect(() => {
+    const s = tourStep === null ? null : TOUR[tourStep];
+    if (!s) return;
+    setCenterView(s.view);
+    const side = s.panel;
+    if (side)
+      setOpen((o) => {
+        if (o[side]) return o;
+        const next = { ...o, [side]: true };
+        saveOpen(window.localStorage, next);
+        return next;
+      });
+  }, [tourStep]);
+  const endTour = useCallback(() => {
+    setTourStep(null);
+    setCenterView("page");
+    void anur.call("tour:done", {});
+  }, []);
   const toggle = useCallback((side: Side) => {
     setOpen((o) => {
       const next = { ...o, [side]: !o[side] };
@@ -826,6 +864,7 @@ export function App() {
       else if (command === "tab-close") setTabs((t) => (t.active ? close(t, t.active) : t));
       else if (command === "back") setTabs(back);
       else if (command === "forward") setTabs(forward);
+      else if (command === "tour") setTourAsked((n) => n + 1);
       else setTabs((t) => cycle(t, command === "tab-next" ? 1 : -1));
     });
     return () => {
@@ -1069,8 +1108,23 @@ export function App() {
           }}
         />
       ) : null}
-      <SkillCard />
-      <OpenerCard />
+      {tourStep !== null ? (
+        <Tour
+          step={tourStep}
+          onStep={(n) => {
+            if (n >= TOUR.length) endTour();
+            else setTourStep(Math.max(0, n));
+          }}
+          onEnd={endTour}
+        />
+      ) : null}
+      {/* The offer cards wait until the tour is over. */}
+      {tourStep === null ? (
+        <>
+          <SkillCard />
+          <OpenerCard />
+        </>
+      ) : null}
       <CommandPalette
         open={paletteOpen}
         onClose={() => {
@@ -1103,6 +1157,14 @@ export function App() {
           onClose={closeSettings}
           folder={folder}
           onOpenFolder={openFolder}
+          onTour={
+            docReady
+              ? () => {
+                  closeSettings();
+                  setTourStep(0);
+                }
+              : null
+          }
         />
       ) : null}
     </div>

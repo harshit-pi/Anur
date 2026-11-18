@@ -204,12 +204,15 @@ export function Settings({
   onClose,
   folder,
   onOpenFolder,
+  onTour,
 }: {
   section: SettingsSection;
   onSection: (s: SettingsSection) => void;
   onClose: () => void;
   folder: FolderState | null;
   onOpenFolder: () => void;
+  /** Show the tour again; null while no doc is open for it to point at. */
+  onTour: (() => void) | null;
 }) {
   const [main, setMain] = useState<MainSettings | null>(null);
   const [theme, setTheme] = useState<ThemePref>(() => loadTheme(window.localStorage));
@@ -258,6 +261,23 @@ export function Settings({
               </button>
             </Row>
             <OpenerRow />
+            <Row
+              title="Tour"
+              detail={
+                onTour
+                  ? "Five short steps through what Anur can do. It showed once on your first doc."
+                  : "Open a doc first: the tour points at parts of it."
+              }
+            >
+              <button
+                type="button"
+                className="settings-button"
+                disabled={!onTour}
+                onClick={onTour ?? undefined}
+              >
+                Show the tour
+              </button>
+            </Row>
             <Row
               title="Commit Anur's data with git"
               detail={

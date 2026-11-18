@@ -10,7 +10,9 @@ export function buildMenu(actions: {
   newFolder: () => void;
   newWindow: () => void;
   insert: (id: InsertId) => void;
-  command: (c: "tab-new" | "tab-close" | "back" | "forward" | "tab-next" | "tab-prev") => void;
+  command: (
+    c: "tab-new" | "tab-close" | "back" | "forward" | "tab-next" | "tab-prev" | "tour",
+  ) => void;
   isDev: boolean;
 }): Menu {
   const mac = process.platform === "darwin";
@@ -117,6 +119,17 @@ export function buildMenu(actions: {
       ],
     },
     { role: "windowMenu" },
+    {
+      role: "help",
+      submenu: [
+        {
+          label: "Show the Tour Again",
+          click: () => {
+            actions.command("tour");
+          },
+        },
+      ],
+    },
   ];
   return Menu.buildFromTemplate(template);
 }
