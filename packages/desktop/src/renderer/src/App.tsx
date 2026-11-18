@@ -869,6 +869,7 @@ export function App() {
       else if (command === "back") setTabs(back);
       else if (command === "forward") setTabs(forward);
       else if (command === "tour") setTourAsked((n) => n + 1);
+      else if (command === "updates") setSettings("general");
       else setTabs((t) => cycle(t, command === "tab-next" ? 1 : -1));
     });
     return () => {

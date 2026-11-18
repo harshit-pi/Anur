@@ -1,4 +1,4 @@
-import { Menu, type MenuItemConstructorOptions } from "electron";
+import { Menu, app, type MenuItemConstructorOptions } from "electron";
 import { INSERT_ITEMS, type InsertId } from "../shared/insert-items.ts";
 
 /**
@@ -8,16 +8,36 @@ import { INSERT_ITEMS, type InsertId } from "../shared/insert-items.ts";
 export function buildMenu(actions: {
   openFolder: () => void;
   newFolder: () => void;
+  checkUpdates: () => void;
   newWindow: () => void;
   insert: (id: InsertId) => void;
   command: (
-    c: "tab-new" | "tab-close" | "back" | "forward" | "tab-next" | "tab-prev" | "tour",
+    c: "tab-new" | "tab-close" | "back" | "forward" | "tab-next" | "tab-prev" | "tour" | "updates",
   ) => void;
   isDev: boolean;
 }): Menu {
   const mac = process.platform === "darwin";
   const template: MenuItemConstructorOptions[] = [
-    ...(mac ? [{ role: "appMenu" as const }] : []),
+    // The app menu as macOS draws it, with Check for Updates under About.
+    ...(mac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: "about" as const },
+              { label: "Check for Updates…", click: actions.checkUpdates },
+              { type: "separator" as const },
+              { role: "services" as const },
+              { type: "separator" as const },
+              { role: "hide" as const },
+              { role: "hideOthers" as const },
+              { role: "unhide" as const },
+              { type: "separator" as const },
+              { role: "quit" as const },
+            ],
+          },
+        ]
+      : []),
     {
       label: "File",
       submenu: [

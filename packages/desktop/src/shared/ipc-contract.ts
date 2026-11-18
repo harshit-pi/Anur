@@ -233,6 +233,18 @@ export type PreviewView = z.infer<typeof PreviewView>;
 /** The section a thread is about: its index in the page's tree and its heading path, to check it. */
 const SectionRef = z.object({ index: z.int().nonnegative(), path: z.array(z.string()).max(50) });
 
+/** Where an update stands; "off" in Anur Dev, which doesn't update itself. */
+export const UpdateState = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("off") }),
+  z.object({ kind: z.literal("idle"), checkedAt: z.string().nullable() }),
+  z.object({ kind: z.literal("checking") }),
+  z.object({ kind: z.literal("available"), version: z.string() }),
+  z.object({ kind: z.literal("downloading"), version: z.string(), percent: z.number() }),
+  z.object({ kind: z.literal("ready"), version: z.string() }),
+  z.object({ kind: z.literal("error"), reason: z.string() }),
+]);
+export type UpdateState = z.infer<typeof UpdateState>;
+
 export const ipcContract = {
   "app:info": {
     request: z.object({}).strict(),
@@ -526,10 +538,25 @@ export const ipcContract = {
     request: z.object({ paths: z.array(z.string().max(1024)).max(1000) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
-  /** A downloaded update waiting for a restart, for a window that opened after it came. */
+  /** Where updates stand, the running version, and whether they install by themselves. */
   "update:status": {
     request: z.object({}).strict(),
-    response: z.object({ ready: z.string().nullable() }),
+    response: z.object({ state: UpdateState, version: z.string(), auto: z.boolean() }),
+  },
+  /** Check the feed now, as Check for Updates asks. */
+  "update:check": {
+    request: z.object({}).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Download the version found, when automatic installs are off. */
+  "update:download": {
+    request: z.object({}).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Turn automatic installs on or off. */
+  "update:set-auto": {
+    request: z.object({ auto: z.boolean() }).strict(),
+    response: z.object({ auto: z.boolean() }),
   },
   /** Quit and put the downloaded update in place, then open again. */
   "update:restart": {
@@ -967,7 +994,16 @@ export const ipcEvents = {
   ]),
   /** A menu-bar command for the window's page and tabs. */
   "app:command": z.object({
-    command: z.enum(["tab-new", "tab-close", "back", "forward", "tab-next", "tab-prev", "tour"]),
+    command: z.enum([
+      "tab-new",
+      "tab-close",
+      "back",
+      "forward",
+      "tab-next",
+      "tab-prev",
+      "tour",
+      "updates",
+    ]),
   }),
   /** Insert in the menu bar: put this block where the page's cursor is. */
   "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
@@ -989,8 +1025,8 @@ export const ipcEvents = {
   }),
   /** An agent in a terminal asked to show a doc (6.7, 6.9): open it, at a section if given. */
   "app:open-doc": z.object({ path: z.string(), section: z.string().nullable() }),
-  /** A new version of Anur downloaded; a restart puts it in place. */
-  "app:update-ready": z.object({ version: z.string() }),
+  /** Where updates stand changed, as when a new version finished downloading. */
+  "app:update-state": UpdateState,
   /** A doc's previews changed, as when a thread's turn ended with edits. */
   "preview:changed": z.object({ path: z.string() }),
   /** A thread changed: all of it, or a reply arriving piece by piece. */

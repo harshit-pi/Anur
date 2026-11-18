@@ -16,12 +16,15 @@ export type AppSettings = {
   defaultAgent: AgentId;
   /** Use agents' edits as they land, instead of proposing them; off by default. */
   autoApply: boolean;
+  /** Download updates and install them on quit by themselves; on by default. */
+  autoUpdate: boolean;
 };
 
 const DEFAULTS: AppSettings = {
   sectionHistory: true,
   defaultAgent: DEFAULT_AGENT,
   autoApply: false,
+  autoUpdate: true,
 };
 
 export class AppSettingsStore {
@@ -40,6 +43,7 @@ export class AppSettingsStore {
         sectionHistory: typeof raw.sectionHistory === "boolean" ? raw.sectionHistory : true,
         defaultAgent: isAgentId(raw.defaultAgent) ? raw.defaultAgent : DEFAULT_AGENT,
         autoApply: raw.autoApply === true,
+        autoUpdate: raw.autoUpdate !== false,
       };
     } catch {
       this.current = { ...DEFAULTS };
