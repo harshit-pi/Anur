@@ -337,6 +337,40 @@ describe("Threads", () => {
     expect(await readFile(path.join(folder, "pricing.md"), "utf8")).toBe(other);
   });
 
+  it("carries a kept finding to new threads on the section, and never an unkept one", async () => {
+    const { threads: t, sent, reply } = await setup();
+    const a = await t.start("plan.md", DOC, risks, "What does the host cost?");
+    if (a.kind !== "started") throw new Error(a.reason);
+    // The agent proposes two findings during its turn.
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    await tool(a.thread.id, "anur_propose_finding", {
+      claim: "The host costs £40 a month.",
+      source: "invoice.pdf",
+    });
+    await tool(a.thread.id, "anur_propose_finding", {
+      claim: "The host is in Frankfurt.",
+      source: "status page",
+    });
+    await reply(a.thread.id, "Two findings proposed.");
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === a.thread.id);
+    const proposed = (view?.items ?? []).flatMap((i) => (i.kind === "finding" ? [i] : []));
+    expect(proposed.map((f) => f.status)).toEqual(["proposed", "proposed"]);
+    const first = proposed[0];
+    if (!first) throw new Error("no finding");
+    await t.decideFinding(a.thread.id, { id: first.id, status: "kept", claim: null });
+    const b = await t.start("plan.md", DOC, risks, "Plan the hosting budget.");
+    if (b.kind !== "started") throw new Error(b.reason);
+    const asked = sent.filter((m) => m.type === "prompt").at(-1);
+    const text = asked?.type === "prompt" ? asked.text : "";
+    expect(text).toContain("- The host costs £40 a month. (source: invoice.pdf)");
+    expect(text).not.toContain("Frankfurt");
+    // Dropped, it stops carrying.
+    await t.decideFinding(a.thread.id, { id: first.id, status: "dropped", claim: null });
+    expect(await t.listFindings("plan.md", DOC, risks.index, risks.path)).toEqual([]);
+  });
+
   it("uses a thread's edits across docs at once, and one Undo takes them back, keeping typing since", async () => {
     const { folder, support, threads: t, reply } = await setup();
     const other = "# Pricing\n\n## Plans\n\nPaid: £4.\n\n## Notes\n\nNone.\n";

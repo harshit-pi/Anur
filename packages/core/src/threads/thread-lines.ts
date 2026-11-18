@@ -186,6 +186,28 @@ export const UsedAllLine = LineEnvelope.extend({
   undo: z.string().nullable(),
 });
 
+/**
+ * A finding (16.1): a claim a thread established, with the source it came
+ * from, proposed by the agent. It carries to later threads only once a
+ * person keeps it.
+ */
+export const FindingLine = LineEnvelope.extend({
+  kind: z.literal("finding"),
+  turn: z.string().min(1),
+  claim: z.string().min(1),
+  /** Where it came from: a file, a doc, a page; null when the agent gave none. */
+  source: z.string().nullable(),
+});
+
+/** A person's decision on a finding: kept (perhaps reworded), or dropped. */
+export const FindingDecidedLine = LineEnvelope.extend({
+  kind: z.literal("finding-decided"),
+  finding: z.string().min(1),
+  status: z.enum(["kept", "dropped"]),
+  /** The claim as the person kept it, when they reworded it. */
+  claim: z.string().nullable(),
+});
+
 /** An auto-used edit taken back from its note. */
 export const AutoUndoneLine = LineEnvelope.extend({
   kind: z.literal("auto-undone"),
@@ -248,6 +270,8 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   CreatedLine,
   ProposedLine,
   UsedAllLine,
+  FindingLine,
+  FindingDecidedLine,
 ]);
 export type KnownThreadLine = z.infer<typeof KnownThreadLine>;
 
@@ -270,6 +294,8 @@ const KNOWN_KINDS = new Set([
   "created",
   "proposed",
   "used-all",
+  "finding",
+  "finding-decided",
 ]);
 
 /** A kind added by a later version of format 1; kept as written. */

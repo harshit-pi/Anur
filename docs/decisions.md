@@ -183,6 +183,13 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - A section's links to other docs are one badge on its box ("→ 6"); a click lists them, each opening where it is. The list opens upward from a box low in the view.
 - Think no longer repeats the section's text under its heading: the page shows it, and so does hovering a map box. It sits behind `SHOW_SECTION_TEXT`, off, to turn back on if missed.
 
+## Findings (16.1, 16.2)
+
+- A finding is a claim a thread established, with its source. The agent proposes one with `anur_propose_finding`; the person keeps it (reworded if they like) or drops it. Only kept findings carry: to every new thread on that section and the sections under it, listed in the bundle with their sources and marked settled unless a source read now contradicts one.
+- A Check's wrong or missing claims each offer "Keep as a finding", which keeps what the source says.
+- Think lists a section's kept findings under Context and history, each with × to drop it.
+- Not carried: unkept proposals, and conclusions in a thread's chat. A wrong finding carried forward pollutes with authority, so a person always decides.
+
 ## The head-to-head eval (16.5), and a cap on the doc in full
 
 - Three tasks on a 2,300-line doc with rules elsewhere, a stale archive and decoy docs, scored by script, three runs each (evals/head-to-head). Anur 0.98, Claude Code fresh 1.00, Claude Code after six unrelated tasks 0.96 with one stale fact; quality sits near the ceiling for all three.

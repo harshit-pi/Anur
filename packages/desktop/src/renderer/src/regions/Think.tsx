@@ -635,6 +635,10 @@ export function Think({
   // thread is still running. Opening a thread from elsewhere doesn't close it.
   const sectionKey = section?.path.join("\u0000") ?? null;
   /** What new threads on this section receive from earlier ones (4.4). */
+  /** Findings kept on this section and above it (16.1). */
+  const [findings, setFindings] = useState<
+    { id: string; thread: string; claim: string; source: string | null; section: string }[]
+  >([]);
   const [inputs, setInputs] = useState<
     { id: string; thread: string; source: string; label: string; trust: string; local: boolean }[]
   >([]);
@@ -666,6 +670,17 @@ export function Think({
   }, [docPath, sectionKey, section?.ownRange.to, section?.ownRange.from]);
   const threadsSeen = threads.map((t) => `${t.id}:${String(t.items.length)}`).join(",");
   useEffect(() => {
+    if (docPath && section)
+      void anur
+        .call("findings:list", {
+          path: docPath,
+          text: docText(),
+          section: { index: section.index, path: section.path },
+        })
+        .then((r) => {
+          setFindings(r.findings);
+        });
+    else setFindings([]);
     setInputs([]);
     if (!docPath || !section) return;
     let current = true;
@@ -991,7 +1006,23 @@ export function Think({
                 ) : null}
               </div>
             ) : item.kind === "check" ? (
-              <CheckCard key={i} claims={item.claims} corrected={item.corrected} />
+              <CheckCard
+                key={i}
+                claims={item.claims}
+                corrected={item.corrected}
+                onKeep={
+                  writable
+                    ? (claim, source) => {
+                        void anur.call("finding:decide", {
+                          thread: thread.id,
+                          add: { claim, source },
+                        });
+                      }
+                    : null
+                }
+              />
+            ) : item.kind === "finding" ? (
+              <FindingCard key={i} item={item} thread={thread.id} writable={writable} />
             ) : item.kind === "used-all" ? (
               <div key={i} className="think-changed auto" role="status">
                 <span>
@@ -1384,6 +1415,44 @@ export function Think({
             }}
           />
         ) : null}
+        {findings.length > 0 ? (
+          <details className="think-inputs" open>
+            <summary className="think-subhead">Findings ({String(findings.length)})</summary>
+            <p className="quiet think-inputs-note">
+              Kept from earlier threads; new threads here know them.
+            </p>
+            <ul>
+              {findings.map((f) => (
+                <li key={f.id}>
+                  <span
+                    className="truncate"
+                    title={f.source ? `${f.claim} (${f.source})` : f.claim}
+                  >
+                    {f.claim}
+                  </span>
+                  {writable ? (
+                    <button
+                      type="button"
+                      className="think-input-remove"
+                      aria-label="Drop this finding"
+                      title="Drop: new threads won't receive it"
+                      onClick={() => {
+                        setFindings((all) => all.filter((x) => x.id !== f.id));
+                        void anur.call("finding:decide", {
+                          thread: f.thread,
+                          id: f.id,
+                          status: "dropped",
+                        });
+                      }}
+                    >
+                      ×
+                    </button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
         {inputs.length > 0 ? (
           <details className="think-inputs">
             <summary className="think-subhead">Inputs ({String(inputs.length)})</summary>
@@ -1617,7 +1686,10 @@ const VERDICT: Record<"holds" | "wrong" | "unsupported" | "missing", string> = {
 function CheckCard({
   claims,
   corrected,
+  onKeep,
 }: {
+  /** Keep what a wrong or missing claim's source says as a finding (16.2). */
+  onKeep: ((claim: string, source: string | null) => void) | null;
   claims: {
     claim: string;
     verdict: keyof typeof VERDICT;
@@ -1626,6 +1698,7 @@ function CheckCard({
   }[];
   corrected: boolean;
 }) {
+  const [kept, setKept] = useState<Set<number>>(new Set());
   // What needs a look first, in this order; what holds folds away.
   const order = ["wrong", "missing", "unsupported"] as const;
   const problems = order.flatMap((v) => claims.filter((c) => c.verdict === v));
@@ -1648,6 +1721,26 @@ function CheckCard({
         <span className="think-source" title={c.source}>
           source
         </span>
+        {onKeep && (c.verdict === "wrong" || c.verdict === "missing") ? (
+          kept.has(claims.indexOf(c)) ? (
+            <span className="think-kept"> · kept as a finding</span>
+          ) : (
+            <>
+              {" · "}
+              <button
+                type="button"
+                className="think-link"
+                title="New threads on this section will know it, with its source"
+                onClick={() => {
+                  onKeep(c.note, c.source || null);
+                  setKept((k) => new Set(k).add(claims.indexOf(c)));
+                }}
+              >
+                Keep as a finding
+              </button>
+            </>
+          )
+        ) : null}
       </div>
     </li>
   );
@@ -1679,6 +1772,94 @@ function CheckCard({
         >
           The corrected text is ready to use, below
         </button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A finding the agent proposed (16.1): keep it, reworded if needed, or drop
+ * it. Kept, it reaches every new thread on this section, with its source.
+ */
+function FindingCard({
+  item,
+  thread,
+  writable,
+}: {
+  item: {
+    id: string;
+    claim: string;
+    source: string | null;
+    status: "proposed" | "kept" | "dropped";
+  };
+  thread: string;
+  writable: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(item.claim);
+  const decide = (status: "kept" | "dropped", claim: string | null = null) => {
+    setEditing(false);
+    void anur.call("finding:decide", { thread, id: item.id, status, claim });
+  };
+  if (item.status !== "proposed")
+    return (
+      <div className={`think-finding ${item.status}`} role="status">
+        <span className="think-finding-label">
+          {item.status === "kept" ? "Finding kept" : "Finding dropped"}
+        </span>{" "}
+        {item.claim}
+        {item.source ? <span className="quiet"> · {item.source}</span> : null}
+      </div>
+    );
+  return (
+    <div className="think-finding proposed" role="group" aria-label="Finding">
+      <div className="think-finding-label">Finding</div>
+      {editing ? (
+        <textarea
+          className="think-input think-finding-edit"
+          value={text}
+          rows={2}
+          onChange={(e) => {
+            setText(e.target.value);
+          }}
+        />
+      ) : (
+        <div>{item.claim}</div>
+      )}
+      {item.source ? <div className="quiet think-claim-note">From {item.source}</div> : null}
+      {writable ? (
+        <div className="think-offer-actions">
+          <button
+            type="button"
+            className="think-button primary"
+            title="New threads on this section will know it"
+            onClick={() => {
+              decide("kept", editing && text.trim() !== item.claim ? text : null);
+            }}
+          >
+            Keep
+          </button>
+          {editing ? null : (
+            <button
+              type="button"
+              className="think-more"
+              onClick={() => {
+                setEditing(true);
+              }}
+            >
+              Edit
+            </button>
+          )}
+          <button
+            type="button"
+            className="think-more"
+            onClick={() => {
+              decide("dropped");
+            }}
+          >
+            Drop
+          </button>
+        </div>
       ) : null}
     </div>
   );
