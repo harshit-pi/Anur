@@ -4179,3 +4179,66 @@ button.file-card-name:hover {
 .font-option-system {
   font-family: -apple-system, "SF Pro Text", sans-serif;
 }
+
+/* Asked rarely, after a few days of use: a star, or a feature to ask for. */
+.star-prompt {
+  position: fixed;
+  right: 20px;
+  bottom: 40px;
+  z-index: 40;
+  width: 360px;
+  padding: 14px 16px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: 0 8px 28px var(--shadow);
+  font-size: 13px;
+}
+
+.star-prompt-title {
+  margin: 0 0 4px;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.star-prompt-body {
+  margin: 0 0 12px;
+  color: var(--slate);
+  line-height: 1.45;
+}
+
+.star-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.star-prompt-actions .settings-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.star-prompt-actions .settings-button.primary {
+  border-color: var(--blue);
+  background: var(--blue);
+  color: var(--sheet);
+}
+
+.star-prompt-later,
+.star-prompt-close {
+  border: none;
+  background: none;
+  color: var(--graphite);
+  font: inherit;
+  cursor: pointer;
+}
+
+.star-prompt-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 16px;
+}
