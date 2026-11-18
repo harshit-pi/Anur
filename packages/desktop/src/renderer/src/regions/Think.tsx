@@ -91,14 +91,51 @@ function withEvent(
 }
 
 /** A section's own text, without its heading line. */
-function bodyOf(text: string, s: SectionNode): string {
+export function bodyOf(text: string, s: SectionNode): string {
   const from = s.headingRange ? s.headingRange.to : s.ownRange.from;
   return text.slice(from, s.ownRange.to).trim();
 }
 
-/** Light Markdown for a reply: paragraphs, bullets and inline styles. */
-function Markdown({ text }: { text: string }) {
-  const blocks = text.split(/\n{2,}/);
+/** A table row's cells; `\\|`, as in a wiki link's alias, stays in its cell. */
+function cellsOf(line: string): string[] {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/(?<!\\)\|$/, "")
+    .split(/(?<!\\)\|/)
+    .map((c) => c.trim().replace(/\\\|/g, "|"));
+}
+const DELIMITER = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+
+/**
+ * Splits a block around its first table: the lines before it, the table's
+ * rows, and the lines after. A table is a row of cells, a `---` delimiter
+ * row, then rows until a line that isn't one.
+ */
+function splitTable(lines: string[]) {
+  const at = lines.findIndex(
+    (l, i) => l.includes("|") && DELIMITER.test(lines[i + 1] ?? "") && lines[i + 1]?.includes("-"),
+  );
+  if (at < 0) return null;
+  let end = at + 2;
+  while (end < lines.length && (lines[end] ?? "").includes("|")) end++;
+  return { before: lines.slice(0, at), rows: lines.slice(at, end), after: lines.slice(end) };
+}
+
+/** Light Markdown for a reply: paragraphs, bullets, tables and inline styles. */
+export function Markdown({ text }: { text: string }) {
+  // A table's blank-line-free rows stay one block; anything around it is its own block.
+  const blocks = text.split(/\n{2,}/).flatMap((block) => {
+    const out: string[] = [];
+    let rest = block.split("\n");
+    for (let t = splitTable(rest); t; t = splitTable(rest)) {
+      if (t.before.length) out.push(t.before.join("\n"));
+      out.push(t.rows.join("\n"));
+      rest = t.after;
+    }
+    if (rest.length) out.push(rest.join("\n"));
+    return out;
+  });
   return (
     <>
       {blocks.map((block, b) => {
@@ -113,6 +150,39 @@ function Markdown({ text }: { text: string }) {
             ))}
           </span>
         );
+        const table = splitTable(lines);
+        if (table && table.before.length === 0) {
+          const [head = "", delimiter = "", ...rows] = table.rows;
+          const align = cellsOf(delimiter).map((c) =>
+            c.startsWith(":") && c.endsWith(":") ? "center" : c.endsWith(":") ? "right" : undefined,
+          );
+          return (
+            <div key={b} className="think-table-wrap">
+              <table className="think-table">
+                <thead>
+                  <tr>
+                    {cellsOf(head).map((c, i) => (
+                      <th key={i} style={{ textAlign: align[i] }}>
+                        {render(c, i)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, j) => (
+                    <tr key={j}>
+                      {cellsOf(r).map((c, i) => (
+                        <td key={i} style={{ textAlign: align[i] }}>
+                          {render(c, i)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
         if (bullets)
           return (
             <ul key={b} className="think-list">

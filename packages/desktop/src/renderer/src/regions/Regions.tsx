@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
 import type { AgentStatus, FolderState } from "../../../shared/ipc-contract.ts";
@@ -499,16 +499,30 @@ const RIGHT_EMPTY: Record<(typeof RIGHT_TABS)[number], string> = {
 };
 
 /** The open doc's headings, from the editor's own parse; a click scrolls the page there. */
-function Outline({ sections, onJump }: { sections: SectionTree; onJump: (index: number) => void }) {
+function Outline({
+  sections,
+  current,
+  onJump,
+}: {
+  sections: SectionTree;
+  current: number;
+  onJump: (index: number) => void;
+}) {
   const headed = sections.sections.filter((s) => s.headingRange);
+  // The section in focus stays in view as the page scrolls.
+  const list = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    list.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [current]);
   if (headed.length === 0) return <p className="quiet">This doc has no headings yet.</p>;
   return (
-    <ul className="outline" aria-label="Outline">
+    <ul ref={list} className="outline" aria-label="Outline">
       {headed.map((s) => (
         <li key={s.index}>
           <button
             type="button"
-            className="tree-row"
+            className={s.index === current ? "tree-row selected" : "tree-row"}
+            aria-current={s.index === current}
             style={{ paddingLeft: 8 + (s.path.length - 1) * 14 }}
             title={s.path.join(" › ")}
             onClick={() => {
@@ -526,12 +540,15 @@ function Outline({ sections, onJump }: { sections: SectionTree; onJump: (index: 
 /** 5. Right sidebar: Outline, Think and History. */
 export function RightSidebar({
   sections,
+  current,
   onJump,
   hidden,
   showThink,
   think,
 }: {
   sections: SectionTree | null;
+  /** The section in focus, by index: the cursor's, the map's pick, or the one scrolled to. */
+  current: number;
   onJump: (index: number) => void;
   hidden: boolean;
   /** Changes each time Think should come to the front. */
@@ -565,7 +582,7 @@ export function RightSidebar({
       </div>
       <div role="tabpanel" className="tab-panel">
         {tab === "Outline" && sections ? (
-          <Outline sections={sections} onJump={onJump} />
+          <Outline sections={sections} current={current} onJump={onJump} />
         ) : tab === "Think" ? (
           think
         ) : (

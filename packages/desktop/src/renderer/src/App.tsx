@@ -51,6 +51,7 @@ import { MergeDialog } from "./regions/MergeDialog.tsx";
 import { Center, LeftSidebar, Ribbon, RightSidebar, StatusBar } from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
 import { MapView } from "./regions/MapView.tsx";
+import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
 export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -73,6 +74,8 @@ export function App() {
   const [sections, setSections] = useState<SectionTree | null>(null);
   /** The section the cursor is in, by index: what the Think panel is about. */
   const [cursorSection, setCursorSection] = useState(0);
+  /** The section the outline marks: the cursor's, the map's pick, or the one scrolled to. */
+  const [outlineAt, setOutlineAt] = useState(0);
   /** Page or Map in the centre (task 7). */
   const [centerView, setCenterView] = useState<"page" | "map">("page");
   /** Bumped when a map box is picked, so the section panel brings Think forward. */
@@ -83,6 +86,7 @@ export function App() {
     const tree = sectionsNow.current;
     const at = tree ? (sectionAt(tree, pos)?.index ?? 0) : 0;
     setCursorSection((i) => (i === at ? i : at));
+    setOutlineAt(at);
   }, []);
   const [source, setSource] = useState(false);
   const [save, setSave] = useState<{ status: SaveStatus | null; detail: string | null }>({
@@ -436,6 +440,7 @@ export function App() {
   const pickOnMap = useCallback(
     (index: number) => {
       setCursorSection(index);
+      setOutlineAt(index);
       setMapPicks((n) => n + 1);
       setOpen((o) => {
         if (o.right) return o;
@@ -468,6 +473,70 @@ export function App() {
       const insert = `${lead}${"#".repeat(level)} ${name}${tail}`;
       v.dispatch({ changes: { from: at, insert }, userEvent: "input.map" });
       return [...p.path, name];
+    },
+    [sections],
+  );
+  // Back from the map, the page opens at the section picked there.
+  const lastView = useRef(centerView);
+  useEffect(() => {
+    const was = lastView.current;
+    lastView.current = centerView;
+    if (was !== "map" || centerView !== "page") return;
+    // After the page is shown again: a hidden editor can't scroll.
+    requestAnimationFrame(() => {
+      jumpTo(cursorSection);
+    });
+  }, [centerView, cursorSection, jumpTo]);
+  // Scrolling the page moves the outline's mark to the section at the top.
+  useEffect(() => {
+    const v = view.current;
+    if (!v || !sections || centerView !== "page") return;
+    let frame = 0;
+    const onScroll = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const top = v.lineBlockAtHeight(v.scrollDOM.scrollTop + 40).from;
+        const at = sectionAt(sections, top)?.index;
+        if (at !== undefined) setOutlineAt(at);
+      });
+    };
+    v.scrollDOM.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      v.scrollDOM.removeEventListener("scroll", onScroll);
+    };
+  }, [sections, centerView, doc]);
+  /** A section deleted on the map: its heading, text and subsections, as one undoable edit. */
+  const deleteSection = useCallback(
+    (index: number) => {
+      const v = view.current;
+      const s = sections?.sections[index];
+      if (!v || !s?.headingRange || index === 0) return false;
+      v.dispatch({
+        changes: { from: s.headingRange.from, to: s.subtreeRange.to },
+        userEvent: "delete.map",
+      });
+      return true;
+    },
+    [sections],
+  );
+  const undoOnPage = useCallback(() => {
+    if (view.current) undoEdit(view.current);
+  }, []);
+  const redoOnPage = useCallback(() => {
+    if (view.current) redoEdit(view.current);
+  }, []);
+  /** A link from one section to another, drawn on the map: `[[#Heading]]` at the end of its text. */
+  const addLink = useCallback(
+    (from: number, to: number) => {
+      const v = view.current;
+      const a = sections?.sections[from];
+      const b = sections?.sections[to];
+      const name = b?.headingRange ? b.path.at(-1) : undefined;
+      if (!v || !a || !name) return;
+      const text = v.state.doc.sliceString(a.ownRange.from, a.ownRange.to);
+      const at = a.ownRange.from + text.trimEnd().length;
+      v.dispatch({ changes: { from: at, insert: `\n\n[[#${name}]]` }, userEvent: "input.map" });
     },
     [sections],
   );
@@ -687,6 +756,10 @@ export function App() {
               selected={cursorSection}
               onSelect={pickOnMap}
               onAddSection={addSection}
+              onLink={addLink}
+              onDelete={deleteSection}
+              onUndo={undoOnPage}
+              onRedo={redoOnPage}
               writable={folder?.mode === "writable" && doc.mode === "editable"}
             />
           ) : null
@@ -716,6 +789,7 @@ export function App() {
       />
       <RightSidebar
         sections={sections}
+        current={outlineAt}
         onJump={jumpTo}
         hidden={!open.right}
         showThink={(threadRequest?.n ?? 0) + mapPicks}

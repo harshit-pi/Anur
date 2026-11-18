@@ -1985,17 +1985,6 @@ body.resizing * {
   color: var(--graphite);
 }
 
-.map-box-line {
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 16px;
-  color: var(--graphite);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
 .map-thread {
   position: absolute;
   box-sizing: border-box;
@@ -2114,4 +2103,123 @@ body.resizing * {
   color: var(--graphite);
   opacity: 0.5;
   cursor: default;
+}
+
+.map-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -6px 0 0 -6px;
+  border: 1px solid var(--blue);
+  border-radius: 50%;
+  background: var(--sheet);
+  cursor: crosshair;
+  opacity: 0;
+}
+
+.map-handle.left {
+  left: 0;
+  top: 50%;
+}
+
+.map-handle.right {
+  left: 100%;
+  top: 50%;
+}
+
+.map-handle.top {
+  left: 50%;
+  top: 0;
+}
+
+.map-handle.bottom {
+  left: 50%;
+  top: 100%;
+}
+
+.map-box:hover .map-handle,
+.map-box.selected .map-handle {
+  opacity: 1;
+}
+
+.map-handle:hover {
+  background: var(--blue);
+}
+
+.map-box.link-target {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+.map-link {
+  stroke: var(--blue);
+  stroke-width: 1.5;
+}
+
+.map-link.drawing {
+  stroke-dasharray: 5 4;
+}
+
+.map-arrowhead {
+  fill: var(--blue);
+}
+
+.map-key.link {
+  width: 16px;
+  height: 0;
+  border-top: 1.5px solid var(--blue);
+  border-radius: 0;
+}
+
+.map-peek {
+  position: absolute;
+  z-index: 3;
+  width: 340px;
+  max-height: 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  box-shadow: 0 6px 18px var(--shadow);
+  color: var(--ink);
+  font: 13px/1.5 var(--font-ui);
+  cursor: auto;
+  user-select: text;
+}
+
+.map-peek-name {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.map-peek p {
+  margin: 0 0 6px;
+}
+
+/* Tables in Think and the map's hover text. */
+.think-table-wrap {
+  margin: 0 0 8px;
+  overflow-x: auto;
+}
+
+.think-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.think-table th,
+.think-table td {
+  padding: 4px 8px;
+  border: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: top;
+  min-width: 80px;
+}
+
+.think-table th {
+  background: var(--hover);
+  font-weight: 600;
 }
