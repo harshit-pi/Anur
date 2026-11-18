@@ -510,7 +510,7 @@ describe("Threads", () => {
     expect(await readdir(folder)).not.toContain("FAQ.md");
   });
 
-  it("flags a doc changed outside Anur during the turn, and reverts it", async () => {
+  it("shows nothing for a doc changed outside Anur during the turn", async () => {
     const { folder, threads: t, reply } = await setup();
     await writeFile(path.join(folder, "plan.md"), DOC);
     const r = await t.start("plan.md", DOC, risks, "Thinking about risks.");
@@ -520,16 +520,9 @@ describe("Threads", () => {
     await new Promise((res) => setTimeout(res, 800));
     await reply(r.thread.id, "OK.");
     const [listed] = await t.list("plan.md", DOC);
-    const flag = listed?.items.find((i) => i.kind === "changed");
-    expect(flag).toMatchObject({
-      kind: "changed",
-      path: "plan.md",
-      canRevert: true,
-      reverted: false,
-    });
-    if (flag?.kind !== "changed") throw new Error("no flag");
-    const back = t.revertFor(r.thread.id, flag.id);
-    expect(back).toMatchObject({ kind: "ok", rel: "plan.md", before: DOC });
+    expect(listed?.items.map((i) => i.kind)).toEqual(["message", "message"]);
+    // And the write stands: nothing put it back.
+    expect(await readFile(path.join(folder, "plan.md"), "utf8")).toContain("Three people.");
   });
 
   it('keeps clashing unsaved typing as a "your unsaved edit" preview on its section', async () => {

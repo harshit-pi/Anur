@@ -193,15 +193,6 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     undoable: z.boolean(),
     undone: z.boolean(),
   }),
-  /** A doc written by something else while this thread's turn ran (3.11). */
-  z.object({
-    kind: z.literal("changed"),
-    turn: z.string(),
-    id: z.string(),
-    path: z.string(),
-    canRevert: z.boolean(),
-    reverted: z.boolean(),
-  }),
 ]);
 export type ThreadItem = z.infer<typeof ThreadItem>;
 
@@ -1026,14 +1017,6 @@ export const ipcContract = {
       .object({ thread: z.string().max(200), id: z.string().max(100), value: z.string().max(200) })
       .strict(),
     response: z.object({}),
-  },
-  /** Put back a doc that changed while the thread's turn ran, as it was before that change. */
-  "thread:revert": {
-    request: z.object({ thread: z.string().max(200), id: z.string().max(100) }).strict(),
-    response: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("reverted") }),
-      z.object({ kind: z.literal("refused"), reason: z.string() }),
-    ]),
   },
   /** The person picked one of a thread's options; the page has already written its text. */
   "thread:use-option": {

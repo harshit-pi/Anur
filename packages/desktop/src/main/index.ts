@@ -1432,34 +1432,6 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!t) return { ok: false };
     return { ok: await t.useOption(rel, text, thread, option, how) };
   },
-  "thread:revert": async ({ thread, id }, { webContentsId }) => {
-    const folder = folders.current(webContentsId);
-    const t = folder ? threadsFor(folder) : null;
-    if (!folder || !t) return { kind: "refused", reason: "No folder Anur can write to is open." };
-    const r = t.revertFor(thread, id);
-    if (r.kind === "refused") return r;
-    const full = path.join(folder.path, r.rel);
-    const now = await readFile(full, "utf8").catch(() => null);
-    if (now !== r.after)
-      return {
-        kind: "refused",
-        reason: `${r.rel} has changed again since. Open it and use its History to go back.`,
-      };
-    // An open doc is written by its page, so Undo covers the Revert; a closed one by main.
-    const pages = [...shownDoc].filter(
-      ([win, rel]) => rel === r.rel && folders.current(win)?.path === folder.path,
-    );
-    if (pages.length > 0) {
-      for (const [win] of pages) {
-        const w = windows.get(win);
-        if (w) send(w, "doc:replace", { path: r.rel, text: r.before });
-      }
-    } else {
-      await writeFileAtomic(full, r.before);
-    }
-    t.reverted(thread, id);
-    return { kind: "reverted" };
-  },
   "thread:stop": ({ thread }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (folder) threadsFor(folder)?.stop(thread);
