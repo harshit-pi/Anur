@@ -2256,7 +2256,7 @@ body.resizing * {
 
 .think-offer-actions {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
   margin-top: 8px;
 }
@@ -2280,4 +2280,23 @@ body.resizing * {
 
 .map-key.option {
   border: 1.5px dashed var(--blue);
+}
+
+.map-option.explored {
+  border-style: solid;
+  background: var(--blue-wash);
+}
+
+.think-offer.explored {
+  border-color: var(--blue);
+}
+
+/* The links beside Use this sit on its middle, not at the top as elsewhere in Think. */
+.think-offer-actions .think-more {
+  align-self: center;
+}
+
+.think-offers-within {
+  margin: 0;
+  font-size: 12px;
 }

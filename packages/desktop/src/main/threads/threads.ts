@@ -122,6 +122,8 @@ export class Threads {
   private readonly tokens = new Map<string, string>();
   /** An agent picked for a thread's next turn, until a session on it starts. */
   private readonly picked = new Map<string, AgentId>();
+  /** The option each thread is exploring this turn: options offered now go within it. */
+  private readonly exploring = new Map<string, string>();
 
   /** The agent a thread runs on: the one picked for it, else its last session's, else the default. */
   private agentOf(thread: string, lines: KnownThreadLine[]): AgentId {
@@ -271,7 +273,11 @@ export class Threads {
     const items: ThreadItem[] = [];
     let closed = false;
     const used = new Map<string, string>();
-    for (const l of lines) if (l.kind === "option-used") used.set(l.option, l.how);
+    const explored = new Set<string>();
+    for (const l of lines) {
+      if (l.kind === "option-used") used.set(l.option, l.how);
+      if (l.kind === "option-explored") explored.add(l.option);
+    }
     for (const l of lines) {
       if (l.kind === "message")
         items.push({ kind: "message", turn: l.turn, role: l.role, text: l.text });
@@ -292,6 +298,8 @@ export class Threads {
           turn: l.turn,
           options: l.options,
           used: l.options.find((o) => used.has(o.id))?.id ?? null,
+          explored: l.options.filter((o) => explored.has(o.id)).map((o) => o.id),
+          within: l.within ?? null,
         });
     }
     for (const f of this.flags.get(thread) ?? [])
@@ -389,6 +397,7 @@ export class Threads {
     text: string,
     message: string,
     knownDoc?: DocId,
+    exploring?: string,
   ): Promise<{ kind: "sent" } | { kind: "refused"; reason: string }> {
     const at = await this.d.locate(rel, text);
     if (!at) return { kind: "refused", reason: "Resolve the doc's merge conflict first." };
@@ -417,6 +426,8 @@ export class Threads {
     live.docText = text;
     this.live.set(thread, live);
 
+    if (exploring) this.exploring.set(thread, exploring);
+    else this.exploring.delete(thread);
     const turn = newTurnId();
     live.turn = turn;
     live.text = "";
@@ -913,7 +924,12 @@ export class Threads {
         text: (o.text as string).trim(),
       }));
     if (options.length < 2) return { error: "Offer at least two options, each with its text." };
-    await this.append(live.doc, thread, { kind: "options", turn: live.turn, options });
+    await this.append(live.doc, thread, {
+      kind: "options",
+      turn: live.turn,
+      options,
+      within: this.exploring.get(thread) ?? null,
+    });
     await this.refresh(live.rel, live.docText, thread);
     return {
       text: `Shown to the person as ${String(options.length)} options. They pick one, and its text replaces the section's. Don't also edit the doc for these.`,
@@ -933,6 +949,36 @@ export class Threads {
     await this.append(at.doc, thread, { kind: "option-used", option, how });
     await this.refresh(rel, text, thread);
     return true;
+  }
+
+  /**
+   * The person wants to dig into one option before picking: the thread
+   * remembers it, and asks the agent to work it through.
+   */
+  async exploreOption(
+    rel: string,
+    text: string,
+    thread: string,
+    option: string,
+  ): Promise<{ kind: "sent" } | { kind: "refused"; reason: string }> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return { kind: "refused", reason: "Resolve the doc's merge conflict first." };
+    const lines = await this.linesOf(at.doc, thread);
+    const o = lines
+      .flatMap((l) => (l.kind === "options" ? l.options : []))
+      .find((x) => x.id === option);
+    if (!o) return { kind: "refused", reason: "That option isn't in this thread." };
+    if (this.live.get(thread)?.turn)
+      return { kind: "refused", reason: "Wait for the reply, or stop it first." };
+    await this.append(at.doc, thread, { kind: "option-explored", option });
+    return this.send(
+      thread,
+      rel,
+      text,
+      `Let's explore the option "${o.title}" before picking anything: what it would take, what could go wrong, and what it costs. If it splits into narrower choices, offer those as options; each is still the section's whole text.`,
+      undefined,
+      option,
+    );
   }
 
   /** One of Anur's MCP tools, called by this thread's agent. */
@@ -984,6 +1030,7 @@ const KNOWN = new Set([
   "state",
   "options",
   "option-used",
+  "option-explored",
 ]);
 
 /** Every file under `dir`, relative to it, with forward slashes. */

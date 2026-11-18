@@ -623,6 +623,13 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (folder) threadsFor(folder)?.setOption(thread, id, value);
     return {};
   },
+  "thread:explore-option": async ({ thread, path: rel, text, option }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !t || !folder.docs.includes(rel))
+      return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
+    return t.exploreOption(rel, text, thread, option);
+  },
   "thread:use-option": async ({ thread, path: rel, text, option, how }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;

@@ -26,6 +26,8 @@ type Box = {
   thread?: ThreadView;
   /** An option a thread offered for this section, not picked yet. */
   option?: { id: string; title: string; text: string };
+  /** The person is exploring this option before picking. */
+  explored?: boolean;
   heading: string;
   x: number;
   y: number;
@@ -229,19 +231,35 @@ export function MapView({
       }
       // Each thread's latest options, until one is picked: what the section could say.
       for (const t of threads.filter((t) => samePath(t.path, s.path))) {
-        const offer = t.items.findLast((x) => x.kind === "options");
-        if (offer?.kind !== "options" || offer.used) continue;
-        for (const o of offer.options) {
+        // Until one is picked: the latest first set, any explored from earlier
+        // first sets, and the narrower sets found while exploring, each hanging
+        // off the option it was found within.
+        const offers = t.items.flatMap((x) => (x.kind === "options" ? [x] : []));
+        if (offers.length === 0 || offers.some((x) => x.used)) continue;
+        const firsts = offers.filter((x) => !x.within);
+        const latestFirst = firsts.at(-1);
+        const exploredIds = new Set(offers.flatMap((x) => x.explored));
+        const shown = offers.flatMap((x) =>
+          x.within
+            ? x.options.map((o) => ({ o, under: x.within }))
+            : x === latestFirst
+              ? x.options.map((o) => ({ o, under: null }))
+              : x.options.filter((o) => exploredIds.has(o.id)).map((o) => ({ o, under: null })),
+        );
+        const shownIds = new Set(shown.map((x) => x.o.id));
+        for (const { o, under } of shown) {
           const oid = `o:${o.id}`;
-          nodes.push({ id: oid, parent: id, ...boxSize(o.title, "") });
+          const parentId = under && shownIds.has(under) ? `o:${under}` : id;
+          nodes.push({ id: oid, parent: parentId, ...boxSize(o.title, "") });
           info.set(oid, {
             id: oid,
             kind: "option",
             index: s.index,
             thread: t,
             option: o,
+            explored: exploredIds.has(o.id),
             heading: o.title,
-            parent: id,
+            parent: parentId,
           });
         }
       }
@@ -751,7 +769,7 @@ export function MapView({
               key={b.id}
               role="button"
               tabIndex={-1}
-              className="map-option"
+              className={b.explored ? "map-option explored" : "map-option"}
               data-peek={b.id}
               title="An option from a thread: open it to pick"
               style={{ left: b.x - b.w / 2, top: b.y, width: b.w, transform: "translateY(-50%)" }}

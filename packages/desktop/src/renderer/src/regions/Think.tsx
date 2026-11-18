@@ -535,11 +535,26 @@ export function Think({
               </div>
             ) : item.kind === "options" ? (
               <div key={i} className="think-offers" role="group" aria-label="Options">
+                {item.within ? (
+                  <p className="think-offers-within quiet">
+                    Within{" "}
+                    {thread.items
+                      .flatMap((x) => (x.kind === "options" ? x.options : []))
+                      .find((o) => o.id === item.within)?.title ?? "an earlier option"}
+                  </p>
+                ) : null}
                 {item.options.map((o) => (
-                  <div key={o.id} className={`think-offer${item.used === o.id ? " used" : ""}`}>
+                  <div
+                    key={o.id}
+                    className={`think-offer${item.used === o.id ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
+                  >
                     <div className="think-offer-head">
                       <strong>{o.title}</strong>
-                      {item.used === o.id ? <span className="quiet">In the doc</span> : null}
+                      {item.used === o.id ? (
+                        <span className="quiet">In the doc</span>
+                      ) : item.explored.includes(o.id) ? (
+                        <span className="quiet">Explored</span>
+                      ) : null}
                     </div>
                     <div className="think-offer-text">
                       <Markdown text={o.text} />
@@ -564,6 +579,28 @@ export function Think({
                         >
                           Add as subsection
                         </button>
+                        {item.explored.includes(o.id) ? null : (
+                          <button
+                            type="button"
+                            className="think-more"
+                            disabled={thread.busy}
+                            onClick={() => {
+                              setError(null);
+                              void anur
+                                .call("thread:explore-option", {
+                                  thread: thread.id,
+                                  path: docPath,
+                                  text: docText(),
+                                  option: o.id,
+                                })
+                                .then((r) => {
+                                  if (r.kind === "refused") setError(r.reason);
+                                });
+                            }}
+                          >
+                            Explore this
+                          </button>
+                        )}
                       </div>
                     ) : null}
                   </div>

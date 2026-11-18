@@ -97,6 +97,8 @@ export const OptionsLine = LineEnvelope.extend({
   kind: z.literal("options"),
   turn: z.string().min(1),
   options: z.array(z.object({ id: z.string().min(1), title: z.string(), text: z.string() })).min(1),
+  /** The option being explored when these were offered: they are narrower choices within it. */
+  within: z.string().min(1).nullable().optional(),
 });
 
 /** The person picked an option: its text replaced the section's, or became a subsection. */
@@ -104,6 +106,12 @@ export const OptionUsedLine = LineEnvelope.extend({
   kind: z.literal("option-used"),
   option: z.string().min(1),
   how: z.enum(["replace", "subsection"]),
+});
+
+/** The person chose to explore an option before picking: the thread digs into it. */
+export const OptionExploredLine = LineEnvelope.extend({
+  kind: z.literal("option-explored"),
+  option: z.string().min(1),
 });
 
 export const KnownThreadLine = z.discriminatedUnion("kind", [
@@ -115,6 +123,7 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   StateLine,
   OptionsLine,
   OptionUsedLine,
+  OptionExploredLine,
 ]);
 export type KnownThreadLine = z.infer<typeof KnownThreadLine>;
 
@@ -127,6 +136,7 @@ const KNOWN_KINDS = new Set([
   "state",
   "options",
   "option-used",
+  "option-explored",
 ]);
 
 /** A kind added by a later version of format 1; kept as written. */
