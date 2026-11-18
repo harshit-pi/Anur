@@ -39,7 +39,15 @@ import { readImage, saveImage } from "./folder/images.ts";
 import { MapLayouts } from "./folder/map-layout.ts";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
 import { createDoc, searchFolder } from "./folder/search.ts";
-import { copyInto, createFolder, duplicateDoc, moveEntry, trashEntry } from "./folder/file-ops.ts";
+import {
+  copyInto,
+  createFolder,
+  duplicateDoc,
+  moveEntry,
+  restoreEntry,
+  trashEntry,
+} from "./folder/file-ops.ts";
+import { isInTrash, trashTelling } from "./folder/system-trash.ts";
 import { FILES_TYPE, filePathsPlist, readFilePaths } from "./folder/finder-clipboard.ts";
 import { FolderWatch } from "./folder/folder-watch.ts";
 import { planLinkUpdates } from "./folder/link-updates.ts";
@@ -658,11 +666,24 @@ const handlers: { [C in Channel]: Handler<C> } = {
   "file:trash": async ({ path: requested }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
-    const gone = await trashEntry(folder, requested, (full) => shell.trashItem(full));
+    const gone = await trashEntry(folder, requested, async (full) => {
+      const place = await trashTelling(full);
+      if (place) return place;
+      await shell.trashItem(full);
+      return null;
+    });
     if (gone.kind === "failed") return gone;
     letGoOf(webContentsId, gone.docs);
     const now = await folders.refresh(webContentsId);
     return now ? { ...gone, folder: now } : { kind: "failed", reason: "The folder closed." };
+  },
+  "file:restore": async ({ path: requested, trashed }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    const back = await restoreEntry(folder, requested, trashed, isInTrash);
+    if (back.kind === "failed") return back;
+    const now = await folders.refresh(webContentsId);
+    return now ? { ...back, folder: now } : { kind: "failed", reason: "The folder closed." };
   },
   "links:plan": async ({ moves }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

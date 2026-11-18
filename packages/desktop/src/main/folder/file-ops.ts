@@ -130,23 +130,54 @@ export async function duplicateDoc(
   return failed("Too many copies with that name.");
 }
 
-/** Put a doc or a folder in the Trash; returns the docs that went with it. */
+/**
+ * Put a doc or a folder in the Trash; returns the docs that went with it and,
+ * when known, where it landed, so Undo can bring it back.
+ */
 export async function trashEntry(
   folder: FolderState,
   requested: string,
-  trash: (full: string) => Promise<void>,
-): Promise<{ kind: "trashed"; docs: string[] } | Failed> {
+  trash: (full: string) => Promise<string | null>,
+): Promise<{ kind: "trashed"; docs: string[]; trashed: string | null } | Failed> {
   if (folder.mode !== "writable") return failed("This folder is read-only.");
   const rel = checkPath(folder, requested);
   if (typeof rel !== "string") return rel;
   if (!isFileIn(folder, rel) && !isFolderIn(folder, rel))
     return failed(`There's no ${rel} in this folder.`);
+  let trashed: string | null;
   try {
-    await trash(path.join(folder.path, rel));
+    trashed = await trash(path.join(folder.path, rel));
   } catch (e) {
     return failed(`Couldn't move it to the Trash: ${(e as Error).message}`);
   }
-  return { kind: "trashed", docs: docsUnder(folder, rel) };
+  return { kind: "trashed", docs: docsUnder(folder, rel), trashed };
+}
+
+/** Bring back from the Trash what was trashed from `requested`, if its place is still free. */
+export async function restoreEntry(
+  folder: FolderState,
+  requested: string,
+  trashed: string,
+  inTrash: (full: string) => boolean,
+): Promise<{ kind: "restored"; path: string } | Failed> {
+  if (folder.mode !== "writable") return failed("This folder is read-only.");
+  const rel = checkPath(folder, requested);
+  if (typeof rel !== "string") return rel;
+  const name = path.posix.basename(rel);
+  const backInFinder = `Find ${name} in the Trash and choose Put Back.`;
+  if (!inTrash(trashed) || !(await exists(trashed)))
+    return failed(`${name} is no longer where it was in the Trash. ${backInFinder}`);
+  const full = path.join(folder.path, rel);
+  if (await exists(full)) return failed(`There's a new ${name} in its place now.`);
+  const parent = path.posix.dirname(rel);
+  if (parent !== "." && !(await exists(path.dirname(full))))
+    return failed(`The folder ${parent} is gone, so ${name} can't go back.`);
+  try {
+    await rename(trashed, full);
+  } catch {
+    return failed(`Anur couldn't take ${name} out of the Trash. ${backInFinder}`);
+  }
+  return { kind: "restored", path: rel };
 }
 
 /** "Plan.md", then "Plan copy.md", "Plan copy 2.md": the nth name to try in `dir`. */

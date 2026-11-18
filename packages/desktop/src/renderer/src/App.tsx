@@ -7,6 +7,14 @@ import { freeName } from "./layout/file-tree.ts";
 import type { FileActions } from "./regions/FileTree.tsx";
 import type { FileNotice } from "./regions/Regions.tsx";
 import { isViewable } from "./layout/file-tree.ts";
+import {
+  FileHistory,
+  moveLabel,
+  reversed,
+  type FileStep,
+  type Gone,
+  type Move,
+} from "./layout/file-history.ts";
 import { ImageView } from "./regions/ImageView.tsx";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import type { SaveStatus } from "./editor/autosave.ts";
@@ -286,8 +294,107 @@ export function App() {
     },
     [selected],
   );
+  /** What the files panel did, to undo and redo; it starts again with each folder. */
+  const history = useRef(new FileHistory());
+  const [, setHistoryTick] = useState(0);
+  const folderPathNow = folder?.path ?? null;
+  useEffect(() => {
+    history.current.clear();
+  }, [folderPathNow]);
   const fileActions = useMemo((): FileActions | undefined => {
     if (!folder || folder.mode !== "writable") return undefined;
+    const record = (step: FileStep) => {
+      history.current.record(step);
+      setHistoryTick((n) => n + 1);
+    };
+    /** Move, stopping at the first that fails; returns those done. */
+    const doMoves = (moves: Move[]) =>
+      touching(
+        moves.map((m) => m.from),
+        async () => {
+          const done: Move[] = [];
+          const docs: Move[] = [];
+          for (const { from, to } of moves) {
+            const r = await anur.call("file:move", { from, to });
+            if (r.kind === "failed") {
+              tell(r.reason);
+              break;
+            }
+            done.push({ from, to });
+            docs.push(...r.docs);
+            setTabs((t) => renamePaths(t, r.docs));
+            setFolder(r.folder);
+          }
+          void offerLinks(docs);
+          return done;
+        },
+      );
+    /** Trash, stopping at the first that fails; returns where each went. */
+    const doTrash = (paths: string[]) =>
+      touching(paths, async () => {
+        const gone: Gone[] = [];
+        for (const path of paths) {
+          const r = await anur.call("file:trash", { path });
+          if (r.kind === "failed") {
+            tell(r.reason);
+            break;
+          }
+          gone.push({ path, trashed: r.trashed });
+          setTabs((t) => prune(t, r.folder.docs));
+          setFolder(r.folder);
+        }
+        return gone;
+      });
+    /** Bring trashed items back; returns the paths back in place. */
+    const doRestore = async (items: Gone[]) => {
+      const back: string[] = [];
+      for (const { path, trashed } of [...items].reverse()) {
+        const name = path.split("/").pop() ?? path;
+        if (!trashed) {
+          tell(`Find ${name} in the Trash and choose Put Back.`);
+          break;
+        }
+        const r = await anur.call("file:restore", { path, trashed });
+        if (r.kind === "failed") {
+          tell(r.reason);
+          break;
+        }
+        back.push(r.path);
+        setFolder(r.folder);
+      }
+      return back;
+    };
+    /** Undo or redo one step; resolves with the paths it touched, to show them. */
+    const turn = async (which: "undo" | "redo"): Promise<string[] | null> => {
+      const h = history.current;
+      const step = which === "undo" ? h.takeUndo() : h.takeRedo();
+      setHistoryTick((n) => n + 1);
+      if (!step) return null;
+      const put = (next: FileStep) => {
+        if (which === "undo") h.undid(next);
+        else h.redid(next);
+        setHistoryTick((n) => n + 1);
+      };
+      if (step.kind === "move") {
+        const want = which === "undo" ? reversed(step.moves) : step.moves;
+        const done = await doMoves(want);
+        if (done.length === want.length) put(step);
+        return done.map((m) => m.to);
+      }
+      const bringBack =
+        (step.kind === "trash" && which === "undo") || (step.kind === "create" && which === "redo");
+      if (bringBack) {
+        const items = step.kind === "trash" ? step.items : step.gone;
+        const back = await doRestore(items);
+        if (back.length === items.length) put(step);
+        return back;
+      }
+      const paths = step.kind === "trash" ? step.items.map((i) => i.path) : step.paths;
+      const gone = await doTrash(paths);
+      if (gone.length === paths.length)
+        put(step.kind === "trash" ? { ...step, items: gone } : { ...step, gone });
+      return [];
+    };
     return {
       newDoc: async (dir) => {
         const path = freeName(folder.docs, dir, "Untitled", ".md");
@@ -298,6 +405,7 @@ export function App() {
         }
         setFolder(r.folder);
         openDoc(r.path, false);
+        record({ label: "New doc", kind: "create", paths: [r.path], gone: [] });
         return r.path;
       },
       newFolder: async (dir) => {
@@ -308,59 +416,36 @@ export function App() {
           return null;
         }
         setFolder(r.folder);
+        record({ label: "New folder", kind: "create", paths: [r.path], gone: [] });
         return r.path;
       },
-      move: (moves) =>
-        touching(
-          moves.map((m) => m.from),
-          async () => {
-            const done: { from: string; to: string }[] = [];
-            let ok = true;
-            for (const { from, to } of moves) {
-              const r = await anur.call("file:move", { from, to });
-              if (r.kind === "failed") {
-                tell(r.reason);
-                ok = false;
-                break;
-              }
-              done.push(...r.docs);
-              setTabs((t) => renamePaths(t, r.docs));
-              setFolder(r.folder);
-            }
-            void offerLinks(done);
-            return ok;
-          },
-        ),
+      move: async (moves) => {
+        const done = await doMoves(moves);
+        if (done.length) record({ label: moveLabel(done), kind: "move", moves: done });
+        return done.length === moves.length;
+      },
       duplicate: async (path) => {
         const r = await anur.call("file:duplicate", { path });
-        if (r.kind === "failed") tell(r.reason);
-        else setFolder(r.folder);
+        if (r.kind === "failed") {
+          tell(r.reason);
+          return;
+        }
+        setFolder(r.folder);
+        record({ label: "Duplicate", kind: "create", paths: [r.path], gone: [] });
       },
       trash: async (items) => {
         const first = items[0];
         if (!first) return;
         const what = first.path.split("/").pop() ?? first.path;
         const files = items.reduce((n, i) => n + i.docs, 0);
-        // A file goes quietly, since Finder can put it back; folders with files in them ask first.
+        // A file goes quietly, since Undo or Finder can put it back; folders with files in them ask first.
         const question =
           items.length > 1
             ? `Move these ${String(items.length)} items to the Trash?`
             : `Move “${what}” and the ${String(files)} ${files === 1 ? "file" : "files"} in it to the Trash?`;
         if (items.some((i) => i.isFolder && i.docs > 0) && !window.confirm(question)) return;
-        await touching(
-          items.map((i) => i.path),
-          async () => {
-            for (const { path } of items) {
-              const r = await anur.call("file:trash", { path });
-              if (r.kind === "failed") {
-                tell(r.reason);
-                return;
-              }
-              setTabs((t) => prune(t, r.folder.docs));
-              setFolder(r.folder);
-            }
-          },
-        );
+        const gone = await doTrash(items.map((i) => i.path));
+        if (gone.length) record({ label: "Move to Trash", kind: "trash", items: gone });
       },
       importFiles: async (sources, into) => {
         const r = await anur.call("file:import", { sources, into });
@@ -369,8 +454,13 @@ export function App() {
           return null;
         }
         setFolder(r.folder);
+        if (r.paths.length)
+          record({ label: "Add files", kind: "create", paths: r.paths, gone: [] });
         return r.paths;
       },
+      undo: () => turn("undo"),
+      redo: () => turn("redo"),
+      history: () => history.current.labels(),
     };
   }, [folder, openDoc, tell, touching, offerLinks]);
   const newDocNow = useRef(newDoc);

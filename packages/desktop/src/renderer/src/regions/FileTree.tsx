@@ -32,6 +32,11 @@ export type FileActions = {
   trash: (items: { path: string; isFolder: boolean; docs: number }[]) => Promise<void>;
   /** Copy files from anywhere, by full path, into a folder; resolves with the new paths. */
   importFiles: (sources: string[], into: string) => Promise<string[] | null>;
+  /** Turn back, or redo, the panel's last change; resolves with the paths it touched. */
+  undo: () => Promise<string[] | null>;
+  redo: () => Promise<string[] | null>;
+  /** What Undo and Redo would do now, as "Rename"; null when there's nothing. */
+  history: () => { undo: string | null; redo: string | null };
 };
 
 /** A request from the panel's header: make a doc or a folder where the keys are. */
@@ -324,9 +329,24 @@ export function FileTree({
       else if (id === "duplicate") void actions?.duplicate(node.path);
     });
   };
+  const turn = (which: "undo" | "redo") => {
+    if (!actions) return;
+    void (which === "undo" ? actions.undo() : actions.redo()).then((paths) => {
+      if (!paths?.length) return;
+      for (const p of paths) openTo(p, false);
+      setMarked(new Set(paths.length > 1 ? paths : []));
+      setFocused(paths[paths.length - 1] ?? null);
+      scrollPending.current = true;
+      list.current?.focus();
+    });
+  };
   const blankMenu = () => {
     if (!editable) return;
+    const can = actions?.history() ?? { undo: null, redo: null };
     const items: MenuEntry[] = [
+      { id: "undo", label: can.undo ? `Undo ${can.undo}` : "Undo", enabled: !!can.undo },
+      { id: "redo", label: can.redo ? `Redo ${can.redo}` : "Redo", enabled: !!can.redo },
+      { separator: true },
       { id: "new-doc", label: "New doc" },
       { id: "new-folder", label: "New folder" },
       { separator: true },
@@ -336,6 +356,8 @@ export function FileTree({
       if (id === "new-doc") void make("doc", "");
       else if (id === "new-folder") void make("folder", "");
       else if (id === "paste") void paste("");
+      else if (id === "undo") turn("undo");
+      else if (id === "redo") turn("redo");
     });
   };
 
@@ -453,6 +475,8 @@ export function FileTree({
     else if (e.key === "Escape" && (marked.size > 0 || clip?.mode === "cut")) {
       setMarked(new Set());
       if (clip?.mode === "cut") setClip(null);
+    } else if (e.key.toLowerCase() === "z" && e.metaKey && editable) {
+      turn(e.shiftKey ? "redo" : "undo");
     } else if (e.key === "a" && e.metaKey) {
       setMarked(new Set(rows.map((n) => n.path)));
     } else return;
