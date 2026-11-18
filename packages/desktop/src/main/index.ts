@@ -643,6 +643,25 @@ const handlers: { [C in Channel]: Handler<C> } = {
       });
     return r;
   },
+  "thread:use-all": async ({ thread, open }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { used: 0, kept: [] };
+    return t.useAll(thread, open);
+  },
+  "thread:undo-all": async ({ thread, id, open }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !t) return { kind: "refused", reason: "No folder is open." };
+    const r = await t.undoAll(thread, id, open);
+    if (r.kind === "refused") return r;
+    // The open doc is written by its page, so ⌘Z covers the Undo too.
+    if (r.page) {
+      const w = windows.get(webContentsId);
+      if (w) send(w, "doc:replace", r.page);
+    }
+    return { kind: "undone", left: r.left };
+  },
   "thread:auto-undo": async ({ thread, id }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;

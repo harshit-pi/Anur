@@ -3207,3 +3207,13 @@ body.resizing * {
 .think-history-key .gone {
   text-decoration: line-through;
 }
+
+/* A thread's change set (9.3): its edits across sections and docs, used together. */
+.think-changeset ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 8px;
+  padding: 0;
+  list-style: none;
+}

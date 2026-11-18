@@ -164,3 +164,11 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - Think shows a section's History, folded: its versions newest first, from every device, each with when, its cause (typed, from a thread, changed outside, restored, first seen) and a one-line summary read from the change itself ("Changed “£4” to “£3”", "Added 2 lines").
 - In a git repo, the commits that changed that section are listed too, each with the section's text then; reading them never writes.
 - A version opens to its text against now: amber for what only it has, struck through for what only now has. Restore puts it back into that section only, as one change ⌘Z undoes, recorded as a "restore" version; anything typed before it is recorded first, so no text is lost. A version from a thread opens that thread.
+
+## Change sets (group 9)
+
+- A thread whose edits touch more than one section or doc shows them as one change set: "3 edits in 2 docs", each opening where it is, with Use all.
+- Use all uses the open doc's edits through its page, one by one, then every other doc's in its file, doc by doc. What clashed with the text stays a proposal and is named. One "Used all" note in the thread holds one Undo.
+- Undo goes back by a three-way merge per doc, so typing made since stays; the open doc goes back through its page, so ⌘Z covers it. A doc that clashes is named and left for its History.
+- A new doc an agent makes is kept with Undo (15.6) rather than shown as a new-doc preview.
+- The working line under a thread's steps gives only the time; the steps line already names the step.

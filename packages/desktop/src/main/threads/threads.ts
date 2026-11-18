@@ -221,6 +221,8 @@ export class Threads {
   private readonly createdUndo = new Map<string, { rel: string; text: string }>();
   /** What each auto-used edit replaced, so its note's Undo can restore it while this app runs. */
   private readonly autoUndo = new Map<string, { rel: string; before: string; after: string }>();
+  /** Use all's Undo (9.5): each doc's text before and after, by the line's undo ID. */
+  private readonly groupUndo = new Map<string, { rel: string; before: string; after: string }[]>();
   /** The window each agent last reported, for a new thread's first budget (4.2). */
   private readonly windows = new Map<AgentId, number>();
   /** The option each thread is exploring this turn: options offered now go within it. */
@@ -476,6 +478,15 @@ export class Threads {
       else if (l.kind === "state") closed = l.state === "closed";
       else if (l.kind === "check")
         items.push({ kind: "check", turn: l.turn, claims: l.claims, corrected: l.corrected });
+      else if (l.kind === "used-all")
+        items.push({
+          kind: "used-all",
+          id: l.id,
+          docs: l.docs,
+          kept: l.kept,
+          undoable: l.undo !== null && this.groupUndo.has(l.undo) && !undone.has(l.id),
+          undone: undone.has(l.id),
+        });
       else if (l.kind === "proposed")
         items.push({ kind: "proposed", doc: l.doc, sections: l.sections });
       else if (l.kind === "created")
@@ -537,6 +548,7 @@ export class Threads {
       closed,
       busy: Boolean(live?.turn),
       busySince: live?.turn ? (live.turnAt ?? null) : null,
+      changeSet: await this.changeSetOf(thread, rel, text),
       reads,
       items,
       options: this.options.get(thread) ?? [],
@@ -1901,13 +1913,33 @@ export class Threads {
    * where the edit did stays a proposal.
    */
   private async applyToFile(rel: string, thread: string): Promise<void> {
+    const done = await this.useInFile(rel, thread);
+    if (!done) return;
+    const undo = `u${randomBytes(6).toString("hex")}`;
+    this.autoUndo.set(undo, { rel, before: done.before, after: done.after });
+    const own = await this.docOfThread(thread);
+    if (own)
+      await this.append(own, thread, { kind: "auto-used", doc: rel, sections: done.used, undo });
+    const live = this.live.get(thread);
+    if (live) await this.refresh(live.rel, live.docText, thread);
+  }
+
+  /**
+   * A closed doc's edits from this thread used in its file: each part merged
+   * onto its section as the file has it, its History version first. What
+   * clashed stays a proposal. Null when nothing was used.
+   */
+  private async useInFile(
+    rel: string,
+    thread: string,
+  ): Promise<{ before: string; after: string; used: string[][]; kept: string[][] } | null> {
     const full = path.join(this.d.folder, rel);
     const before = await readFile(full, "utf8").catch(() => null);
-    if (before === null) return;
+    if (before === null) return null;
     const first = await this.d.locate(rel, before);
-    if (!first) return;
+    if (!first) return null;
     const preview = await this.previews.read(first.doc, thread);
-    if (!preview || preview.parts.length === 0) return;
+    if (!preview || preview.parts.length === 0) return null;
     let text = before;
     const used: string[][] = [];
     const kept: PreviewPart[] = [];
@@ -1928,17 +1960,143 @@ export class Threads {
       text = text.slice(0, s.subtreeRange.from) + made.text + text.slice(s.subtreeRange.to);
       used.push(s.path);
     }
-    if (used.length === 0) return;
+    if (used.length === 0) return { before, after: before, used, kept: kept.map((k) => k.path) };
     this.ownWrite(rel, text);
     await writeFileAtomic(full, text);
     await this.previews.write(first.doc, thread, kept, preview.summary);
     this.d.previewsChanged(rel);
-    const undo = `u${randomBytes(6).toString("hex")}`;
-    this.autoUndo.set(undo, { rel, before, after: text });
+    return { before, after: text, used, kept: kept.map((k) => k.path) };
+  }
+
+  /**
+   * Use all (9.4): the page has used the open doc's edits; here, every other
+   * doc's, in its file, doc by doc. One line notes it all, with one Undo.
+   */
+  async useAll(
+    thread: string,
+    open: { path: string; before: string; after: string; sections: string[][] } | null,
+  ): Promise<{ used: number; kept: string[] }> {
     const own = await this.docOfThread(thread);
-    if (own) await this.append(own, thread, { kind: "auto-used", doc: rel, sections: used, undo });
+    const live = this.live.get(thread);
+    const set = live ? await this.changeSetOf(thread, live.rel, live.docText) : [];
+    const done: { rel: string; before: string; after: string; sections: string[][] }[] = [];
+    const kept: string[] = [];
+    if (open && open.before !== open.after)
+      done.push({
+        rel: open.path,
+        before: open.before,
+        after: open.after,
+        sections: open.sections,
+      });
+    for (const c of set) {
+      if (c.doc === open?.path) continue;
+      const r = await this.useInFile(c.doc, thread);
+      if (!r) continue;
+      if (r.used.length > 0)
+        done.push({ rel: c.doc, before: r.before, after: r.after, sections: r.used });
+      for (const k of r.kept) kept.push(`${c.doc} › ${k.at(-1) ?? ""}`);
+    }
+    // What the page couldn't use on the open doc stays a proposal there.
+    if (open) {
+      const left = set.find((c) => c.doc === open.path);
+      for (const p of left?.sections ?? [])
+        if (!open.sections.some((x) => x.join("\u0000") === p.join("\u0000")))
+          kept.push(`${open.path} › ${p.at(-1) ?? ""}`);
+    }
+    if (done.length > 0 && own) {
+      const undo = `g${randomBytes(6).toString("hex")}`;
+      this.groupUndo.set(
+        undo,
+        done.map((d) => ({ rel: d.rel, before: d.before, after: d.after })),
+      );
+      await this.append(own, thread, {
+        kind: "used-all",
+        docs: done.map((d) => ({ doc: d.rel, sections: d.sections })),
+        kept,
+        undo,
+      });
+    }
+    if (live) await this.refresh(live.rel, live.docText, thread);
+    return { used: done.length, kept };
+  }
+
+  /**
+   * One Undo for a Use all (9.5): each doc goes back by a three-way merge,
+   * so typing made since stays. A doc whose text clashes is left, and named.
+   * The open doc's text is returned for its page to write; closed docs are
+   * written here.
+   */
+  async undoAll(
+    thread: string,
+    id: string,
+    open: { path: string; text: string } | null,
+  ): Promise<
+    | { kind: "undone"; left: string[]; page: { path: string; text: string } | null }
+    | { kind: "refused"; reason: string }
+  > {
+    const own = await this.docOfThread(thread);
+    const lines = own ? await this.linesOf(own, thread) : [];
+    const line = lines.find((l) => l.id === id && l.kind === "used-all");
+    const group =
+      line?.kind === "used-all" && line.undo ? this.groupUndo.get(line.undo) : undefined;
+    if (!line || !group || !own)
+      return {
+        kind: "refused",
+        reason: "Anur restarted since; use each section's History to go back.",
+      };
+    const left: string[] = [];
+    let page: { path: string; text: string } | null = null;
+    for (const g of group) {
+      const isOpen = open?.path === g.rel;
+      const full = path.join(this.d.folder, g.rel);
+      const now = isOpen ? open.text : await readFile(full, "utf8").catch(() => null);
+      if (now === null) {
+        left.push(g.rel);
+        continue;
+      }
+      const back =
+        now === g.after ? { text: g.before, conflicts: 0 } : merge3(g.after, now, g.before, "ours");
+      if (back.conflicts > 0) {
+        left.push(g.rel);
+        continue;
+      }
+      if (isOpen) page = { path: g.rel, text: back.text };
+      else {
+        this.ownWrite(g.rel, back.text);
+        await writeFileAtomic(full, back.text);
+      }
+    }
+    if (line.kind === "used-all" && line.undo) this.groupUndo.delete(line.undo);
+    await this.append(own, thread, { kind: "auto-undone", used: id });
     const live = this.live.get(thread);
     if (live) await this.refresh(live.rel, live.docText, thread);
+    return { kind: "undone", left, page };
+  }
+
+  /** Every doc this thread now proposes edits to, with the sections (9.3). */
+  async changeSetOf(
+    thread: string,
+    rel: string,
+    text: string,
+  ): Promise<{ doc: string; sections: string[][] }[]> {
+    const own = await this.docOfThread(thread);
+    const lines = own ? await this.linesOf(own, thread) : [];
+    const docs = [
+      rel,
+      ...new Set(lines.flatMap((l) => (l.kind === "proposed" && l.doc !== rel ? [l.doc] : []))),
+    ];
+    const out: { doc: string; sections: string[][] }[] = [];
+    for (const d of docs) {
+      const body =
+        d === rel ? text : await readFile(path.join(this.d.folder, d), "utf8").catch(() => null);
+      if (body === null) continue;
+      const at = await this.d.locate(d, body);
+      if (!at) continue;
+      const preview = await this.previews.read(at.doc, thread);
+      const parts = preview?.parts ?? [];
+      if (parts.length > 0) out.push({ doc: d, sections: parts.map((p) => p.path) });
+    }
+    return out;
   }
 
   /** The page used an edit itself, on an open doc: the thread notes it; ⌘Z takes it back there. */
@@ -2110,6 +2268,7 @@ const KNOWN = new Set([
   "check",
   "created",
   "proposed",
+  "used-all",
 ]);
 
 /**

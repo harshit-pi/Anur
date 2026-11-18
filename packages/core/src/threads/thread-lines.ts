@@ -177,6 +177,15 @@ export const ProposedLine = LineEnvelope.extend({
   sections: z.array(z.array(z.string())),
 });
 
+/** Use all (9.4): a thread's edits used across docs at once, with one Undo. */
+export const UsedAllLine = LineEnvelope.extend({
+  kind: z.literal("used-all"),
+  docs: z.array(z.object({ doc: z.string(), sections: z.array(z.array(z.string())) })),
+  /** Edits that clashed with the text and stay proposals, as "doc › section". */
+  kept: z.array(z.string()),
+  undo: z.string().nullable(),
+});
+
 /** An auto-used edit taken back from its note. */
 export const AutoUndoneLine = LineEnvelope.extend({
   kind: z.literal("auto-undone"),
@@ -238,6 +247,7 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   CheckLine,
   CreatedLine,
   ProposedLine,
+  UsedAllLine,
 ]);
 export type KnownThreadLine = z.infer<typeof KnownThreadLine>;
 
@@ -259,6 +269,7 @@ const KNOWN_KINDS = new Set([
   "check",
   "created",
   "proposed",
+  "used-all",
 ]);
 
 /** A kind added by a later version of format 1; kept as written. */
