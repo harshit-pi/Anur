@@ -554,12 +554,48 @@ body.resizing * {
 }
 
 .tree-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin: 8px 0 0;
   padding: 8px 10px;
   border-radius: 7px;
+  font-size: 13px;
+}
+
+.tree-notice.error {
   background: var(--red-wash);
   color: var(--red);
-  font-size: 13px;
+}
+
+.tree-notice.info {
+  background: var(--blue-wash);
+  color: var(--ink);
+}
+
+.tree-notice-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tree-notice-button,
+.tree-notice-dismiss {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font: 600 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.tree-notice-button {
+  border: 0;
+  background: var(--blue);
+  color: var(--sheet);
+}
+
+.tree-notice-dismiss {
+  border: 1px solid var(--rule);
+  background: var(--sheet);
+  color: var(--slate);
 }
 
 .tree-row {

@@ -5,6 +5,7 @@ import { flushSync } from "react-dom";
 import { settled } from "./editor/pending-saves.ts";
 import { freeName } from "./layout/file-tree.ts";
 import type { FileActions } from "./regions/FileTree.tsx";
+import type { FileNotice } from "./regions/Regions.tsx";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import type { SaveStatus } from "./editor/autosave.ts";
 import { Page, type OpenDoc, type SavedView } from "./editor/Page.tsx";
@@ -178,15 +179,62 @@ export function App() {
   );
   /** While true the page is put away, so a doc being moved saves first and isn't written behind. */
   const [holding, setHolding] = useState(false);
-  const [fileNotice, setFileNotice] = useState<string | null>(null);
+  const [fileNotice, setFileNotice] = useState<FileNotice | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const tell = useCallback((reason: string) => {
-    setFileNotice(reason);
+  const show = useCallback((notice: FileNotice | null, ms: number | null) => {
+    setFileNotice(notice);
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
-    noticeTimer.current = setTimeout(() => {
-      setFileNotice(null);
-    }, 6000);
+    if (notice && ms !== null)
+      noticeTimer.current = setTimeout(() => {
+        setFileNotice(null);
+      }, ms);
   }, []);
+  const tell = useCallback(
+    (reason: string) => {
+      show({ text: reason, tone: "error" }, 6000);
+    },
+    [show],
+  );
+  /** After a rename or move: if links to those docs broke, offer to write them again. */
+  const offerLinks = useCallback(
+    async (moves: { from: string; to: string }[]) => {
+      if (moves.length === 0) return;
+      const plan = await anur.call("links:plan", { moves });
+      if (plan.links === 0) return;
+      const dismiss = () => {
+        show(null, null);
+      };
+      const n = (k: number, one: string, many: string) => `${String(k)} ${k === 1 ? one : many}`;
+      show(
+        {
+          text: `${n(plan.links, "link", "links")} in ${n(plan.docs, "doc", "docs")} pointed at the old ${moves.length === 1 ? "name" : "names"}.`,
+          tone: "info",
+          action: {
+            label: "Update links",
+            run: () => {
+              dismiss();
+              void anur.call("links:update", { moves }).then((r) => {
+                const left =
+                  r.skipped > 0
+                    ? ` ${n(r.skipped, "doc", "docs")} changed meanwhile and ${r.skipped === 1 ? "was" : "were"} left as ${r.skipped === 1 ? "it was" : "they were"}.`
+                    : "";
+                show(
+                  {
+                    text: `Updated ${n(r.links, "link", "links")} in ${n(r.docs, "doc", "docs")}.${left}`,
+                    tone: "info",
+                  },
+                  5000,
+                );
+              });
+            },
+          },
+          dismiss,
+        },
+        null,
+      );
+    },
+    [show],
+  );
   /** Run a change to the files; if it touches the open doc, its typing is saved first. */
   const touching = useCallback(
     async <T,>(paths: readonly string[], run: () => Promise<T>): Promise<T> => {
@@ -239,6 +287,7 @@ export function App() {
           }
           setTabs((t) => renamePaths(t, r.docs));
           setFolder(r.folder);
+          void offerLinks(r.docs);
           return true;
         }),
       duplicate: async (path) => {
@@ -268,7 +317,7 @@ export function App() {
         });
       },
     };
-  }, [folder, openDoc, tell, touching]);
+  }, [folder, openDoc, tell, touching, offerLinks]);
   const newDocNow = useRef(newDoc);
   newDocNow.current = newDoc;
   /** A line search found, selected once its doc is open on the page. */

@@ -40,6 +40,11 @@ export const FolderState = z.object({
 });
 export type FolderState = z.infer<typeof FolderState>;
 
+/** Docs that moved, each from its old path to its new one. */
+const Moves = z
+  .array(z.object({ from: z.string().max(1024), to: z.string().max(1024) }))
+  .max(20_000);
+
 /** An item in a native menu: a choice, a line, or a submenu of more. */
 export type MenuEntry =
   | { id: string; label: string; enabled?: boolean | undefined; checked?: boolean | undefined }
@@ -349,6 +354,16 @@ export const ipcContract = {
       z.object({ kind: z.literal("trashed"), docs: z.array(z.string()), folder: FolderState }),
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
+  },
+  /** How many links a rename or move broke, in how many docs. */
+  "links:plan": {
+    request: z.object({ moves: Moves }).strict(),
+    response: z.object({ docs: z.number(), links: z.number() }),
+  },
+  /** Write those links again, so they reach their docs at the new paths. */
+  "links:update": {
+    request: z.object({ moves: Moves }).strict(),
+    response: z.object({ docs: z.number(), links: z.number(), skipped: z.number() }),
   },
   /** Open a web or mail link in the system's browser or mail app. */
   "link:open-external": {
@@ -672,6 +687,14 @@ export const ipcEvents = {
   "agent:options": z.object({ agent: AgentIdSchema, options: z.array(SessionOption) }),
   /** Put this text on the open doc's page, as a Revert asks; the page saves it. */
   "doc:replace": z.object({ path: z.string(), text: z.string() }),
+  /** Links in the open doc to write again after docs moved; the page does it, so ⌘Z undoes it. */
+  "links:rewrite": z.object({
+    path: z.string(),
+    was: z.string(),
+    moves: z.array(z.object({ from: z.string(), to: z.string() })),
+    before: z.array(z.string()),
+    after: z.array(z.string()),
+  }),
   /** A doc's previews changed, as when a thread's turn ended with edits. */
   "preview:changed": z.object({ path: z.string() }),
   /** A thread changed: all of it, or a reply arriving piece by piece. */
