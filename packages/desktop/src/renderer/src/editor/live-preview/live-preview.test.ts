@@ -11,6 +11,7 @@ import {
 import { BaseWidget } from "../bases/base-widget.ts";
 import { ImageWidget, InlineImageWidget } from "../images/image-widget.ts";
 import { TableWidget } from "../table/table-widget.ts";
+import { MermaidWidget } from "../mermaid/mermaid-widget.ts";
 import { CalloutLabelWidget, CopyCodeWidget, LanguageChipWidget } from "../chips/chip-widgets.ts";
 import { PropertiesWidget } from "../properties/properties-widget.ts";
 import { CheckboxWidget, ConflictMarkWidget } from "./widgets.ts";
@@ -193,6 +194,13 @@ describe("live preview", () => {
     // Lines 2, 4 and 10 are gaps; line 7 is inside the code block; 12 is before a heading.
     expect(gaps()).toEqual([2, 4, 10]);
     expect(gaps(doc.indexOf("Para two") - 1)).toEqual([4, 10]);
+  });
+
+  it("draws a mermaid block as its diagram, and shows its source with the cursor in it", () => {
+    const doc = "Intro.\n\n```mermaid\ngraph TD\n  A --> B\n```\n\nend";
+    expect(widgetOf(doc, MermaidWidget)?.source).toBe("graph TD\n  A --> B");
+    expect(widgetOf(doc, MermaidWidget, doc.indexOf("A -->"))).toBeUndefined();
+    expect(widgetOf("```js\nlet a = 1;\n```\n\nend", MermaidWidget)).toBeUndefined();
   });
 
   it("shows a code fence as a language chip, even with the cursor on it", () => {

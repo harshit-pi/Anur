@@ -37,6 +37,7 @@ import { parseFields } from "../properties/properties-model.ts";
 import { PropertiesWidget } from "../properties/properties-widget.ts";
 import { parseTable } from "../table/table-model.ts";
 import { TableWidget } from "../table/table-widget.ts";
+import { MermaidWidget } from "../mermaid/mermaid-widget.ts";
 
 /**
  * Live preview (task 2.6): the page renders Markdown in place, as Obsidian
@@ -195,6 +196,25 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           return false;
         case "FencedCode":
         case "CodeBlock":
+          // A Mermaid diagram draws as its picture, unless the cursor is in its source.
+          if (name === "FencedCode" && !isActive(from, to)) {
+            const info = children(node, "CodeInfo")[0];
+            const marks = children(node, "CodeMark");
+            const close = marks.length > 1 ? marks.at(-1) : undefined;
+            if (info && /^mermaid$/i.test(text(info.from, info.to).trim()) && close) {
+              const body = text(
+                doc.lineAt(from).to + 1,
+                Math.max(doc.lineAt(from).to + 1, close.from),
+              );
+              out.push(
+                Decoration.replace({
+                  widget: new MermaidWidget(body.replace(/\n$/, ""), doc.lineAt(from).to + 1),
+                  block: true,
+                }).range(from, to),
+              );
+              return false;
+            }
+          }
           for (let n = doc.lineAt(from).number; n <= doc.lineAt(to).number; n++) {
             out.push(line("cm-lp-codeblock").range(doc.line(n).from));
           }
