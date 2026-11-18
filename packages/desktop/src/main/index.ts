@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, mkdirSync } from "node:fs";
 import { readFile, realpath, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -78,6 +78,7 @@ import {
   updateState,
 } from "./updater.ts";
 import { folderFor } from "./open-file.ts";
+import { offerMoveToApplications } from "./move-to-applications.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
 import { AgentChoices } from "./threads/agent-choices.ts";
 import { AnurSocket } from "./threads/anur-socket.ts";
@@ -282,6 +283,11 @@ async function startClaudeSkill(): Promise<void> {
 
 /** Agents whose choices were read this run; once per run is enough. */
 const probed = new Set<AgentId>();
+const probeFolder = () => {
+  const dir = path.join(app.getPath("userData"), "agent", "empty");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+};
 /** Each folder's threads, so a reply reaches the windows showing that folder. */
 const threads = new Map<string, Threads>();
 function threadsFor(folder: FolderState): Threads | null {
@@ -864,7 +870,9 @@ const handlers: { [C in Channel]: Handler<C> } = {
       hub.send({
         type: "probe",
         agent,
-        cwd: folders.current(webContentsId)?.path ?? app.getPath("home"),
+        // No folder open: an empty folder of Anur's own. Home would have the
+        // agent look around it, and macOS ask about Downloads and Documents.
+        cwd: folders.current(webContentsId)?.path ?? probeFolder(),
       });
     }
     return { options: choices.get(agent) };
@@ -1364,6 +1372,7 @@ void app.whenReady().then(async () => {
   });
   registerIpc();
   void startClaudeSkill();
+  if (isRelease) await offerMoveToApplications();
   if (isRelease)
     startUpdates(appSettings.get().autoUpdate, (state) => {
       for (const win of windows.values()) send(win, "app:update-state", state);
