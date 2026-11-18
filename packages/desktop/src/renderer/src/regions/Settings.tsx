@@ -7,6 +7,7 @@ import { useFeatures } from "../features.ts";
 import { FEATURES } from "../../../shared/features.ts";
 import { CloseIcon } from "./Icons.tsx";
 import { type ThemePref, applyTheme, loadTheme, saveTheme } from "./theme-pref.ts";
+import { type PageFont, applyPageFont, loadPageFont, savePageFont } from "./font-pref.ts";
 
 /**
  * Settings (task 2.25), from the gear, the plugins icon or ⌘,. Laid out as
@@ -467,6 +468,12 @@ export function Settings({
   const change = (c: Partial<Omit<MainSettings, "commitAnur"> & { commitAnur: boolean }>) => {
     void anur.call("settings:set", c).then(setMain);
   };
+  const [pageFont, setPageFont] = useState<PageFont>(() => loadPageFont(window.localStorage));
+  const pickPageFont = (f: PageFont) => {
+    setPageFont(f);
+    savePageFont(window.localStorage, f);
+    applyPageFont(f);
+  };
   const pickTheme = (t: ThemePref) => {
     setTheme(t);
     saveTheme(window.localStorage, t);
@@ -566,6 +573,27 @@ export function Settings({
                     }}
                   >
                     {t === "system" ? "System" : t === "light" ? "Light" : "Dark"}
+                  </button>
+                ))}
+              </div>
+            </Row>
+            <Row
+              title="Page font"
+              detail="The font docs and agents' replies are read in. Serif is Source Serif, close to Claude's; Sans is the app's; System is the Mac's."
+            >
+              <div className="segmented" role="radiogroup" aria-label="Page font">
+                {(["serif", "sans", "system"] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    role="radio"
+                    aria-checked={pageFont === f}
+                    className={`segmented-option font-option-${f}`}
+                    onClick={() => {
+                      pickPageFont(f);
+                    }}
+                  >
+                    {f === "serif" ? "Serif" : f === "sans" ? "Sans" : "System"}
                   </button>
                 ))}
               </div>

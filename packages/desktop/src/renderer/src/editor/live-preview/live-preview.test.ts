@@ -174,12 +174,25 @@ describe("live preview", () => {
 
   it("marks a callout's lines and shows its kind as a label", () => {
     const doc = "> [!warning] Careful\n> body\n\nend";
-    const lines = decorations(doc).filter((d) => d.from === d.to);
+    const lines = decorations(doc).filter(
+      (d) => d.from === d.to && String(d.cls).startsWith("cm-lp-callout"),
+    );
     expect(lines.map((d) => d.cls)).toEqual([
       "cm-lp-callout cm-lp-callout-warning cm-lp-callout-first",
       "cm-lp-callout cm-lp-callout-warning",
     ]);
     expect(hidden(doc)).toEqual(["> ", "[!warning]", "> "]);
+  });
+
+  it("draws blank lines between blocks at half height, but not in code or under the cursor", () => {
+    const doc = "Para one.\n\nPara two.\n\n```\na\n\nb\n```\n\nend\n\n## Next";
+    const gaps = (cursor?: number) =>
+      decorations(doc, cursor)
+        .filter((d) => d.cls === "cm-lp-gap")
+        .map((d) => doc.slice(0, d.from).split("\n").length);
+    // Lines 2, 4 and 10 are gaps; line 7 is inside the code block; 12 is before a heading.
+    expect(gaps()).toEqual([2, 4, 10]);
+    expect(gaps(doc.indexOf("Para two") - 1)).toEqual([4, 10]);
   });
 
   it("shows a code fence as a language chip, even with the cursor on it", () => {
