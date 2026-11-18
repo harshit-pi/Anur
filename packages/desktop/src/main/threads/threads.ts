@@ -124,6 +124,10 @@ type Live = {
   merged: Map<string, string>;
   /** Docs this thread made (15.6): each one's undo id, revised in place while it's as made. */
   created?: Map<string, string>;
+  /** Other docs this thread proposed edits to, with the sections last said. */
+  proposedTo?: Map<string, string>;
+  /** A tool ran since the last text: the next text starts a paragraph. */
+  afterTool?: boolean;
   /** The session's context and the model's window, as the agent last reported them (4.9). */
   context?: { used: number; size: number } | null;
   /** The window known when the turn started: this thread's last, or its agent's (4.2). */
@@ -415,6 +419,8 @@ export class Threads {
       else if (l.kind === "state") closed = l.state === "closed";
       else if (l.kind === "check")
         items.push({ kind: "check", turn: l.turn, claims: l.claims, corrected: l.corrected });
+      else if (l.kind === "proposed")
+        items.push({ kind: "proposed", doc: l.doc, sections: l.sections });
       else if (l.kind === "created")
         items.push({
           kind: "created",
@@ -899,8 +905,16 @@ export class Threads {
       const existing = await this.previews.read(at.doc, thread);
       const current = withPreview(decided, existing?.parts ?? [], Threads.byId(at));
       const proposed = merge3(start, current, copy, "theirs").text;
-      await this.previews.write(at.doc, thread, previewParts(decided, proposed, Threads.spans(at)));
+      const parts = previewParts(decided, proposed, Threads.spans(at));
+      await this.previews.write(at.doc, thread, parts);
       this.d.previewsChanged(rel);
+      // An edit to another doc shows on that doc's page; the thread says where.
+      const sections = parts.map((p) => p.path);
+      const said = live.proposedTo?.get(rel);
+      if (!own && sections.length > 0 && said !== JSON.stringify(sections)) {
+        (live.proposedTo ??= new Map()).set(rel, JSON.stringify(sections));
+        await this.append(live.doc, thread, { kind: "proposed", doc: rel, sections });
+      }
       // The setting: edits are used as they land. An open doc's page applies
       // them itself, as the only writer of an open doc's file; here, the rest.
       if (this.d.autoApply?.() && !this.d.isOpen?.(rel)) await this.applyToFile(rel, thread);
@@ -973,10 +987,14 @@ export class Threads {
         this.picked.delete(thread);
         return;
       case "text":
+        // Text after a tool call is a new paragraph, as the agent wrote it.
+        if (live.afterTool && live.text && !live.text.endsWith("\n")) live.text += "\n\n";
+        live.afterTool = false;
         live.text += m.text;
         this.d.emit({ kind: "text", thread, turn: m.turn, text: m.text });
         return;
       case "tool": {
+        live.afterTool = true;
         const prev = live.tools.get(m.toolUse);
         // A path into the working copies reads as what it is: the working copy of that doc.
         const title = (m.title || prev?.title || "A tool")
@@ -1857,6 +1875,7 @@ const KNOWN = new Set([
   "renamed",
   "check",
   "created",
+  "proposed",
 ]);
 
 /**

@@ -144,6 +144,12 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     doc: z.string(),
     undoable: z.boolean(),
   }),
+  /** An edit this thread proposed to another doc: shown on that doc's page. */
+  z.object({
+    kind: z.literal("proposed"),
+    doc: z.string(),
+    sections: z.array(z.array(z.string())),
+  }),
   /** An edit used as it landed (the setting); `undoable` while its Undo can still restore it. */
   z.object({
     kind: z.literal("auto-used"),

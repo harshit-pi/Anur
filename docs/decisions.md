@@ -118,8 +118,9 @@ Engineering decisions made while building Anur, newest first, each with why. The
 ## Actions: build and check a section (group 15)
 
 - Two actions on any section, under the message box: **Build this section** and **Check this section**. Each is a thread tagged Build or Check, in the list and on the map; the person's message reads "Build this section", while the agent gets Anur's instruction.
-- Both start in the agent's own plan mode. Claude Code's request to leave plan mode carries the plan, shown as a card: Approve and build, or Keep planning. Nothing changes before the person approves.
+- Both run in the mode the person picked, as any thread does: Anur adds no approval Claude Code wouldn't ask for (rule: never worse than Obsidian or Claude Code). In plan mode, Claude Code's request to leave it carries the plan, shown as a card: Approve and build, or Keep planning.
 - Build does what the section decides with the agent's own tools. A message to a person is a draft, never sent. The reply lists each change by its path in the folder, then guesses marked as guesses; the section's text gets a "Built" line as a proposed edit.
 - A doc the agent makes is kept in the folder as made, not proposed: there's nothing to compare it to. The thread notes "Made FAQ.md" with Undo, which removes it while it's as the agent left it. Revisions within the turn update it in place. The hook sends a new doc's write to the working copy without copying anything first.
 - Check reads only and reports with `anur_report_check`: each claim holds, is wrong, is unsupported or is missing, with its source and a note, shown as a table. Corrected text becomes a proposed edit.
+- An edit a thread proposes to another doc shows on that doc's page, and the thread says so ("Proposed an edit to Plans in Pricing.md", with Open). Text the agent writes after a tool call starts a new paragraph.
 - Anur's own tools never ask the person for permission, in any mode, and show by what they do ("Named the thread"), not their ids.
