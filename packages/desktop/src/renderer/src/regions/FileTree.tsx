@@ -639,8 +639,18 @@ export function FileTree({
     );
   };
 
-  /** ⌘-click picks a row too, ⇧-click a run of rows; a plain click opens it. */
+  /**
+   * A plain click opens a row; ⌘-click opens it in a new tab, as in Obsidian.
+   * ⌘⇧-click picks a row too, and ⇧-click a run of rows.
+   */
   const click = (e: MouseEvent, n: TreeNode) => {
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && n.kind !== "folder") {
+      setMarked(new Set());
+      anchor.current = n.path;
+      setFocused(n.path);
+      openNode(n, true);
+      return;
+    }
     if (e.metaKey || e.ctrlKey) {
       setMarked((m) => {
         const next = new Set(m.size ? m : focused ? [focused] : []);

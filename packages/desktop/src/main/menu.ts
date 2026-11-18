@@ -103,10 +103,11 @@ export function buildMenu(actions: {
     {
       label: "Go",
       submenu: [
+        // ⌘[ and ⌘], as in Chrome, Safari and Finder; ⌘⌥← and ⌘⌥→ still work, unlisted.
         {
           id: "go-back",
           label: "Back",
-          accelerator: "CmdOrCtrl+Alt+Left",
+          accelerator: "CmdOrCtrl+[",
           click: () => {
             actions.command("back");
           },
@@ -114,7 +115,25 @@ export function buildMenu(actions: {
         {
           id: "go-forward",
           label: "Forward",
+          accelerator: "CmdOrCtrl+]",
+          click: () => {
+            actions.command("forward");
+          },
+        },
+        {
+          label: "Back",
+          accelerator: "CmdOrCtrl+Alt+Left",
+          visible: false,
+          acceleratorWorksWhenHidden: true,
+          click: () => {
+            actions.command("back");
+          },
+        },
+        {
+          label: "Forward",
           accelerator: "CmdOrCtrl+Alt+Right",
+          visible: false,
+          acceleratorWorksWhenHidden: true,
           click: () => {
             actions.command("forward");
           },
