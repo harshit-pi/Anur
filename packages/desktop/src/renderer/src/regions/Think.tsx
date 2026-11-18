@@ -18,8 +18,8 @@ import { inlineRuns } from "../layout/inline-markdown.ts";
 /**
  * The Think panel (task 3.5): the section the cursor is in, its text as it
  * stands, and its threads. Each thread is its own chat with the person's
- * agent, started from this section; what the agent reads is listed above
- * the chat, so what is shown is exactly what is sent.
+ * agent, started from this section. What the agent reads isn't listed:
+ * it was more than a thread needs on screen.
  */
 
 type Prompt = EventPayload<"thread:event"> & { kind: "permission" };
@@ -498,19 +498,6 @@ export function Think({
           <span className="think-where quiet">Its section is gone</span>
         )}
         <h2 className="think-title">{thread.title}</h2>
-        <section className="think-reads" aria-label="The agent reads in this thread">
-          <h3>The agent reads in this thread</h3>
-          {thread.reads.map((r) => (
-            <div key={`${r.label}:${r.detail}`} className="think-read">
-              <span className="truncate">{r.label}</span>
-              <span className="quiet">{r.detail}</span>
-            </div>
-          ))}
-          <div className="think-read left-out">
-            <span>Other threads, on any section</span>
-            <span>left out</span>
-          </div>
-        </section>
         <div className="think-chat" aria-live="polite">
           {thread.items.map((item, i) =>
             item.kind === "message" ? (
