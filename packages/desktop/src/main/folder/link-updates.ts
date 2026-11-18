@@ -14,7 +14,9 @@ export async function planLinkUpdates(
   moves: readonly Move[],
 ): Promise<LinkChange[]> {
   if (moves.length === 0) return [];
-  const before = docsBefore(folder.docs, moves);
+  // Images and other files are link targets too: `![[photo.png]]` follows a renamed photo.
+  const all = [...folder.docs, ...folder.files];
+  const before = docsBefore(all, moves);
   const wasOf = new Map(moves.map((m) => [m.to, m.from]));
   const cloud = new Set(folder.offloaded);
   const changes: LinkChange[] = [];
@@ -24,7 +26,7 @@ export async function planLinkUpdates(
     // Most docs link to nothing that moved: skip the parse unless a [ is there at all.
     if (text === null || !text.includes("[")) continue;
     const was = wasOf.get(rel) ?? rel;
-    const r = rewriteLinks(text, was, rel, moves, before, folder.docs);
+    const r = rewriteLinks(text, was, rel, moves, before, all);
     if (r.changed > 0) changes.push({ rel, was, text, next: r.text, links: r.changed });
   }
   return changes;

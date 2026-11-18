@@ -11,12 +11,41 @@ export const MAX_DOCS = 20_000;
 
 const SKIP_DIRS = new Set(["node_modules"]);
 
+/**
+ * Files the sidebar shows beside docs, the kinds Obsidian shows: images,
+ * PDFs, audio, video, canvases and bases. Code and the rest stay hidden, so
+ * a repo's sidebar stays a list of its writing.
+ */
+export const ATTACHMENT_EXTS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".svg",
+  ".bmp",
+  ".avif",
+  ".pdf",
+  ".mp3",
+  ".wav",
+  ".m4a",
+  ".ogg",
+  ".flac",
+  ".mp4",
+  ".webm",
+  ".mov",
+  ".canvas",
+  ".base",
+]);
+
 export async function listDocs(
   root: string,
   max = MAX_DOCS,
   ext = ".md",
-): Promise<{ docs: string[]; truncated: boolean; folders: string[] }> {
+): Promise<{ docs: string[]; truncated: boolean; folders: string[]; files: string[] }> {
   const docs: string[] = [];
+  /** Attachments the sidebar shows, when listing Markdown docs. */
+  const files: string[] = [];
   /** Folders worth showing: those holding docs at any depth, and empty ones, such as a new folder. */
   const folders: string[] = [];
   let truncated = false;
@@ -46,6 +75,14 @@ export async function listDocs(
         }
         docs.push(childRel.normalize("NFC"));
         shown = true;
+      } else if (
+        e.isFile() &&
+        ext === ".md" &&
+        ATTACHMENT_EXTS.has(path.extname(e.name).toLowerCase()) &&
+        files.length < max
+      ) {
+        files.push(childRel.normalize("NFC"));
+        shown = true;
       }
     }
     return shown;
@@ -55,10 +92,11 @@ export async function listDocs(
   const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
   docs.sort((a, b) => collator.compare(a, b));
   folders.sort((a, b) => collator.compare(a, b));
-  return { docs, truncated, folders };
+  files.sort((a, b) => collator.compare(a, b));
+  return { docs, truncated, folders, files };
 }
 
-/** Each doc's last change and creation times, in ms, for sorting the sidebar. */
+/** Each doc or file's last change and creation times, in ms, for sorting the sidebar. */
 export async function docTimes(
   root: string,
   docs: readonly string[],

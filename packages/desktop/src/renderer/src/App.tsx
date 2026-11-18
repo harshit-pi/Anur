@@ -6,6 +6,8 @@ import { settled } from "./editor/pending-saves.ts";
 import { freeName } from "./layout/file-tree.ts";
 import type { FileActions } from "./regions/FileTree.tsx";
 import type { FileNotice } from "./regions/Regions.tsx";
+import { isViewable } from "./layout/file-tree.ts";
+import { ImageView } from "./regions/ImageView.tsx";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import type { SaveStatus } from "./editor/autosave.ts";
 import { Page, type OpenDoc, type SavedView } from "./editor/Page.tsx";
@@ -120,7 +122,8 @@ export function App() {
     setDoc(null);
     setSections(null);
     setDocError(null);
-    if (!selected) {
+    // An image shows in its own view, not on the page.
+    if (!selected || isViewable(selected)) {
       setOpening(null);
       return;
     }
@@ -301,12 +304,12 @@ export function App() {
       },
       trash: async (path, isFolder, docs) => {
         const what = path.split("/").pop() ?? path;
-        // A doc goes quietly, since Finder can put it back; a folder of docs asks first.
+        // A file goes quietly, since Finder can put it back; a folder with files in it asks first.
         if (
           isFolder &&
           docs > 0 &&
           !window.confirm(
-            `Move “${what}” and the ${String(docs)} ${docs === 1 ? "doc" : "docs"} in it to the Trash?`,
+            `Move “${what}” and the ${String(docs)} ${docs === 1 ? "file" : "files"} in it to the Trash?`,
           )
         )
           return;
@@ -726,7 +729,9 @@ export function App() {
         selected={selected}
         page={
           // Only the doc the tab shows: after a rename the old one mustn't mount for a moment.
-          doc && !holding && doc.path === selected ? (
+          selected && isViewable(selected) ? (
+            <ImageView path={selected} />
+          ) : doc && !holding && doc.path === selected ? (
             <Page
               doc={doc}
               docs={folder?.docs ?? []}
