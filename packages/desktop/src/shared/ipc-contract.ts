@@ -428,6 +428,16 @@ export const ipcContract = {
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
+  /** Copy files or folders from outside, as dropped or pasted from Finder, into a folder. */
+  "file:import": {
+    request: z
+      .object({ sources: z.array(z.string().max(4096)).max(1000), into: z.string().max(1024) })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("copied"), paths: z.array(z.string()), folder: FolderState }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
   /** Move a doc or a folder to the system Trash, where Finder can put it back. */
   "file:trash": {
     request: z.object({ path: z.string().max(1024) }).strict(),
@@ -449,6 +459,16 @@ export const ipcContract = {
   /** Open a web or mail link in the system's browser or mail app. */
   "link:open-external": {
     request: z.object({ url: z.string().max(4096) }).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Files copied in Finder, or in Anur, as full paths. */
+  "clipboard:read-files": {
+    request: z.object({}).strict(),
+    response: z.object({ paths: z.array(z.string()) }),
+  },
+  /** Put the folder's files at these paths on the clipboard, so Finder can paste them. */
+  "clipboard:write-files": {
+    request: z.object({ paths: z.array(z.string().max(1024)).max(1000) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
   /** Put text on the clipboard, which works whether or not the window has focus. */
@@ -898,4 +918,6 @@ export type AnurBridge = {
   call<C extends Channel>(channel: C, request: Request<C>): Promise<Response<C>>;
   /** Listen for an event from main; returns a function that stops listening. */
   on<E extends EventName>(event: E, listener: (payload: EventPayload<E>) => void): () => void;
+  /** Where a file dropped from Finder lives on disk; "" for one that isn't on disk. */
+  pathOf(file: File): string;
 };

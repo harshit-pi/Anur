@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { isChannel, isEvent, type AnurBridge } from "../shared/ipc-contract.ts";
 
 /**
@@ -20,6 +20,9 @@ const bridge: AnurBridge = {
     return () => {
       ipcRenderer.removeListener(event, wrapped);
     };
+  },
+  pathOf(file) {
+    return webUtils.getPathForFile(file);
   },
 };
 

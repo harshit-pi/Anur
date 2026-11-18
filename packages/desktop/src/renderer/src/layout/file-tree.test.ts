@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildTree, docCount, dropTarget, freeName, renamed } from "./file-tree.ts";
+import {
+  buildTree,
+  docCount,
+  dropTarget,
+  freeName,
+  rangeBetween,
+  renamed,
+  topmost,
+} from "./file-tree.ts";
 
 describe("the file tree", () => {
   it("nests docs under their folders, folders first, names without .md", () => {
@@ -75,5 +83,18 @@ describe("files panel names", () => {
     expect(renamed("img/photo.png", "cover", false)).toBe("img/cover.png");
     expect(renamed("img/photo.png", "cover.png", false)).toBe("img/cover.png");
     expect(renamed("spec.pdf", "Spec v2", false)).toBe("Spec v2.pdf");
+  });
+});
+
+describe("picking several rows", () => {
+  const rows = ["A", "A/x.md", "B.md", "C.md"];
+  it("⇧-click takes the run between, either way round", () => {
+    expect(rangeBetween(rows, "A/x.md", "C.md")).toEqual(["A/x.md", "B.md", "C.md"]);
+    expect(rangeBetween(rows, "C.md", "A")).toEqual(rows);
+    expect(rangeBetween(rows, "gone.md", "B.md")).toEqual(["B.md"]);
+  });
+  it("a row inside a picked folder goes with the folder", () => {
+    expect(topmost(["A", "A/x.md", "B.md"])).toEqual(["A", "B.md"]);
+    expect(topmost(["AB.md", "A"])).toEqual(["AB.md", "A"]);
   });
 });

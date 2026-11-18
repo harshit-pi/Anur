@@ -643,6 +643,17 @@ body.resizing * {
   color: var(--ink);
 }
 
+/* Rows picked together with ⌘- or ⇧-click. */
+.tree-row.marked:not(.selected) {
+  background: var(--blue-wash);
+  color: var(--ink);
+}
+
+/* Rows cut with ⌘X, waiting to be pasted. */
+.tree-row.cut {
+  opacity: 0.5;
+}
+
 .caret {
   flex: none;
   width: 0;

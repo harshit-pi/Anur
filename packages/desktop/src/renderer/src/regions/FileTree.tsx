@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import type { MenuEntry } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import {
@@ -7,7 +15,9 @@ import {
   dropTarget,
   folderOf,
   isViewable,
+  rangeBetween,
   renamed,
+  topmost,
   type Sort,
   type TreeNode,
 } from "../layout/file-tree.ts";
@@ -16,9 +26,12 @@ import {
 export type FileActions = {
   newDoc: (dir: string) => Promise<string | null>;
   newFolder: (dir: string) => Promise<string | null>;
-  move: (from: string, to: string) => Promise<boolean>;
+  /** Several moves as one: open docs wait, and links are offered once. */
+  move: (moves: { from: string; to: string }[]) => Promise<boolean>;
   duplicate: (path: string) => Promise<void>;
-  trash: (path: string, isFolder: boolean, docs: number) => Promise<void>;
+  trash: (items: { path: string; isFolder: boolean; docs: number }[]) => Promise<void>;
+  /** Copy files from anywhere, by full path, into a folder; resolves with the new paths. */
+  importFiles: (sources: string[], into: string) => Promise<string[] | null>;
 };
 
 /** A request from the panel's header: make a doc or a folder where the keys are. */
@@ -26,6 +39,9 @@ export type MakeRequest = { kind: "doc" | "folder"; n: number };
 
 /** A path being dragged in the tree, so drops from elsewhere are told apart. */
 const DRAG_TYPE = "application/x-anur-path";
+
+/** What ⌘C or ⌘X last put on the clipboard from the tree. */
+type Clip = { mode: "copy" | "cut"; paths: string[] };
 
 /**
  * The folder's docs and folders as a tree. A click opens a doc or a folder;
@@ -79,7 +95,11 @@ export function FileTree({
   const [focused, setFocused] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [dropOn, setDropOn] = useState<string | null>(null);
-  const dragging = useRef<string | null>(null);
+  /** Rows picked with ⌘- or ⇧-click, which menus, keys and drags act on together. */
+  const [marked, setMarked] = useState<ReadonlySet<string>>(() => new Set());
+  const anchor = useRef<string | null>(null);
+  const [clip, setClip] = useState<Clip | null>(null);
+  const dragging = useRef<string[] | null>(null);
   const hold = useRef<{ path: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const isFolder = (p: string) => folderSet.has(p);
 
@@ -150,7 +170,7 @@ export function FileTree({
     setEditing(null);
     const to = renamed(path, typed, isFolder(path));
     if (!actions || !to || to === path) return;
-    if (await actions.move(path, to)) setFocused(to);
+    if (await actions.move([{ from: path, to }])) setFocused(to);
     list.current?.focus();
   };
   /** A doc or an image opens in a tab; any other file in its default app. */
@@ -160,12 +180,103 @@ export function FileTree({
     else if (node.kind === "file")
       void anur.call("doc:reveal", { path: node.path, how: "default-app" });
   };
-  const trash = (node: TreeNode) => {
-    void actions?.trash(node.path, node.kind === "folder", docCount(node));
+  const nodeAt = useMemo(() => {
+    const map = new Map<string, TreeNode>();
+    const walk = (nodes: TreeNode[]) => {
+      for (const n of nodes) {
+        map.set(n.path, n);
+        if (n.kind === "folder") walk(n.children);
+      }
+    };
+    walk(tree);
+    return map;
+  }, [tree]);
+  /** What the keys and menus act on: the picked rows when the row is one of them, else the row. */
+  const pickedWith = (path: string | null): string[] => {
+    if (path === null) return [];
+    if (marked.size > 1 && marked.has(path))
+      return topmost(
+        visible()
+          .map((n) => n.path)
+          .filter((p) => marked.has(p)),
+      );
+    return [path];
   };
+  const trash = (paths: string[]) => {
+    const items = paths.flatMap((p) => {
+      const n = nodeAt.get(p);
+      return n ? [{ path: p, isFolder: n.kind === "folder", docs: docCount(n) }] : [];
+    });
+    if (items.length) void actions?.trash(items);
+  };
+  const copyOut = (paths: string[], mode: Clip["mode"]) => {
+    if (paths.length === 0) return;
+    void anur.call("clipboard:write-files", { paths }).then(({ ok }) => {
+      if (ok) setClip({ mode, paths });
+    });
+  };
+  /** Paste into `into`: rows cut here move; anything copied, here or in Finder, is copied. */
+  const paste = async (into: string) => {
+    if (!actions || !editable) return;
+    const { paths: onClip } = await anur.call("clipboard:read-files", {});
+    const ours =
+      clip !== null &&
+      clip.paths.length === onClip.length &&
+      clip.paths.every((p, i) => onClip[i]?.endsWith(`/${p}`));
+    if (ours && clip.mode === "cut") {
+      const moves = clip.paths.flatMap((from) => {
+        const to = dropTarget(from, into);
+        return to ? [{ from, to }] : [];
+      });
+      setClip(null);
+      if (moves.length && (await actions.move(moves)))
+        landed(
+          into,
+          moves.map((m) => m.to),
+        );
+      return;
+    }
+    if (onClip.length === 0) return;
+    const made = await actions.importFiles(onClip, into);
+    if (made?.length) landed(into, made);
+  };
+  /** After a paste, drop or move: open the folder and pick what arrived. */
+  const landed = (into: string, paths: string[]) => {
+    if (into) openTo(into, true);
+    setMarked(new Set(paths.length > 1 ? paths : []));
+    const last = paths[paths.length - 1];
+    if (last) setFocused(last);
+    scrollPending.current = true;
+  };
+  const intoFor = (path: string | null) => folderOf(path, path !== null && folderSet.has(path));
 
   const rowMenu = (node: TreeNode) => {
     setFocused(node.path);
+    const picked = pickedWith(node.path);
+    if (picked.length > 1) {
+      const n = String(picked.length);
+      void anur
+        .call("menu:popup", {
+          items: [
+            { id: "cut", label: `Cut ${n} items`, enabled: editable },
+            { id: "copy", label: `Copy ${n} items` },
+            { separator: true },
+            { id: "trash", label: `Move ${n} items to Trash`, enabled: editable },
+          ],
+        })
+        .then(({ id }) => {
+          if (id === "cut") copyOut(picked, "cut");
+          else if (id === "copy") copyOut(picked, "copy");
+          else if (id === "trash") trash(picked);
+        });
+      return;
+    }
+    setMarked(new Set());
+    const clipItems: MenuEntry[] = [
+      { id: "cut", label: "Cut", enabled: editable },
+      { id: "copy", label: "Copy" },
+      { id: "paste", label: "Paste", enabled: editable },
+    ];
     const items: MenuEntry[] =
       node.kind === "folder"
         ? [
@@ -173,6 +284,8 @@ export function FileTree({
             { id: "new-folder", label: "New folder", enabled: editable },
             { separator: true },
             { id: "rename", label: "Rename", enabled: editable },
+            { separator: true },
+            ...clipItems,
             { separator: true },
             { id: "reveal", label: "Reveal in Finder" },
             { id: "copy-path", label: "Copy path" },
@@ -188,6 +301,8 @@ export function FileTree({
             { id: "rename", label: "Rename", enabled: editable },
             { id: "duplicate", label: "Duplicate", enabled: editable },
             { separator: true },
+            ...clipItems,
+            { separator: true },
             { id: "reveal", label: "Reveal in Finder" },
             { id: "copy-path", label: "Copy path" },
             { separator: true },
@@ -199,7 +314,10 @@ export function FileTree({
       else if (id === "rename") setEditing(node.path);
       else if (id === "reveal") void anur.call("doc:reveal", { path: node.path, how: "finder" });
       else if (id === "copy-path") void anur.call("clipboard:write", { text: node.path });
-      else if (id === "trash") trash(node);
+      else if (id === "trash") trash([node.path]);
+      else if (id === "cut") copyOut([node.path], "cut");
+      else if (id === "copy") copyOut([node.path], "copy");
+      else if (id === "paste") void paste(intoFor(node.path));
       else if (id === "open-tab") onSelect(node.path, true);
       else if (id === "open-app")
         void anur.call("doc:reveal", { path: node.path, how: "default-app" });
@@ -211,10 +329,13 @@ export function FileTree({
     const items: MenuEntry[] = [
       { id: "new-doc", label: "New doc" },
       { id: "new-folder", label: "New folder" },
+      { separator: true },
+      { id: "paste", label: "Paste" },
     ];
     void anur.call("menu:popup", { items }).then(({ id }) => {
       if (id === "new-doc") void make("doc", "");
       else if (id === "new-folder") void make("folder", "");
+      else if (id === "paste") void paste("");
     });
   };
 
@@ -228,14 +349,19 @@ export function FileTree({
     if (hold.current) clearTimeout(hold.current.timer);
     hold.current = null;
   };
+  /** Files dragged in from Finder or another app, to be copied in. */
+  const fromOutside = (e: DragEvent) =>
+    !dragging.current && editable && e.dataTransfer.types.includes("Files");
   const dragOver = (e: DragEvent, node: TreeNode | null) => {
     const from = dragging.current;
-    if (!from || !e.dataTransfer.types.includes(DRAG_TYPE)) return;
     const into = intoOf(node);
-    if (!dropTarget(from, into)) return;
+    if (from) {
+      if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+      if (!from.every((f) => dropTarget(f, into))) return;
+    } else if (!fromOutside(e)) return;
     e.preventDefault();
     e.stopPropagation();
-    e.dataTransfer.dropEffect = "move";
+    e.dataTransfer.dropEffect = from ? "move" : "copy";
     setDropOn(into);
     // Holding over a closed folder opens it, so a drop can go deeper.
     if (node?.kind === "folder" && !open.has(node.path) && hold.current?.path !== node.path) {
@@ -250,17 +376,33 @@ export function FileTree({
   };
   const drop = (e: DragEvent, node: TreeNode | null) => {
     const from = dragging.current;
-    if (!from) return;
+    const into = intoOf(node);
+    if (!from) {
+      if (!fromOutside(e) || !actions) return;
+      e.preventDefault();
+      e.stopPropagation();
+      endDrag();
+      const sources = [...e.dataTransfer.files].map((f) => anur.pathOf(f)).filter(Boolean);
+      if (sources.length === 0) return;
+      void actions.importFiles(sources, into).then((made) => {
+        if (made?.length) landed(into, made);
+      });
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     endDrag();
-    const into = intoOf(node);
-    const to = dropTarget(from, into);
-    if (!to || !actions) return;
-    void actions.move(from, to).then((ok) => {
-      if (!ok) return;
-      if (into) openTo(into, true);
-      setFocused(to);
+    const moves = from.flatMap((f) => {
+      const to = dropTarget(f, into);
+      return to ? [{ from: f, to }] : [];
+    });
+    if (moves.length === 0 || !actions) return;
+    void actions.move(moves).then((ok) => {
+      if (ok)
+        landed(
+          into,
+          moves.map((m) => m.to),
+        );
     });
   };
 
@@ -283,6 +425,14 @@ export function FileTree({
     const node = rows[at];
     const go = (n: TreeNode | undefined) => {
       if (!n) return;
+      if (e.shiftKey && focused) {
+        setMarked((m) => new Set([...(m.size ? m : [focused]), n.path]));
+        setFocused(n.path);
+        scrollPending.current = true;
+        return;
+      }
+      setMarked(new Set());
+      anchor.current = n.path;
       setFocused(n.path);
       scrollPending.current = true;
       if (n.kind === "doc" || (n.kind === "file" && isViewable(n.path))) onSelect(n.path, false);
@@ -299,8 +449,13 @@ export function FileTree({
         if (parent) setFocused(parent);
       }
     } else if (e.key === "Enter" && node && editable) setEditing(node.path);
-    else if (e.key === "Backspace" && e.metaKey && node && editable) trash(node);
-    else return;
+    else if (e.key === "Backspace" && e.metaKey && node && editable) trash(pickedWith(node.path));
+    else if (e.key === "Escape" && (marked.size > 0 || clip?.mode === "cut")) {
+      setMarked(new Set());
+      if (clip?.mode === "cut") setClip(null);
+    } else if (e.key === "a" && e.metaKey) {
+      setMarked(new Set(rows.map((n) => n.path)));
+    } else return;
     e.preventDefault();
   };
 
@@ -312,6 +467,8 @@ export function FileTree({
       n.kind === "file" ? "file" : "",
       isDoc && selected === n.path ? "selected" : "",
       focused === n.path ? "focused" : "",
+      marked.size > 1 && marked.has(n.path) ? "marked" : "",
+      clip?.mode === "cut" && clip.paths.includes(n.path) ? "cut" : "",
       !isDoc && dropOn === n.path ? "drop-into" : "",
     ]
       .filter(Boolean)
@@ -357,7 +514,7 @@ export function FileTree({
         title={inCloud.has(n.path) ? `${n.path} (in iCloud; downloads when opened)` : n.path}
         draggable={editable}
         onDragStart={(e) => {
-          dragging.current = n.path;
+          dragging.current = pickedWith(n.path);
           e.dataTransfer.setData(DRAG_TYPE, n.path);
           e.dataTransfer.setData("text/plain", n.path);
           e.dataTransfer.effectAllowed = "move";
@@ -375,9 +532,11 @@ export function FileTree({
           rowMenu(n);
         }}
         onClick={(e) => {
-          setFocused(n.path);
-          if (isDoc) openNode(n, e.metaKey || e.ctrlKey);
-          else toggle(n.path);
+          click(e, n);
+        }}
+        onAuxClick={(e) => {
+          // A middle click opens a doc in a new tab, as in a browser.
+          if (e.button === 1 && isDoc) openNode(n, true);
         }}
       >
         {caret}
@@ -391,6 +550,58 @@ export function FileTree({
       </button>
     );
   };
+
+  /** ⌘-click picks a row too, ⇧-click a run of rows; a plain click opens it. */
+  const click = (e: MouseEvent, n: TreeNode) => {
+    if (e.metaKey || e.ctrlKey) {
+      setMarked((m) => {
+        const next = new Set(m.size ? m : focused ? [focused] : []);
+        if (next.has(n.path)) next.delete(n.path);
+        else next.add(n.path);
+        return next;
+      });
+      anchor.current = n.path;
+      setFocused(n.path);
+      return;
+    }
+    if (e.shiftKey) {
+      const rows = visible().map((r) => r.path);
+      setMarked(new Set(rangeBetween(rows, anchor.current ?? focused ?? n.path, n.path)));
+      setFocused(n.path);
+      return;
+    }
+    setMarked(new Set());
+    anchor.current = n.path;
+    setFocused(n.path);
+    if (n.kind === "folder") toggle(n.path);
+    else openNode(n, false);
+  };
+
+  // ⌘C, ⌘X and ⌘V, from the keys or the Edit menu, while the tree has focus.
+  const clipNow = useRef({ copyOut, paste, pickedWith, intoFor, focused, editing });
+  clipNow.current = { copyOut, paste, pickedWith, intoFor, focused, editing };
+  useEffect(() => {
+    const on = (kind: "copy" | "cut" | "paste") => (e: ClipboardEvent) => {
+      const now = clipNow.current;
+      const el = document.activeElement;
+      if (!list.current || !el || !list.current.contains(el) || el.tagName === "INPUT") return;
+      if (now.editing) return;
+      e.preventDefault();
+      if (kind === "paste") void now.paste(now.intoFor(now.focused));
+      else now.copyOut(now.pickedWith(now.focused), kind);
+    };
+    const copy = on("copy");
+    const cut = on("cut");
+    const pasteOn = on("paste");
+    document.addEventListener("copy", copy);
+    document.addEventListener("cut", cut);
+    document.addEventListener("paste", pasteOn);
+    return () => {
+      document.removeEventListener("copy", copy);
+      document.removeEventListener("cut", cut);
+      document.removeEventListener("paste", pasteOn);
+    };
+  }, []);
 
   const render = (nodes: TreeNode[], depth: number) =>
     nodes.map((n) =>

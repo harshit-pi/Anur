@@ -299,43 +299,66 @@ export function App() {
         setFolder(r.folder);
         return r.path;
       },
-      move: (from, to) =>
-        touching([from], async () => {
-          const r = await anur.call("file:move", { from, to });
-          if (r.kind === "failed") {
-            tell(r.reason);
-            return false;
-          }
-          setTabs((t) => renamePaths(t, r.docs));
-          setFolder(r.folder);
-          void offerLinks(r.docs);
-          return true;
-        }),
+      move: (moves) =>
+        touching(
+          moves.map((m) => m.from),
+          async () => {
+            const done: { from: string; to: string }[] = [];
+            let ok = true;
+            for (const { from, to } of moves) {
+              const r = await anur.call("file:move", { from, to });
+              if (r.kind === "failed") {
+                tell(r.reason);
+                ok = false;
+                break;
+              }
+              done.push(...r.docs);
+              setTabs((t) => renamePaths(t, r.docs));
+              setFolder(r.folder);
+            }
+            void offerLinks(done);
+            return ok;
+          },
+        ),
       duplicate: async (path) => {
         const r = await anur.call("file:duplicate", { path });
         if (r.kind === "failed") tell(r.reason);
         else setFolder(r.folder);
       },
-      trash: async (path, isFolder, docs) => {
-        const what = path.split("/").pop() ?? path;
-        // A file goes quietly, since Finder can put it back; a folder with files in it asks first.
-        if (
-          isFolder &&
-          docs > 0 &&
-          !window.confirm(
-            `Move “${what}” and the ${String(docs)} ${docs === 1 ? "file" : "files"} in it to the Trash?`,
-          )
-        )
-          return;
-        await touching([path], async () => {
-          const r = await anur.call("file:trash", { path });
-          if (r.kind === "failed") {
-            tell(r.reason);
-            return;
-          }
-          setTabs((t) => prune(t, r.folder.docs));
-          setFolder(r.folder);
-        });
+      trash: async (items) => {
+        const first = items[0];
+        if (!first) return;
+        const what = first.path.split("/").pop() ?? first.path;
+        const files = items.reduce((n, i) => n + i.docs, 0);
+        // A file goes quietly, since Finder can put it back; folders with files in them ask first.
+        const question =
+          items.length > 1
+            ? `Move these ${String(items.length)} items to the Trash?`
+            : `Move “${what}” and the ${String(files)} ${files === 1 ? "file" : "files"} in it to the Trash?`;
+        if (items.some((i) => i.isFolder && i.docs > 0) && !window.confirm(question)) return;
+        await touching(
+          items.map((i) => i.path),
+          async () => {
+            for (const { path } of items) {
+              const r = await anur.call("file:trash", { path });
+              if (r.kind === "failed") {
+                tell(r.reason);
+                return;
+              }
+              setTabs((t) => prune(t, r.folder.docs));
+              setFolder(r.folder);
+            }
+          },
+        );
+      },
+      importFiles: async (sources, into) => {
+        const r = await anur.call("file:import", { sources, into });
+        if (r.kind === "failed") {
+          tell(r.reason);
+          return null;
+        }
+        setFolder(r.folder);
+        return r.paths;
       },
     };
   }, [folder, openDoc, tell, touching, offerLinks]);

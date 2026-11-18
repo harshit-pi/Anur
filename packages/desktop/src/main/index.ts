@@ -8,6 +8,7 @@ import { AGENTS, type AgentId } from "../shared/agents.ts";
 import type { SessionOption } from "../agent/protocol.ts";
 import {
   BrowserWindow,
+  ClipboardItem,
   Menu,
   clipboard as systemClipboard,
   type MenuItemConstructorOptions,
@@ -38,7 +39,9 @@ import { readImage, saveImage } from "./folder/images.ts";
 import { MapLayouts } from "./folder/map-layout.ts";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
 import { createDoc, searchFolder } from "./folder/search.ts";
-import { createFolder, duplicateDoc, moveEntry, trashEntry } from "./folder/file-ops.ts";
+import { copyInto, createFolder, duplicateDoc, moveEntry, trashEntry } from "./folder/file-ops.ts";
+import { FILES_TYPE, filePathsPlist, readFilePaths } from "./folder/finder-clipboard.ts";
+import { FolderWatch } from "./folder/folder-watch.ts";
 import { planLinkUpdates } from "./folder/link-updates.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
@@ -316,6 +319,18 @@ const docWatcher = new DocWatcher((windowId, change) => {
   if (win) send(win, "doc:changed", change);
 });
 
+/** Files added, moved or removed outside Anur, as in Finder: the files panel catches up. */
+const folderWatch = new FolderWatch((windowId) => {
+  void (async () => {
+    const before = folders.current(windowId);
+    const now = await folders.refresh(windowId);
+    const win = windows.get(windowId);
+    if (!before || !now || !win) return;
+    const lists = (f: FolderState) => JSON.stringify([f.docs, f.folders, f.files, f.offloaded]);
+    if (lists(before) !== lists(now)) send(win, "folder:changed", now);
+  })();
+});
+
 /** The window's open doc is moving or going: stop watching it, so it isn't reported gone. */
 function letGoOf(windowId: number, docs: readonly string[]) {
   const shown = shownDoc.get(windowId);
@@ -335,6 +350,7 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
   if (folders.current(win.webContents.id)) target = createWindow();
   const outcome = await folders.open(target.webContents.id, folder);
   if (outcome.kind === "opened") {
+    folderWatch.start(target.webContents.id, outcome.folder.path);
     target.setTitle(outcome.folder.name);
     target.setRepresentedFilename(outcome.folder.path);
     send(target, "folder:changed", outcome.folder);
@@ -682,6 +698,36 @@ const handlers: { [C in Channel]: Handler<C> } = {
     await shell.openExternal(url);
     return { ok: true };
   },
+  "clipboard:read-files": async () => {
+    // Finder puts each copied file on the clipboard as an item of its own.
+    const paths = new Set<string>();
+    for (const item of await systemClipboard.read()) {
+      const text = async (type: string) =>
+        item.types.includes(type) ? ((await item.getType(type)) as Blob).text() : "";
+      for (const p of readFilePaths(await text(FILES_TYPE), await text("text/uri-list")))
+        paths.add(p);
+    }
+    return { paths: [...paths] };
+  },
+  "clipboard:write-files": async ({ paths }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { ok: false };
+    const known = new Set([...folder.docs, ...folder.files, ...folder.folders]);
+    const full = paths.filter((p) => known.has(p)).map((p) => path.join(folder.path, p));
+    if (full.length === 0) return { ok: false };
+    await systemClipboard.write([
+      new ClipboardItem({ [FILES_TYPE]: filePathsPlist(full), "text/plain": full.join("\n") }),
+    ]);
+    return { ok: true };
+  },
+  "file:import": async ({ sources, into }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    const copied = await copyInto(folder, sources, into);
+    if (copied.kind === "failed") return copied;
+    const now = await folders.refresh(webContentsId);
+    return now ? { ...copied, folder: now } : { kind: "failed", reason: "The folder closed." };
+  },
   "clipboard:write": async ({ text }) => {
     await systemClipboard.writeText(text);
     return { ok: true };
@@ -954,6 +1000,7 @@ function createWindow(): BrowserWindow {
     shownDoc.delete(id);
     windows.delete(id);
     docWatcher.stop(id);
+    folderWatch.stop(id);
     senders.remove(id);
     void folders.close(id);
   });
