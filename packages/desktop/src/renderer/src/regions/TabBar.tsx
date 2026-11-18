@@ -64,6 +64,8 @@ export function TabBar({
   onSelectTab,
   onNewTab,
   onListTabs,
+  view,
+  onView,
 }: {
   open: Record<"left" | "right", boolean>;
   onToggle: (side: "left" | "right") => void;
@@ -72,6 +74,9 @@ export function TabBar({
   onSelectTab: (id: string) => void;
   onNewTab: () => void;
   onListTabs: () => void;
+  /** Page or Map; null while no doc is open. */
+  view: "page" | "map" | null;
+  onView: (view: "page" | "map") => void;
 }) {
   const active = tabs.active;
   // ⌄ shows once the tabs no longer fit.
@@ -356,18 +361,22 @@ export function TabBar({
         ) : null}
       </div>
       <div className="segmented" role="radiogroup" aria-label="View">
-        <button
-          type="button"
-          role="radio"
-          aria-checked="true"
-          className="segment selected"
-          disabled
-        >
-          Page
-        </button>
-        <button type="button" role="radio" aria-checked="false" className="segment" disabled>
-          Map
-        </button>
+        {(["page", "map"] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={view === v}
+            className={view === v ? "segment selected" : "segment"}
+            disabled={view === null}
+            title={v === "page" ? "Page (⇧⌘M)" : "Map (⇧⌘M)"}
+            onClick={() => {
+              onView(v);
+            }}
+          >
+            {v === "page" ? "Page" : "Map"}
+          </button>
+        ))}
       </div>
       {/* Ask, the whole-doc thread, comes back here with task 4.8. */}
       <button

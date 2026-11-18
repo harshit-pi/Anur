@@ -166,3 +166,4 @@ export {
   type BundlePart,
   type BundleRule,
 } from "./context/index.ts";
+export { MapLayoutFile, boxSize, mapLayout, type MapNode, type Placed } from "./map/index.ts";
