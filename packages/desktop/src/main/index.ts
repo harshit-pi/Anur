@@ -925,6 +925,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
         source: c.source,
         label: c.label,
         trust: c.trust,
+        local: c.local,
       })),
     };
   },

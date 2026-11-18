@@ -138,3 +138,9 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - The rest of the wait before a first action, one to two seconds, is the model's, as in Claude Code.
 - A running turn shows "Thinking…" for ten seconds, then how long it has been working ("Working for 4 min 12 s…"), so a long build doesn't read as stuck.
 - A thread's mode and model pickers show their values, as a new thread's do.
+
+## Inputs: reads only, and the machine's own stays on it
+
+- Only reads become inputs: files, pages, searches, other MCP servers' answers, and shell commands made only of reading programs (cat, ls, rg, git log…) with nothing written to a file. Commands that write, run, build or test are the agent's own work, and reading back a file the thread wrote brings nothing in.
+- What came from the person's machine outside the folder (a file, a command's output, another MCP server's answer, the chat behind `/anur doc`) keeps its content in Anur's local app data, never `.anur/`, which is shared and often committed. The input line keeps its label and hash, marked `local`; another person's agent sees it exists and reads it again itself. Think marks it "kept local".
+- Build says first, in one line, what it will build and what it relies on, so the person can stop it early. On a section with several steps it builds the first that fits one sitting and lists the rest as next steps.

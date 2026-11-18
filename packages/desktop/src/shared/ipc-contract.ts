@@ -841,6 +841,8 @@ export const ipcContract = {
           source: z.string(),
           label: z.string(),
           trust: z.enum(["trusted", "untrusted"]),
+          /** Its content stays on the device that read it, out of `.anur/`. */
+          local: z.boolean(),
         }),
       ),
     }),
