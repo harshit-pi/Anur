@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rename, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { realpathSync } from "node:fs";
@@ -36,6 +36,18 @@ describe("docs written during a turn", () => {
         threads: ["t1"],
       },
     ]);
+  });
+
+  it("never reports a doc moved or renamed during the turn", async () => {
+    const { folder, seen, w } = await setup();
+    await mkdir(path.join(folder, "Refined"));
+    // Written well before the turn, as an old doc is.
+    const old = new Date(Date.now() - 60 * 60 * 1000);
+    await utimes(path.join(folder, "plan.md"), old, old);
+    await w.start("t1");
+    await rename(path.join(folder, "plan.md"), path.join(folder, "Refined", "plan.md"));
+    await wait(400);
+    expect(seen).toEqual([]);
   });
 
   it("never reports Anur's own save", async () => {
