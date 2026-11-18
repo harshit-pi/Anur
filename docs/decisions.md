@@ -259,3 +259,10 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - A group still above twelve splits by the word most of its parts share, then the next, plural or not; parts sharing no word go to "Other".
 - Groups are a view: a part's ID and path never change with them. The model's proposals (20.6) may rename or merge them, accepted by a person.
 - On the team's largest repo, 103 parts become eight groups; its biggest, services (37), opens to seven, of which "Other" still holds 13 for the model to name.
+
+## The system tab (group 20)
+
+- The system shows in a tab of its own, with the fixed path `anur:system`, so tabs, back and forward work as for docs. It opens from a ribbon button and from ⌘K, both shown only while Engineering is on for the folder.
+- Repos, then groups, then parts, one level per click; a trail goes back. Repos sort by name, ignoring case, with those that have no build file last.
+- Section sources run in a new index process, a `utilityProcess` with its own plugin hosts, as Internals §2 says, so a scan never freezes main. A full scan of the team's 16 repos takes about 1.4 s.
+- Still to come: the model's proposed names and merges, with Accept and Rename (20.6, 20.6a), "unreviewed" on new parts (20.6b), and a rescan by watcher instead of the Rescan button (20.8).

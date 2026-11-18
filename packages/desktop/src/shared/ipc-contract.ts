@@ -488,6 +488,28 @@ export const ipcContract = {
       ),
     }),
   },
+  /**
+   * Sections from plugins' section sources for this window's folder, read in
+   * the index process: the engineering plugin's repos, groups and parts (group 20).
+   */
+  "system:sections": {
+    request: z.object({}).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("off") }),
+      z.object({
+        kind: z.literal("ok"),
+        sections: z.array(
+          z.object({
+            id: z.string(),
+            path: z.array(z.string()),
+            text: z.string(),
+            parent: z.string().nullable(),
+          }),
+        ),
+      }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
   /** Switch a plugin on or off for this window's folder; new threads pick it up. */
   "plugins:set": {
     request: z.object({ id: z.string().max(100), on: z.boolean() }).strict(),

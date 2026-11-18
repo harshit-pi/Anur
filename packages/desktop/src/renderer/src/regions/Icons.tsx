@@ -44,6 +44,16 @@ export const PluginsIcon = (p: IconProps) => (
   </Svg>
 );
 
+/** Repos as boxes, one holding more: the system map (group 20). */
+export const SystemIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="1.75" y="2.25" width="5" height="4" rx="1" />
+    <rect x="9.25" y="2.25" width="5" height="4" rx="1" />
+    <rect x="1.75" y="9.25" width="12.5" height="4.5" rx="1" />
+    <path d="M4.5 11.5h2M9.5 11.5h2" />
+  </Svg>
+);
+
 /** A gear, as settings look everywhere (Lucide's, drawn on 24 and scaled to 16). */
 export const SettingsIcon = (p: IconProps) => (
   <Svg {...p}>
