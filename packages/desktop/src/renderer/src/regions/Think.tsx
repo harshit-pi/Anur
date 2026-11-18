@@ -409,6 +409,9 @@ function EditCard({
   );
 }
 
+/** Rows dragged from the files panel carry their full paths under this type (see FileTree). */
+const PANEL_PATHS = "application/x-anur-files";
+
 function Composer({
   placeholder,
   busy,
@@ -560,6 +563,19 @@ export function Think({
     };
   }, [newAgent]);
   const [error, setError] = useState<string | null>(null);
+  /** Branch (10.5): the next thread started here continues that thread up to that item. */
+  const [branch, setBranch] = useState<{
+    thread: string;
+    upTo: number;
+    title: string;
+    excerpt: string;
+  } | null>(null);
+  /** A link being typed into the inputs list, while its field is open. */
+  const [linkDraft, setLinkDraft] = useState<string | null>(null);
+  /** Files or links held over the panel, to add as inputs. */
+  const [dropOver, setDropOver] = useState(false);
+  /** Bumped when inputs are added, so the list reads again. */
+  const [inputsTick, setInputsTick] = useState(0);
   const [showText, setShowText] = useState(false);
   /** The edits threads proposed on this doc: each a card, like an option. */
   const [previews, setPreviews] = useState<PreviewView[]>([]);
@@ -682,7 +698,7 @@ export function Think({
       current = false;
     };
     // Again when the section changes or a thread's turn adds lines.
-  }, [docPath, sectionKey, threadsSeen]);
+  }, [docPath, sectionKey, threadsSeen, inputsTick]);
   const lastSection = useRef(sectionKey);
   useEffect(() => {
     if (lastSection.current === sectionKey) return;
@@ -705,17 +721,80 @@ export function Think({
         agent: newAgent,
         options,
         ...(purpose ? { purpose } : {}),
+        ...(branch && !purpose ? { branch: { thread: branch.thread, upTo: branch.upTo } } : {}),
       });
       if (r.kind === "refused") {
         setError(r.reason);
         return false;
       }
+      setBranch(null);
       setThreads((ts) => [...ts.filter((t) => t.id !== r.thread.id), r.thread]);
       setOpen(r.thread.id);
       return true;
     },
-    [docPath, section, docText, setThreads, newAgent, newChoices],
+    [docPath, section, docText, setThreads, newAgent, newChoices, branch],
   );
+
+  /** Add files or links as inputs: to the open thread, else to the section (10.4). */
+  const addInputs = useCallback(
+    async (files: string[], links: string[], toThread: string | null) => {
+      if (!docPath || !section || (files.length === 0 && links.length === 0)) return;
+      const r = await anur.call("inputs:add", {
+        path: docPath,
+        text: docText(),
+        section: { index: section.index, path: section.path },
+        thread: toThread,
+        files,
+        links,
+      });
+      if ("error" in r) setError(r.error);
+      else if (r.added === 0) setError("Nothing there could be added as an input.");
+      else setInputsTick((n) => n + 1);
+    },
+    [docPath, section, docText],
+  );
+  /** Dropping files, rows from the files panel, or links on Think adds them as inputs. */
+  const dropProps = (toThread: string | null) =>
+    writable
+      ? {
+          onDragOver: (e: React.DragEvent) => {
+            const t = e.dataTransfer.types;
+            if (!t.includes("Files") && !t.includes(PANEL_PATHS) && !t.includes("text/uri-list"))
+              return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setDropOver(true);
+          },
+          onDragLeave: (e: React.DragEvent) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropOver(false);
+          },
+          onDrop: (e: React.DragEvent) => {
+            setDropOver(false);
+            const dt = e.dataTransfer;
+            let files = [...dt.files].map((f) => anur.pathOf(f)).filter(Boolean);
+            if (files.length === 0 && dt.types.includes(PANEL_PATHS)) {
+              try {
+                const listed: unknown = JSON.parse(dt.getData(PANEL_PATHS));
+                if (Array.isArray(listed))
+                  files = listed.filter((p): p is string => typeof p === "string");
+              } catch {
+                // Not a list of paths.
+              }
+            }
+            const links =
+              files.length > 0
+                ? []
+                : dt
+                    .getData("text/uri-list")
+                    .split(/\r?\n/)
+                    .map((l) => l.trim())
+                    .filter((l) => /^https?:\/\//i.test(l));
+            if (files.length === 0 && links.length === 0) return;
+            e.preventDefault();
+            void addInputs(files, links, toThread);
+          },
+        }
+      : {};
 
   /** A picked option goes into the page, where ⌘Z takes it back; the thread remembers the pick. */
   const useOption = (
@@ -775,7 +854,7 @@ export function Think({
   if (thread) {
     const asks = prompts.filter((p) => p.thread === thread.id);
     return (
-      <div className="think">
+      <div className={`think${dropOver ? " think-drop" : ""}`} {...dropProps(thread.id)}>
         <button
           type="button"
           className="think-back"
@@ -785,6 +864,20 @@ export function Think({
         >
           ← All threads
         </button>
+        {thread.branchedFrom ? (
+          <p className="quiet think-branched">
+            Branched from{" "}
+            <button
+              type="button"
+              className="think-link"
+              onClick={() => {
+                if (thread.branchedFrom) setOpen(thread.branchedFrom.thread);
+              }}
+            >
+              {thread.branchedFrom.title}
+            </button>
+          </p>
+        ) : null}
         {thread.path ? (
           <button
             type="button"
@@ -860,8 +953,35 @@ export function Think({
                 running={thread.busy && i + steps.length === thread.items.length}
               />
             ) : item.kind === "message" ? (
-              <div key={i} className={`think-message ${item.role}`}>
-                {item.role === "agent" ? <Markdown text={item.text} /> : item.text}
+              <div key={i} className={`think-message-wrap ${item.role}`}>
+                <div className={`think-message ${item.role}`}>
+                  {item.role === "agent" ? <Markdown text={item.text} /> : item.text}
+                </div>
+                {writable && !thread.busy && item.role === "agent" ? (
+                  <button
+                    type="button"
+                    className="think-branch"
+                    title="A new thread that knows this chat up to this reply, and nothing after it"
+                    onClick={() => {
+                      setBranch({
+                        thread: thread.id,
+                        upTo: i,
+                        title: thread.title,
+                        excerpt: item.text.replace(/\s+/g, " ").slice(0, 60),
+                      });
+                      const at = tree.sections.findIndex(
+                        (x) => thread.path && samePath(thread.path, x.path),
+                      );
+                      if (at >= 0) onJump(at);
+                      setOpen(null);
+                      requestAnimationFrame(() => {
+                        document.querySelector<HTMLTextAreaElement>(".think .think-input")?.focus();
+                      });
+                    }}
+                  >
+                    Branch from here
+                  </button>
+                ) : null}
               </div>
             ) : item.kind === "tool" ? (
               <div key={i} className={`think-tool ${item.status}`} title={item.title}>
@@ -1245,7 +1365,7 @@ export function Think({
 
   const body = bodyOf(docText(), section);
   return (
-    <div className="think">
+    <div className={`think${dropOver ? " think-drop" : ""}`} {...dropProps(null)}>
       <h2
         className="think-section"
         // The heading is the section's name: edit it here as on the page.
@@ -1384,11 +1504,12 @@ export function Think({
             }}
           />
         ) : null}
-        {inputs.length > 0 ? (
+        {inputs.length > 0 || writable ? (
           <details className="think-inputs">
             <summary className="think-subhead">Inputs ({String(inputs.length)})</summary>
             <p className="quiet think-inputs-note">
-              Earlier threads picked these up; new threads here and below can read them.
+              What threads here work from: what earlier threads picked up, and what you add. New
+              threads here and below read them; threads already here get what you add next turn.
             </p>
             <ul>
               {inputs.map((i) => (
@@ -1428,6 +1549,59 @@ export function Think({
                 </li>
               ))}
             </ul>
+            {writable ? (
+              <div className="think-input-add">
+                <button
+                  type="button"
+                  className="think-more"
+                  onClick={() => {
+                    void anur.call("inputs:pick-files", {}).then(({ files }) => {
+                      void addInputs(files, [], null);
+                    });
+                  }}
+                >
+                  Add a file…
+                </button>
+                {linkDraft === null ? (
+                  <button
+                    type="button"
+                    className="think-more"
+                    onClick={() => {
+                      setLinkDraft("");
+                    }}
+                  >
+                    Add a link
+                  </button>
+                ) : (
+                  <form
+                    className="think-input-link"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const link = linkDraft.trim();
+                      setLinkDraft(null);
+                      if (link) void addInputs([], [link], null);
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      aria-label="Link to add"
+                      placeholder="https://…"
+                      value={linkDraft}
+                      onChange={(e) => {
+                        setLinkDraft(e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") setLinkDraft(null);
+                      }}
+                    />
+                    <button type="submit" className="think-more">
+                      Add
+                    </button>
+                  </form>
+                )}
+                <span className="quiet">or drop files and links on this panel</span>
+              </div>
+            ) : null}
           </details>
         ) : null}
       </SectionFooter>
@@ -1438,6 +1612,24 @@ export function Think({
       )}
       {notConnected(newAgent)}
       {error ? <p className="think-error">{error}</p> : null}
+      {branch ? (
+        <div className="think-branching" role="status">
+          <span>
+            Branching from <strong>{branch.title}</strong> after “{branch.excerpt}
+            {branch.excerpt.length >= 60 ? "…" : ""}”. The new thread knows that chat up to there,
+            and nothing after.
+          </span>
+          <button
+            type="button"
+            className="think-more"
+            onClick={() => {
+              setBranch(null);
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
       {signedOut(newAgent) ?? (
         <Composer
           placeholder={
@@ -1447,7 +1639,7 @@ export function Think({
                 ? "What should we do with this doc?"
                 : "What should we do with this section?"
           }
-          sendLabel="Start thread"
+          sendLabel={branch ? "Start branch" : "Start thread"}
           pickers={
             <>
               <AgentPicker value={newAgent} disabled={!writable} onChange={setNewAgent} />

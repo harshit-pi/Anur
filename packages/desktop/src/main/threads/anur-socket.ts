@@ -10,7 +10,9 @@ import path from "node:path";
  * request without a known token is refused.
  */
 
-export type ToolAnswer = { text: string } | { error: string };
+/** A tool's answer; an image rides along for inputs a person added (10.3). */
+export type ToolAnswer =
+  { text: string; image?: { data: string; mimeType: string } } | { error: string };
 export type ToolHandler = (tool: string, args: unknown) => Promise<ToolAnswer>;
 
 export class AnurSocket {

@@ -3435,3 +3435,84 @@ body.resizing * {
   stroke-width: 2.5;
   stroke-linecap: round;
 }
+
+/* Branch from a reply (10.5): a small link under it, shown on hover. */
+.think-message-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.think-message-wrap.person {
+  align-items: flex-end;
+}
+
+.think-branch {
+  align-self: flex-start;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--slate);
+  font: 12px var(--font-ui);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.think-message-wrap:hover .think-branch,
+.think-branch:focus-visible {
+  opacity: 1;
+}
+
+.think-branch:hover {
+  color: var(--blue);
+}
+
+.think-branched {
+  margin: 4px 0 8px;
+  font-size: 12.5px;
+}
+
+.think-branching {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--blue-wash);
+  color: var(--ink2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* Inputs a person adds (10.4). */
+.think-input-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+
+.think-input-link {
+  display: flex;
+  gap: 6px;
+}
+
+.think-input-link input {
+  width: 200px;
+  padding: 3px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: 12.5px var(--font-ui);
+}
+
+.think.think-drop {
+  outline: 2px dashed var(--blue);
+  outline-offset: -6px;
+  border-radius: 10px;
+}

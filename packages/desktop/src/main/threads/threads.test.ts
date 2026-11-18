@@ -447,3 +447,107 @@ describe("Threads", () => {
     });
   });
 });
+
+describe("inputs a person adds, and Branch (group 10)", () => {
+  const budget = { index: 2, path: ["Plan", "Budget"] };
+  const title = { index: 0, path: ["Plan"] };
+
+  it("adds files and links to a section: outside files copied in, folder files as pointers", async () => {
+    const t = await setup();
+    await writeFile(path.join(t.folder, "Plan.md"), DOC);
+    await writeFile(path.join(t.folder, "notes.md"), "# Notes\n");
+    const outside = await mkdtemp(path.join(tmpdir(), "anur-outside-"));
+    await writeFile(path.join(outside, "mock.png"), "png-bytes");
+    const r = await t.threads.addInputs(
+      "Plan.md",
+      DOC,
+      title.index,
+      title.path,
+      null,
+      [path.join(outside, "mock.png"), path.join(t.folder, "notes.md")],
+      ["https://example.com/spec", "not a link"],
+    );
+    expect(r).toEqual({ added: 3 });
+    expect(await readFile(path.join(t.folder, "attachments", "mock.png"), "utf8")).toBe(
+      "png-bytes",
+    );
+    // On the title, so a thread on any section below receives them.
+    const below = await t.threads.listInputs("Plan.md", DOC, budget.index, budget.path);
+    expect(below.map((c) => [c.source, c.label, c.trust])).toEqual([
+      ["attachment", "attachments/mock.png", "trusted"],
+      ["file", "notes.md", "trusted"],
+      ["link", "example.com/spec", "untrusted"],
+    ]);
+    // Removed: it no longer reaches new threads.
+    const link = below.find((c) => c.source === "link");
+    if (!link) throw new Error("no link");
+    await t.threads.removeInput("Plan.md", DOC, link.thread, link.id);
+    expect(
+      (await t.threads.listInputs("Plan.md", DOC, budget.index, budget.path)).map((c) => c.source),
+    ).toEqual(["attachment", "file"]);
+  });
+
+  it("reaches a thread on the section, named in its bundle, but not a sibling section", async () => {
+    const t = await setup();
+    await writeFile(path.join(t.folder, "Plan.md"), DOC);
+    await writeFile(path.join(t.folder, "notes.md"), "# Notes\n");
+    await t.threads.addInputs(
+      "Plan.md",
+      DOC,
+      risks.index,
+      risks.path,
+      null,
+      [path.join(t.folder, "notes.md")],
+      [],
+    );
+    expect(await t.threads.listInputs("Plan.md", DOC, budget.index, budget.path)).toEqual([]);
+    const s = await t.threads.start("Plan.md", DOC, risks, "What could go wrong?");
+    if (s.kind !== "started") throw new Error(s.reason);
+    const prompt = t.sent.filter((m) => m.type === "prompt").at(-1);
+    expect(prompt?.type === "prompt" ? prompt.text : "").toContain("notes.md");
+  });
+
+  it("branches: the new thread's agent gets the chat up to the message, and nothing after", async () => {
+    const t = await setup();
+    await writeFile(path.join(t.folder, "Plan.md"), DOC);
+    const a = await t.threads.start("Plan.md", DOC, risks, "Remember PELICAN.");
+    if (a.kind !== "started") throw new Error(a.reason);
+    await t.reply(a.thread.id, "OK, PELICAN.");
+    const send = await t.threads.send(
+      a.thread.id,
+      "Plan.md",
+      DOC,
+      "Now forget it; the word is OTTER.",
+    );
+    expect(send.kind).toBe("sent");
+    await t.reply(a.thread.id, "OK, OTTER.");
+    const items = (await t.threads.list("Plan.md", DOC)).find((x) => x.id === a.thread.id)?.items;
+    const upTo = items?.findIndex((i) => i.kind === "message" && i.text === "OK, PELICAN.") ?? -1;
+    expect(upTo).toBeGreaterThan(0);
+    const b = await t.threads.start(
+      "Plan.md",
+      DOC,
+      risks,
+      "Which word?",
+      undefined,
+      [],
+      undefined,
+      {
+        thread: a.thread.id,
+        upTo,
+      },
+    );
+    if (b.kind !== "started") throw new Error(b.reason);
+    const prompt = t.sent.filter((m) => m.type === "prompt").at(-1);
+    const text = prompt?.type === "prompt" ? prompt.text : "";
+    expect(text).toContain("The person: Remember PELICAN.");
+    expect(text).toContain("You: OK, PELICAN.");
+    expect(text).not.toContain("OTTER");
+    expect(text.trim().endsWith("Which word?")).toBe(true);
+    // The thread shows only what the person typed, and where it came from.
+    expect(b.thread.items.find((i) => i.kind === "message")).toMatchObject({ text: "Which word?" });
+    expect(b.thread.branchedFrom).toEqual({ thread: a.thread.id, title: "Remember PELICAN." });
+    // A new session: the old thread's isn't resumed.
+    expect(prompt?.type === "prompt" ? prompt.spec.resume : "x").toBe(null);
+  });
+});

@@ -39,7 +39,7 @@ async function isFile(full: string): Promise<boolean> {
 }
 
 /** Obsidian's setting for where new attachments go, if the folder has one. */
-async function attachmentFolder(root: string): Promise<string | null> {
+export async function attachmentFolder(root: string): Promise<string | null> {
   try {
     const raw = JSON.parse(await readFile(path.join(root, ".obsidian", "app.json"), "utf8")) as {
       attachmentFolderPath?: unknown;
