@@ -123,6 +123,27 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     /** The explored option these are narrower choices within; null for a first set. */
     within: z.string().nullable(),
   }),
+  /** A check of the section (15.5): each claim, its verdict and source. */
+  z.object({
+    kind: z.literal("check"),
+    turn: z.string(),
+    claims: z.array(
+      z.object({
+        claim: z.string(),
+        verdict: z.enum(["holds", "wrong", "unsupported", "missing"]),
+        source: z.string(),
+        note: z.string(),
+      }),
+    ),
+    corrected: z.boolean(),
+  }),
+  /** A doc the agent made (15.6), kept in the folder; `undoable` while Undo can remove it. */
+  z.object({
+    kind: z.literal("created"),
+    id: z.string(),
+    doc: z.string(),
+    undoable: z.boolean(),
+  }),
   /** An edit used as it landed (the setting); `undoable` while its Undo can still restore it. */
   z.object({
     kind: z.literal("auto-used"),
@@ -184,6 +205,8 @@ export const ThreadView = z.object({
       window: z.int().positive().nullable(),
     })
     .nullable(),
+  /** An action thread (group 15), or null for thinking. */
+  purpose: z.enum(["build", "check"]).nullable(),
   agent: AgentIdSchema,
 });
 export type ThreadView = z.infer<typeof ThreadView>;
@@ -357,6 +380,14 @@ export const ipcContract = {
       })
       .strict(),
     response: z.object({ ok: z.boolean() }),
+  },
+  /** Take back a doc the agent made: removed, while it is as the agent left it. */
+  "thread:undo-created": {
+    request: z.object({ thread: z.string().max(200), id: z.string().max(100) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("undone") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
   },
   /** Take back an edit used as it landed, from its note in the thread. */
   "thread:auto-undo": {
@@ -638,6 +669,8 @@ export const ipcContract = {
         message: z.string().min(1).max(100_000),
         /** The agent to run it on; the default agent when left out. */
         agent: AgentIdSchema.optional(),
+        /** An action (group 15): Anur writes the first message, and the agent plans first. */
+        purpose: z.enum(["build", "check"]).optional(),
         /** Mode and model picked before the first message, set when its session opens. */
         options: z
           .array(z.object({ id: z.string().max(100), value: z.string().max(200) }))
@@ -893,6 +926,8 @@ export const ipcEvents = {
       request: z.string(),
       title: z.string(),
       options: z.array(z.object({ id: z.string(), name: z.string(), kind: z.string() })),
+      /** The agent's plan, when it asks to leave plan mode and carry it out (15.2). */
+      plan: z.string().nullable().optional(),
     }),
   ]),
 } as const;

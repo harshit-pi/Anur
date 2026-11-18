@@ -27,6 +27,8 @@ export const ThreadStartLine = LineEnvelope.extend({
   start: z.enum(["new", "ask", "fresh", "branch"]),
   /** For a branch: the thread and line it continues from. */
   branchedFrom: z.object({ thread: ThreadId, line: z.string() }).nullable(),
+  /** An action thread (group 15): build the section, or check it; absent for thinking. */
+  purpose: z.enum(["build", "check"]).optional(),
 });
 
 /** An agent session this thread runs in; a new line each time one starts, resumes or is rebuilt. */
@@ -167,6 +169,29 @@ export const RenamedLine = LineEnvelope.extend({
   by: z.enum(["person", "agent"]).optional(),
 });
 
+/** A check of the section (15.5): each claim, what the agent found, and where. */
+export const CheckLine = LineEnvelope.extend({
+  kind: z.literal("check"),
+  turn: z.string().min(1),
+  claims: z.array(
+    z.object({
+      claim: z.string(),
+      verdict: z.enum(["holds", "wrong", "unsupported", "missing"]),
+      source: z.string(),
+      note: z.string(),
+    }),
+  ),
+  /** Whether it proposed corrected text, as the thread's edit. */
+  corrected: z.boolean(),
+});
+
+/** A doc an agent made (15.6): kept in the folder; `undo` restores while the app runs. */
+export const CreatedLine = LineEnvelope.extend({
+  kind: z.literal("created"),
+  doc: z.string(),
+  undo: z.string().nullable(),
+});
+
 /** The person chose to explore an option before picking: the thread digs into it. */
 export const OptionExploredLine = LineEnvelope.extend({
   kind: z.literal("option-explored"),
@@ -188,6 +213,8 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   AutoUsedLine,
   AutoUndoneLine,
   RenamedLine,
+  CheckLine,
+  CreatedLine,
 ]);
 export type KnownThreadLine = z.infer<typeof KnownThreadLine>;
 
@@ -206,6 +233,8 @@ const KNOWN_KINDS = new Set([
   "auto-used",
   "auto-undone",
   "renamed",
+  "check",
+  "created",
 ]);
 
 /** A kind added by a later version of format 1; kept as written. */

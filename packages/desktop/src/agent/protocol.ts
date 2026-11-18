@@ -81,6 +81,8 @@ export type ToMain =
       request: string;
       title: string;
       options: { id: string; name: string; kind: string }[];
+      /** The plan the agent asks to carry out, when it leaves its plan mode (15.2). */
+      plan?: string | null;
     }
   | {
       type: "turn-end";

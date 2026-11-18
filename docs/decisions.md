@@ -114,3 +114,12 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - A thread names itself after its first reply (`anur_name_thread`, two to five words); a name the person gives always wins.
 - A section's threads group by what they need: Needs you (options to pick, an edit to use, a question waiting), Running, then Done, folded. Other sections' threads fold under "Other threads in this doc", by section. Map boxes and that fold show an amber dot when something needs you.
 - A new `.anur/` is committed with git by default; a `.gitignore` of "*" is how a folder opts out.
+
+## Actions: build and check a section (group 15)
+
+- Two actions on any section, under the message box: **Build this section** and **Check this section**. Each is a thread tagged Build or Check, in the list and on the map; the person's message reads "Build this section", while the agent gets Anur's instruction.
+- Both start in the agent's own plan mode. Claude Code's request to leave plan mode carries the plan, shown as a card: Approve and build, or Keep planning. Nothing changes before the person approves.
+- Build does what the section decides with the agent's own tools. A message to a person is a draft, never sent. The reply lists each change by its path in the folder, then guesses marked as guesses; the section's text gets a "Built" line as a proposed edit.
+- A doc the agent makes is kept in the folder as made, not proposed: there's nothing to compare it to. The thread notes "Made FAQ.md" with Undo, which removes it while it's as the agent left it. Revisions within the turn update it in place. The hook sends a new doc's write to the working copy without copying anything first.
+- Check reads only and reports with `anur_report_check`: each claim holds, is wrong, is unsupported or is missing, with its source and a note, shown as a table. Corrected text becomes a proposed edit.
+- Anur's own tools never ask the person for permission, in any mode, and show by what they do ("Named the thread"), not their ids.

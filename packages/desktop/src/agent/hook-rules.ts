@@ -70,7 +70,7 @@ export const MESSAGES = {
 
 /** The message that sends the agent to a doc's working copy. */
 export const toCopy = (rel: string, copy: string) =>
-  `Anur: in a thread, docs are read and edited in your working copy, never in the folder, so the person can review your edits before they land. Your working copy of ${rel} is at ${copy}. Use that path instead, with the same tool.`;
+  `Anur: in a thread, docs are read and edited in your working copy, never in the folder, so the person can review your edits before they land. Your working copy of ${rel} is at ${copy}. Use that path instead, with the same tool. A new doc written there is added to the folder when your turn ends, so name it by its place in the folder.`;
 
 const refuse = (reason: string): Decision => ({ reason, copy: null });
 

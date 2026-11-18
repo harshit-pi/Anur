@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { SnapshotStore } from "../../vault/snapshot-store.ts";
 import { classify } from "./inputs.ts";
+import { actionPrompt, actionTitle, type Purpose } from "./actions.ts";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
@@ -59,6 +60,8 @@ export { readSection } from "./read-section.ts";
 type Located = { doc: DocId; tree: SectionTree; ids: SectionId[] };
 
 export type ThreadDeps = {
+  /** The folder's files changed: a doc an agent made, or one taken back. */
+  filesChanged?: () => void;
   /** Whether agents' edits are used as they land (Settings, Agent). */
   autoApply?: () => boolean;
   /** Whether a doc is open in a window: its page writes it, never main. */
@@ -119,6 +122,8 @@ type Live = {
   watching: { stop: () => void } | null;
   /** Each copy's text when last merged, so an unchanged one isn't merged again. */
   merged: Map<string, string>;
+  /** Docs this thread made (15.6): each one's undo id, revised in place while it's as made. */
+  created?: Map<string, string>;
   /** The session's context and the model's window, as the agent last reported them (4.9). */
   context?: { used: number; size: number } | null;
   /** The window known when the turn started: this thread's last, or its agent's (4.2). */
@@ -179,6 +184,8 @@ export class Threads {
     return this.snapshotStore;
   }
   private snapshotStore: SnapshotStore | null = null;
+  /** Docs agents made this run, so a note's Undo can remove one while it's unchanged. */
+  private readonly createdUndo = new Map<string, { rel: string; text: string }>();
   /** What each auto-used edit replaced, so its note's Undo can restore it while this app runs. */
   private readonly autoUndo = new Map<string, { rel: string; before: string; after: string }>();
   /** The window each agent last reported, for a new thread's first budget (4.2). */
@@ -406,6 +413,15 @@ export class Threads {
       else if (l.kind === "turn" && l.event === "end" && l.stopReason?.startsWith("error:"))
         items.push({ kind: "error", turn: l.turn, text: l.stopReason.slice(6).trim() });
       else if (l.kind === "state") closed = l.state === "closed";
+      else if (l.kind === "check")
+        items.push({ kind: "check", turn: l.turn, claims: l.claims, corrected: l.corrected });
+      else if (l.kind === "created")
+        items.push({
+          kind: "created",
+          id: l.id,
+          doc: l.doc,
+          undoable: l.undo !== null && this.createdUndo.has(l.undo) && !undone.has(l.id),
+        });
       else if (l.kind === "auto-used")
         items.push({
           kind: "auto-used",
@@ -462,6 +478,7 @@ export class Threads {
       options: this.options.get(thread) ?? [],
       agent: this.agentOf(thread, lines),
       tokens: tokensOf(lines),
+      purpose: start.purpose ?? null,
     };
     return view;
   }
@@ -480,6 +497,7 @@ export class Threads {
     message: string,
     agent?: AgentId,
     options: { id: string; value: string }[] = [],
+    purpose?: Purpose,
   ): Promise<{ kind: "started"; thread: ThreadView } | { kind: "refused"; reason: string }> {
     const at = await this.d.locate(rel, text);
     if (!at)
@@ -496,19 +514,29 @@ export class Threads {
     if (index < 0 || !section)
       return { kind: "refused", reason: "That section changed; try again." };
     const thread = newThreadId();
+    const name = at.tree.sections[index]?.path.at(-1) ?? "this section";
     await this.append(at.doc, thread, {
       kind: "thread",
       thread,
       doc: at.doc,
       section,
-      title: message.split("\n")[0]?.trim().slice(0, 140) ?? "",
+      title: purpose
+        ? actionTitle(purpose, name)
+        : (message.split("\n")[0]?.trim().slice(0, 140) ?? ""),
       start: "new",
       branchedFrom: null,
+      ...(purpose ? { purpose } : {}),
     });
+    // An action: Anur writes what it asks for; the person's words ride along.
+    const note = message === "-" ? "" : message.trim();
+    const shown = purpose
+      ? `${purpose === "build" ? "Build" : "Check"} this section${note ? `: ${note}` : ""}`
+      : undefined;
+    if (purpose) message = actionPrompt(purpose, name, note);
     this.picked.set(thread, agent ?? this.d.defaultAgent());
     // Picks made before the first message: the host sets them as the session opens.
     for (const o of options) this.setOption(thread, o.id, o.value);
-    await this.send(thread, rel, text, message, at.doc);
+    await this.send(thread, rel, text, message, at.doc, undefined, shown);
     const v = await this.view(at, rel, text, thread);
     return v
       ? { kind: "started", thread: v }
@@ -523,6 +551,8 @@ export class Threads {
     message: string,
     knownDoc?: DocId,
     exploring?: string,
+    /** What the thread shows as the person's message, when Anur wrote the one sent (an action). */
+    shown?: string,
   ): Promise<{ kind: "sent" } | { kind: "refused"; reason: string }> {
     const at = await this.d.locate(rel, text);
     if (!at) return { kind: "refused", reason: "Resolve the doc's merge conflict first." };
@@ -575,7 +605,12 @@ export class Threads {
       stopReason: null,
       usage: null,
     });
-    await this.append(doc, thread, { kind: "message", turn, role: "person", text: message });
+    await this.append(doc, thread, {
+      kind: "message",
+      turn,
+      role: "person",
+      text: shown ?? message,
+    });
     await this.turnWatch.start(thread);
 
     // This device's last session for the thread, if any: sessions live on the machine that ran them.
@@ -654,7 +689,17 @@ export class Threads {
     const parts: string[] = [];
     if (rebuildFrom) {
       parts.push(bundle);
+      const begun = rebuildFrom.find((l) => l.kind === "thread");
+      const purpose = begun?.kind === "thread" ? begun.purpose : undefined;
       const said = rebuildFrom.flatMap((l) => (l.kind === "message" ? [l] : []));
+      // An action's first message is shown short; the agent gets what Anur sent.
+      const first = said.findIndex((l) => l.role === "person");
+      if (purpose && first >= 0) {
+        const m = said[first];
+        const note = m?.text.replace(/^(Build|Check) this section:? ?/, "") ?? "";
+        const name = at.tree.sections[index]?.path.at(-1) ?? "";
+        if (m) said[first] = { ...m, text: actionPrompt(purpose, name, note) };
+      }
       if (said.length > 0) {
         parts.push(
           "Earlier in this thread:",
@@ -833,7 +878,19 @@ export class Threads {
       const decided = own
         ? live.docText
         : await readFile(path.join(this.d.folder, rel), "utf8").catch(() => null);
-      if (decided === null) continue;
+      const made = live.created?.get(rel);
+      if (made && decided !== null && decided === live.merged.get(rel)) {
+        // A doc this thread made, revised before anyone touched it: revised in place.
+        if (copy !== decided) await this.reviseCreated(made, rel, copy, live);
+        continue;
+      }
+      if (decided === null) {
+        // A doc the agent made (15.6): nothing to propose against, so it's
+        // kept in the folder as made, and noted in the thread with Undo.
+        await this.keepCreated(thread, live, rel, copy);
+        live.merged.set(rel, copy);
+        continue;
+      }
       const start = own ? (live.copyStart ?? decided) : decided;
       if (copy === start || live.merged.get(rel) === copy) continue;
       live.merged.set(rel, copy);
@@ -993,6 +1050,7 @@ export class Threads {
           request: m.request,
           title: m.title,
           options: m.options,
+          plan: m.plan ?? null,
         });
         return;
       case "turn-end":
@@ -1393,10 +1451,11 @@ export class Threads {
   }
 
   /**
-   * anur_propose_preview from a terminal (6.6): the section's own text as
-   * the agent proposes it, shown as a proposed edit; nothing is applied.
+   * A section's own text as an agent proposes it, as `thread`'s edit; the
+   * setting may use it at once. Returns the section's path, or null.
    */
-  async proposeFromTerminal(
+  private async proposeAs(
+    thread: string,
     rel: string,
     text: string,
     query: string,
@@ -1413,11 +1472,27 @@ export class Threads {
     const proposed = `${text.slice(0, from)}${s.headingRange ? "\n\n" : ""}${body.trim()}\n${rest ? `\n${rest.replace(/^\n+/, "")}` : ""}`;
     const parts = previewParts(text, proposed, Threads.spans(at));
     if (parts.length === 0) return s.path.join(" > ");
-    await this.previews.write(at.doc, TERMINAL_EDIT, parts, summary);
+    const existing = (await this.previews.read(at.doc, thread))?.parts ?? [];
+    const keep = existing.filter((p) => !parts.some((q) => q.section === p.section));
+    await this.previews.write(at.doc, thread, [...keep, ...parts], summary);
     this.d.previewsChanged(rel);
-    // An agent in a terminal is an agent too: the setting uses its edit as it lands.
-    if (this.d.autoApply?.() && !this.d.isOpen?.(rel)) await this.applyToFile(rel, TERMINAL_EDIT);
+    // The setting uses an agent's edit as it lands.
+    if (this.d.autoApply?.() && !this.d.isOpen?.(rel)) await this.applyToFile(rel, thread);
     return s.path.join(" > ");
+  }
+
+  /**
+   * anur_propose_preview from a terminal (6.6): the section's own text as
+   * the agent proposes it, shown as a proposed edit; nothing is applied.
+   */
+  async proposeFromTerminal(
+    rel: string,
+    text: string,
+    query: string,
+    body: string,
+    summary: string | null,
+  ): Promise<string | null> {
+    return this.proposeAs(TERMINAL_EDIT, rel, text, query, body, summary);
   }
 
   /**
@@ -1484,6 +1559,101 @@ export class Threads {
       });
     }
     return thread;
+  }
+
+  /**
+   * anur_report_check (15.5): each claim with its verdict and source, shown
+   * as a card; corrected text becomes the thread's proposal on its section.
+   */
+  private async reportCheckTool(thread: string, args: unknown): Promise<ToolAnswer> {
+    const live = this.live.get(thread);
+    if (!live?.turn) return { error: "A check can only be reported during a turn." };
+    const raw = (args ?? {}) as { claims?: unknown; corrected?: unknown };
+    const verdicts = new Set(["holds", "wrong", "unsupported", "missing"]);
+    const claims = (Array.isArray(raw.claims) ? (raw.claims as Record<string, unknown>[]) : [])
+      .filter((c) => typeof c.claim === "string" && verdicts.has(String(c.verdict)))
+      .slice(0, 50)
+      .map((c) => ({
+        claim: String(c.claim).slice(0, 500),
+        verdict: String(c.verdict) as "holds" | "wrong" | "unsupported" | "missing",
+        source: typeof c.source === "string" ? c.source.slice(0, 300) : "",
+        note: typeof c.note === "string" ? c.note.slice(0, 500) : "",
+      }));
+    if (claims.length === 0) return { error: "Report at least one claim, each with its verdict." };
+    const corrected =
+      typeof raw.corrected === "string" && raw.corrected.trim() ? raw.corrected : null;
+    const lines = await this.linesOf(live.doc, thread);
+    const start = lines.find((l) => l.kind === "thread");
+    let proposed = false;
+    if (corrected && start?.kind === "thread")
+      proposed =
+        (await this.proposeAs(thread, live.rel, live.docText, start.section, corrected, null)) !==
+        null;
+    await this.append(live.doc, thread, {
+      kind: "check",
+      turn: live.turn,
+      claims,
+      corrected: proposed,
+    });
+    await this.refresh(live.rel, live.docText, thread);
+    return {
+      text: `Shown to the person as a check of ${String(claims.length)} claim${claims.length === 1 ? "" : "s"}${proposed ? ", with the corrected text as a proposal on the section" : ""}.`,
+    };
+  }
+
+  /** A new doc from the agent's working copies, written into the folder once. */
+  private async keepCreated(thread: string, live: Live, rel: string, text: string): Promise<void> {
+    if (live.created?.has(rel)) return;
+    const full = path.join(this.d.folder, rel);
+    if (!full.startsWith(this.d.folder + path.sep) || rel.split("/").some((p) => p.startsWith(".")))
+      return;
+    if ((await readFile(full, "utf8").catch(() => null)) !== null) return;
+    await mkdir(path.dirname(full), { recursive: true });
+    this.ownWrite(rel, text);
+    await writeFileAtomic(full, text);
+    const undo = `c${randomBytes(6).toString("hex")}`;
+    this.createdUndo.set(undo, { rel, text });
+    (live.created ??= new Map()).set(rel, undo);
+    await this.append(live.doc, thread, { kind: "created", doc: rel, undo });
+    this.d.filesChanged?.();
+  }
+
+  private async reviseCreated(undo: string, rel: string, text: string, live: Live): Promise<void> {
+    this.ownWrite(rel, text);
+    await writeFileAtomic(path.join(this.d.folder, rel), text);
+    live.merged.set(rel, text);
+    if (this.createdUndo.has(undo)) this.createdUndo.set(undo, { rel, text });
+    this.d.filesChanged?.();
+  }
+
+  /** Undo on a "created" note: the doc goes, while it's as the agent left it. */
+  async undoCreated(
+    thread: string,
+    id: string,
+  ): Promise<{ kind: "undone" } | { kind: "refused"; reason: string }> {
+    const own = await this.docOfThread(thread);
+    const lines = own ? await this.linesOf(own, thread) : [];
+    const line = lines.find((l) => l.id === id && l.kind === "created");
+    const made =
+      line?.kind === "created" && line.undo ? this.createdUndo.get(line.undo) : undefined;
+    if (!line || !made || !own)
+      return {
+        kind: "refused",
+        reason: "Anur restarted since; delete the doc from the files panel.",
+      };
+    const full = path.join(this.d.folder, made.rel);
+    const now = await readFile(full, "utf8").catch(() => null);
+    if (now !== made.text)
+      return {
+        kind: "refused",
+        reason: `${made.rel} was changed since; delete it from the files panel if you want it gone.`,
+      };
+    await rm(full, { force: true });
+    if (line.kind === "created" && line.undo) this.createdUndo.delete(line.undo);
+    await this.append(own, thread, { kind: "auto-undone", used: id });
+    const live = this.live.get(thread);
+    if (live) await this.refresh(live.rel, live.docText, thread);
+    return { kind: "undone" };
   }
 
   /** anur_name_thread: the agent names a thread once; a name already given is kept. */
@@ -1631,6 +1801,7 @@ export class Threads {
     if (tool === "anur_offer_options") return this.offerOptions(thread, args);
     if (tool === "anur_list_inputs") return this.listInputsTool(thread);
     if (tool === "anur_name_thread") return this.nameThreadTool(thread, args);
+    if (tool === "anur_report_check") return this.reportCheckTool(thread, args);
     if (tool === "anur_read_input") return this.readInputTool(thread, args);
     if (tool !== "anur_read_section") return { error: `Anur has no tool ${tool}.` };
     const a = (args ?? {}) as { section?: unknown; doc?: unknown };
@@ -1684,6 +1855,8 @@ const KNOWN = new Set([
   "auto-used",
   "auto-undone",
   "renamed",
+  "check",
+  "created",
 ]);
 
 /**

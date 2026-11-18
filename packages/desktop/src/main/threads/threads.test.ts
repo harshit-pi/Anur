@@ -297,6 +297,33 @@ describe("Threads", () => {
     expect(preview?.parts[0]?.proposed).toContain("The host has no tests yet; CI is red.");
   });
 
+  it("keeps a doc the agent makes, revises it in place, and takes it back on Undo", async () => {
+    const { folder, support, threads: t, reply, sent } = await setup();
+    const r = await t.start("plan.md", DOC, risks, "-", undefined, [], "build");
+    if (r.kind !== "started") throw new Error(r.reason);
+    expect(r.thread.title).toBe("Build: Risks");
+    expect(r.thread.purpose).toBe("build");
+    // The person sees what they did; the agent gets Anur's whole instruction.
+    expect(r.thread.items[0]).toMatchObject({ kind: "message", text: "Build this section" });
+    const asked = sent.find((m) => m.type === "prompt");
+    expect(asked?.type === "prompt" && asked.text).toContain("present the plan for approval");
+    const copies = path.join(support, "agent", "copies", r.thread.id);
+    await writeFile(path.join(copies, "FAQ.md"), "# FAQ\n");
+    await reply(r.thread.id, "Made FAQ.md.");
+    expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe("# FAQ\n");
+    // Background work revises it after the turn: the made doc follows.
+    await writeFile(path.join(copies, "FAQ.md"), "# FAQ\n\nOne question.\n");
+    await new Promise((res) => setTimeout(res, 1500));
+    expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe("# FAQ\n\nOne question.\n");
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === r.thread.id);
+    const made = view?.items.find((i) => i.kind === "created");
+    if (made?.kind !== "created") throw new Error("no created note");
+    expect(made.doc).toBe("FAQ.md");
+    expect(made.undoable).toBe(true);
+    expect((await t.undoCreated(r.thread.id, made.id)).kind).toBe("undone");
+    expect(await readdir(folder)).not.toContain("FAQ.md");
+  });
+
   it("flags a doc changed outside Anur during the turn, and reverts it", async () => {
     const { folder, threads: t, reply } = await setup();
     await writeFile(path.join(folder, "plan.md"), DOC);

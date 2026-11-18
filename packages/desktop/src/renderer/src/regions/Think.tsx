@@ -128,6 +128,28 @@ function splitTable(lines: string[]) {
 }
 
 /** Light Markdown for a reply: paragraphs, bullets, tables and inline styles. */
+const BULLET = /^\s*(?:[-*+]|\d+[.)])\s/;
+
+/**
+ * A block split where its kind changes, as Markdown reads it: a heading is
+ * its own block, and a list right after a line of text starts a new one.
+ */
+function byKind(block: string): string[] {
+  const out: string[][] = [];
+  let kind: "heading" | "list" | "text" | null = null;
+  for (const line of block.split("\n")) {
+    const next: "heading" | "list" | "text" = /^#{1,6}\s/.test(line)
+      ? "heading"
+      : BULLET.test(line) || (kind === "list" && /^\s+\S/.test(line))
+        ? "list"
+        : "text";
+    if (next !== kind || next === "heading") out.push([]);
+    out.at(-1)?.push(line);
+    kind = next;
+  }
+  return out.map((l) => l.join("\n"));
+}
+
 export function Markdown({ text }: { text: string }) {
   // A table's blank-line-free rows stay one block; anything around it is its own block.
   const blocks = text.split(/\n{2,}/).flatMap((block) => {
@@ -139,13 +161,13 @@ export function Markdown({ text }: { text: string }) {
       rest = t.after;
     }
     if (rest.length) out.push(rest.join("\n"));
-    return out;
+    return out.flatMap((part) => (splitTable(part.split("\n")) ? [part] : byKind(part)));
   });
   return (
     <>
       {blocks.map((block, b) => {
         const lines = block.split("\n");
-        const bullets = lines.every((l) => /^\s*(?:[-*+]|\d+[.)])\s/.test(l) || l.trim() === "");
+        const bullets = BULLET.test(lines[0] ?? "");
         const render = (line: string, i: number) => (
           <span key={i}>
             {inlineRuns(line).map((r, j) => (
@@ -192,7 +214,12 @@ export function Markdown({ text }: { text: string }) {
           return (
             <ul key={b} className="think-list">
               {lines
-                .filter((l) => l.trim())
+                .reduce<string[]>((items, l) => {
+                  // An indented line under an item continues it.
+                  if (BULLET.test(l) || items.length === 0) items.push(l);
+                  else if (l.trim()) items.push(`${items.pop() ?? ""} ${l.trim()}`);
+                  return items;
+                }, [])
                 .map((l, i) => (
                   <li key={i}>{render(l, i)}</li>
                 ))}
@@ -577,16 +604,22 @@ export function Think({
   }, [sectionKey, section, thread]);
 
   const start = useCallback(
-    async (message: string) => {
+    async (message: string, purpose?: "build" | "check") => {
       if (!docPath || !section) return false;
       setError(null);
+      // An action plans first (15.2): the agent's plan mode, where it has one.
+      const options = newChoices.map((o) => ({
+        id: o.id,
+        value: purpose && o.choices.some((c) => c.value === "plan") ? "plan" : o.current,
+      }));
       const r = await anur.call("thread:start", {
         path: docPath,
         text: docText(),
         section: { index: section.index, path: section.path },
         message,
         agent: newAgent,
-        options: newChoices.map((o) => ({ id: o.id, value: o.current })),
+        options,
+        ...(purpose ? { purpose } : {}),
       });
       if (r.kind === "refused") {
         setError(r.reason);
@@ -740,8 +773,8 @@ export function Think({
                 {item.role === "agent" ? <Markdown text={item.text} /> : item.text}
               </div>
             ) : item.kind === "tool" ? (
-              <div key={i} className={`think-tool ${item.status}`} title={item.status}>
-                {item.title}
+              <div key={i} className={`think-tool ${item.status}`} title={item.title}>
+                {toolLabel(item.title)}
               </div>
             ) : item.kind === "options" ? (
               <div key={i} className="think-offers" role="group" aria-label="Options">
@@ -866,35 +899,86 @@ export function Think({
                   </button>
                 ) : null}
               </div>
+            ) : item.kind === "check" ? (
+              <CheckCard key={i} claims={item.claims} corrected={item.corrected} />
+            ) : item.kind === "created" ? (
+              <div key={i} className="think-changed auto" role="status">
+                <span>
+                  {item.undoable ? "Made " : "Made, then taken back: "}
+                  <button
+                    type="button"
+                    className="think-link"
+                    onClick={() => {
+                      window.dispatchEvent(
+                        new CustomEvent("anur:open-path", { detail: { path: item.doc } }),
+                      );
+                    }}
+                  >
+                    {item.doc}
+                  </button>
+                </span>
+                {item.undoable ? (
+                  <button
+                    type="button"
+                    className="think-button"
+                    onClick={() => {
+                      void anur
+                        .call("thread:undo-created", { thread: thread.id, id: item.id })
+                        .then((r) => {
+                          if (r.kind === "refused") setError(r.reason);
+                        });
+                    }}
+                  >
+                    Undo
+                  </button>
+                ) : null}
+              </div>
             ) : (
               <div key={i} className="think-error" role="alert">
                 {item.text}
               </div>
             ),
           )}
-          {thread.busy && thread.items.at(-1)?.kind !== "message" ? (
+          {thread.busy && thread.items.at(-1)?.kind !== "message" && asks.length === 0 ? (
             <div className="think-working quiet">Thinking…</div>
           ) : null}
-          {asks.map((p) => (
-            <div key={p.request} className="think-ask" role="group" aria-label={p.title}>
-              <p>{p.title}</p>
-              <div className="think-ask-options">
-                {p.options.map((o) => (
-                  <button
-                    key={o.id}
-                    type="button"
-                    className={`think-button${o.kind.startsWith("allow") ? " primary" : ""}`}
-                    onClick={() => {
-                      setPrompts((ps) => ps.filter((x) => x.request !== p.request));
-                      void anur.call("thread:permission", { request: p.request, option: o.id });
-                    }}
-                  >
-                    {o.name}
-                  </button>
-                ))}
+          {asks.map((p) =>
+            p.plan ? (
+              <PlanCard
+                key={p.request}
+                plan={p.plan}
+                build={thread.purpose === "build"}
+                options={p.options}
+                onPick={(o) => {
+                  setPrompts((ps) => ps.filter((x) => x.request !== p.request));
+                  void anur.call("thread:permission", { request: p.request, option: o.id });
+                  if (!o.kind.startsWith("allow"))
+                    requestAnimationFrame(() => {
+                      document.querySelector<HTMLTextAreaElement>(".think .think-input")?.focus();
+                    });
+                }}
+              />
+            ) : (
+              <div key={p.request} className="think-ask" role="group" aria-label={p.title}>
+                <p>{p.title}</p>
+                <div className="think-ask-options">
+                  {p.options.map((o) => (
+                    <button
+                      key={o.id}
+                      type="button"
+                      className={`think-button${o.kind.startsWith("allow") ? " primary" : ""}`}
+                      onClick={() => {
+                        setPrompts((ps) => ps.filter((x) => x.request !== p.request));
+                        void anur.call("thread:permission", { request: p.request, option: o.id });
+                      }}
+                    >
+                      {o.name}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            ),
+          )}
         </div>
         {notConnected(thread.agent)}
         {error ? <p className="think-error">{error}</p> : null}
@@ -1153,9 +1237,33 @@ export function Think({
           }
           busy={false}
           disabled={!writable || !AGENTS[newAgent].runsThreads}
-          onSend={start}
+          onSend={(m) => start(m)}
         />
       )}
+      {writable && AGENTS[newAgent].runsThreads && !signedOut(newAgent) ? (
+        <div className="think-actions" role="group" aria-label="Actions">
+          <button
+            type="button"
+            className="think-more"
+            title="The agent plans the work this section describes, and builds it once you approve"
+            onClick={() => {
+              void start("-", "build");
+            }}
+          >
+            Build this section
+          </button>
+          <button
+            type="button"
+            className="think-more"
+            title="The agent tests each claim here against what the section links or names, changing nothing"
+            onClick={() => {
+              void start("-", "check");
+            }}
+          >
+            Check this section
+          </button>
+        </div>
+      ) : null}
       {elsewhere.length > 0 ? (
         <details className="think-elsewhere">
           <summary className="think-subhead">
@@ -1179,6 +1287,109 @@ export function Think({
           )}
         </details>
       ) : null}
+    </div>
+  );
+}
+
+const VERDICT: Record<"holds" | "wrong" | "unsupported" | "missing", string> = {
+  holds: "Holds",
+  wrong: "Wrong",
+  unsupported: "Unsupported",
+  missing: "Missing",
+};
+
+/** A check's report: each claim with what it was tested against. */
+function CheckCard({
+  claims,
+  corrected,
+}: {
+  claims: {
+    claim: string;
+    verdict: keyof typeof VERDICT;
+    source: string;
+    note: string;
+  }[];
+  corrected: boolean;
+}) {
+  const counts = (["wrong", "missing", "unsupported", "holds"] as const)
+    .map((v) => [v, claims.filter((c) => c.verdict === v).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([v, n]) => `${String(n)} ${v === "holds" ? "hold" : v}`);
+  return (
+    <div className="think-check" role="group" aria-label="Check">
+      <p className="think-check-head">
+        <strong>
+          {claims.every((c) => c.verdict === "holds")
+            ? `All ${countOf(claims.length, "claim")} hold`
+            : counts.join(", ")}
+        </strong>
+        {corrected ? <span className="quiet"> · a corrected version is below</span> : null}
+      </p>
+      <ul>
+        {claims.map((c, i) => (
+          <li key={i} className={`think-claim ${c.verdict}`}>
+            <span className="think-verdict">{VERDICT[c.verdict]}</span>
+            <div>
+              <div>{c.claim}</div>
+              <div className="quiet">
+                {c.note} <span className="think-source">{c.source}</span>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** The plan an agent wants approved before it acts. */
+function PlanCard({
+  plan,
+  build,
+  options,
+  onPick,
+}: {
+  plan: string;
+  build: boolean;
+  options: Prompt["options"];
+  onPick: (o: Prompt["options"][number]) => void;
+}) {
+  const allow =
+    options.find((o) => o.kind === "allow_once") ?? options.find((o) => o.kind.startsWith("allow"));
+  const reject = options.find((o) => o.kind.startsWith("reject"));
+  return (
+    <div className="think-plan" role="group" aria-label="Plan">
+      <p className="think-plan-head">
+        <strong>{build ? "The plan, before it builds" : "The plan, before it acts"}</strong>
+        <span className="quiet"> · nothing has changed yet</span>
+      </p>
+      <div className="think-plan-text">
+        <Markdown text={plan} />
+      </div>
+      <div className="think-ask-options">
+        {allow ? (
+          <button
+            type="button"
+            className="think-button primary"
+            onClick={() => {
+              onPick(allow);
+            }}
+          >
+            {build ? "Approve and build" : "Approve and run"}
+          </button>
+        ) : null}
+        {reject ? (
+          <button
+            type="button"
+            className="think-more"
+            onClick={() => {
+              onPick(reject);
+            }}
+          >
+            Keep planning
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -1263,6 +1474,40 @@ function GroupedThreads({
 }
 
 /** Threads as buttons: their question, where they are, and how far they've got. */
+/** Anur's own tools, named for the person rather than by their ids. */
+const OWN_TOOLS: Record<string, string> = {
+  anur_name_thread: "Named the thread",
+  anur_list_inputs: "Looked at the section's inputs",
+  anur_read_input: "Read an input",
+  anur_report_check: "Reported the check",
+  anur_offer_options: "Offered options",
+  anur_read_section: "Read a section",
+};
+
+function toolLabel(title: string): string {
+  if (title === "Approve Plan") return "Asked you to approve the plan";
+  if (/^Write \S*\/\.claude\/plans\//.test(title)) return "Wrote the plan";
+  const own = /^mcp__anur__(\w+)/.exec(title)?.[1];
+  return own ? (OWN_TOOLS[own] ?? own.replace(/^anur_/, "").replace(/_/g, " ")) : title;
+}
+
+const PURPOSE = { build: "Build", check: "Check" } as const;
+
+/** A thread's title, tagged Build or Check when it's an action (15.7). */
+export function ThreadName({ thread }: { thread: ThreadView }) {
+  if (!thread.purpose) return <>{thread.title}</>;
+  const tag = PURPOSE[thread.purpose];
+  const title = thread.title.startsWith(`${tag}: `)
+    ? thread.title.slice(tag.length + 2)
+    : thread.title;
+  return (
+    <>
+      <span className="thread-tag">{tag}</span>
+      {title}
+    </>
+  );
+}
+
 function ThreadList({
   threads,
   onOpen,
@@ -1289,7 +1534,9 @@ function ThreadList({
                 {t.path ? t.path.at(-1) : "A section that's gone"}
               </span>
             ) : null}
-            <span className="think-thread-title">{t.title}</span>
+            <span className="think-thread-title">
+              <ThreadName thread={t} />
+            </span>
             <span className="quiet">
               {t.busy
                 ? "Replying…"

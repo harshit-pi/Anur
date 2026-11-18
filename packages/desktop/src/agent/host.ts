@@ -561,6 +561,14 @@ export class AgentHost {
   ): Promise<acp.RequestPermissionResponse> {
     const t = this.running.get(params.sessionId);
     if (!t) return Promise.resolve({ outcome: { outcome: "cancelled" } });
+    // Anur's own tools are the thread talking to Anur, never something to ask
+    // the person about, in any mode (plan mode asks for every MCP tool).
+    const own = (params.toolCall.title ?? "").startsWith("mcp__anur__");
+    const allow =
+      params.options.find((o) => o.kind === "allow_once") ??
+      params.options.find((o) => o.kind.startsWith("allow"));
+    if (own && allow)
+      return Promise.resolve({ outcome: { outcome: "selected", optionId: allow.optionId } });
     const request = `${t.thread}:${randomBytes(6).toString("hex")}`;
     return new Promise((resolve) => {
       this.permissions.set(request, (option) => {
@@ -576,6 +584,10 @@ export class AgentHost {
         request,
         title: params.toolCall.title ?? "The agent asks to continue",
         options: params.options.map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })),
+        plan: (() => {
+          const raw = params.toolCall.rawInput as { plan?: unknown } | null | undefined;
+          return typeof raw?.plan === "string" ? raw.plan : null;
+        })(),
       });
     });
   }
