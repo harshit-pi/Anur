@@ -189,3 +189,9 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - A Check's wrong or missing claims each offer "Keep as a finding", which keeps what the source says.
 - Think lists a section's kept findings under Context and history, each with × to drop it.
 - Not carried: unkept proposals, and conclusions in a thread's chat. A wrong finding carried forward pollutes with authority, so a person always decides.
+
+## The head-to-head eval (16.5), and a cap on the doc in full
+
+- Three tasks on a 2,300-line doc with rules elsewhere, a stale archive and decoy docs, scored by script, three runs each (evals/head-to-head). Anur 0.98, Claude Code fresh 1.00, Claude Code after six unrelated tasks 0.96 with one stale fact; quality sits near the ceiling for all three.
+- Cost told them apart: Anur sent the whole doc in every bundle, about 153k weighted tokens a task against Claude Code's 65k. With the rest of a doc sent in full only up to about 15k tokens (`DOC_FULL_MAX`), and as an outline past that, Anur scored 1.00 at 62k, with the fewest steps.
+- 16.3 (inputs given in full) is dropped: the eval shows the agent reads what it needs, and more in the bundle costs more for nothing.

@@ -114,6 +114,16 @@ export function embedTargets(markdown: string): string[] {
   return [...markdown.matchAll(EMBED_LINE)].flatMap((m) => (m[1] ? [m[1].trim()] : []));
 }
 
+/**
+ * The most of the rest of a doc that goes in full, about 15,000 tokens; a
+ * longer doc goes as its outline, with the hint to read any section that
+ * could set a rule. The head-to-head eval (16.5, 2026-11-18) found a
+ * 2,300-line doc sent whole cost about two and a half times what Claude
+ * Code spent on the same tasks, for the same quality: the agent reads the
+ * sections it needs.
+ */
+export const DOC_FULL_MAX = 60_000;
+
 /** About a third of a 200,000-token context window, at roughly four characters a token. */
 export const FULL_TEXT_BUDGET = 240_000;
 
@@ -223,7 +233,7 @@ export function buildBundle({
               })
               .join("\n\n")
           : null;
-      if (full !== null && full.length <= budget) {
+      if (full !== null && full.length <= Math.min(budget, DOC_FULL_MAX)) {
         if (full)
           parts.push({
             kind: "full",
