@@ -96,6 +96,8 @@ await build({
       // Finder shows its toolbar and path bar on disk images now, so the icons
       // sit centred in what's left of the 540 × 380 window, not in all of it.
       window: { width: 540, height: 380 },
+      // Our own backdrop: the default's arrow sits at y 220, below these icons.
+      background: path.join(app, "build", "dmg-background.tiff"),
       contents: [
         { x: 140, y: 140, type: "file" },
         { x: 400, y: 140, type: "link", path: "/Applications" },
