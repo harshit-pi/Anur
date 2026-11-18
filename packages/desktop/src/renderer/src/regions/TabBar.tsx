@@ -53,7 +53,7 @@ type Drag = {
 };
 
 /**
- * 3. Tab bar: the files toggle, tabs, then Page and Map, Ask, and the section
+ * 3. Tab bar: the files toggle, tabs, then Page and Map, and the section
  * panel toggle. Tabs drag to move, pin to the left, and gather in groups.
  */
 export function TabBar({
@@ -369,9 +369,7 @@ export function TabBar({
           Map
         </button>
       </div>
-      <button className="ask-button" type="button" disabled title="Ask about the whole doc">
-        Ask
-      </button>
+      {/* Ask, the whole-doc thread, comes back here with task 4.8. */}
       <button
         className="icon-button"
         type="button"
