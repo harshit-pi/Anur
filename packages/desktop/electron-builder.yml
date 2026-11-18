@@ -24,6 +24,9 @@ mac:
       - CFBundleTypeName: Markdown document
         CFBundleTypeRole: Editor
         LSHandlerRank: Alternate
+        # macOS draws Anur's own document icon; without one, Finder shows the
+        # icon of whichever other app declared the type (Obsidian's).
+        CFBundleTypeIconSystemGenerated: true
         LSItemContentTypes:
           - net.daringfireball.markdown
         CFBundleTypeExtensions:
