@@ -43,9 +43,18 @@ function useThreads(docPath: string | null, docText: () => string) {
   const textNow = useRef(docText);
   textNow.current = docText;
 
+  const [loads, setLoads] = useState(0);
+  const shownDoc = useRef<string | null>(null);
+  /** Read the list again, after threads moved or went (group 11). */
+  const reload = useCallback(() => {
+    setLoads((n) => n + 1);
+  }, []);
   useEffect(() => {
-    setThreads([]);
-    setPrompts([]);
+    if (shownDoc.current !== docPath) {
+      shownDoc.current = docPath;
+      setThreads([]);
+      setPrompts([]);
+    }
     if (!docPath) return;
     let current = true;
     void anur.call("thread:list", { path: docPath, text: textNow.current() }).then((r) => {
@@ -70,9 +79,9 @@ function useThreads(docPath: string | null, docText: () => string) {
       current = false;
       off();
     };
-  }, [docPath]);
+  }, [docPath, loads]);
 
-  return { threads, setThreads, prompts, setPrompts };
+  return { threads, setThreads, prompts, setPrompts, reload };
 }
 
 /** A reply arriving piece by piece, or a tool call changing state. */
@@ -580,7 +589,9 @@ export function Think({
   onJump: (index: number) => void;
 }) {
   const features = useFeatures();
-  const { threads, setThreads, prompts, setPrompts } = useThreads(docPath, docText);
+  const { threads, setThreads, prompts, setPrompts, reload } = useThreads(docPath, docText);
+  /** Closed threads on this section, shown on a click (11.3). */
+  const [showClosed, setShowClosed] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   /** Each agent's connection, as main last reported it. */
   const [statuses, setStatuses] = useState<Partial<Record<AgentId, AgentStatus>>>({});
@@ -700,16 +711,21 @@ export function Think({
     return anur.on("agent:status", noteStatus);
   }, [noteStatus]);
 
-  const here = useMemo(
+  const onSection = useMemo(
     () => (section ? threads.filter((t) => samePath(t.path, section.path)) : []),
     [threads, section],
   );
+  const here = useMemo(() => onSection.filter((t) => !t.closed), [onSection]);
+  const closedHere = useMemo(() => onSection.filter((t) => t.closed), [onSection]);
   /** Every other thread in the doc, in the order of their sections, the latest first within one. */
   const elsewhere = useMemo(() => {
     const order = new Map(tree?.sections.map((s, i) => [s.path.join("\u0000"), i]));
     const at = (t: ThreadView) => (t.path ? (order.get(t.path.join("\u0000")) ?? 1e9) : 1e9);
-    return threads.filter((t) => !here.includes(t)).sort((a, b) => at(a) - at(b));
-  }, [threads, here, tree]);
+    // Closed threads stay with their section; a gone section's are under Orphaned.
+    return threads
+      .filter((t) => !onSection.includes(t) && !t.closed && t.path !== null)
+      .sort((a, b) => at(a) - at(b));
+  }, [threads, onSection, tree]);
   /**
    * What a thread needs from the person: an answer to its agent, options to
    * pick, or an edit to use; else running, or done.
@@ -947,15 +963,68 @@ export function Think({
     const asks = prompts.filter((p) => p.thread === thread.id);
     return (
       <div className={`think${dropOver ? " think-drop" : ""}`} {...dropProps()}>
-        <button
-          type="button"
-          className="think-back"
-          onClick={() => {
-            setOpen(null);
-          }}
-        >
-          ← All threads
-        </button>
+        <div className="think-top">
+          <button
+            type="button"
+            className="think-back"
+            onClick={() => {
+              setOpen(null);
+            }}
+          >
+            ← All threads
+          </button>
+          {writable && docPath ? (
+            <span className="think-top-actions">
+              <button
+                type="button"
+                className="think-more"
+                title={
+                  thread.closed
+                    ? "Show it with this section's threads again"
+                    : "Hide it from this section's threads; nothing is deleted"
+                }
+                disabled={thread.busy}
+                onClick={() => {
+                  const closed = !thread.closed;
+                  setThreads((ts) => ts.map((t) => (t.id === thread.id ? { ...t, closed } : t)));
+                  void anur.call("thread:close", {
+                    thread: thread.id,
+                    path: docPath,
+                    text: docText(),
+                    closed,
+                  });
+                  if (closed) setOpen(null);
+                }}
+              >
+                {thread.closed ? "Reopen" : "Close"}
+              </button>
+              <button
+                type="button"
+                className="think-more danger"
+                disabled={thread.busy}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      `Delete “${thread.title}”? Its chat and the edits it proposes go at once. This can't be undone.`,
+                    )
+                  )
+                    return;
+                  void anur.call("thread:delete", { thread: thread.id }).then((r) => {
+                    if (r.kind === "refused") {
+                      setError(r.reason);
+                      return;
+                    }
+                    setOpen(null);
+                    setThreads((ts) => ts.filter((t) => t.id !== thread.id));
+                    reload();
+                  });
+                }}
+              >
+                Delete
+              </button>
+            </span>
+          ) : null}
+        </div>
         {thread.branchedFrom ? (
           <p className="quiet think-branched">
             Branched from{" "}
@@ -1711,6 +1780,21 @@ export function Think({
       ) : (
         <GroupedThreads threads={here} stateOf={stateOf} onOpen={setOpen} />
       )}
+      {closedHere.length > 0 ? (
+        <>
+          <button
+            type="button"
+            className="think-more think-closed-toggle"
+            aria-expanded={showClosed}
+            onClick={() => {
+              setShowClosed((v) => !v);
+            }}
+          >
+            {showClosed ? "Hide closed" : `Show closed (${String(closedHere.length)})`}
+          </button>
+          {showClosed ? <ThreadList threads={closedHere} onOpen={setOpen} /> : null}
+        </>
+      ) : null}
       {notConnected(newAgent)}
       {error ? <p className="think-error">{error}</p> : null}
       {branch ? (
@@ -1811,7 +1895,168 @@ export function Think({
           )}
         </details>
       ) : null}
+      {docPath ? (
+        <Orphans
+          docPath={docPath}
+          docText={docText}
+          threads={threads}
+          sections={tree.sections}
+          writable={writable}
+          onOpen={setOpen}
+          onChanged={reload}
+        />
+      ) : null}
     </div>
+  );
+}
+
+type Orphan = {
+  id: string;
+  path: string[];
+  threads: { id: string; title: string }[];
+  history: boolean;
+  suggestion: { index: number; path: string[] } | null;
+};
+
+/**
+ * Orphaned (11.1, 11.2): sections whose heading is gone, with what was
+ * behind them. Reattach moves their threads and history to a live section;
+ * Delete removes them at once.
+ */
+function Orphans({
+  docPath,
+  docText,
+  threads,
+  sections,
+  writable,
+  onOpen,
+  onChanged,
+}: {
+  docPath: string;
+  docText: () => string;
+  threads: ThreadView[];
+  sections: { path: string[] }[];
+  writable: boolean;
+  onOpen: (id: string) => void;
+  onChanged: () => void;
+}) {
+  const [orphans, setOrphans] = useState<Orphan[]>([]);
+  const [picked, setPicked] = useState<Record<string, number>>({});
+  const [error, setError] = useState<string | null>(null);
+  const [n, setN] = useState(0);
+  // Read again when the doc's threads or headings change.
+  const key = `${threads.map((t) => `${t.id}:${t.path?.join("/") ?? "-"}`).join(",")}|${sections
+    .map((s) => s.path.join("/"))
+    .join(",")}`;
+  const text = useRef(docText);
+  text.current = docText;
+  useEffect(() => {
+    let current = true;
+    const t = window.setTimeout(() => {
+      void anur.call("orphans:list", { path: docPath, text: text.current() }).then((r) => {
+        if (current) setOrphans(r.orphans);
+      });
+    }, 300);
+    return () => {
+      current = false;
+      window.clearTimeout(t);
+    };
+  }, [docPath, key, n]);
+  if (orphans.length === 0) return null;
+  const done = () => {
+    setN((x) => x + 1);
+    onChanged();
+  };
+  return (
+    <details className="think-elsewhere think-orphans">
+      <summary className="think-subhead">Orphaned ({String(orphans.length)})</summary>
+      <p className="quiet think-orphans-why">
+        Sections whose heading is gone. Reattach their threads and history to a section, or delete
+        them.
+      </p>
+      {error ? <p className="think-error">{error}</p> : null}
+      {orphans.map((o) => {
+        const views = o.threads.flatMap((x) => threads.filter((t) => t.id === x.id));
+        const at = picked[o.id] ?? o.suggestion?.index ?? -1;
+        const target = sections[at];
+        return (
+          <div key={o.id} className="think-elsewhere-group think-orphan">
+            <div className="think-elsewhere-where">{o.path.at(-1) ?? "Untitled"}</div>
+            {views.length > 0 ? (
+              <ThreadList threads={views} onOpen={onOpen} />
+            ) : (
+              <p className="quiet">{o.history ? "Its history only" : "Nothing behind it"}</p>
+            )}
+            {o.suggestion && picked[o.id] === undefined ? (
+              <p className="quiet">Looks like it became “{o.suggestion.path.at(-1)}”.</p>
+            ) : null}
+            {writable ? (
+              <div className="think-orphan-actions">
+                <select
+                  aria-label="Section to reattach to"
+                  value={at}
+                  onChange={(e) => {
+                    setPicked((p) => ({ ...p, [o.id]: Number(e.target.value) }));
+                  }}
+                >
+                  <option value={-1}>Pick a section…</option>
+                  {sections.map((s, i) => (
+                    <option key={s.path.join("/")} value={i}>
+                      {"  ".repeat(Math.max(0, s.path.length - 1))}
+                      {s.path.at(-1) ?? "Untitled"}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="think-button primary"
+                  disabled={!target}
+                  onClick={() => {
+                    if (!target) return;
+                    setError(null);
+                    void anur
+                      .call("orphans:reattach", {
+                        path: docPath,
+                        text: text.current(),
+                        orphan: o.id,
+                        section: { index: at, path: target.path },
+                      })
+                      .then((r) => {
+                        if (r.kind === "refused") setError(r.reason);
+                        done();
+                      });
+                  }}
+                >
+                  Reattach
+                </button>
+                <button
+                  type="button"
+                  className="think-button danger"
+                  onClick={() => {
+                    const what =
+                      o.threads.length > 0
+                        ? `its ${o.threads.length === 1 ? "thread" : `${String(o.threads.length)} threads`}, their proposed edits, its inputs and its history`
+                        : "its history";
+                    if (
+                      !window.confirm(
+                        `Delete what was behind “${o.path.at(-1) ?? "Untitled"}”: ${what}? This can't be undone.`,
+                      )
+                    )
+                      return;
+                    setError(null);
+                    void anur
+                      .call("orphans:delete", { path: docPath, text: text.current(), orphan: o.id })
+                      .then(done);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </details>
   );
 }
 

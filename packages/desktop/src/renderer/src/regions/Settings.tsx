@@ -14,12 +14,13 @@ import { type ThemePref, applyTheme, loadTheme, saveTheme } from "./theme-pref.t
  * says which, so nothing on this screen is a switch that does nothing.
  */
 
-export type SettingsSection = "general" | "appearance" | "agent" | "core" | "community";
+export type SettingsSection = "general" | "appearance" | "agent" | "storage" | "core" | "community";
 
 const SECTIONS: { id: SettingsSection; label: string; group?: string }[] = [
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
   { id: "agent", label: "Agent" },
+  { id: "storage", label: "Storage" },
   { id: "core", label: "Core plugins", group: "Plugins" },
   { id: "community", label: "Community plugins" },
 ];
@@ -308,6 +309,117 @@ function SkillRow() {
   );
 }
 
+const sizeOf = (bytes: number) =>
+  bytes < 1024
+    ? `${String(bytes)} B`
+    : bytes < 1024 * 1024
+      ? `${(bytes / 1024).toFixed(0)} KB`
+      : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+type Storage = {
+  kinds: { kind: string; bytes: number; files: number }[];
+  cleanable: { count: number; bytes: number };
+  blockedBy: { openedAt: string | null }[];
+  attachments: { path: string; bytes: number }[];
+};
+
+/** Storage (11.5, 11.6): what `.anur/` holds, Clean up, and attachments nothing uses. */
+function StoragePane({ folder }: { folder: FolderState | null }) {
+  const [s, setS] = useState<Storage | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    setS(null);
+    void anur.call("storage:read", {}).then(setS);
+  }, [folder?.path, n]);
+  if (folder?.mode !== "writable")
+    return <Row title="Storage" detail="Open a folder Anur can write to." />;
+  if (!s) return <p className="settings-row-detail">Reading .anur/…</p>;
+  const total = s.kinds.reduce((t, k) => t + k.bytes, 0);
+  const since = s.blockedBy
+    .map((b) => (b.openedAt ? new Date(b.openedAt).toLocaleDateString() : null))
+    .filter((x) => x !== null);
+  return (
+    <>
+      <Row
+        title="What .anur/ holds"
+        detail={`${sizeOf(total)} of threads, history and what threads read, kept beside your files.`}
+      />
+      <table className="settings-storage">
+        <tbody>
+          {s.kinds.map((k) => (
+            <tr key={k.kind}>
+              <td>{k.kind.charAt(0).toUpperCase() + k.kind.slice(1)}</td>
+              <td>{sizeOf(k.bytes)}</td>
+              <td className="quiet">
+                {String(k.files)} {k.files === 1 ? "file" : "files"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <Row
+        title="Clean up"
+        detail={
+          s.blockedBy.length > 0
+            ? `Another device has this folder open, or didn't quit cleanly${since.length ? ` (opened ${since.join(", ")})` : ""}. Quit Anur there first, so nothing it is still writing goes.`
+            : s.cleanable.count === 0
+              ? "Nothing to clean: every snapshot is in use or newer than 30 days."
+              : `${String(s.cleanable.count)} ${s.cleanable.count === 1 ? "snapshot" : "snapshots"} nothing points to, unused for 30 days: ${sizeOf(s.cleanable.bytes)}.`
+        }
+      >
+        <button
+          type="button"
+          className="settings-button"
+          disabled={s.blockedBy.length > 0 || s.cleanable.count === 0}
+          onClick={() => {
+            void anur.call("storage:clean", {}).then((r) => {
+              setNote(
+                r.kind === "ok"
+                  ? `Removed ${String(r.removed)} ${r.removed === 1 ? "snapshot" : "snapshots"}.`
+                  : r.reason,
+              );
+              setN((x) => x + 1);
+            });
+          }}
+        >
+          Clean up
+        </button>
+      </Row>
+      {note ? <p className="settings-row-detail">{note}</p> : null}
+      <Row
+        title="Unused attachments"
+        detail={
+          s.attachments.length === 0
+            ? "None: every image and attached file is linked or used."
+            : "Images and attached files no doc links and no thread uses. Each goes to the Trash only when you say."
+        }
+      />
+      {s.attachments.length > 0 ? (
+        <ul className="settings-attachments">
+          {s.attachments.map((a) => (
+            <li key={a.path}>
+              <span className="settings-attachment-path">{a.path}</span>
+              <span className="quiet">{sizeOf(a.bytes)}</span>
+              <button
+                type="button"
+                className="settings-button"
+                onClick={() => {
+                  void anur.call("attachment:trash", { path: a.path }).then(() => {
+                    setN((x) => x + 1);
+                  });
+                }}
+              >
+                Move to Trash
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
+}
+
 export function Settings({
   section,
   onSection,
@@ -407,6 +519,13 @@ export function Settings({
                 }}
               />
             </Row>
+          </>
+        );
+      case "storage":
+        return (
+          <>
+            <h2>Storage</h2>
+            <StoragePane folder={folder} />
           </>
         );
       case "appearance":

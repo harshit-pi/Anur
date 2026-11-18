@@ -435,6 +435,94 @@ export const ipcContract = {
       .strict(),
     response: z.object({ ok: z.boolean() }),
   },
+  /**
+   * Settings, Storage (11.5, 11.6): what `.anur/` holds by kind, what Clean
+   * up would remove, which other devices hold it off, and attachments
+   * nothing uses.
+   */
+  "storage:read": {
+    request: z.object({}).strict(),
+    response: z.object({
+      kinds: z.array(z.object({ kind: z.string(), bytes: z.number(), files: z.number() })),
+      cleanable: z.object({ count: z.number(), bytes: z.number() }),
+      /** Other devices open now or that didn't quit cleanly: when each last opened the folder. */
+      blockedBy: z.array(z.object({ openedAt: z.string().nullable() })),
+      attachments: z.array(z.object({ path: z.string(), bytes: z.number() })),
+    }),
+  },
+  /** Clean up (11.5): remove snapshots unused for 30 days that nothing points to. */
+  "storage:clean": {
+    request: z.object({}).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok"), removed: z.number() }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** Move one unused attachment to the system trash (11.6). */
+  "attachment:trash": {
+    request: z.object({ path: z.string().max(4096) }).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Close or reopen a thread (11.3): closed ones are hidden until a person shows them. */
+  "thread:close": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        path: z.string().max(4096),
+        text: z.string(),
+        closed: z.boolean(),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Delete a thread and its previews, at once (11.3). */
+  "thread:delete": {
+    request: z.object({ thread: z.string().max(200) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /**
+   * The open doc's orphans (11.1): sections whose heading is gone, with the
+   * threads and history behind them, and the live section most like each.
+   */
+  "orphans:list": {
+    request: z.object({ path: z.string().max(4096), text: z.string() }).strict(),
+    response: z.object({
+      orphans: z.array(
+        z.object({
+          id: z.string(),
+          path: z.array(z.string()),
+          threads: z.array(z.object({ id: z.string(), title: z.string() })),
+          history: z.boolean(),
+          suggestion: SectionRef.nullable(),
+        }),
+      ),
+    }),
+  },
+  /** Reattach an orphan to a live section (11.1): its threads and history move there. */
+  "orphans:reattach": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        orphan: z.string().max(200),
+        section: SectionRef,
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** Delete an orphan's threads, previews, inputs and history, at once (11.2). */
+  "orphans:delete": {
+    request: z
+      .object({ path: z.string().max(4096), text: z.string(), orphan: z.string().max(200) })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Take back a doc the agent made: removed, while it is as the agent left it. */
   "thread:undo-created": {
     request: z.object({ thread: z.string().max(200), id: z.string().max(100) }).strict(),
