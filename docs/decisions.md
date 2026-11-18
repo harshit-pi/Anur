@@ -282,3 +282,4 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - The person answers on the group's box: Accept, Rename or Keep (20.6a). Any group can be renamed. Answers are lines in `.anur/system/review.jsonl`, keyed by the group's section ID, applied over the rule's groups by the engineering plugin, so regrouping never mints IDs.
 - Parts the person hasn't seen say "unreviewed" (20.6b). Accepting or renaming a group counts its parts as seen; "Mark N reviewed" does so for a level.
 - A failed ask, such as no sign-in, says why with Try again, and isn't retried on its own.
+- While Claude names the groups, the tab shows a thin bar that moves without a percentage, since the answer arrives whole, and the seconds since the ask began, sent from main so a tab opened mid-ask counts right. Reduced motion shows a still bar.
