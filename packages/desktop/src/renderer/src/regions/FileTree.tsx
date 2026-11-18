@@ -150,8 +150,8 @@ export function FileTree({
     const items: MenuEntry[] =
       node.kind === "folder"
         ? [
-            { id: "new-doc", label: "New doc here", enabled: editable },
-            { id: "new-folder", label: "New folder here", enabled: editable },
+            { id: "new-doc", label: "New doc", enabled: editable },
+            { id: "new-folder", label: "New folder", enabled: editable },
             { separator: true },
             { id: "rename", label: "Rename", enabled: editable },
             { separator: true },
