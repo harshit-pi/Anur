@@ -48,7 +48,7 @@ import {
 } from "../../shared/agents.ts";
 import { JsonlWriter, readJsonlFile } from "../../vault/jsonl-writer.ts";
 import { IMAGE_TYPES, attachmentDir, attachmentFolder } from "../folder/images.ts";
-import { readLink } from "./read-link.ts";
+import { pageText, readLink } from "./read-link.ts";
 import type { AgentHub } from "./hub.ts";
 import { PreviewStore } from "./previews.ts";
 import { denyRulesOf, type DenyRule } from "../../agent/deny-rules.ts";
@@ -816,12 +816,20 @@ export class Threads {
       if (table) live.embeds.set(target, table);
     }
     await this.makeWorkingCopy(thread, live, at);
+    // What the person attached to this message goes with it, as in a chat (10.4).
+    const lastSaid = lines.findLastIndex((l) => l.kind === "message" && l.role === "person");
+    const attachedNow = lines
+      .slice(lastSaid + 1)
+      .filter((l) => l.kind === "added-input" && l.thread === thread && l.source !== "link");
+    const withFiles = attachedNow.length
+      ? `${await this.attachedBlock(attachedNow, live.carried)}\n\n${message}`
+      : message;
     const prompt = this.promptFor(
       at,
       start.section,
       rel,
       text,
-      message,
+      withFiles,
       live,
       resume === null ? lines : null,
     );
@@ -1577,6 +1585,42 @@ export class Threads {
     const section = at.ids[index];
     if (!section) return { error: "That section changed; try again." };
     return { added: await this.addTo(at, rel, section, thread, files, links) };
+  }
+
+  /**
+   * What the person attached to this message, as the agent reads it: a text
+   * file's content in full (up to a limit), and for an image or a folder its
+   * name and the input ID to open it with, so "What's this?" is about them.
+   */
+  private async attachedBlock(
+    lines: KnownThreadLine[],
+    carried: readonly Carried[] | undefined,
+  ): Promise<string> {
+    const parts = ["The person attached these to this message; their question is about them."];
+    for (const l of lines) {
+      if (l.kind !== "added-input") continue;
+      const id = carried?.find((c) => c.id === l.id)?.id ?? l.id;
+      const full = path.join(this.d.folder, l.ref);
+      const kind = await lstat(full).catch(() => null);
+      const ext = path.extname(l.ref).toLowerCase();
+      if (kind?.isDirectory()) {
+        const files = (await listFolder(full)) ?? [];
+        parts.push(
+          `### Folder ${l.ref}\nIn the opened folder; read its files with your own tools.\n${files.join("\n")}`,
+        );
+      } else if (IMAGE_TYPES[ext]) {
+        parts.push(`### Image ${l.ref}\nLook at it with Anur's anur_read_input tool, ID ${id}.`);
+      } else if (kind?.isFile() && kind.size <= ATTACH_INLINE && TEXT_EXT.test(ext)) {
+        const raw = await readFile(full, "utf8");
+        const body = /^\.html?$/.test(ext) ? pageText(raw) : raw;
+        parts.push(`### ${l.ref}\n\`\`\`\n${body}\n\`\`\``);
+      } else {
+        parts.push(
+          `### ${l.ref}\nOpen it with Anur's anur_read_input tool, ID ${id}, or your own tools.`,
+        );
+      }
+    }
+    return parts.join("\n\n");
   }
 
   /** Attach files or folders to a thread before its next message (10.4). */
@@ -2615,6 +2659,11 @@ function addedCarried(l: Extract<KnownThreadLine, { kind: "added-input" }>): Car
     at: l.at,
   };
 }
+
+/** A text file attached to a message goes into the prompt whole up to this size. */
+const ATTACH_INLINE = 200 * 1024;
+const TEXT_EXT =
+  /^\.(md|markdown|txt|text|html?|csv|tsv|json|ya?ml|xml|toml|ini|log|js|jsx|ts|tsx|py|rb|go|rs|java|kt|swift|c|h|cpp|cs|php|sh|sql|css|scss)$/;
 
 /** A folder copied in from outside stays under this; a bigger one isn't copied. */
 const FOLDER_LIMIT = 50 * 1024 * 1024;

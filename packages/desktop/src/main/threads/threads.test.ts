@@ -597,5 +597,9 @@ describe("inputs a person adds, and Branch (group 10)", () => {
     ]);
     const prompt = t.sent.filter((m) => m.type === "prompt").at(-1);
     expect(prompt?.type === "prompt" ? prompt.text : "").toContain("attachments/specs");
+    // A text file goes with the message itself, so "use these" is about it.
+    const sentText = prompt?.type === "prompt" ? prompt.text : "";
+    expect(sentText).toContain("The person attached these to this message");
+    expect(sentText).toMatch(/### attachments\/brief\.txt\n```\nHERON\n```/);
   });
 });
