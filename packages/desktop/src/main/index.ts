@@ -50,6 +50,7 @@ import {
 import { isInTrash, trashTelling } from "./folder/system-trash.ts";
 import { FILES_TYPE, filePathsPlist, readFilePaths } from "./folder/finder-clipboard.ts";
 import { FolderWatch } from "./folder/folder-watch.ts";
+import { agentMemoryMb } from "./threads/agent-memory.ts";
 import { docFromText, obsidianVaults, resolveIncoming } from "./folder/incoming.ts";
 import { planLinkUpdates } from "./folder/link-updates.ts";
 import { openDoc } from "./folder/open-doc.ts";
@@ -1049,6 +1050,20 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.removeInput(rel, text, thread, input) : false };
   },
+  "agent:sessions": async () => ({
+    live: hub.liveSessions(),
+    limit: appSettings.get().sessionLimit,
+    memoryMb: hub.liveSessions() > 0 ? await agentMemoryMb(hub.hostPid()) : null,
+  }),
+  "agent:set-session-limit": async ({ limit }) => {
+    await appSettings.set({ sessionLimit: limit });
+    hub.setLimit(limit);
+    return {
+      live: hub.liveSessions(),
+      limit,
+      memoryMb: hub.liveSessions() > 0 ? await agentMemoryMb(hub.hostPid()) : null,
+    };
+  },
   "features:get": () => appSettings.get().features,
   "features:set": async ({ id, on }) => {
     const features = { ...appSettings.get().features, [id]: on };
@@ -1439,6 +1454,7 @@ void app.whenReady().then(async () => {
   choices = new AgentChoices(app.getPath("userData"));
   await choices.load();
   await appSettings.load();
+  hub.setLimit(appSettings.get().sessionLimit);
   device = await loadDeviceId(app.getPath("userData")).catch((e: unknown) => {
     console.error("Anur couldn't read this install's device ID:", e);
     return null;

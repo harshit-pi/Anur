@@ -20,6 +20,8 @@ export type AppSettings = {
   autoApply: boolean;
   /** Download updates and install them on quit by themselves; on by default. */
   autoUpdate: boolean;
+  /** Live agent sessions before idle ones close (13.3); eight by default. */
+  sessionLimit: number;
 };
 
 const DEFAULTS: AppSettings = {
@@ -27,7 +29,13 @@ const DEFAULTS: AppSettings = {
   defaultAgent: DEFAULT_AGENT,
   autoApply: false,
   autoUpdate: true,
+  sessionLimit: 8,
 };
+
+/** The limits Settings offers; anything else saved reads as the default. */
+export const SESSION_LIMITS = [2, 4, 6, 8, 12, 16, 20];
+const sessionLimitOf = (v: unknown) =>
+  typeof v === "number" && SESSION_LIMITS.includes(v) ? v : DEFAULTS.sessionLimit;
 
 export class AppSettingsStore {
   private current: AppSettings = { ...DEFAULTS };
@@ -48,6 +56,7 @@ export class AppSettingsStore {
         defaultAgent: isAgentId(raw.defaultAgent) ? raw.defaultAgent : DEFAULT_AGENT,
         autoApply: raw.autoApply === true,
         autoUpdate: raw.autoUpdate !== false,
+        sessionLimit: sessionLimitOf(raw.sessionLimit),
       };
     } catch {
       this.current = { ...DEFAULTS };
