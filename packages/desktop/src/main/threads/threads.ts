@@ -495,6 +495,7 @@ export class Threads {
           id: l.id,
           doc: l.doc,
           undoable: l.undo !== null && this.createdUndo.has(l.undo) && !undone.has(l.id),
+          undone: undone.has(l.id),
         });
       else if (l.kind === "auto-used")
         items.push({

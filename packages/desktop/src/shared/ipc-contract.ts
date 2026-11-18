@@ -145,6 +145,8 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     id: z.string(),
     doc: z.string(),
     undoable: z.boolean(),
+    /** Taken back with Undo; `undoable` alone is false too after a restart. */
+    undone: z.boolean().optional(),
   }),
   /** Use all (9.4): edits used across docs at once; `undoable` while one Undo can take them back. */
   z.object({
