@@ -155,6 +155,13 @@ export const AutoUsedLine = LineEnvelope.extend({
   undo: z.string().nullable(),
 });
 
+/** An edit this thread proposed to another doc, which shows it on its page. */
+export const ProposedLine = LineEnvelope.extend({
+  kind: z.literal("proposed"),
+  doc: z.string(),
+  sections: z.array(z.array(z.string())),
+});
+
 /** An auto-used edit taken back from its note. */
 export const AutoUndoneLine = LineEnvelope.extend({
   kind: z.literal("auto-undone"),
@@ -215,6 +222,7 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   RenamedLine,
   CheckLine,
   CreatedLine,
+  ProposedLine,
 ]);
 export type KnownThreadLine = z.infer<typeof KnownThreadLine>;
 
@@ -235,6 +243,7 @@ const KNOWN_KINDS = new Set([
   "renamed",
   "check",
   "created",
+  "proposed",
 ]);
 
 /** A kind added by a later version of format 1; kept as written. */

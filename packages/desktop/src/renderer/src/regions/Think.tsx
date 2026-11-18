@@ -607,11 +607,9 @@ export function Think({
     async (message: string, purpose?: "build" | "check") => {
       if (!docPath || !section) return false;
       setError(null);
-      // An action plans first (15.2): the agent's plan mode, where it has one.
-      const options = newChoices.map((o) => ({
-        id: o.id,
-        value: purpose && o.choices.some((c) => c.value === "plan") ? "plan" : o.current,
-      }));
+      // An action runs in the mode the person picked, as any thread does:
+      // Anur adds no approval Claude Code wouldn't ask for.
+      const options = newChoices.map((o) => ({ id: o.id, value: o.current }));
       const r = await anur.call("thread:start", {
         path: docPath,
         text: docText(),
@@ -901,6 +899,25 @@ export function Think({
               </div>
             ) : item.kind === "check" ? (
               <CheckCard key={i} claims={item.claims} corrected={item.corrected} />
+            ) : item.kind === "proposed" ? (
+              <div key={i} className="think-changed auto" role="status">
+                <span>
+                  Proposed an edit to{" "}
+                  <strong>{item.sections.map((p) => p.at(-1) ?? "").join(", ")}</strong> in{" "}
+                  {item.doc}, shown on its page.
+                </span>
+                <button
+                  type="button"
+                  className="think-button"
+                  onClick={() => {
+                    window.dispatchEvent(
+                      new CustomEvent("anur:open-path", { detail: { path: item.doc } }),
+                    );
+                  }}
+                >
+                  Open
+                </button>
+              </div>
             ) : item.kind === "created" ? (
               <div key={i} className="think-changed auto" role="status">
                 <span>
@@ -1245,7 +1262,7 @@ export function Think({
           <button
             type="button"
             className="think-more"
-            title="The agent plans the work this section describes, and builds it once you approve"
+            title="The agent does what this section describes, with its own tools"
             onClick={() => {
               void start("-", "build");
             }}

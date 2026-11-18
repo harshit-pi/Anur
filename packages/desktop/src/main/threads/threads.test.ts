@@ -297,6 +297,30 @@ describe("Threads", () => {
     expect(preview?.parts[0]?.proposed).toContain("The host has no tests yet; CI is red.");
   });
 
+  it("says in the thread when its edit lands in another doc", async () => {
+    const { folder, support, threads: t, reply } = await setup();
+    const other = "# Pricing\n\n## Plans\n\nPaid: £4.\n";
+    await writeFile(path.join(folder, "pricing.md"), other);
+    const r = await t.start("plan.md", DOC, risks, "Fix the price in pricing.md.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const copies = path.join(support, "agent", "copies", r.thread.id);
+    await writeFile(path.join(copies, "pricing.md"), other.replace("£4", "£3"));
+    await reply(r.thread.id, "Proposed.");
+    // The turn's merge runs after it ends; wait for it rather than a fixed time.
+    const proposed = async () =>
+      (await t.list("plan.md", DOC))
+        .find((x) => x.id === r.thread.id)
+        ?.items.find((i) => i.kind === "proposed");
+    for (let n = 0; n < 50 && !(await proposed()); n++)
+      await new Promise((res) => setTimeout(res, 100));
+    expect(await proposed()).toEqual({
+      kind: "proposed",
+      doc: "pricing.md",
+      sections: [["Pricing", "Plans"]],
+    });
+    expect(await readFile(path.join(folder, "pricing.md"), "utf8")).toBe(other);
+  });
+
   it("keeps a doc the agent makes, revises it in place, and takes it back on Undo", async () => {
     const { folder, support, threads: t, reply, sent } = await setup();
     const r = await t.start("plan.md", DOC, risks, "-", undefined, [], "build");
@@ -306,7 +330,7 @@ describe("Threads", () => {
     // The person sees what they did; the agent gets Anur's whole instruction.
     expect(r.thread.items[0]).toMatchObject({ kind: "message", text: "Build this section" });
     const asked = sent.find((m) => m.type === "prompt");
-    expect(asked?.type === "prompt" && asked.text).toContain("present the plan for approval");
+    expect(asked?.type === "prompt" && asked.text).toContain("never send it yourself");
     const copies = path.join(support, "agent", "copies", r.thread.id);
     await writeFile(path.join(copies, "FAQ.md"), "# FAQ\n");
     await reply(r.thread.id, "Made FAQ.md.");
