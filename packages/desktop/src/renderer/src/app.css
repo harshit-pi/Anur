@@ -226,6 +226,8 @@ button {
 .right-sidebar {
   grid-area: right;
   border-left: 1px solid var(--rule);
+  /* White like the page: the chat is read and written, the files panel only navigated. */
+  background: var(--sheet);
 }
 
 .sidebar-head {
@@ -3336,7 +3338,7 @@ body.resizing * {
   max-height: 45vh;
   overflow: auto;
   border-top: 1px solid var(--rule);
-  background: var(--paper);
+  background: var(--sheet);
 }
 
 .right-footer:empty {
@@ -3750,7 +3752,7 @@ body.resizing * {
   position: absolute;
   inset: auto 0 0;
   height: 56px;
-  background: linear-gradient(transparent, var(--paper));
+  background: linear-gradient(transparent, var(--sheet));
 }
 
 .think-showall {
