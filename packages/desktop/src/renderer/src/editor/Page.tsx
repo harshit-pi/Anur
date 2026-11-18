@@ -23,6 +23,7 @@ import { insertMenu } from "./insert-menu.ts";
 import { type ClickedLink, linkClicks } from "./link-click.ts";
 import { editLink, linkEditor } from "./link-editor.ts";
 import { livePreview } from "./live-preview/live-preview.ts";
+import { restoreFolds, sectionFolding } from "./fold/section-fold.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { editorFilter } from "./editor-filter.ts";
 import { diffSpan, mergeOutside, putBack } from "./outside.ts";
@@ -350,6 +351,7 @@ export function Page({
             ? [
                 markdownSupport(),
                 pageHighlight,
+                sectionFolding(doc.path),
                 preview.current.of(previewFor(sourceNow.current)),
                 ...(editable ? [insertMenu(docsNow.current), linkEditor] : []),
                 linkClicks((link, inNewTab) => {
@@ -599,6 +601,7 @@ export function Page({
       });
     }
     view.current = editor;
+    if (markdownDoc) restoreFolds(editor, doc.path);
     loadPreviews();
     setConflicts(markdownDoc ? conflictsIn(doc.text).length : 0);
     onView(editor);
