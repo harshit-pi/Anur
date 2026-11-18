@@ -13,7 +13,9 @@ import { listDocs } from "../folder/list-docs.ts";
  * While any turn runs in the folder, its docs are watched. Each doc's text
  * before the change comes from a cache read when the turn starts, re-read
  * only for files whose time changed, so Revert has something to go back to.
- * Anur's own writes are recognised by their content and never reported.
+ * Anur's own writes are recognised by their content and never reported, and
+ * neither is a file last written before the turn began: a move, a rename or
+ * an iCloud download shows up as a new path, but its text didn't change.
  */
 
 export type DocChange = { rel: string; before: string | null; after: string };
@@ -28,6 +30,8 @@ export class TurnWatch {
   private readonly cache = new Map<string, { mtime: number; text: string }>();
   private readonly own = new Map<string, { hash: string; at: number }>();
   private readonly running = new Set<string>();
+  /** When each running turn started: a file last written before the earliest wasn't written by it. */
+  private readonly started = new Map<string, number>();
   private watcher: FSWatcher | null = null;
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -47,6 +51,7 @@ export class TurnWatch {
   /** A thread's turn starts: watch the folder, and bring the cache up to date. */
   async start(thread: string): Promise<void> {
     this.running.add(thread);
+    this.started.set(thread, Date.now());
     if (!this.watcher) {
       try {
         this.watcher = watch(this.folder, { recursive: true }, (_e, name) => {
@@ -63,6 +68,7 @@ export class TurnWatch {
   /** A thread's turn ended; the watch stops when no turn runs. */
   stop(thread: string): void {
     this.running.delete(thread);
+    this.started.delete(thread);
     if (this.running.size === 0) {
       this.watcher?.close();
       this.watcher = null;
@@ -123,6 +129,10 @@ export class TurnWatch {
     const mine = this.own.get(rel);
     this.cache.set(rel, { mtime, text: after });
     if (known?.text === after) return;
+    // Moved, renamed, or downloaded by iCloud: the path is new but the file
+    // was last written before the turn began, so nothing in it changed now.
+    const since = Math.min(...this.started.values());
+    if (mtime < since - 1000) return;
     // Anur's own save, from a page or an Apply, in the last minute.
     if (mine && mine.hash === hash(after) && Date.now() - mine.at < 60_000) return;
     this.onChange({ rel, before: known?.text ?? null, after }, [...this.running]);
