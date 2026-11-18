@@ -304,6 +304,40 @@ describe("linked sections (group 8)", () => {
   });
 });
 
+describe("decisions", () => {
+  it("lists people's decisions apart from findings, with who, what they replaced and until", () => {
+    const text = "# Plan\n\n## Pricing\n\nSplitwise is £5.\n";
+    const b = buildBundle({
+      text,
+      tree: buildSectionTree(text, { fileName: "Plan.md" }),
+      index: 1,
+      docPath: "Plan.md",
+      findings: [
+        {
+          claim: "Three retries, not infinite.",
+          source: null,
+          section: "Checkout",
+          by: "person",
+          who: "Sam",
+          when: "3 Nov",
+          instead: "retry until it succeeds",
+          until: null,
+        },
+        { claim: "Splitwise Pro is £2.99.", source: "competitors.txt", section: "Pricing" },
+      ],
+    });
+    expect(b.markdown).toContain("## Decided on this section");
+    expect(b.markdown).toContain(
+      "- Decided by Sam (3 Nov): Three retries, not infinite. Instead of: retry until it succeeds. [on Checkout]",
+    );
+    expect(b.markdown).toContain("Kept Sam's decision");
+    expect(b.markdown).toContain(
+      "- Splitwise Pro is £2.99. (source: competitors.txt) [on Pricing]",
+    );
+    expect(b.markdown).toContain("anur_note_decision");
+  });
+});
+
 describe("findings (16.1)", () => {
   it("carries kept findings with their sources, and asks for new ones through the tool", () => {
     const text = "# Plan\n\n## Pricing\n\nSplitwise is £5.\n";

@@ -1174,6 +1174,13 @@ const handlers: { [C in Channel]: Handler<C> } = {
         claim: f.claim,
         source: f.source,
         section: f.section,
+        by: f.by,
+        quote: f.quote,
+        // Names show only on someone else's decisions.
+        who: f.mine ? null : f.who,
+        instead: f.instead,
+        until: f.until,
+        at: f.at,
       })),
     };
   },

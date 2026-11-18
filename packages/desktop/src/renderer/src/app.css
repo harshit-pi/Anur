@@ -4242,3 +4242,40 @@ button.file-card-name:hover {
   right: 8px;
   font-size: 16px;
 }
+
+/* Decisions: a person's call, in their words. Settled, one quiet line with Undo. */
+.think-decided {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 4px 0;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+
+.think-decided.undone {
+  color: var(--graphite);
+  text-decoration: line-through;
+}
+
+.think-decided-mark {
+  color: var(--green);
+}
+
+.think-decided .think-more {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.think-decided-quote {
+  margin: 2px 0 4px;
+  color: var(--graphite);
+  font-style: italic;
+}
+
+.think-decided-tag {
+  margin-right: 6px;
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 650;
+}

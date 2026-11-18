@@ -22,6 +22,7 @@ import {
   merge3,
   previewParts,
   withPreview,
+  settleRule,
   type DocId,
   type PreviewPart,
   type KnownThreadLine,
@@ -194,6 +195,15 @@ export type KeptFinding = {
   /** The section it was kept on, by name. */
   section: string;
   at: string;
+  /** A person's decision, or a finding from a source. */
+  by: "source" | "person";
+  /** For a decision: the person's words, who said them, what it replaced, until when. */
+  quote: string | null;
+  who: string | null;
+  /** The decision is this person's own: Think shows no name on it. */
+  mine: boolean;
+  instead: string | null;
+  until: string | null;
 };
 
 export type Carried = {
@@ -562,6 +572,13 @@ export class Threads {
     return who;
   }
 
+  /** A device's person by name, this person included: for decisions an agent reads. */
+  private async nameOf(dev: string): Promise<string> {
+    const people = (await this.d.people?.().catch(() => null)) ?? null;
+    if (dev === this.d.device) return people?.me ?? "you";
+    return people?.byDevice.get(dev) ?? "a teammate";
+  }
+
   private async view(at: Located, rel: string, text: string, thread: string) {
     const lines = await this.linesOf(at.doc, thread);
     const start = lines.find((l) => l.kind === "thread");
@@ -603,12 +620,23 @@ export class Threads {
         items.push({ kind: "check", turn: l.turn, claims: l.claims, corrected: l.corrected });
       else if (l.kind === "finding") {
         const last = lines.findLast((d) => d.kind === "finding-decided" && d.finding === l.id);
+        const from = l.from ? lines.find((m) => m.id === l.from) : undefined;
         items.push({
           kind: "finding",
           id: l.id,
           claim: last?.kind === "finding-decided" && last.claim ? last.claim : l.claim,
           source: l.source,
           status: last?.kind === "finding-decided" ? last.status : "proposed",
+          ...(l.by === "person"
+            ? {
+                by: "person" as const,
+                quote: l.quote ?? null,
+                instead: l.instead ?? null,
+                until: l.until ?? null,
+                who: who(from?.dev ?? l.dev),
+                auto: last?.kind === "finding-decided" && last.how === "auto",
+              }
+            : {}),
         });
       } else if (l.kind === "used-all")
         items.push({
@@ -982,6 +1010,11 @@ export class Threads {
         claim: f.claim,
         source: f.source,
         section: f.section,
+        by: f.by,
+        who: f.who,
+        when: new Date(f.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+        instead: f.instead,
+        until: f.until,
       })),
       embeds: live.embeds ?? new Map(),
       linked: live.linked?.linked ?? [],
@@ -1555,6 +1588,7 @@ export class Threads {
         if (l.kind !== "finding") continue;
         const last = lines.findLast((d) => d.kind === "finding-decided" && d.finding === l.id);
         if (last?.kind !== "finding-decided" || last.status !== "kept") continue;
+        const from = l.from ? lines.find((m) => m.id === l.from) : undefined;
         out.push({
           id: l.id,
           thread: t,
@@ -1562,6 +1596,12 @@ export class Threads {
           source: l.source,
           section: sectionName,
           at: l.at,
+          by: l.by ?? "source",
+          quote: l.quote ?? null,
+          who: l.by === "person" ? await this.nameOf(from?.dev ?? l.dev) : null,
+          mine: l.by === "person" && (await this.whoIs())(from?.dev ?? l.dev) === null,
+          instead: l.instead ?? null,
+          until: l.until ?? null,
         });
       }
     }
@@ -1619,6 +1659,58 @@ export class Threads {
     const live = this.live.get(thread);
     if (live) await this.refresh(live.rel, live.docText, thread);
     return { kind: "ok" };
+  }
+
+  /**
+   * anur_note_decision: the agent records a decision the person made, in
+   * their exact words. It settles by itself, with Undo, when the words are
+   * theirs, not a question, and the agent is sure (core settleRule);
+   * otherwise it waits for their Keep. Words they never typed are refused.
+   */
+  private async noteDecisionTool(thread: string, args: unknown): Promise<ToolAnswer> {
+    const live = this.live.get(thread);
+    if (!live?.turn) return { error: "Decisions can only be recorded during a turn." };
+    const a = (args ?? {}) as Record<string, unknown>;
+    const str = (v: unknown, n: number) =>
+      typeof v === "string" && v.trim() ? v.trim().slice(0, n) : null;
+    const quote = str(a.quote, 600);
+    const decision = str(a.decision, 400);
+    if (!quote || !decision) return { error: "Give the person's exact words and the decision." };
+    const confidence = typeof a.confidence === "number" ? a.confidence : 0;
+    const lines = await this.linesOf(live.doc, thread);
+    const said = lines.flatMap((l) =>
+      l.kind === "message" && l.role === "person" ? [{ id: l.id, text: l.text }] : [],
+    );
+    const rule = settleRule(quote, confidence, said);
+    if (rule.kind === "refuse") return { error: rule.reason };
+    const line = await this.append(live.doc, thread, {
+      kind: "finding",
+      turn: live.turn,
+      claim: decision,
+      source: null,
+      by: "person",
+      quote,
+      from: rule.from,
+      instead: str(a.instead, 300),
+      until: str(a.until, 200),
+    });
+    if (rule.kind === "settle")
+      await this.append(live.doc, thread, {
+        kind: "finding-decided",
+        finding: line.id,
+        status: "kept",
+        claim: null,
+        how: "auto",
+      });
+    await this.refresh(live.rel, live.docText, thread);
+    return {
+      text:
+        rule.kind === "settle"
+          ? "Recorded as decided, shown to the person with Undo. It reaches every new thread on this section."
+          : rule.why === "question"
+            ? "Their words read as a question, so it's shown to them to keep; nothing settles until they do."
+            : "Shown to the person to keep; nothing settles until they do.",
+    };
   }
 
   /** anur_propose_finding (16.1): the agent proposes a claim it established, with its source. */
@@ -2739,6 +2831,7 @@ export class Threads {
     if (tool === "anur_read_input") return this.readInputTool(thread, args);
     if (tool === "anur_links") return this.linksTool(thread, args);
     if (tool === "anur_propose_finding") return this.proposeFindingTool(thread, args);
+    if (tool === "anur_note_decision") return this.noteDecisionTool(thread, args);
     if (tool === "anur_search_sections") {
       const words = (args as { words?: unknown } | null)?.words;
       return typeof words === "string" && words.trim()
