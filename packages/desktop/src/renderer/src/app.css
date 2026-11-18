@@ -3486,31 +3486,6 @@ body.resizing * {
   line-height: 1.45;
 }
 
-/* Inputs a person adds (10.4). */
-.think-input-add {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 12px;
-  margin-top: 6px;
-  font-size: 12.5px;
-}
-
-.think-input-link {
-  display: flex;
-  gap: 6px;
-}
-
-.think-input-link input {
-  width: 200px;
-  padding: 3px 6px;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--sheet);
-  color: var(--ink);
-  font: 12.5px var(--font-ui);
-}
-
 .think.think-drop {
   outline: 2px dashed var(--blue);
   outline-offset: -6px;
@@ -3577,4 +3552,43 @@ body.resizing * {
   background: var(--sheet);
   color: var(--slate);
   font: 12.5px var(--font-ui);
+}
+
+/* Findings (16.1): what a thread established, kept or dropped by a person. */
+.think-finding {
+  padding: 8px 12px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--green);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.think-finding.proposed {
+  border-left-color: var(--blue);
+}
+
+.think-finding.dropped {
+  opacity: 0.6;
+  border-left-color: var(--rule);
+}
+
+.think-finding-label {
+  margin-right: 6px;
+  color: var(--graphite);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.think-finding.proposed .think-finding-label {
+  margin-bottom: 2px;
+  color: var(--blue);
+}
+
+.think-finding-edit {
+  width: 100%;
+  margin: 4px 0;
+}
+
+.think-kept {
+  color: var(--green);
 }

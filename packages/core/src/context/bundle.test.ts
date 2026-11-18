@@ -303,3 +303,23 @@ describe("linked sections (group 8)", () => {
     expect(b.markdown).not.toContain("bbbb");
   });
 });
+
+describe("findings (16.1)", () => {
+  it("carries kept findings with their sources, and asks for new ones through the tool", () => {
+    const text = "# Plan\n\n## Pricing\n\nSplitwise is £5.\n";
+    const b = buildBundle({
+      text,
+      tree: buildSectionTree(text, { fileName: "Plan.md" }),
+      index: 1,
+      docPath: "Plan.md",
+      findings: [
+        { claim: "Splitwise Pro is £2.99 a month.", source: "competitors.txt", section: "Pricing" },
+      ],
+    });
+    expect(b.markdown).toContain("## Findings kept on this section");
+    expect(b.markdown).toContain(
+      "- Splitwise Pro is £2.99 a month. (source: competitors.txt) [on Pricing]",
+    );
+    expect(b.markdown).toContain("anur_propose_finding");
+  });
+});

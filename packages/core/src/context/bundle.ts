@@ -93,6 +93,11 @@ export type BundleInput = {
   linked?: readonly { label: string; path: string; text: string; nameOnly?: boolean }[];
   /** Links in this section that go nowhere, as written: "Spec#Plans". */
   broken?: readonly string[];
+  /**
+   * Findings people kept on this section or the sections above it (16.1):
+   * claims earlier threads established, each with its source.
+   */
+  findings?: readonly { claim: string; source: string | null; section: string }[];
 };
 
 /** An embed line on its own: `![[target]]`, the target without its alias. */
@@ -165,6 +170,7 @@ export function buildBundle({
   embeds = new Map<string, string>(),
   linked = [],
   broken = [],
+  findings = [],
 }: BundleInput): Bundle {
   const section = tree.sections[index];
   if (!section) throw new Error(`no section at index ${String(index)}`);
@@ -293,6 +299,8 @@ export function buildBundle({
     "",
     'When this thread has no name yet, name it with Anur\'s anur_name_thread tool as you first reply: two to five words for what it is about, such as "Pricing per flat".',
     "",
+    "When you establish a fact later threads on this section should know, such as a corrected price or a confirmed date, propose it with Anur's anur_propose_finding tool, with the file, doc or page it came from. The person decides whether to keep it; kept findings reach every new thread here.",
+    "",
     "When you have alternatives for this section, two or more ways it could read, offer them with Anur's anur_offer_options tool instead of listing them in your reply: each option is a short title and the section's whole new text, without its heading. The person sees them as cards and on the map, and picks one; its text replaces the section's. Your reply then says in a line or two how they differ; don't repeat their text.",
     "",
   ];
@@ -317,6 +325,18 @@ export function buildBundle({
       lines.push("## Sections beside it, as an outline", "", part.text, "");
     }
   }
+  if (findings.length > 0)
+    lines.push(
+      "## Findings kept on this section",
+      "",
+      "Earlier threads established these, and a person kept them. Treat them as settled unless a source you read now contradicts one; then say so.",
+      "",
+      ...findings.map(
+        (f) =>
+          `- ${f.claim}${f.source ? ` (source: ${f.source})` : ""}${f.section ? ` [on ${f.section}]` : ""}`,
+      ),
+      "",
+    );
   if (leftOut.length > 0)
     lines.push(
       "## Linked, not included",

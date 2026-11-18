@@ -146,6 +146,8 @@ type Live = {
     linked: { label: string; path: string; text: string; nameOnly?: boolean }[];
     broken: string[];
   };
+  /** Findings kept on this thread's section and above it, for its bundle (16.1). */
+  findings?: KeptFinding[];
   /** Files this thread wrote, as absolute paths: reading them back isn't an input. */
   made?: Set<string>;
   /** Other docs this thread proposed edits to, with the sections last said. */
@@ -170,6 +172,18 @@ type Live = {
 const WATCH_AFTER_TURN_MS = 10 * 60_000;
 
 /** An input an earlier thread picked up, carried to a new one (4.4). */
+/** A finding a person kept (16.1), as carried to new threads and listed in Think. */
+export type KeptFinding = {
+  /** The finding line's ID, and the thread that holds it. */
+  id: string;
+  thread: string;
+  claim: string;
+  source: string | null;
+  /** The section it was kept on, by name. */
+  section: string;
+  at: string;
+};
+
 export type Carried = {
   id: string;
   /** The thread that picked it up, or "" for one a person added to the section. */
@@ -409,9 +423,13 @@ export class Threads {
       .sort(compareLines);
   }
 
-  private async append(doc: DocId, thread: string, line: Record<string, unknown>): Promise<void> {
+  private async append(
+    doc: DocId,
+    thread: string,
+    line: Record<string, unknown>,
+  ): Promise<{ id: string }> {
     const file = path.join(this.d.folder, ANUR_DIR, anurPaths.thread(doc, thread, this.d.device));
-    await this.appendTo(file, line);
+    return this.appendTo(file, line);
   }
 
   /** The doc's own inputs file: what people added to its sections, one file per device (10.1). */
@@ -436,13 +454,13 @@ export class Threads {
       .sort(compareLines);
   }
 
-  private async appendTo(file: string, line: Record<string, unknown>): Promise<void> {
+  private async appendTo(file: string, line: Record<string, unknown>): Promise<{ id: string }> {
     let w = this.writers.get(file);
     if (!w) {
       w = JsonlWriter.open(file, this.d.device);
       this.writers.set(file, w);
     }
-    await (await w).append(line);
+    return (await w).append(line);
   }
 
   /** Every thread on the doc, each with its section's heading path in `text`. */
@@ -530,7 +548,16 @@ export class Threads {
       else if (l.kind === "state") closed = l.state === "closed";
       else if (l.kind === "check")
         items.push({ kind: "check", turn: l.turn, claims: l.claims, corrected: l.corrected });
-      else if (l.kind === "used-all")
+      else if (l.kind === "finding") {
+        const last = lines.findLast((d) => d.kind === "finding-decided" && d.finding === l.id);
+        items.push({
+          kind: "finding",
+          id: l.id,
+          claim: last?.kind === "finding-decided" && last.claim ? last.claim : l.claim,
+          source: l.source,
+          status: last?.kind === "finding-decided" ? last.status : "proposed",
+        });
+      } else if (l.kind === "used-all")
         items.push({
           kind: "used-all",
           id: l.id,
@@ -808,6 +835,7 @@ export class Threads {
     const gone = (live.proposed ?? []).filter((p) => !still.includes(p));
     live.waiting = live.proposed?.length ? { still, gone } : null;
     live.carried = await this.carriedFor(at, start.section, thread);
+    live.findings = await this.findingsFor(at, start.section);
     live.linked = await this.linkedFor(at, start.section, rel, text);
     // An embedded base reaches the agent as its table, not as the embed line (4.11).
     live.embeds = new Map();
@@ -875,6 +903,11 @@ export class Threads {
       // A third of the model's window (4.2): this thread's, else the agent's last, else the default.
       budget: budgetFor(live.context?.size ?? live.window ?? null),
       inputs: live.carried ?? [],
+      findings: (live.findings ?? []).map((f) => ({
+        claim: f.claim,
+        source: f.source,
+        section: f.section,
+      })),
       embeds: live.embeds ?? new Map(),
       linked: live.linked?.linked ?? [],
       broken: live.linked?.broken ?? [],
@@ -1417,6 +1450,122 @@ export class Threads {
    * that section or any section above it picked up, never a sibling's, less
    * any a person removed. The latest of each source stays.
    */
+  /**
+   * Findings kept on a section or the sections above it (16.1), oldest
+   * first: each claim as the person kept it, with its source. Dropped ones,
+   * and ones never decided, don't carry.
+   */
+  async findingsFor(at: Located, section: SectionId): Promise<KeptFinding[]> {
+    const index = at.ids.indexOf(section);
+    if (index < 0) return [];
+    const above = new Set<string>();
+    for (let i: number | null = index; i !== null; i = at.tree.sections[i]?.parent ?? null) {
+      const id = at.ids[i];
+      if (id) above.add(id);
+    }
+    let names: string[];
+    try {
+      names = await readdir(this.threadsDir(at.doc));
+    } catch {
+      return [];
+    }
+    const out: KeptFinding[] = [];
+    for (const t of names) {
+      const lines = await this.linesOf(at.doc, t);
+      const start = lines.find((l) => l.kind === "thread");
+      if (start?.kind !== "thread" || !above.has(start.section)) continue;
+      const sectionName =
+        at.tree.sections[at.ids.indexOf(start.section)]?.path.at(-1) ?? "an earlier section";
+      for (const l of lines) {
+        if (l.kind !== "finding") continue;
+        const last = lines.findLast((d) => d.kind === "finding-decided" && d.finding === l.id);
+        if (last?.kind !== "finding-decided" || last.status !== "kept") continue;
+        out.push({
+          id: l.id,
+          thread: t,
+          claim: last.claim ?? l.claim,
+          source: l.source,
+          section: sectionName,
+          at: l.at,
+        });
+      }
+    }
+    return out.sort((a, b) => a.at.localeCompare(b.at));
+  }
+
+  /** The kept findings on a section, for Think's list (16.1). */
+  async listFindings(rel: string, text: string, sectionIndex: number, sectionPath: string[]) {
+    const at = await this.d.locate(rel, text);
+    if (!at) return [];
+    const node = at.tree.sections[sectionIndex];
+    const index =
+      node && node.path.join("\u0000") === sectionPath.join("\u0000")
+        ? sectionIndex
+        : at.tree.sections.findIndex((s) => s.path.join("\u0000") === sectionPath.join("\u0000"));
+    const section = at.ids[index];
+    return section ? this.findingsFor(at, section) : [];
+  }
+
+  /**
+   * A person decides on a finding (16.1): keep it, perhaps reworded, or drop
+   * it. `add` is a finding the person makes themselves, such as from a
+   * Check's verdict (16.2): it is recorded and kept at once.
+   */
+  async decideFinding(
+    thread: string,
+    decision:
+      | { id: string; status: "kept" | "dropped"; claim: string | null }
+      | { add: { claim: string; source: string | null } },
+  ): Promise<{ kind: "ok" } | { kind: "refused"; reason: string }> {
+    const own = await this.docOfThread(thread);
+    if (!own) return { kind: "refused", reason: "That thread isn't in this folder." };
+    let id: string;
+    let status: "kept" | "dropped";
+    let claim: string | null;
+    if ("add" in decision) {
+      const line = await this.append(own, thread, {
+        kind: "finding",
+        turn: "person",
+        claim: decision.add.claim.trim().slice(0, 600),
+        source: decision.add.source,
+      });
+      id = line.id;
+      status = "kept";
+      claim = null;
+    } else {
+      ({ id, status, claim } = decision);
+    }
+    await this.append(own, thread, {
+      kind: "finding-decided",
+      finding: id,
+      status,
+      claim: claim?.trim() ? claim.trim().slice(0, 600) : null,
+    });
+    const live = this.live.get(thread);
+    if (live) await this.refresh(live.rel, live.docText, thread);
+    return { kind: "ok" };
+  }
+
+  /** anur_propose_finding (16.1): the agent proposes a claim it established, with its source. */
+  private async proposeFindingTool(thread: string, args: unknown): Promise<ToolAnswer> {
+    const live = this.live.get(thread);
+    if (!live?.turn) return { error: "Findings can only be proposed during a turn." };
+    const a = (args ?? {}) as { claim?: unknown; source?: unknown };
+    if (typeof a.claim !== "string" || !a.claim.trim())
+      return { error: "Give the claim, one or two sentences." };
+    await this.append(live.doc, thread, {
+      kind: "finding",
+      turn: live.turn,
+      claim: a.claim.trim().slice(0, 600),
+      source:
+        typeof a.source === "string" && a.source.trim() ? a.source.trim().slice(0, 300) : null,
+    });
+    await this.refresh(live.rel, live.docText, thread);
+    return {
+      text: "Shown to the person as a finding to keep or drop. Kept, it reaches every new thread on this section.",
+    };
+  }
+
   async carriedFor(at: Located, section: SectionId, except: string | null): Promise<Carried[]> {
     const index = at.ids.indexOf(section);
     if (index < 0) return [];
@@ -2514,6 +2663,7 @@ export class Threads {
     if (tool === "anur_report_check") return this.reportCheckTool(thread, args);
     if (tool === "anur_read_input") return this.readInputTool(thread, args);
     if (tool === "anur_links") return this.linksTool(thread, args);
+    if (tool === "anur_propose_finding") return this.proposeFindingTool(thread, args);
     if (tool === "anur_search_sections") {
       const words = (args as { words?: unknown } | null)?.words;
       return typeof words === "string" && words.trim()
@@ -2580,6 +2730,8 @@ const KNOWN = new Set([
   "created",
   "proposed",
   "used-all",
+  "finding",
+  "finding-decided",
 ]);
 
 /**

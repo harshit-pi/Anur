@@ -1011,6 +1011,29 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (folder) await versionsFor(folder)?.restored(rel, text, section, from);
     return {};
   },
+  "finding:decide": async ({ thread, id, status, claim, add }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { kind: "refused", reason: "No folder is open." };
+    if (add) return t.decideFinding(thread, { add });
+    if (!id || !status) return { kind: "refused", reason: "Say which finding, and keep or drop." };
+    return t.decideFinding(thread, { id, status, claim: claim ?? null });
+  },
+  "findings:list": async ({ path: rel, text, section }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { findings: [] };
+    const list = await t.listFindings(rel, text, section.index, section.path);
+    return {
+      findings: list.map((f) => ({
+        id: f.id,
+        thread: f.thread,
+        claim: f.claim,
+        source: f.source,
+        section: f.section,
+      })),
+    };
+  },
   "links:of": async ({ path: rel, text, section }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;

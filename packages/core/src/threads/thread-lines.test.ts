@@ -80,7 +80,7 @@ describe("thread lines", () => {
   });
 
   it("keeps a kind added by a later version, as written", () => {
-    const later = { ...env(8), kind: "finding", text: "Retries stop at 3." };
+    const later = { ...env(8), kind: "verdict", text: "Retries stop at 3." };
     const parsed = parseJsonl(encodeLine(later), ThreadLine);
     expect(parsed.lines).toEqual([later]);
   });

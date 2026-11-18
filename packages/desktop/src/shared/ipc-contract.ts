@@ -159,6 +159,14 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     undoable: z.boolean(),
     undone: z.boolean(),
   }),
+  /** A finding (16.1): proposed by the agent, then kept or dropped by a person. */
+  z.object({
+    kind: z.literal("finding"),
+    id: z.string(),
+    claim: z.string(),
+    source: z.string().nullable(),
+    status: z.enum(["proposed", "kept", "dropped"]),
+  }),
   /** An edit this thread proposed to another doc: shown on that doc's page. */
   z.object({
     kind: z.literal("proposed"),
@@ -1059,6 +1067,42 @@ export const ipcContract = {
       z.object({ kind: z.literal("undone"), left: z.array(z.string()) }),
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
+  },
+  /**
+   * A person decides on a finding (16.1): keep it (perhaps reworded) or drop
+   * it; or adds one, such as from a Check's verdict (16.2), kept at once.
+   */
+  "finding:decide": {
+    request: z
+      .object({
+        thread: z.string(),
+        id: z.string().optional(),
+        status: z.enum(["kept", "dropped"]).optional(),
+        claim: z.string().max(600).nullable().optional(),
+        add: z.object({ claim: z.string().max(600), source: z.string().nullable() }).optional(),
+      })
+      .strict(),
+    response: z.union([
+      z.object({ kind: z.literal("ok") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** The findings kept on a section and above it, for Think's list (16.1). */
+  "findings:list": {
+    request: z
+      .object({ path: z.string().max(4096), text: z.string(), section: SectionRef })
+      .strict(),
+    response: z.object({
+      findings: z.array(
+        z.object({
+          id: z.string(),
+          thread: z.string(),
+          claim: z.string(),
+          source: z.string().nullable(),
+          section: z.string(),
+        }),
+      ),
+    }),
   },
   /** A person removes an input: it no longer reaches new threads (4.4). */
   "inputs:remove": {

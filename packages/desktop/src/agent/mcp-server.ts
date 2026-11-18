@@ -77,6 +77,26 @@ const TOOLS = [
     },
   },
   {
+    name: "anur_propose_finding",
+    description:
+      "Propose a finding: a fact this thread established that later threads on this section should know, such as a corrected price or a confirmed date, with the file, doc or page it came from. The person keeps or drops it; kept findings reach every new thread on this section. Propose only what you checked against a source, one claim per call.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        claim: {
+          type: "string",
+          description: "The fact, in one or two sentences, standing on its own.",
+        },
+        source: {
+          type: "string",
+          description: "Where it came from: a path in the folder, a doc, or a URL.",
+        },
+      },
+      required: ["claim", "source"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "anur_offer_options",
     description:
       "Offer the person two or more alternatives for this thread's section, instead of listing them in your reply. Each option is a short title and the section's whole new text, without its heading. Anur shows them as cards in the thread and as boxes on the doc's map; the person picks one, and its text replaces the section's text in the doc. Don't also edit the doc for options you offer.",
