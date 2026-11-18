@@ -1561,33 +1561,60 @@ function CheckCard({
   }[];
   corrected: boolean;
 }) {
-  const counts = (["wrong", "missing", "unsupported", "holds"] as const)
+  // What needs a look first, in this order; what holds folds away.
+  const order = ["wrong", "missing", "unsupported"] as const;
+  const problems = order.flatMap((v) => claims.filter((c) => c.verdict === v));
+  const fine = claims.filter((c) => c.verdict === "holds");
+  const said = order
     .map((v) => [v, claims.filter((c) => c.verdict === v).length] as const)
     .filter(([, n]) => n > 0)
-    .map(([v, n]) => `${String(n)} ${v === "holds" ? "hold" : v}`);
+    .map(
+      ([v, n]) =>
+        `${String(n)} ${n === 1 ? "is" : "are"} ${v === "unsupported" ? "unsupported" : v}`,
+    );
+  const row = (c: (typeof claims)[number], i: number) => (
+    <li key={i} className={`think-claim ${c.verdict}`}>
+      <div className="think-claim-line">
+        <span className="think-verdict">{VERDICT[c.verdict]}</span>
+        <span>{c.claim}</span>
+      </div>
+      <div className="quiet think-claim-note">
+        {c.note}{" "}
+        <span className="think-source" title={c.source}>
+          source
+        </span>
+      </div>
+    </li>
+  );
   return (
     <div className="think-check" role="group" aria-label="Check">
       <p className="think-check-head">
         <strong>
-          {claims.every((c) => c.verdict === "holds")
+          {problems.length === 0
             ? `All ${countOf(claims.length, "claim")} hold`
-            : counts.join(", ")}
+            : `Of ${countOf(claims.length, "claim")}, ${said.join(", ")}`}
         </strong>
-        {corrected ? <span className="quiet"> · a corrected version is below</span> : null}
       </p>
-      <ul>
-        {claims.map((c, i) => (
-          <li key={i} className={`think-claim ${c.verdict}`}>
-            <span className="think-verdict">{VERDICT[c.verdict]}</span>
-            <div>
-              <div>{c.claim}</div>
-              <div className="quiet">
-                {c.note} <span className="think-source">{c.source}</span>
-              </div>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {problems.length > 0 ? <ul>{problems.map(row)}</ul> : null}
+      {fine.length > 0 && problems.length > 0 ? (
+        <details className="think-check-fine">
+          <summary className="quiet">{countOf(fine.length, "claim")} hold</summary>
+          <ul>{fine.map(row)}</ul>
+        </details>
+      ) : null}
+      {corrected ? (
+        <button
+          type="button"
+          className="think-link think-check-fix"
+          onClick={() => {
+            document
+              .querySelector(".think-offer.edit")
+              ?.scrollIntoView({ block: "center", behavior: "smooth" });
+          }}
+        >
+          The corrected text is ready to use, below
+        </button>
+      ) : null}
     </div>
   );
 }
