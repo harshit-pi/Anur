@@ -138,6 +138,7 @@ export {
 export {
   applyEol,
   applyHunks,
+  describeChange,
   detectEol,
   diffLines,
   merge3,

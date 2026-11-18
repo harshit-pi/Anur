@@ -868,6 +868,48 @@ export const ipcContract = {
       into: z.array(z.object({ doc: z.string(), path: z.array(z.string()) })),
     }),
   },
+  /**
+   * A section's history (group 5): its versions newest first, and in a git
+   * repo the commits that changed it, each with the section's text.
+   */
+  "history:list": {
+    request: z
+      .object({ path: z.string().max(4096), text: z.string(), section: SectionRef })
+      .strict(),
+    response: z.object({
+      versions: z.array(
+        z.object({
+          id: z.string(),
+          at: z.string(),
+          cause: z.string(),
+          summary: z.string(),
+          text: z.string(),
+          thread: z.string().nullable(),
+        }),
+      ),
+      commits: z.array(
+        z.object({
+          hash: z.string(),
+          at: z.string(),
+          author: z.string(),
+          subject: z.string(),
+          text: z.string(),
+        }),
+      ),
+    }),
+  },
+  /** A person restored a version of one section: recorded as a "restore" version (5.3). */
+  "history:restored": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        section: z.array(z.string()).max(50),
+        from: z.string(),
+      })
+      .strict(),
+    response: z.object({}),
+  },
   /** A person removes an input: it no longer reaches new threads (4.4). */
   "inputs:remove": {
     request: z

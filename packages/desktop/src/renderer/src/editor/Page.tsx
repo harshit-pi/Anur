@@ -381,6 +381,34 @@ export function Page({
       const at = partOf(e);
       if (at) void savePreview(at.thread, withPart(at.thread, sectionKey(at.part.path), null));
     };
+    // Restore from History (5.3): one version back into its section only, as one change ⌘Z undoes.
+    const onRestore = (e: Event) => {
+      const {
+        path: sectionPath,
+        text: version,
+        from,
+      } = (e as CustomEvent<{ path: string[]; text: string; from: string }>).detail;
+      const tree = sectionsOf(editor.state, doc.path.split("/").pop() ?? doc.path);
+      const s = tree.sections.find((x) => x.path.join("\u0000") === sectionPath.join("\u0000"));
+      if (!s) return;
+      const now = editor.state.doc.sliceString(s.subtreeRange.from, s.subtreeRange.to);
+      // Keep the section's own trailing break, so the next heading stays where it was.
+      const tail = /\s*$/.exec(now)?.[0] ?? "";
+      const insert = version.replace(/\s*$/, "") + tail;
+      if (insert === now) return;
+      editor.dispatch({
+        changes: { from: s.subtreeRange.from, to: s.subtreeRange.to, insert },
+        userEvent: "restore.version",
+        scrollIntoView: true,
+      });
+      void anur.call("history:restored", {
+        path: doc.path,
+        text: editor.state.doc.toString(),
+        section: sectionPath,
+        from,
+      });
+    };
+    window.addEventListener("anur:restore-section", onRestore);
     window.addEventListener("anur:use-preview", onUsePreview);
     window.addEventListener("anur:drop-preview", onDropPreview);
     const offPreviews = anur.on("preview:changed", ({ path }) => {
@@ -683,6 +711,7 @@ export function Page({
       window.removeEventListener("beforeunload", beforeUnload);
       window.removeEventListener("anur:show-preview", onShowPreview);
       window.removeEventListener("anur:use-preview", onUsePreview);
+      window.removeEventListener("anur:restore-section", onRestore);
       window.removeEventListener("anur:drop-preview", onDropPreview);
       offPreviews();
       offReplace();
