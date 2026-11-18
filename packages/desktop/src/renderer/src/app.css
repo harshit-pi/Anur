@@ -2579,3 +2579,59 @@ body.resizing * {
   cursor: pointer;
   list-style-position: inside;
 }
+
+/* The first-launch card for Claude Code (6.1). */
+.skill-card {
+  position: fixed;
+  right: 20px;
+  bottom: 40px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 340px;
+  padding: 16px 18px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: 0 10px 30px var(--shadow);
+  font: 13px/1.5 var(--font-ui);
+  color: var(--ink);
+}
+
+.skill-card p,
+.skill-card ul {
+  margin: 0;
+}
+
+.skill-card ul {
+  padding-left: 18px;
+}
+
+.skill-card code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--hover);
+  font-size: 12px;
+}
+
+.skill-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.skill-card-error {
+  color: var(--red);
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  flex: none;
+}
+
+.skill-card-actions .think-more {
+  align-self: center;
+}

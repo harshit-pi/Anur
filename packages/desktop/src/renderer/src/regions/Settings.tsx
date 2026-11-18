@@ -75,6 +75,85 @@ function Row({
   );
 }
 
+/** Anur in the person's Claude Code (6.2): added or not, with Add, Update and Remove. */
+function SkillRow() {
+  const [s, setS] = useState<{ added: boolean; claude: boolean; current: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = () => {
+    void anur.call("skill:status", {}).then(setS);
+  };
+  useEffect(load, []);
+  const act = (action: "add" | "update" | "remove") => {
+    setBusy(true);
+    setError(null);
+    void anur.call("skill:act", { action }).then((r) => {
+      setBusy(false);
+      if (r.kind === "failed") setError(r.reason);
+      load();
+    });
+  };
+  return (
+    <Row
+      title="Use Anur from Claude Code"
+      detail={
+        error ??
+        (!s
+          ? "Checking…"
+          : !s.claude
+            ? "Claude Code isn't on this computer."
+            : !s.added
+              ? "Adds /anur to Claude Code: /anur doc turns a chat into a doc here."
+              : s.current
+                ? "Added: /anur doc, /anur new and /anur open work in Claude Code. Anur keeps them up to date."
+                : "Added, but out of date: Anur updates it on its next launch, or now.")
+      }
+    >
+      {s?.claude ? (
+        <div className="settings-actions">
+          {!s.added ? (
+            <button
+              type="button"
+              className="think-button primary"
+              disabled={busy}
+              onClick={() => {
+                act("add");
+              }}
+            >
+              Add
+            </button>
+          ) : (
+            <>
+              {!s.current ? (
+                <button
+                  type="button"
+                  className="think-button primary"
+                  disabled={busy}
+                  onClick={() => {
+                    act("update");
+                  }}
+                >
+                  Update
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="think-button"
+                disabled={busy}
+                onClick={() => {
+                  act("remove");
+                }}
+              >
+                Remove
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+    </Row>
+  );
+}
+
 export function Settings({
   section,
   onSection,
@@ -246,6 +325,7 @@ export function Settings({
                 <span className="settings-status">Not yet</span>
               </Row>
             ))}
+            <SkillRow />
           </>
         );
       case "core":

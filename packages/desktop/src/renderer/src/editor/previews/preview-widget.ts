@@ -1,3 +1,4 @@
+import { TERMINAL_EDIT } from "../../../../shared/agents.ts";
 import {
   Facet,
   RangeSetBuilder,
@@ -259,7 +260,9 @@ class BodyWidget extends WidgetType {
     const unsaved = this.thread === UNSAVED_EDIT;
     note.textContent = unsaved
       ? "Your typing from before this section changed outside Anur. Not in the file."
-      : `Preview from the “${shortTitle(this.title)}” thread. Not in the file yet.`;
+      : this.thread === TERMINAL_EDIT
+        ? "Proposed from your terminal. Not in the file yet."
+        : `Preview from the “${shortTitle(this.title)}” thread. Not in the file yet.`;
     const toggle = document.createElement("label");
     toggle.className = "cm-preview-toggle";
     const box = document.createElement("input");

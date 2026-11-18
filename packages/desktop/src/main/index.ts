@@ -30,6 +30,9 @@ import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
+import { ClaudeSkill, claudeHome } from "./claude-skill/install.ts";
+import { terminalHandler, writeTerminalFile } from "./claude-skill/terminal.ts";
+import { findClaude, loginPath } from "../agent/find-claude.ts";
 import { baseAsMarkdown } from "@anur/core";
 import { readImage, saveImage } from "./folder/images.ts";
 import { MapLayouts } from "./folder/map-layout.ts";
@@ -134,6 +137,108 @@ const anurSocket = new AnurSocket(mkdtempSync(path.join(tmpdir(), "anur-")));
 void anurSocket.start().catch((e: unknown) => {
   console.error("Anur's tool socket didn't start; threads run without Anur's tools:", e);
 });
+/** Anur in the person's Claude Code (group 6); set up once the app is ready. */
+let claudeSkill: ClaudeSkill | null = null;
+
+/** The front window, and the folder it shows. */
+function front() {
+  const win = BrowserWindow.getFocusedWindow() ?? [...windows.values()][0] ?? null;
+  const folder = win ? folders.current(win.webContents.id) : null;
+  return win && folder ? { win, folder } : null;
+}
+
+/**
+ * Group 6: the terminal token and its file (6.4), the tools an agent in a
+ * terminal reaches (6.5 to 6.9), and the check of the installed skill on
+ * every launch (6.3).
+ */
+async function startClaudeSkill(): Promise<void> {
+  const support = app.getPath("userData");
+  const terminalFile = path.join(support, "agent", "terminal.json");
+  claudeSkill = new ClaudeSkill({
+    stateFile: path.join(support, "claude-skill.json"),
+    ...claudeHome(),
+    claude: async () => findClaude(await loginPath()),
+    entry: {
+      type: "stdio",
+      command: process.execPath,
+      args: [path.join(here, "mcp-server.js")],
+      env: { ELECTRON_RUN_AS_NODE: "1", ANUR_TERMINAL: terminalFile },
+    },
+  });
+  const t = (webContentsId: number) => {
+    const folder = folders.current(webContentsId);
+    return folder ? threadsFor(folder) : null;
+  };
+  const token = anurSocket.issue(
+    terminalHandler({
+      front: () => {
+        const f = front();
+        return f
+          ? { folder: f.folder.path, docs: f.folder.docs, webContentsId: f.win.webContents.id }
+          : null;
+      },
+      outline: async (_f, rel, text) => {
+        const at = front();
+        return at ? ((await t(at.win.webContents.id)?.outlineOf(rel, text)) ?? null) : null;
+      },
+      bundle: async (_f, rel, text, section) => {
+        const at = front();
+        return at ? ((await t(at.win.webContents.id)?.bundleOf(rel, text, section)) ?? null) : null;
+      },
+      threads: async (_f, rel, text) => {
+        const at = front();
+        return at ? ((await t(at.win.webContents.id)?.threadsOf(rel, text)) ?? null) : null;
+      },
+      propose: async (_f, rel, text, section, body, summary) => {
+        const at = front();
+        return at
+          ? ((await t(at.win.webContents.id)?.proposeFromTerminal(
+              rel,
+              text,
+              section,
+              body,
+              summary,
+            )) ?? null)
+          : null;
+      },
+      keepChat: async (_f, rel, text, chat) => {
+        const at = front();
+        return at ? ((await t(at.win.webContents.id)?.keepChat(rel, text, chat)) ?? null) : null;
+      },
+      create: async (webContentsId, name, markdown) => {
+        const folder = folders.current(webContentsId);
+        if (!folder) return { error: "Anur has no folder open." };
+        const made = await createDoc(folder, name);
+        if (made.kind === "failed") return { error: made.reason };
+        await writeFileAtomic(path.join(folder.path, made.path), markdown);
+        threadsFor(folder)?.ownWrite(made.path, markdown);
+        const now = await folders.refresh(webContentsId);
+        const win = windows.get(webContentsId);
+        if (win && now) send(win, "folder:changed", now);
+        return { path: made.path };
+      },
+      open: (webContentsId, rel, section) => {
+        const win = windows.get(webContentsId);
+        if (!win) return;
+        if (win.isMinimized()) win.restore();
+        win.focus();
+        send(win, "app:open-doc", { path: rel, section });
+      },
+    }),
+  );
+  try {
+    await anurSocket.start();
+    await writeTerminalFile(terminalFile, anurSocket.path, token);
+    if (isCheck) console.log(`terminal-file: ${terminalFile}`);
+  } catch (e) {
+    console.error("Anur couldn't open its tools to a terminal:", e);
+  }
+  const repaired = await claudeSkill.check().catch(() => []);
+  if (repaired.length > 0)
+    console.log(`Anur brought its Claude Code skill up to date: ${repaired.join(", ")}.`);
+}
+
 /** Agents whose choices were read this run; once per run is enough. */
 const probed = new Set<AgentId>();
 /** Each folder's threads, so a reply reaches the windows showing that folder. */
@@ -690,6 +795,21 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.removeInput(rel, text, thread, input) : false };
   },
+  "skill:status": async () =>
+    claudeSkill
+      ? claudeSkill.status()
+      : { added: false, dismissed: false, claude: false, current: false },
+  "skill:act": async ({ action }) => {
+    if (!claudeSkill) return { kind: "failed", reason: "Anur is still starting." };
+    try {
+      if (action === "add" || action === "update") await claudeSkill.add();
+      else if (action === "remove") await claudeSkill.remove();
+      else await claudeSkill.dismiss();
+      return { kind: "done" };
+    } catch (e) {
+      return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
+    }
+  },
   "thread:explore-option": async ({ thread, path: rel, text, option }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
@@ -959,6 +1079,7 @@ void app.whenReady().then(async () => {
     callback(false);
   });
   registerIpc();
+  void startClaudeSkill();
   // A built app takes its icon from its bundle; in dev, show the diamond in the Dock too.
   if (!app.isPackaged && process.platform === "darwin") {
     app.dock?.setIcon(path.join(here, "..", "..", "build", "icon.png"));
@@ -1014,22 +1135,30 @@ app.on("second-instance", () => {
 });
 
 // Quitting ends every typing session first, so its versions are written (2.24).
-let sessionsEnded = false;
 app.on("will-quit", (event) => {
-  if (!sessionsEnded && versions.size > 0) {
-    event.preventDefault();
-    sessionsEnded = true;
-    void Promise.all([...versions.values()].map((v) => v.endAll())).finally(() => {
-      app.quit();
+  if (cleanedUp) return;
+  // Clean up once, then exit: a second app.quit() from inside will-quit
+  // isn't always honoured, which left the app running after a quit.
+  event.preventDefault();
+  cleanedUp = true;
+  const cleanup = async () => {
+    await Promise.all([...versions.values()].map((v) => v.endAll()));
+    docWatcher.stopAll();
+    hub.stop();
+    anurSocket.close();
+    await Promise.all([...threads.values()].map((t) => t.close()));
+    await folders.closeAll();
+  };
+  // Never more than a few seconds: a stuck write mustn't keep the app open.
+  void Promise.race([cleanup(), new Promise((r) => setTimeout(r, 4000))])
+    .catch((e: unknown) => {
+      console.error("Anur couldn't finish cleaning up before quitting:", e);
+    })
+    .finally(() => {
+      app.exit(0);
     });
-    return;
-  }
-  docWatcher.stopAll();
-  for (const t of threads.values()) void t.close();
-  hub.stop();
-  anurSocket.close();
-  void folders.closeAll();
 });
+let cleanedUp = false;
 
 // A window with unsaved typing holds its close until the save lands
 // (the page's beforeunload), then closes itself; a quit carries on after it.

@@ -36,3 +36,5 @@ export const isAgentId = (v: unknown): v is AgentId =>
  * this name, with no thread behind it.
  */
 export const UNSAVED_EDIT = "unsaved";
+/** The preview an agent in a terminal proposed through `anur_propose_preview` (6.6). */
+export const TERMINAL_EDIT = "terminal";

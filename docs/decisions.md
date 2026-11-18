@@ -93,3 +93,11 @@ Engineering decisions made while building Anur, newest first, each with why. The
 ## Panels
 
 - The outline sits under the file tree in the left panel, folding away, and marks the section in focus. The right panel is Think alone, with no tabs; History returns inside Think when section history is built.
+
+## Start from your chat (group 6)
+
+- Anur adds itself to the person's Claude Code only on their Add: the `/anur` skill in `~/.claude/skills/anur/`, and its MCP server registered through `claude mcp add-json --scope user`, so Anur never edits Claude Code's config by hand. `CLAUDE_CONFIG_DIR` is honoured, as Claude Code does.
+- Every launch checks the install: a skill file whose hash differs from the app's (an update, or corruption) is rewritten, and a registration pointing at an old path is replaced. Remove is remembered; nothing comes back after it.
+- An agent in a terminal reaches Anur with a terminal token, written each launch to a file only the person can read. Its tools work on the folder in Anur's front window: outline, section bundle, thread counts, a proposed edit (shown as "Proposed from your terminal"), make a doc, open a doc.
+- `/anur doc` keeps the chat on the new doc's title: the agent's summary as the thread's first message, the Claude Code transcript and the inputs it used as inputs, carried to every section.
+- Quitting cleans up once (sessions, threads, socket, folders, at most four seconds), then exits: a second quit from inside will-quit wasn't always honoured.

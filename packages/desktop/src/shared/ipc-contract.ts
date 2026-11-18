@@ -700,6 +700,24 @@ export const ipcContract = {
       .strict(),
     response: z.object({ ok: z.boolean() }),
   },
+  /** Anur in the person's Claude Code (6.1, 6.2): whether it's added and up to date. */
+  "skill:status": {
+    request: z.object({}).strict(),
+    response: z.object({
+      added: z.boolean(),
+      dismissed: z.boolean(),
+      claude: z.boolean(),
+      current: z.boolean(),
+    }),
+  },
+  /** Add, update, remove, or say Not now to the first-launch card. */
+  "skill:act": {
+    request: z.object({ action: z.enum(["add", "update", "remove", "dismiss"]) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("done") }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
   /** Stop the thread's running turn. */
   "thread:stop": {
     request: z.object({ thread: z.string().max(200) }).strict(),
@@ -789,6 +807,8 @@ export const ipcEvents = {
     before: z.array(z.string()),
     after: z.array(z.string()),
   }),
+  /** An agent in a terminal asked to show a doc (6.7, 6.9): open it, at a section if given. */
+  "app:open-doc": z.object({ path: z.string(), section: z.string().nullable() }),
   /** A doc's previews changed, as when a thread's turn ended with edits. */
   "preview:changed": z.object({ path: z.string() }),
   /** A thread changed: all of it, or a reply arriving piece by piece. */

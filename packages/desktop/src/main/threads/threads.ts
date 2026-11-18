@@ -25,7 +25,13 @@ import {
 } from "@anur/core";
 import type { EventPayload, ThreadItem, ThreadView } from "../../shared/ipc-contract.ts";
 import type { SessionOption, SessionSpec, ToMain } from "../../agent/protocol.ts";
-import { DEFAULT_AGENT, UNSAVED_EDIT, isAgentId, type AgentId } from "../../shared/agents.ts";
+import {
+  DEFAULT_AGENT,
+  TERMINAL_EDIT,
+  UNSAVED_EDIT,
+  isAgentId,
+  type AgentId,
+} from "../../shared/agents.ts";
 import { JsonlWriter, readJsonlFile } from "../../vault/jsonl-writer.ts";
 import type { AgentHub } from "./hub.ts";
 import { PreviewStore } from "./previews.ts";
@@ -971,9 +977,11 @@ export class Threads {
           title:
             p.thread === UNSAVED_EDIT
               ? "Your unsaved edit"
-              : start?.kind === "thread"
-                ? start.title
-                : "A thread",
+              : p.thread === TERMINAL_EDIT
+                ? "From your terminal"
+                : start?.kind === "thread"
+                  ? start.title
+                  : "A thread",
           parts: p.parts.map((part) => {
             const i = part.section ? at.ids.indexOf(part.section) : -1;
             return { ...part, path: at.tree.sections[i]?.path ?? part.path };
@@ -1225,6 +1233,173 @@ export class Threads {
       undefined,
       option,
     );
+  }
+
+  // ---- For agents in a terminal (6.5 to 6.8) ----
+
+  /** A section by its ID, heading path ("Retry > Payday") or heading; -1 when none. */
+  private static findSection(at: Located, query: string): number {
+    const q = query.trim();
+    const byId = at.ids.findIndex((id) => id === q);
+    if (byId >= 0) return byId;
+    const want = q.split(/\s*>\s*/).map((p) => p.toLowerCase());
+    return at.tree.sections.findIndex(
+      (s) =>
+        s.path.length >= want.length &&
+        want.every((w, k) => s.path[s.path.length - want.length + k]?.toLowerCase() === w),
+    );
+  }
+
+  /** Each section's open threads, and how many are running. */
+  private async threadCounts(at: Located, rel: string, text: string) {
+    const views = await this.list(rel, text);
+    const counts = new Map<number, { open: number; running: number }>();
+    for (const v of views) {
+      if (v.closed || !v.path) continue;
+      const i = at.tree.sections.findIndex((s) => s.path.join("\u0000") === v.path?.join("\u0000"));
+      const c = counts.get(i) ?? { open: 0, running: 0 };
+      c.open += 1;
+      if (v.busy) c.running += 1;
+      counts.set(i, c);
+    }
+    return counts;
+  }
+
+  /** anur_outline: the heading tree, each with its ID and its threads. */
+  async outlineOf(rel: string, text: string): Promise<string | null> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return null;
+    const counts = await this.threadCounts(at, rel, text);
+    return at.tree.sections
+      .map((s) => {
+        const c = counts.get(s.index);
+        const threads = c ? `, ${String(c.open)} thread${c.open === 1 ? "" : "s"}` : "";
+        return `${"  ".repeat(Math.max(0, s.path.length - 1))}- ${s.path.at(-1) ?? ""} [${at.ids[s.index] ?? ""}${threads}]`;
+      })
+      .join("\n");
+  }
+
+  /** anur_list_threads: each section with threads, how many, and whether any is running. */
+  async threadsOf(rel: string, text: string): Promise<string | null> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return null;
+    const counts = await this.threadCounts(at, rel, text);
+    if (counts.size === 0) return "No section has a thread yet.";
+    return [...counts]
+      .map(([i, c]) => {
+        const s = at.tree.sections[i];
+        return `- ${s ? s.path.join(" > ") : "A section that's gone"}: ${String(c.open)} open${c.running ? `, ${String(c.running)} running` : ""}`;
+      })
+      .join("\n");
+  }
+
+  /** anur_section_bundle: what a new thread on the section starts with. */
+  async bundleOf(rel: string, text: string, query: string): Promise<string | null> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return null;
+    const index = Threads.findSection(at, query);
+    const id = at.ids[index];
+    if (index < 0 || !id) return null;
+    return buildBundle({
+      text,
+      tree: at.tree,
+      index,
+      docPath: rel,
+      budget: budgetFor(null),
+      inputs: await this.carriedFor(at, id, null),
+    }).markdown;
+  }
+
+  /**
+   * anur_propose_preview from a terminal (6.6): the section's own text as
+   * the agent proposes it, shown as a proposed edit; nothing is applied.
+   */
+  async proposeFromTerminal(
+    rel: string,
+    text: string,
+    query: string,
+    body: string,
+    summary: string | null,
+  ): Promise<string | null> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return null;
+    const index = Threads.findSection(at, query);
+    const s = at.tree.sections[index];
+    if (!s) return null;
+    const from = s.headingRange ? s.headingRange.to : s.ownRange.from;
+    const rest = text.slice(s.ownRange.to);
+    const proposed = `${text.slice(0, from)}${s.headingRange ? "\n\n" : ""}${body.trim()}\n${rest ? `\n${rest.replace(/^\n+/, "")}` : ""}`;
+    const parts = previewParts(text, proposed, Threads.spans(at));
+    if (parts.length === 0) return s.path.join(" > ");
+    await this.previews.write(at.doc, TERMINAL_EDIT, parts, summary);
+    this.d.previewsChanged(rel);
+    return s.path.join(" > ");
+  }
+
+  /**
+   * /anur doc (6.8): the chat a doc came from, kept as a thread on its
+   * title. The agent's summary is its first message; the transcript and
+   * the inputs it used are inputs on the title, so every section's new
+   * threads receive them.
+   */
+  async keepChat(
+    rel: string,
+    text: string,
+    chat: {
+      summary: string;
+      transcript: string | null;
+      inputs: {
+        source: "file" | "fetch" | "command" | "mcp";
+        label: string;
+        ref: string;
+        content: string | null;
+      }[];
+    },
+  ): Promise<string | null> {
+    const at = await this.d.locate(rel, text);
+    const title = at?.ids[0];
+    if (!at || !title) return null;
+    const thread = newThreadId();
+    const turn = newTurnId();
+    await this.append(at.doc, thread, {
+      kind: "thread",
+      thread,
+      doc: at.doc,
+      section: title,
+      title: "From your chat",
+      start: "new",
+      branchedFrom: null,
+    });
+    await this.append(at.doc, thread, { kind: "message", turn, role: "agent", text: chat.summary });
+    const all = [
+      ...(chat.transcript
+        ? [
+            {
+              source: "file" as const,
+              label: "The chat this doc came from",
+              ref: "chat transcript",
+              content: chat.transcript,
+            },
+          ]
+        : []),
+      ...chat.inputs,
+    ];
+    let n = 0;
+    for (const i of all) {
+      const hash =
+        i.content != null ? await this.snapshots.put(new TextEncoder().encode(i.content)) : null;
+      await this.append(at.doc, thread, {
+        kind: "input",
+        turn,
+        toolUse: `chat-${String((n += 1))}`,
+        source: i.source,
+        label: i.label,
+        ref: i.ref,
+        hash,
+        trust: i.source === "fetch" ? "untrusted" : "trusted",
+      });
+    }
+    return thread;
   }
 
   /** One of Anur's MCP tools, called by this thread's agent. */
