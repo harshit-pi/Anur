@@ -145,6 +145,32 @@ export const InputLine = LineEnvelope.extend({
   hash: SnapshotHash.nullable(),
   /** Pages and search results are untrusted: text from the web, not from the person. */
   trust: z.enum(["trusted", "untrusted"]),
+  /**
+   * Its content is kept on the device that read it, never in `.anur/`: what
+   * came from that person's machine outside the folder. Others see the label.
+   */
+  local: z.boolean().optional(),
+});
+
+/**
+ * Something a person added for threads to work from (group 10): a file or a
+ * mock attached, a file from the folder, or a link. On a section, it lives
+ * in the doc's inputs file and reaches every thread on that section and
+ * below; on a thread, in that thread's file, and from there new threads too.
+ */
+export const AddedInputLine = LineEnvelope.extend({
+  kind: z.literal("added-input"),
+  section: SectionId,
+  /** The thread it was added to; null when added to the section. */
+  thread: ThreadId.nullable(),
+  /** An attachment copied into the folder, a file already in it, or a link. */
+  source: z.enum(["attachment", "file", "link"]),
+  label: z.string(),
+  /** A path in the folder, or the link's address. */
+  ref: z.string(),
+  hash: SnapshotHash.nullable(),
+  /** A link is text from the web: untrusted. */
+  trust: z.enum(["trusted", "untrusted"]),
 });
 
 /** A person removed an input: it no longer reaches new threads (4.4). */
@@ -170,6 +196,37 @@ export const ProposedLine = LineEnvelope.extend({
   kind: z.literal("proposed"),
   doc: z.string(),
   sections: z.array(z.array(z.string())),
+});
+
+/** Use all (9.4): a thread's edits used across docs at once, with one Undo. */
+export const UsedAllLine = LineEnvelope.extend({
+  kind: z.literal("used-all"),
+  docs: z.array(z.object({ doc: z.string(), sections: z.array(z.array(z.string())) })),
+  /** Edits that clashed with the text and stay proposals, as "doc › section". */
+  kept: z.array(z.string()),
+  undo: z.string().nullable(),
+});
+
+/**
+ * A finding (16.1): a claim a thread established, with the source it came
+ * from, proposed by the agent. It carries to later threads only once a
+ * person keeps it.
+ */
+export const FindingLine = LineEnvelope.extend({
+  kind: z.literal("finding"),
+  turn: z.string().min(1),
+  claim: z.string().min(1),
+  /** Where it came from: a file, a doc, a page; null when the agent gave none. */
+  source: z.string().nullable(),
+});
+
+/** A person's decision on a finding: kept (perhaps reworded), or dropped. */
+export const FindingDecidedLine = LineEnvelope.extend({
+  kind: z.literal("finding-decided"),
+  finding: z.string().min(1),
+  status: z.enum(["kept", "dropped"]),
+  /** The claim as the person kept it, when they reworded it. */
+  claim: z.string().nullable(),
 });
 
 /** An auto-used edit taken back from its note. */
@@ -227,12 +284,16 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   OptionExploredLine,
   InputLine,
   InputRemovedLine,
+  AddedInputLine,
   AutoUsedLine,
   AutoUndoneLine,
   RenamedLine,
   CheckLine,
   CreatedLine,
   ProposedLine,
+  UsedAllLine,
+  FindingLine,
+  FindingDecidedLine,
 ]);
 export type KnownThreadLine = z.infer<typeof KnownThreadLine>;
 
@@ -248,12 +309,16 @@ const KNOWN_KINDS = new Set([
   "option-explored",
   "input",
   "input-removed",
+  "added-input",
   "auto-used",
   "auto-undone",
   "renamed",
   "check",
   "created",
   "proposed",
+  "used-all",
+  "finding",
+  "finding-decided",
 ]);
 
 /** A kind added by a later version of format 1; kept as written. */

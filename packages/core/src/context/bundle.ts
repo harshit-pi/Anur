@@ -12,7 +12,7 @@ import type { SectionTree } from "../sections/tree.ts";
 
 /** One part of the bundle, as the reads line lists it. */
 export type BundlePart = {
-  kind: "ancestor" | "section" | "siblings" | "outline" | "full";
+  kind: "ancestor" | "section" | "siblings" | "outline" | "full" | "linked";
   /** What the reads line says it is: the section's heading, "Sibling sections" or "The rest of the doc". */
   label: string;
   /** How much of it: "its text", "its outline". */
@@ -84,6 +84,20 @@ export type BundleInput = {
    * for `![[Ideas.base]]` (4.11), by the embed's target. Counted in the budget.
    */
   embeds?: ReadonlyMap<string, string>;
+  /**
+   * The sections this section links to in other docs, one link deep, in
+   * reading order (group 8): each with its label ("Pricing.md › Plans"),
+   * its path in the folder and its text. What fits the budget left after
+   * the doc goes in; the rest are named as left out, farthest first.
+   */
+  linked?: readonly { label: string; path: string; text: string; nameOnly?: boolean }[];
+  /** Links in this section that go nowhere, as written: "Spec#Plans". */
+  broken?: readonly string[];
+  /**
+   * Findings people kept on this section or the sections above it (16.1):
+   * claims earlier threads established, each with its source.
+   */
+  findings?: readonly { claim: string; source: string | null; section: string }[];
 };
 
 /** An embed line on its own: `![[target]]`, the target without its alias. */
@@ -99,6 +113,16 @@ export function expandEmbeds(markdown: string, embeds: ReadonlyMap<string, strin
 export function embedTargets(markdown: string): string[] {
   return [...markdown.matchAll(EMBED_LINE)].flatMap((m) => (m[1] ? [m[1].trim()] : []));
 }
+
+/**
+ * The most of the rest of a doc that goes in full, about 15,000 tokens; a
+ * longer doc goes as its outline, with the hint to read any section that
+ * could set a rule. The head-to-head eval (16.5, 2026-11-18) found a
+ * 2,300-line doc sent whole cost about two and a half times what Claude
+ * Code spent on the same tasks, for the same quality: the agent reads the
+ * sections it needs.
+ */
+export const DOC_FULL_MAX = 60_000;
 
 /** About a third of a 200,000-token context window, at roughly four characters a token. */
 export const FULL_TEXT_BUDGET = 240_000;
@@ -144,6 +168,9 @@ export function buildBundle({
   budget = FULL_TEXT_BUDGET,
   inputs = [],
   embeds = new Map<string, string>(),
+  linked = [],
+  broken = [],
+  findings = [],
 }: BundleInput): Bundle {
   const section = tree.sections[index];
   if (!section) throw new Error(`no section at index ${String(index)}`);
@@ -206,7 +233,7 @@ export function buildBundle({
               })
               .join("\n\n")
           : null;
-      if (full !== null && full.length <= budget) {
+      if (full !== null && full.length <= Math.min(budget, DOC_FULL_MAX)) {
         if (full)
           parts.push({
             kind: "full",
@@ -241,6 +268,16 @@ export function buildBundle({
     }
   }
 
+  // Linked sections, in reading order, while the budget the doc left allows.
+  let used = parts.reduce((n, p) => n + p.text.length, 0);
+  const leftOut: { label: string; path: string }[] = [];
+  for (const l of linked) {
+    if (!l.nameOnly && used + l.text.length <= budget) {
+      parts.push({ kind: "linked", label: l.label, detail: "linked, its text", text: l.text });
+      used += l.text.length;
+    } else leftOut.push(l);
+  }
+
   const where = formatPath(section.path);
   const lines = [
     `# Anur: a thread on one section`,
@@ -249,6 +286,11 @@ export function buildBundle({
     parts.some((p) => p.kind === "full")
       ? "Below is what this thread works from: the text of the sections above it, this section in full, and the rest of the doc in full. Other threads' discussions are never included, on purpose, so this one stays about this section."
       : "Below is what this thread works from: the text of the sections above it, this section in full, and the rest of the doc as an outline, each section's heading and first line. Any section's full text is one call away with Anur's anur_read_section tool. Other threads' discussions are never included, on purpose, so this one stays about this section.",
+    ...(parts.some((p) => p.kind === "linked")
+      ? [
+          "It also has the text of the sections this section links to in other docs, one link deep, each labelled with its file: what the section points at is part of what it says.",
+        ]
+      : []),
     ...(rules.includes("fetch-hint") && !parts.some((p) => p.kind === "full")
       ? [
           "Before you answer, read with anur_read_section any section in the outline whose text could set a rule for your answer, such as a rule on wording, format or channels; the outline shows first lines only.",
@@ -256,6 +298,8 @@ export function buildBundle({
       : []),
     "",
     'When this thread has no name yet, name it with Anur\'s anur_name_thread tool as you first reply: two to five words for what it is about, such as "Pricing per flat".',
+    "",
+    "When you establish a fact later threads on this section should know, such as a corrected price or a confirmed date, propose it with Anur's anur_propose_finding tool, with the file, doc or page it came from. The person decides whether to keep it; kept findings reach every new thread here.",
     "",
     "When you have alternatives for this section, two or more ways it could read, offer them with Anur's anur_offer_options tool instead of listing them in your reply: each option is a short title and the section's whole new text, without its heading. The person sees them as cards and on the map, and picks one; its text replaces the section's. Your reply then says in a line or two how they differ; don't repeat their text.",
     "",
@@ -275,10 +319,42 @@ export function buildBundle({
       lines.push("## The whole doc, as an outline", "", part.text, "");
     } else if (part.kind === "full") {
       lines.push("## The rest of the doc, in full", "", part.text, "");
+    } else if (part.kind === "linked") {
+      lines.push(`## Linked from this section: ${part.label}`, "", part.text || "(empty)", "");
     } else {
       lines.push("## Sections beside it, as an outline", "", part.text, "");
     }
   }
+  if (findings.length > 0)
+    lines.push(
+      "## Findings kept on this section",
+      "",
+      "Earlier threads established these, and a person kept them. Treat them as settled unless a source you read now contradicts one; then say so.",
+      "",
+      ...findings.map(
+        (f) =>
+          `- ${f.claim}${f.source ? ` (source: ${f.source})` : ""}${f.section ? ` [on ${f.section}]` : ""}`,
+      ),
+      "",
+    );
+  if (leftOut.length > 0)
+    lines.push(
+      "## Linked, not included",
+      "",
+      "This section links to these too; they were left out to keep this short. Read any you need with your own Read tool.",
+      "",
+      ...leftOut.map((l) => `- ${l.label}: \`${l.path}\``),
+      "",
+    );
+  if (broken.length > 0)
+    lines.push(
+      "## Links that go nowhere",
+      "",
+      "This section links to these, but no doc or heading by that name is in the folder. Don't guess what they held; say so if it matters.",
+      "",
+      ...broken.map((b) => `- [[${b}]]`),
+      "",
+    );
   if (inputs.length > 0) {
     lines.push(
       "## Inputs from earlier threads on this section or above it",

@@ -98,11 +98,15 @@ export type AgentSignIn = z.infer<typeof AgentSignIn>;
 
 /** One item in a thread, as the Think panel shows it. */
 export const ThreadItem = z.discriminatedUnion("kind", [
+  /** A file or folder the person attached to their next message (10.4). */
+  z.object({ kind: z.literal("attached"), source: z.string(), label: z.string() }),
   z.object({
     kind: z.literal("message"),
     turn: z.string(),
     role: z.enum(["person", "agent"]),
     text: z.string(),
+    /** Who wrote a person's message, when it isn't the one reading. */
+    by: z.string().nullable().optional(),
   }),
   z.object({
     kind: z.literal("tool"),
@@ -145,6 +149,25 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     id: z.string(),
     doc: z.string(),
     undoable: z.boolean(),
+    /** Taken back with Undo; `undoable` alone is false too after a restart. */
+    undone: z.boolean().optional(),
+  }),
+  /** Use all (9.4): edits used across docs at once; `undoable` while one Undo can take them back. */
+  z.object({
+    kind: z.literal("used-all"),
+    id: z.string(),
+    docs: z.array(z.object({ doc: z.string(), sections: z.array(z.array(z.string())) })),
+    kept: z.array(z.string()),
+    undoable: z.boolean(),
+    undone: z.boolean(),
+  }),
+  /** A finding (16.1): proposed by the agent, then kept or dropped by a person. */
+  z.object({
+    kind: z.literal("finding"),
+    id: z.string(),
+    claim: z.string(),
+    source: z.string().nullable(),
+    status: z.enum(["proposed", "kept", "dropped"]),
   }),
   /** An edit this thread proposed to another doc: shown on that doc's page. */
   z.object({
@@ -193,6 +216,15 @@ export const ThreadView = z.object({
   title: z.string(),
   closed: z.boolean(),
   busy: z.boolean(),
+  /** When anything last happened in it, and the start of its last reply, for the list. */
+  lastAt: z.string().nullable().optional(),
+  lastReply: z.string().nullable().optional(),
+  /** For a branch (10.5): the thread it came from, and that thread's name. */
+  branchedFrom: z.object({ thread: z.string(), title: z.string() }).nullable().optional(),
+  /** Every edit this thread proposes now, by doc and section (9.3). */
+  changeSet: z
+    .array(z.object({ doc: z.string(), sections: z.array(z.array(z.string())) }))
+    .optional(),
   /** When the running turn started (ms since epoch); null while idle. */
   busySince: z.number().nullable().optional(),
   /** What the agent reads in this thread: the bundle's parts, as the reads line lists them. */
@@ -208,6 +240,8 @@ export const ThreadView = z.object({
   tokens: z
     .object({
       used: z.int().nonnegative(),
+      /** Of `used`, what was read back from the prompt cache, at a fraction of the price. */
+      cached: z.int().nonnegative().optional(),
       context: z.int().nonnegative(),
       /** The context after the first turn: the meter counts growth from here (4.9). */
       first: z.int().nonnegative(),
@@ -217,6 +251,10 @@ export const ThreadView = z.object({
     .nullable(),
   /** An action thread (group 15), or null for thinking. */
   purpose: z.enum(["build", "check"]).nullable(),
+  /** Who started it, when it isn't the one reading; null for their own. */
+  by: z.string().nullable().optional(),
+  /** When it started (ISO). */
+  startedAt: z.string().optional(),
   agent: AgentIdSchema,
 });
 export type ThreadView = z.infer<typeof ThreadView>;
@@ -232,6 +270,24 @@ export type PreviewView = z.infer<typeof PreviewView>;
 
 /** The section a thread is about: its index in the page's tree and its heading path, to check it. */
 const SectionRef = z.object({ index: z.int().nonnegative(), path: z.array(z.string()).max(50) });
+
+const FeatureFlagsSchema = z.object({
+  links: z.boolean(),
+  history: z.boolean(),
+  actions: z.boolean(),
+});
+
+/** Where an update stands; "off" in Anur Dev, which doesn't update itself. */
+export const UpdateState = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("off") }),
+  z.object({ kind: z.literal("idle"), checkedAt: z.string().nullable() }),
+  z.object({ kind: z.literal("checking") }),
+  z.object({ kind: z.literal("available"), version: z.string() }),
+  z.object({ kind: z.literal("downloading"), version: z.string(), percent: z.number() }),
+  z.object({ kind: z.literal("ready"), version: z.string() }),
+  z.object({ kind: z.literal("error"), reason: z.string() }),
+]);
+export type UpdateState = z.infer<typeof UpdateState>;
 
 export const ipcContract = {
   "app:info": {
@@ -357,26 +413,29 @@ export const ipcContract = {
   "settings:get": {
     request: z.object({}).strict(),
     response: z.object({
-      sectionHistory: z.boolean(),
       commitAnur: z.boolean().nullable(),
       defaultAgent: AgentIdSchema,
       autoApply: z.boolean(),
+      /** The name others see on this person's threads. */
+      name: z.string(),
     }),
   },
   "settings:set": {
     request: z
       .object({
-        sectionHistory: z.boolean().optional(),
         commitAnur: z.boolean().optional(),
         defaultAgent: AgentIdSchema.optional(),
         autoApply: z.boolean().optional(),
+        /** Empty goes back to git's name, else the Mac's. */
+        name: z.string().max(80).optional(),
       })
       .strict(),
     response: z.object({
-      sectionHistory: z.boolean(),
       commitAnur: z.boolean().nullable(),
       defaultAgent: AgentIdSchema,
       autoApply: z.boolean(),
+      /** The name others see on this person's threads. */
+      name: z.string(),
     }),
   },
   /** Rename a thread, so the person can tell it apart in Think and on the map. */
@@ -388,6 +447,94 @@ export const ipcContract = {
         text: z.string(),
         title: z.string().max(400),
       })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /**
+   * Settings, Storage (11.5, 11.6): what `.anur/` holds by kind, what Clean
+   * up would remove, which other devices hold it off, and attachments
+   * nothing uses.
+   */
+  "storage:read": {
+    request: z.object({}).strict(),
+    response: z.object({
+      kinds: z.array(z.object({ kind: z.string(), bytes: z.number(), files: z.number() })),
+      cleanable: z.object({ count: z.number(), bytes: z.number() }),
+      /** Other devices open now or that didn't quit cleanly: when each last opened the folder. */
+      blockedBy: z.array(z.object({ openedAt: z.string().nullable() })),
+      attachments: z.array(z.object({ path: z.string(), bytes: z.number() })),
+    }),
+  },
+  /** Clean up (11.5): remove snapshots unused for 30 days that nothing points to. */
+  "storage:clean": {
+    request: z.object({}).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok"), removed: z.number() }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** Move one unused attachment to the system trash (11.6). */
+  "attachment:trash": {
+    request: z.object({ path: z.string().max(4096) }).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Close or reopen a thread (11.3): closed ones are hidden until a person shows them. */
+  "thread:close": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        path: z.string().max(4096),
+        text: z.string(),
+        closed: z.boolean(),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Delete a thread and its previews, at once (11.3). */
+  "thread:delete": {
+    request: z.object({ thread: z.string().max(200) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /**
+   * The open doc's orphans (11.1): sections whose heading is gone, with the
+   * threads and history behind them, and the live section most like each.
+   */
+  "orphans:list": {
+    request: z.object({ path: z.string().max(4096), text: z.string() }).strict(),
+    response: z.object({
+      orphans: z.array(
+        z.object({
+          id: z.string(),
+          path: z.array(z.string()),
+          threads: z.array(z.object({ id: z.string(), title: z.string() })),
+          history: z.boolean(),
+          suggestion: SectionRef.nullable(),
+        }),
+      ),
+    }),
+  },
+  /** Reattach an orphan to a live section (11.1): its threads and history move there. */
+  "orphans:reattach": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        orphan: z.string().max(200),
+        section: SectionRef,
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** Delete an orphan's threads, previews, inputs and history, at once (11.2). */
+  "orphans:delete": {
+    request: z
+      .object({ path: z.string().max(4096), text: z.string(), orphan: z.string().max(200) })
       .strict(),
     response: z.object({ ok: z.boolean() }),
   },
@@ -516,6 +663,27 @@ export const ipcContract = {
     request: z.object({ url: z.string().max(4096) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
+  /** What another app dropped or pasted that isn't plain files: addresses, links, text. */
+  "file:incoming": {
+    request: z
+      .object({
+        into: z.string().max(1024),
+        uriList: z.string().max(100_000),
+        text: z.string().max(1_000_000),
+        obsidianFiles: z.string().max(100_000),
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("copied"), paths: z.array(z.string()), folder: FolderState }),
+      z.object({ kind: z.literal("made"), path: z.string(), folder: FolderState }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /** Paste into the page as Edit → Paste does, so the paste event carries every kind of data. */
+  "edit:paste": {
+    request: z.object({}).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Files copied in Finder, or in Anur, as full paths. */
   "clipboard:read-files": {
     request: z.object({}).strict(),
@@ -526,14 +694,48 @@ export const ipcContract = {
     request: z.object({ paths: z.array(z.string().max(1024)).max(1000) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
-  /** Which one-time tips have been shown, and whether tips show at all (not in checks). */
-  "tips:seen": {
+  /** Live agent sessions, the memory the agents use, and the limit (13.3, 13.4). */
+  "agent:sessions": {
     request: z.object({}).strict(),
-    response: z.object({ seen: z.array(z.string()), enabled: z.boolean() }),
+    response: z.object({ live: z.number(), limit: z.number(), memoryMb: z.number().nullable() }),
   },
-  /** A tip was shown and dismissed: never show it again. */
-  "tips:done": {
-    request: z.object({ id: z.string().max(64) }).strict(),
+  "agent:set-session-limit": {
+    request: z.object({ limit: z.number().int().min(1).max(50) }).strict(),
+    response: z.object({ live: z.number(), limit: z.number(), memoryMb: z.number().nullable() }),
+  },
+  /** Which switchable Core features are on (group 12). */
+  "features:get": {
+    request: z.object({}).strict(),
+    response: FeatureFlagsSchema,
+  },
+  /** Turn one switchable Core feature on or off; every window hears it. */
+  "features:set": {
+    request: z.object({ id: z.enum(["links", "history", "actions"]), on: z.boolean() }).strict(),
+    response: FeatureFlagsSchema,
+  },
+  /** Where updates stand, the running version, and whether they install by themselves. */
+  "update:status": {
+    request: z.object({}).strict(),
+    response: z.object({ state: UpdateState, version: z.string(), auto: z.boolean() }),
+  },
+  /** Check the feed now, as Check for Updates asks. */
+  "update:check": {
+    request: z.object({}).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Download the version found, when automatic installs are off. */
+  "update:download": {
+    request: z.object({}).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Turn automatic installs on or off. */
+  "update:set-auto": {
+    request: z.object({ auto: z.boolean() }).strict(),
+    response: z.object({ auto: z.boolean() }),
+  },
+  /** Quit and put the downloaded update in place, then open again. */
+  "update:restart": {
+    request: z.object({}).strict(),
     response: z.object({ ok: z.boolean() }),
   },
   /** Whether to show the first-run tour: not yet seen on this Mac. */
@@ -731,6 +933,10 @@ export const ipcContract = {
         agent: AgentIdSchema.optional(),
         /** An action (group 15): Anur writes the first message, and the agent plans first. */
         purpose: z.enum(["build", "check"]).optional(),
+        /** Branch (10.5): a new thread whose agent knows that thread's chat up to that item. */
+        branch: z.object({ thread: z.string().max(200), upTo: z.int().nonnegative() }).optional(),
+        /** Files and folders attached in the composer (10.4). */
+        files: z.array(z.string().max(4096)).max(50).optional(),
         /** Mode and model picked before the first message, set when its session opens. */
         options: z
           .array(z.object({ id: z.string().max(100), value: z.string().max(200) }))
@@ -751,6 +957,8 @@ export const ipcContract = {
         path: z.string().max(4096),
         text: z.string(),
         message: z.string().min(1).max(100_000),
+        /** Files and folders attached in the composer (10.4). */
+        files: z.array(z.string().max(4096)).max(50).optional(),
       })
       .strict(),
     response: z.discriminatedUnion("kind", [
@@ -828,6 +1036,25 @@ export const ipcContract = {
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
   },
+  /** A person adds files or links as inputs, to a section or one of its threads (10.1). */
+  "inputs:add": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        section: SectionRef,
+        thread: z.string().max(200).nullable(),
+        files: z.array(z.string().max(4096)).max(100),
+        links: z.array(z.string().max(4096)).max(100),
+      })
+      .strict(),
+    response: z.union([z.object({ added: z.number() }), z.object({ error: z.string() })]),
+  },
+  /** Pick files to add as inputs, in the system's open sheet. */
+  "inputs:pick-files": {
+    request: z.object({}).strict(),
+    response: z.object({ files: z.array(z.string()) }),
+  },
   /** The inputs new threads on a section receive: picked up by earlier threads on it or above (4.4). */
   "inputs:list": {
     request: z
@@ -841,6 +1068,141 @@ export const ipcContract = {
           source: z.string(),
           label: z.string(),
           trust: z.enum(["trusted", "untrusted"]),
+          /** Its content stays on the device that read it, out of `.anur/`. */
+          local: z.boolean(),
+        }),
+      ),
+    }),
+  },
+  /**
+   * A section's links (8.3): where its links go, which a new thread there
+   * reads too, and which sections link to it, across the folder.
+   */
+  "links:of": {
+    request: z
+      .object({ path: z.string().max(4096), text: z.string(), section: SectionRef })
+      .strict(),
+    response: z.object({
+      out: z.array(
+        z.object({
+          /** The doc it points to; null when broken. */
+          doc: z.string().nullable(),
+          heading: z.string().nullable(),
+          /** As written, for a broken one. */
+          written: z.string(),
+        }),
+      ),
+      into: z.array(z.object({ doc: z.string(), path: z.array(z.string()) })),
+    }),
+  },
+  /**
+   * A section's history (group 5): its versions newest first, and in a git
+   * repo the commits that changed it, each with the section's text.
+   */
+  "history:list": {
+    request: z
+      .object({ path: z.string().max(4096), text: z.string(), section: SectionRef })
+      .strict(),
+    response: z.object({
+      versions: z.array(
+        z.object({
+          id: z.string(),
+          at: z.string(),
+          cause: z.string(),
+          summary: z.string(),
+          text: z.string(),
+          thread: z.string().nullable(),
+        }),
+      ),
+      commits: z.array(
+        z.object({
+          hash: z.string(),
+          at: z.string(),
+          author: z.string(),
+          subject: z.string(),
+          text: z.string(),
+        }),
+      ),
+    }),
+  },
+  /** A person restored a version of one section: recorded as a "restore" version (5.3). */
+  "history:restored": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        section: z.array(z.string()).max(50),
+        from: z.string(),
+      })
+      .strict(),
+    response: z.object({}),
+  },
+  /**
+   * Use all (9.4): the page has used the open doc's edits (`open`, its text
+   * before and after); main uses the rest in their files and notes it once.
+   */
+  "thread:use-all": {
+    request: z
+      .object({
+        thread: z.string(),
+        open: z
+          .object({
+            path: z.string(),
+            before: z.string(),
+            after: z.string(),
+            sections: z.array(z.array(z.string())),
+          })
+          .nullable(),
+      })
+      .strict(),
+    response: z.object({ used: z.number(), kept: z.array(z.string()) }),
+  },
+  /** One Undo for a Use all (9.5); `open` is the open doc's text now. */
+  "thread:undo-all": {
+    request: z
+      .object({
+        thread: z.string(),
+        id: z.string(),
+        open: z.object({ path: z.string(), text: z.string() }).nullable(),
+      })
+      .strict(),
+    response: z.union([
+      z.object({ kind: z.literal("undone"), left: z.array(z.string()) }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /**
+   * A person decides on a finding (16.1): keep it (perhaps reworded) or drop
+   * it; or adds one, such as from a Check's verdict (16.2), kept at once.
+   */
+  "finding:decide": {
+    request: z
+      .object({
+        thread: z.string(),
+        id: z.string().optional(),
+        status: z.enum(["kept", "dropped"]).optional(),
+        claim: z.string().max(600).nullable().optional(),
+        add: z.object({ claim: z.string().max(600), source: z.string().nullable() }).optional(),
+      })
+      .strict(),
+    response: z.union([
+      z.object({ kind: z.literal("ok") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** The findings kept on a section and above it, for Think's list (16.1). */
+  "findings:list": {
+    request: z
+      .object({ path: z.string().max(4096), text: z.string(), section: SectionRef })
+      .strict(),
+    response: z.object({
+      findings: z.array(
+        z.object({
+          id: z.string(),
+          thread: z.string(),
+          claim: z.string(),
+          source: z.string().nullable(),
+          section: z.string(),
         }),
       ),
     }),
@@ -944,7 +1306,16 @@ export const ipcEvents = {
   ]),
   /** A menu-bar command for the window's page and tabs. */
   "app:command": z.object({
-    command: z.enum(["tab-new", "tab-close", "back", "forward", "tab-next", "tab-prev", "tour"]),
+    command: z.enum([
+      "tab-new",
+      "tab-close",
+      "back",
+      "forward",
+      "tab-next",
+      "tab-prev",
+      "tour",
+      "updates",
+    ]),
   }),
   /** Insert in the menu bar: put this block where the page's cursor is. */
   "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
@@ -966,6 +1337,10 @@ export const ipcEvents = {
   }),
   /** An agent in a terminal asked to show a doc (6.7, 6.9): open it, at a section if given. */
   "app:open-doc": z.object({ path: z.string(), section: z.string().nullable() }),
+  /** A Core feature was switched on or off, in this window or another. */
+  "features:changed": FeatureFlagsSchema,
+  /** Where updates stand changed, as when a new version finished downloading. */
+  "app:update-state": UpdateState,
   /** A doc's previews changed, as when a thread's turn ended with edits. */
   "preview:changed": z.object({ path: z.string() }),
   /** A thread changed: all of it, or a reply arriving piece by piece. */

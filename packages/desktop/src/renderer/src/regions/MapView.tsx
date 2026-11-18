@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { boxSize, mapLayout, type MapNode, type SectionTree } from "@anur/core";
+import { boxSize, mapLayout, resolveWiki, type MapNode, type SectionTree } from "@anur/core";
 import type { PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
+import { useFeatures } from "../features.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
 
 /**
@@ -21,7 +22,9 @@ type Pos = { x: number; y: number };
 type View = { x: number; y: number; z: number };
 type Box = {
   id: string;
-  kind: "section" | "thread" | "option" | "edit";
+  kind: "section" | "thread" | "option" | "edit" | "link";
+  /** A link from this section to another doc's section (8.6). */
+  link?: { doc: string | null; heading: string | null; written: string };
   index: number;
   thread?: ThreadView;
   /** An option a thread offered for this section, not picked yet. */
@@ -32,6 +35,14 @@ type Box = {
   exploring?: boolean;
   /** The box's second line: what's under it, or what sets it apart. */
   sub?: string;
+  /** A section's links to other docs (8.6), shown as one badge with a list. */
+  outLinks?: { doc: string | null; heading: string | null; label: string }[];
+  /** Where the layout put its parent's rail for its row, and the spine (group 7). */
+  row?: number;
+  rails?: number[];
+  spine?: number;
+  /** Moved off the layout by a drag: its lines go back to curves. */
+  shifted?: boolean;
   heading: string;
   x: number;
   y: number;
@@ -81,9 +92,11 @@ export function MapView({
   onAddSection,
   onLink,
   onDelete,
+  onRename,
   onUndo,
   onRedo,
   writable,
+  docs,
 }: {
   docPath: string;
   tree: SectionTree;
@@ -97,13 +110,22 @@ export function MapView({
   onLink: (from: number, to: number) => void;
   /** Delete the section at `index` with everything under it; false when it can't be. */
   onDelete: (index: number) => boolean;
+  /** Rename the section at `index`: its heading in the doc changes, so the page follows. */
+  onRename: (index: number, name: string) => void;
   /** Undo and redo the page's last edit. */
   onUndo: () => void;
   onRedo: () => void;
   /** False when the doc can't be edited: boxes still move, but none can be added. */
   writable: boolean;
+  /** The folder's docs, to place links to other docs (8.6). */
+  docs: readonly string[];
 }) {
+  const features = useFeatures();
   const host = useRef<HTMLDivElement>(null);
+  /** The section whose list of links is open (8.6). */
+  const [openLinks, setOpenLinks] = useState<string | null>(null);
+  /** The list opens upward from a box low in the view, so it stays on screen. */
+  const [linksUp, setLinksUp] = useState(false);
   /** Section IDs by heading path, so a heading added above can't hand a box another's ID. */
   const [ids, setIds] = useState<Map<string, string>>(new Map());
   const [moved, setMoved] = useState<Record<string, Pos>>({});
@@ -127,6 +149,8 @@ export function MapView({
   const userMoved = useRef(false);
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
   /** Naming a new box: where it goes, and its parent when it was drawn from a box. */
+  /** The section being renamed in its box, by index. */
+  const [renaming, setRenaming] = useState<number | null>(null);
   const [adding, setAdding] = useState<{ at: Pos; screen: Pos; parent?: number } | null>(null);
   /** An arrow being drawn from a box's handle. */
   const [linking, setLinking] = useState<{ from: string; to: Pos; over: number | null } | null>(
@@ -261,17 +285,57 @@ export function MapView({
         sub,
         parent: s.parent === null ? null : idOf(s.parent),
       });
-      for (const t of threads.filter((t) => samePath(t.path, s.path))) {
+      // A branch hangs off the thread it came from (10.5), so each comes after its source.
+      const here = threads.filter((t) => samePath(t.path, s.path));
+      const onSection = new Set(here.map((t) => t.id));
+      const depth = (t: ThreadView, seen = new Set<string>()): number => {
+        const from = t.branchedFrom?.thread;
+        if (!from || !onSection.has(from) || seen.has(t.id)) return 0;
+        const source = here.find((x) => x.id === from);
+        return source ? 1 + depth(source, new Set([...seen, t.id])) : 0;
+      };
+      for (const t of [...here].sort((a, b) => depth(a) - depth(b))) {
         const tid = `t:${t.id}`;
-        nodes.push({ id: tid, parent: id, ...pill(t.title) });
+        const from = t.branchedFrom?.thread;
+        const parent = from && onSection.has(from) ? `t:${from}` : id;
+        nodes.push({ id: tid, parent, ...pill(t.title) });
         info.set(tid, {
           id: tid,
           kind: "thread",
           index: s.index,
           thread: t,
           heading: t.title,
-          parent: id,
+          parent,
         });
+      }
+      // Links to other docs' sections (8.6): one badge on the section, with the list on a click.
+      const seen = new Set<string>();
+      const outLinks: NonNullable<Box["outLinks"]> = [];
+      for (const l of features.links ? s.linksOut : []) {
+        if (l.sameDoc || l.embed) continue;
+        const to = resolveWiki(docs, docPath, l.target, l.heading);
+        const doc = to.kind === "doc" ? to.path : null;
+        const key = `${doc ?? l.target}#${l.heading ?? ""}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        outLinks.push({
+          doc,
+          heading: l.heading,
+          label: doc
+            ? [
+                doc.replace(/\.md$/i, "").split("/").pop() ?? doc,
+                ...(l.heading ? l.heading.split("#") : []),
+              ].join(" › ")
+            : `${l.target} (no such doc)`,
+        });
+      }
+      const own = info.get(id);
+      if (own && outLinks.length > 0) {
+        own.outLinks = outLinks;
+        // Room for the badge beside the name.
+        const node = nodes.find((n) => n.id === id);
+        if (node)
+          Object.assign(node, boxSize(`${heading}  → ${String(outLinks.length)}`, own.sub ?? ""));
       }
       // Each thread's latest options, until one is picked: what the section could say.
       for (const t of threads.filter((t) => samePath(t.path, s.path))) {
@@ -345,7 +409,12 @@ export function MapView({
     }
     // Threads before subsections, so they sit nearest their section.
     const near = (n: MapNode) =>
-      Number(n.id.startsWith("t:") || n.id.startsWith("o:") || n.id.startsWith("p:"));
+      Number(
+        n.id.startsWith("t:") ||
+          n.id.startsWith("o:") ||
+          n.id.startsWith("p:") ||
+          n.id.startsWith("l:"),
+      );
     nodes.sort((a, b) => near(b) - near(a));
     const placed = mapLayout(
       [nodes.find((n) => n.parent === null), ...nodes.filter((n) => n.parent !== null)].filter(
@@ -356,7 +425,17 @@ export function MapView({
     for (const [id, p] of placed) {
       const i = info.get(id);
       if (!i) continue;
-      out.push({ ...i, x: p.x, y: p.y, w: p.w, h: p.h, side: p.side });
+      out.push({
+        ...i,
+        x: p.x,
+        y: p.y,
+        w: p.w,
+        h: p.h,
+        side: p.side,
+        ...(p.row !== undefined ? { row: p.row } : {}),
+        ...(p.rails ? { rails: p.rails } : {}),
+        ...(p.spine !== undefined ? { spine: p.spine } : {}),
+      });
     }
     // A moved box sits where it was put; its threads move with it.
     const byId = new Map(out.map((b) => [b.id, b]));
@@ -377,22 +456,25 @@ export function MapView({
       if (b.kind !== "section") {
         b.x += dx;
         b.y += dy;
+        if (dx !== 0 || dy !== 0) b.shifted = true;
       }
     }
     for (const b of out) {
       if (b.kind !== "section") continue;
       const put = moved[b.id];
       if (put) {
+        if (put.x !== b.x || put.y !== b.y) b.shifted = true;
         b.x = put.x;
         b.y = put.y;
       }
       if (drag?.id === b.id) {
         b.x += drag.dx;
         b.y += drag.dy;
+        b.shifted = true;
       }
     }
     return out;
-  }, [tree, threads, previews, idOf, moved, drag]);
+  }, [tree, threads, previews, idOf, moved, drag, docs, docPath, features.links]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
 
@@ -579,6 +661,15 @@ export function MapView({
     if (e.button !== 0) return;
     e.stopPropagation();
     host.current?.focus();
+    if (b.kind === "link") {
+      if (b.link?.doc)
+        window.dispatchEvent(
+          new CustomEvent("anur:open-path", {
+            detail: { path: b.link.doc, heading: b.link.heading },
+          }),
+        );
+      return;
+    }
     if ((b.kind === "thread" || b.kind === "option" || b.kind === "edit") && b.thread) {
       onSelect(b.index);
       window.dispatchEvent(
@@ -675,6 +766,11 @@ export function MapView({
       redo();
       return;
     }
+    if ((e.key === "Enter" || e.key === "F2") && writable && tree.sections[selected]) {
+      e.preventDefault();
+      setRenaming(selected);
+      return;
+    }
     if ((e.key === "Backspace" || e.key === "Delete") && writable) {
       e.preventDefault();
       const parent = tree.sections[selected]?.parent ?? 0;
@@ -754,6 +850,36 @@ export function MapView({
   const edges = boxes.flatMap((b) => {
     const p = b.parent ? byId.get(b.parent) : undefined;
     if (!p) return [];
+    // Laid out as placed: a trunk from the parent, its row's rail, and a drop to the box.
+    const r = b.row ?? 0;
+    const rail = p.rails?.[r];
+    const first = p.rails?.[0];
+    if (!b.shifted && !p.shifted && rail !== undefined && first !== undefined) {
+      const top = b.y - b.h / 2;
+      const pts =
+        r === 0
+          ? [
+              [p.x, p.y + p.h / 2],
+              [p.x, rail],
+              [b.x, rail],
+              [b.x, top],
+            ]
+          : [
+              [p.x, p.y + p.h / 2],
+              [p.x, first],
+              [p.spine ?? p.x, first],
+              [p.spine ?? p.x, rail],
+              [b.x, rail],
+              [b.x, top],
+            ];
+      return [
+        <path
+          key={b.id}
+          className={b.kind === "section" ? "map-edge rail" : "map-edge rail thread"}
+          d={pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" ")}
+        />,
+      ];
+    }
     // From the parent's bottom to the child's top, a soft S; sideways when a moved box sits beside.
     const below = b.y - b.h / 2 >= p.y + p.h / 2;
     const above = b.y + b.h / 2 <= p.y - p.h / 2;
@@ -921,6 +1047,23 @@ export function MapView({
               </div>
               {b.sub ? <div className="map-box-sub">{b.sub}</div> : null}
             </div>
+          ) : b.kind === "link" && b.link ? (
+            <button
+              key={b.id}
+              type="button"
+              className={`map-linkbox${b.link.doc ? "" : " broken"}`}
+              style={{ left: b.x - b.w / 2, top: b.y - b.h / 2, width: b.w, height: b.h }}
+              title={
+                b.link.doc
+                  ? `Opens ${b.link.doc}${b.link.heading ? ` at ${b.link.heading.split("#").join(" › ")}` : ""}`
+                  : "No doc by that name in the folder"
+              }
+              onPointerDown={(e) => {
+                onBoxDown(e, b);
+              }}
+            >
+              <span className="truncate">→ {b.heading}</span>
+            </button>
           ) : b.kind === "thread" && b.thread ? (
             <button
               key={b.id}
@@ -953,10 +1096,92 @@ export function MapView({
               onPointerDown={(e) => {
                 onBoxDown(e, b);
               }}
+              onDoubleClick={() => {
+                if (writable) setRenaming(b.index);
+              }}
             >
               <div className="map-box-head">
-                <span className="map-box-name">{b.heading}</span>
+                {renaming === b.index ? (
+                  <input
+                    className="map-rename"
+                    aria-label="Section name"
+                    defaultValue={b.heading}
+                    autoFocus
+                    onFocus={(e) => {
+                      e.currentTarget.select();
+                    }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") {
+                        setRenaming(null);
+                        host.current?.focus();
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const name = e.currentTarget.value.trim();
+                      setRenaming(null);
+                      if (name && name !== b.heading) {
+                        onRename(b.index, name);
+                        record({ kind: "doc" });
+                      }
+                      host.current?.focus();
+                    }}
+                  />
+                ) : (
+                  <span className="map-box-name">{b.heading}</span>
+                )}
+                {b.outLinks ? (
+                  <button
+                    type="button"
+                    className={`map-linkcount${openLinks === b.id ? " open" : ""}`}
+                    title="Links to other docs"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const r = e.currentTarget.getBoundingClientRect();
+                      const view = host.current?.getBoundingClientRect();
+                      setLinksUp(view ? r.top - view.top > view.height / 2 : false);
+                      setOpenLinks((o) => (o === b.id ? null : b.id));
+                    }}
+                  >
+                    → {String(b.outLinks.length)}
+                  </button>
+                ) : null}
               </div>
+              {openLinks === b.id && b.outLinks ? (
+                <div
+                  className={`map-linklist${linksUp ? " up" : ""}`}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  {b.outLinks.map((l) => (
+                    <button
+                      key={l.label}
+                      type="button"
+                      className={l.doc ? "map-linkitem" : "map-linkitem broken"}
+                      disabled={!l.doc}
+                      onClick={() => {
+                        setOpenLinks(null);
+                        if (l.doc)
+                          window.dispatchEvent(
+                            new CustomEvent("anur:open-path", {
+                              detail: { path: l.doc, heading: l.heading },
+                            }),
+                          );
+                      }}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               {(() => {
                 const here = threads.filter((t) =>
                   samePath(t.path, tree.sections[b.index]?.path ?? []),

@@ -1,5 +1,13 @@
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
-import { EditorState, RangeSet, StateEffect, StateField, type Range } from "@codemirror/state";
+import {
+  EditorState,
+  Facet,
+  RangeSet,
+  StateEffect,
+  StateField,
+  type Range,
+} from "@codemirror/state";
+import { resolveWiki } from "@anur/core";
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import {
@@ -39,6 +47,15 @@ import { TableWidget } from "../table/table-widget.ts";
 
 const hide = Decoration.replace({});
 const mark = (cls: string) => Decoration.mark({ class: cls });
+
+/**
+ * The folder's docs and this doc's path (8.5), so a wiki link to a doc that
+ * isn't there shows faded, as Obsidian shows it. Unset, every link looks found.
+ */
+export const knownDocs = Facet.define<
+  { docs: readonly string[]; path: string },
+  { docs: readonly string[]; path: string } | null
+>({ combine: (v) => v.at(-1) ?? null });
 const line = (cls: string) => Decoration.line({ class: cls });
 
 /** The lines a cursor or selection touches; their Markdown shows as source. */
@@ -82,6 +99,14 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
     const lineEnd = doc.lineAt(from).to;
     while (end < lineEnd && text(end, end + 1) === " ") end++;
     if (end > from) out.push(hide.range(from, end));
+  };
+  /**
+   * Every keystroke shows: a block mark ("#", ">", "-", "[ ]") takes effect
+   * only once the space after it is typed. Until then it shows, faint, as typed.
+   */
+  const started = (to: number) => /[ \t]/.test(text(to, to + 1));
+  const pending = (from: number, to: number) => {
+    out.push(mark("cm-lp-pending").range(from, to));
   };
   const children = (node: SyntaxNode, name: string) => {
     const found: SyntaxNode[] = [];
@@ -191,6 +216,8 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           const callout = /^\s*>\s?\[!([A-Za-z]+)\][+-]?/.exec(firstLine.text);
           const kind = callout?.[1]?.toLowerCase();
           for (let n = firstLine.number; n <= doc.lineAt(to).number; n++) {
+            // A lone ">" is still being typed: no quote yet.
+            if (/^\s*>$/.test(doc.line(n).text)) continue;
             const cls = kind
               ? `cm-lp-callout cm-lp-callout-${kind}${n === firstLine.number ? " cm-lp-callout-first" : ""}`
               : "cm-lp-quote";
@@ -209,12 +236,34 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
         // A heading's "#"s, a quote's ">" and a list's marker never show
         // (2.8): the cursor steps over them, and Backspace removes them whole.
         case "QuoteMark":
-          hideWithSpace(from, to);
+          if (to === doc.lineAt(from).to) pending(from, to);
+          else hideWithSpace(from, to);
           return;
         case "HeaderMark": {
           const parent = node.parent?.name ?? "";
-          if (parent.startsWith("SetextHeading")) out.push(hide.range(from, to));
-          else hideWithSpace(from, to);
+          if (parent.startsWith("SetextHeading")) {
+            out.push(hide.range(from, to));
+            return;
+          }
+          const ln = doc.lineAt(from);
+          // Only the opening marks: a closing "##" is part of the heading's text here.
+          if (from !== ln.from + (/^\s*/.exec(ln.text)?.[0].length ?? 0)) {
+            hideWithSpace(from, to);
+            return;
+          }
+          const empty = text(to, ln.to).trim() === "";
+          if (!started(to)) pending(from, to);
+          else if (!empty) hideWithSpace(from, to);
+          else if (isActive(from, to)) {
+            // "## " and nothing yet: the heading it will be, as a faint placeholder.
+            hideWithSpace(from, to);
+            out.push(
+              Decoration.widget({
+                widget: new TextWidget(`Heading ${String(to - from)}`, "cm-lp-placeholder"),
+                side: 1,
+              }).range(ln.to),
+            );
+          } else pending(from, to);
           return;
         }
         // Inline marks never show either (2.11): the cursor steps over them,
@@ -337,9 +386,15 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           const heading = children(node, "WikiLinkHeading")[0];
           const alias = children(node, "WikiLinkAlias")[0];
           if (alias) {
+            const known = state.facet(knownDocs);
+            const gone =
+              known !== null &&
+              target !== undefined &&
+              resolveWiki(known.docs, known.path, text(target.from, target.to), null).kind ===
+                "missing";
             out.push(
               hide.range(from, alias.from),
-              mark("cm-lp-link").range(alias.from, alias.to),
+              mark(gone ? "cm-lp-link cm-lp-missing" : "cm-lp-link").range(alias.from, alias.to),
               hide.range(alias.to, to),
             );
             return false;
@@ -347,7 +402,14 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           const shown = [target, heading].filter((n): n is SyntaxNode => Boolean(n));
           const [first, second] = shown;
           if (!first) return false;
-          out.push(hide.range(from, first.from), mark("cm-lp-link").range(first.from, first.to));
+          const known = state.facet(knownDocs);
+          const missing =
+            known !== null &&
+            target !== undefined &&
+            resolveWiki(known.docs, known.path, text(target.from, target.to), null).kind ===
+              "missing";
+          const cls = missing ? "cm-lp-link cm-lp-missing" : "cm-lp-link";
+          out.push(hide.range(from, first.from), mark(cls).range(first.from, first.to));
           if (second) {
             out.push(
               Decoration.replace({ widget: new TextWidget(" › ", "cm-lp-link") }).range(
@@ -362,7 +424,14 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
         }
         case "ListMark": {
           const listName = node.parent?.parent?.name;
-          const task = node.parent ? children(node.parent, "Task")[0] : undefined;
+          const taskNode = node.parent ? children(node.parent, "Task")[0] : undefined;
+          const box = taskNode ? children(taskNode, "TaskMarker")[0] : undefined;
+          // "- [ ]" becomes a checkbox once its space is typed; until then it's a bullet.
+          const task = box && started(box.to) ? taskNode : undefined;
+          if (!started(to) && !task) {
+            if (listName === "BulletList") pending(from, to);
+            return;
+          }
           if (listName === "BulletList" && !task) {
             const space = text(to, to + 1) === " " ? 1 : 0;
             out.push(Decoration.replace({ widget: new BulletWidget() }).range(from, to + space));
@@ -370,6 +439,7 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           return;
         }
         case "TaskMarker": {
+          if (!started(to)) return;
           const checked = /x/i.test(text(from, to));
           const space = text(to, to + 1) === " " ? 1 : 0;
           out.push(
@@ -447,6 +517,7 @@ const previewField = StateField.define<Preview>({
       focused !== value.focused ||
       tr.docChanged ||
       tr.selection ||
+      tr.startState.facet(knownDocs) !== tr.state.facet(knownDocs) ||
       syntaxTree(tr.startState) !== syntaxTree(tr.state);
     return stale ? preview(tr.state, focused) : value;
   },

@@ -1,0 +1,632 @@
+[
+  {
+    "run": 0,
+    "task": "email",
+    "setup": "anur",
+    "score": 1.0,
+    "checks": {
+      "made": true,
+      "subject": true,
+      "three_bullets": true,
+      "no_price": true,
+      "sign_off": true,
+      "no_exclamation": true,
+      "no_competitor": true,
+      "british": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 8,
+      "cacheRead": 381419,
+      "cacheWrite": 101839,
+      "output": 2753,
+      "steps": 4,
+      "secs": 36
+    },
+    "reply": "I've drafted the email in launch-email.md. It's waiting for you to use; nothing changes in your folder until you do.\n\nIt follows the rules in Email spec:\n\nThe subject is exactly \"Tally is live on Product Hunt\".\nThere are exactly three bullets: comment on the Product Hunt page, forward it to another flat, and reply if anything breaks on launch day.\nIt never mentions the price. I also left out the free tier and the beta discount.\nIt signs off with \"Cheers, Maya from Tally\" on one line, word for word as the spec gives it.\n\nIt also keeps to the house rules: British spelling (\"prioritise\"), no exclamation marks and no competitor named.\n\nTwo things to check before it goes out:\n\nProduct Hunt link: [Product Hunt link] is a placeholder. Swap in the real URL on the day.\nGreeting: it opens with \"Hi there\" because we email flats, not named people. If your email tool can merge in a first name, swap that in.\n\nI asked for comments rather than upvotes on purpose: Product Hunt frowns on asking for votes, and a real comment from a flat does more for us anyway."
+  },
+  {
+    "run": 0,
+    "task": "email",
+    "setup": "cc-fresh",
+    "score": 1.0,
+    "checks": {
+      "made": true,
+      "subject": true,
+      "three_bullets": true,
+      "no_price": true,
+      "sign_off": true,
+      "no_exclamation": true,
+      "no_competitor": true,
+      "british": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 14,
+      "cacheRead": 358942,
+      "cacheWrite": 34855,
+      "output": 2348,
+      "steps": 7,
+      "secs": 34.7
+    },
+    "reply": "I've written the email and saved it to `launch-email.md`, as the \"Launch email\" section asks.\n\n**Subject:** Tally is live on Product Hunt\n\n> Hi there,\n>\n> Today is the day: Tally is live on Product Hunt. Your flat was one of the first to try it, and much of what launches today was shaped by what you told us during the beta.\n>\n> If you have a minute today, here is how you can help:\n>\n> - Visit our Product Hunt page and leave an upvote: [Product Hunt link]\n> - Add a comment about how your flat uses Tally to organise shared bills. Honest, specific stories help more than anything we could write ourselves.\n> - Share the page with friends who live in shared flats and are tired of chasing who owes what.\n>\n> Thank you for testing early builds, reporting bugs and putting up with the rough edges. We could not have got here without you.\n>\n> Cheers, Maya from Tally\n\nIt follows the rules in `specs/Email spec.md`: the exact subject line, exactly three bullet points, no price and the current sign-off. It also follows the plan's house rules: British spelling, no exclamation marks and no competitor names.\n\n**Before sending:**\n- **Product Hunt link:** `[Product Hunt link]` is a placeholder. Put the real URL there.\n\n**Problems I found in the Pricing section of `Launch.md`.** The email avoids all of these, but you should fix the plan:\n- **Wrong competitor price:** It says Splitwise Pro costs \u00a35 a month. That figure comes from the archived 2025 price list. `competitors.txt` (checked 1 November 20"
+  },
+  {
+    "run": 0,
+    "task": "email",
+    "setup": "cc-long",
+    "score": 1.0,
+    "checks": {
+      "made": true,
+      "subject": true,
+      "three_bullets": true,
+      "no_price": true,
+      "sign_off": true,
+      "no_exclamation": true,
+      "no_competitor": true,
+      "british": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 10,
+      "cacheRead": 495437,
+      "cacheWrite": 12259,
+      "output": 1775,
+      "steps": 5,
+      "secs": 24.8
+    },
+    "reply": "I've written the email to `launch-email.md` in the vault root, as the Launch email section asks:\n\n> **Subject:** Tally is live on Product Hunt\n>\n> Hi there,\n>\n> Today Tally launches on Product Hunt, and as one of our beta flats you helped shape it. Here is how you can help on launch day:\n>\n> - Visit our Product Hunt page and upvote Tally: [Product Hunt link]\n> - Leave a comment about how your flat uses Tally to organise shared bills\n> - Share the page with friends who are tired of chasing flatmates for money\n>\n> Thank you for testing Tally with us and for every bit of feedback along the way.\n>\n> Cheers, Maya from Tally\n\nIt follows both sets of rules the section points to:\n- **Email spec:** the exact subject line, exactly three bullets, no price, and the current \"Cheers, Maya from Tally\" sign-off (not the older \"Best, the Tally team\").\n- **Plan's house rules:** British spelling (\"organise\"), no exclamation marks, and no competitor named. The Pricing section compares Tally with Splitwise Pro, but I kept that out because it's customer-facing copy.\n\n**Needs filling in:** the plan doesn't give the Product Hunt URL, so I left a `[Product Hunt link]` placeholder.\n\n**Elsewhere in `Launch.md`:** the Risks section breaks two of the plan's own rules. It uses American spelling (\"prioritize\", \"organized\"), and it has six bullets, though sections under Plan are meant to have three at most."
+  },
+  {
+    "run": 0,
+    "task": "pricing",
+    "setup": "anur",
+    "score": 1.0,
+    "checks": {
+      "current_price": true,
+      "says_not_cheaper": true,
+      "flats_27": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 6,
+      "cacheRead": 255685,
+      "cacheWrite": 99707,
+      "output": 1090,
+      "steps": 4,
+      "secs": 21
+    },
+    "reply": "Two of the section's claims are wrong. Our own competitors.txt (checked 2026-11-01) lists Splitwise Pro at \u00a32.99 a month, not \u00a35, so \u00a33 a flat is about the same price, not cheaper. And beta.csv has 27 flats, not 40. The section also names Splitwise, which is fine in an internal plan but must come out of anything customer-facing."
+  },
+  {
+    "run": 0,
+    "task": "pricing",
+    "setup": "cc-fresh",
+    "score": 1.0,
+    "checks": {
+      "current_price": true,
+      "says_not_cheaper": true,
+      "flats_27": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 12,
+      "cacheRead": 297998,
+      "cacheWrite": 33635,
+      "output": 1273,
+      "steps": 6,
+      "secs": 20.2
+    },
+    "reply": "No, the Pricing claim in Launch.md is out of date. It uses the archived 2025 price of \u00a35 for Splitwise Pro, but `competitors.txt` (checked 2026-11-01) lists it at \u00a32.99 a month, so Tally's \u00a33 plan now costs slightly more, not less. Separately, `beta.csv` has 27 flats, not the 40 the section claims."
+  },
+  {
+    "run": 0,
+    "task": "pricing",
+    "setup": "cc-long",
+    "score": 1.0,
+    "checks": {
+      "current_price": true,
+      "says_not_cheaper": true,
+      "flats_27": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 12,
+      "cacheRead": 471520,
+      "cacheWrite": 4651,
+      "output": 1037,
+      "steps": 5,
+      "secs": 21.0
+    },
+    "reply": "No, the Pricing claim is wrong. The \u00a35 figure is from the 2025 archive, and `competitors.txt` (checked 2026-11-01) shows Splitwise Pro at \u00a32.99 a month, so Tally's \u00a33 plan is slightly more expensive, not cheaper. The beta count is also wrong: `beta.csv` lists 27 flats, not 40."
+  },
+  {
+    "run": 0,
+    "task": "risks",
+    "setup": "anur",
+    "score": 1.0,
+    "checks": {
+      "changed": true,
+      "max_three": true,
+      "british": true,
+      "no_exclamation": true,
+      "keeps_install": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 6,
+      "cacheRead": 255605,
+      "cacheWrite": 100349,
+      "output": 1990,
+      "steps": 3,
+      "secs": 28
+    },
+    "reply": "The section had six bullets, but the Plan allows three at most, so getting it down to three means choosing what to drop. I've given you two versions to pick from:\n\nAll six, merged keeps every risk and groups them into adoption, switching and launch week. Each bullet gets longer as a result.\nLaunch-week only keeps the risks that bite on launch day: holdouts and Android, the support rota, and the Product Hunt spike. It drops the competitor risk and the colour scheme risk, which are longer-term and could go elsewhere in the plan.\n\nBoth versions also:\n\nSpelling: fix \"prioritize\" and \"organized\" to British spelling.\nAndroid: reword the Android bullet. It read as a task, so it now states the risk.\nCompetitor: say \"the free, well-known incumbent\" instead of naming Splitwise. This plan isn't customer-facing, so naming it isn't strictly against the house rule. But this way the line can't end up in copy written from the plan."
+  },
+  {
+    "run": 0,
+    "task": "risks",
+    "setup": "cc-fresh",
+    "score": 1.0,
+    "checks": {
+      "changed": true,
+      "max_three": true,
+      "british": true,
+      "no_exclamation": true,
+      "keeps_install": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 12,
+      "cacheRead": 298484,
+      "cacheWrite": 32828,
+      "output": 1718,
+      "steps": 6,
+      "secs": 23.2
+    },
+    "reply": "I've tightened the Risks section in `Launch.md:2299`. It's now three bullets instead of six, because the doc's rule is that every section under Plan has at most three bullets.\n\n- **Adoption:** if one flatmate won't install the app, the shared balance breaks, and Splitwise is free and familiar, so switching feels costly.\n- **Product:** half the beta flats use Android, so the Android build must be prioritised. The colour scheme also tests poorly with older users.\n- **Launch week:** a spike in Product Hunt traffic could slow sign-up, and there's no support rota yet.\n\nI also changed \"prioritize\" and \"organized\" to British spelling (\"prioritised\", \"organised\"), as the house rules ask. All six original risks are still there, just merged into three groups.\n\nI kept the name Splitwise because this is an internal plan; the rule against naming competitors only covers customer-facing copy. The Pricing section mentions Splitwise too, so watch for the name if any of this text ends up in the launch email."
+  },
+  {
+    "run": 0,
+    "task": "risks",
+    "setup": "cc-long",
+    "score": 1.0,
+    "checks": {
+      "changed": true,
+      "max_three": true,
+      "british": true,
+      "no_exclamation": true,
+      "keeps_install": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 10,
+      "cacheRead": 452107,
+      "cacheWrite": 12063,
+      "output": 1692,
+      "steps": 5,
+      "secs": 25.4
+    },
+    "reply": "I cut the Risks section in `Launch.md:2299` from six bullets to three. The Plan section says each part of it gets three bullets at most, so I merged related risks rather than dropping any:\n\n```\n### Risks\n\n- Adoption: one flatmate who won't install breaks the shared balance, and Splitwise is free and familiar, so switching feels costly.\n- Launch week: no support rota is organised yet, and a Product Hunt spike could slow sign-up.\n- Product: half the beta flats use Android, so prioritise that build; the colour scheme tests poorly with older users.\n```\n\nI also followed the plan's house rules: \"prioritize\" and \"organized\" are now British spelling, and there are no exclamation marks. I kept the name Splitwise because the no-competitor-names rule only covers customer-facing copy, and this section is internal.\n\nI didn't touch the Pricing section just above, but it has a problem. It gives Splitwise Pro as \u00a35 a month, while `competitors.txt` (checked on 2026-11-01) says \u00a32.99. That means \"so we are cheaper\" is no longer true, because our plan is \u00a33 a month per flat."
+  },
+  {
+    "run": 1,
+    "task": "email",
+    "setup": "anur",
+    "score": 1.0,
+    "checks": {
+      "made": true,
+      "subject": true,
+      "three_bullets": true,
+      "no_price": true,
+      "sign_off": true,
+      "no_exclamation": true,
+      "no_competitor": true,
+      "british": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 8,
+      "cacheRead": 380389,
+      "cacheWrite": 101301,
+      "output": 2640,
+      "steps": 4,
+      "secs": 33
+    },
+    "reply": "I've drafted the launch email in launch-email.md. It joins the doc folder when this turn ends, so you can review it there.\n\nIt follows the Email spec rules:\n\nThe subject line is exactly \"Tally is live on Product Hunt\".\nThe body has exactly three bullet points: upvote us, leave a comment about how your flat uses Tally, and tell a friend who shares a flat.\nIt never mentions the price.\nIt signs off with \"Cheers, Maya from Tally\".\n\nIt also follows the plan's house rules: British spelling, no exclamation marks, and no competitor named. The Pricing section compares us with Splitwise, but none of that went into the email.\n\nTwo things to know:\n\nPlaceholder link: the Product Hunt link is still [Product Hunt link]. Swap in the real URL before it goes out.\nNo promised replies: I avoided saying we'll be \"around all day answering questions\", because the Risks section says launch week has no support rota yet. The email only says we'll read every comment."
+  },
+  {
+    "run": 1,
+    "task": "email",
+    "setup": "cc-fresh",
+    "score": 1.0,
+    "checks": {
+      "made": true,
+      "subject": true,
+      "three_bullets": true,
+      "no_price": true,
+      "sign_off": true,
+      "no_exclamation": true,
+      "no_competitor": true,
+      "british": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 12,
+      "cacheRead": 287191,
+      "cacheWrite": 33343,
+      "output": 2214,
+      "steps": 6,
+      "secs": 29.3
+    },
+    "reply": "I wrote the launch email and saved it to `launch-email.md`, as the \"Launch email\" section asks.\n\n**Subject:** Tally is live on Product Hunt\n\n> Hi there,\n>\n> Today Tally goes live on Product Hunt, and your flat is a big part of why it got there. Over the beta you told us what felt confusing, what you wanted organised differently, and where splitting bills still caused friction at home. We have used that to shape what launches today.\n>\n> If you have a couple of minutes, here are three ways to help:\n>\n> - **Visit our Product Hunt page** and leave an upvote or a comment about how your flat uses Tally: [Product Hunt link]\n> - **Invite any flatmates who have not joined yet**, so everyone in the flat sees the same shared balance.\n> - **Reply to this email** with anything that still gets in your way. We read every reply and prioritise fixes from them.\n>\n> Thank you for testing Tally with us from the start.\n>\n> Cheers, Maya from Tally\n\nIt follows the rules in `specs/Email spec.md`: the exact subject line, exactly three bullets, no price and the \"Cheers, Maya from Tally\" sign-off. It also follows the plan's house rules: British spelling, no exclamation marks and no competitor names.\n\n**Before it goes out:**\n- **Product Hunt link:** `[Product Hunt link]` is a placeholder. Swap in the real URL on launch day.\n- **No feature list:** I left features out on purpose. The plan doesn't say which ones are actually shipping, so I didn't want to promise anything that might not be live.\n\n**Problems"
+  },
+  {
+    "run": 1,
+    "task": "email",
+    "setup": "cc-long",
+    "score": 1.0,
+    "checks": {
+      "made": true,
+      "subject": true,
+      "three_bullets": true,
+      "no_price": true,
+      "sign_off": true,
+      "no_exclamation": true,
+      "no_competitor": true,
+      "british": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 10,
+      "cacheRead": 495111,
+      "cacheWrite": 12404,
+      "output": 2107,
+      "steps": 5,
+      "secs": 27.7
+    },
+    "reply": "I wrote the email to `launch-email.md` in the vault root, which is where the section asks for it:\n\n> **Subject:** Tally is live on Product Hunt\n>\n> Hi there,\n>\n> Tally launches on Product Hunt today, and as one of our beta flats, you're hearing it from us first. Your feedback has shaped much of what goes out today.\n>\n> - You can find our launch here: [Product Hunt link]\n> - If Tally has made sharing a flat a little easier, an upvote or a short review would help other flats find us.\n> - Please keep the feedback coming. We read every message and prioritise what you tell us.\n>\n> Thank you for being with us from the start.\n>\n> Cheers, Maya from Tally\n\nIt follows the rules in `specs/Email spec.md`: the exact subject line, exactly three bullets, no price, and the \"Cheers, Maya from Tally\" sign-off. It also follows the house rules at the top of `Launch.md`: British spelling, no exclamation marks and no competitor names. Replace `[Product Hunt link]` with the real URL before it goes out.\n\nOne problem in `Launch.md` itself: the Pricing section says \"Splitwise Pro costs \u00a35 a month, so we are cheaper.\" That \u00a35 is the archived 2025 figure. `competitors.txt` (checked 2026-11-01) lists Splitwise Pro at \u00a32.99 a month, which means Tally's \u00a33 is now slightly more expensive. The email doesn't mention price, but that claim shouldn't end up in other copy."
+  },
+  {
+    "run": 1,
+    "task": "pricing",
+    "setup": "anur",
+    "score": 1.0,
+    "checks": {
+      "current_price": true,
+      "says_not_cheaper": true,
+      "flats_27": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 12,
+      "cacheRead": 625496,
+      "cacheWrite": 100378,
+      "output": 1580,
+      "steps": 6,
+      "secs": 30
+    },
+    "reply": "No, two of the section's facts are wrong. According to competitors.txt (checked 1 November), Splitwise Pro costs \u00a32.99 a month, not \u00a35, so \u00a33 a month is not cheaper than one Pro subscription. It only works out cheaper per flat if two or more flatmates would each pay for Pro. Also, beta.csv lists 27 flats, not 40."
+  },
+  {
+    "run": 1,
+    "task": "pricing",
+    "setup": "cc-fresh",
+    "score": 1.0,
+    "checks": {
+      "current_price": true,
+      "says_not_cheaper": true,
+      "flats_27": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 10,
+      "cacheRead": 241776,
+      "cacheWrite": 32756,
+      "output": 952,
+      "steps": 5,
+      "secs": 16.5
+    },
+    "reply": "No, the Pricing section is wrong on two counts. The \u00a35 Splitwise Pro price comes from `Archive/Competitor prices 2025.md`, which is out of date. `competitors.txt` (checked 2026-11-01) lists Splitwise Pro at \u00a32.99 a month, so our \u00a33 plan is actually 1p more expensive, not cheaper. The section also says 40 beta flats, but `beta.csv` lists only 27 (all in London)."
+  },
+  {
+    "run": 1,
+    "task": "pricing",
+    "setup": "cc-long",
+    "score": 0.6666666666666666,
+    "checks": {
+      "current_price": true,
+      "says_not_cheaper": true,
+      "flats_27": false
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 6,
+      "cacheRead": 288950,
+      "cacheWrite": 12470,
+      "output": 640,
+      "steps": 3,
+      "secs": 12.9
+    },
+    "reply": "The claim is out of date. The Pricing section says Splitwise Pro costs \u00a35 a month, but that figure comes from the archived 2025 price list. `competitors.txt`, checked on 1 November 2026, puts it at \u00a32.99, so Tally's \u00a33 paid plan is now 1p a month dearer rather than cheaper."
+  },
+  {
+    "run": 1,
+    "task": "risks",
+    "setup": "anur",
+    "score": 0.8,
+    "checks": {
+      "changed": true,
+      "max_three": true,
+      "british": true,
+      "no_exclamation": true,
+      "keeps_install": false
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 6,
+      "cacheRead": 256320,
+      "cacheWrite": 100441,
+      "output": 2058,
+      "steps": 3,
+      "secs": 28
+    },
+    "reply": "I've offered two shorter versions of Risks as cards for you to pick from. Right now the section breaks two of the doc's rules. It has six bullets, but sections under Plan can have at most three. It also uses American spellings (\"prioritize\", \"organized\"). Both versions fix this.\n\nAll six, grouped: keeps all six risks, grouped under three headings: adoption, appeal and launch week.\nTop three only: keeps only the three risks most likely to hurt launch day: the flatmate who never installs, the Android build, and launch-week support and traffic. It drops the switching cost and the colour scheme. If you want to keep those, they'd need to go in another section.\n\nIn both, I turned the Android point into a risk (\"a late Android build shuts them out\"), because it was written as an instruction. I also kept the Splitwise mention in the grouped version: this plan is internal, and the rule against naming competitors only covers copy customers see."
+  },
+  {
+    "run": 1,
+    "task": "risks",
+    "setup": "cc-fresh",
+    "score": 1.0,
+    "checks": {
+      "changed": true,
+      "max_three": true,
+      "british": true,
+      "no_exclamation": true,
+      "keeps_install": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 12,
+      "cacheRead": 296156,
+      "cacheWrite": 33363,
+      "output": 3058,
+      "steps": 6,
+      "secs": 35.9
+    },
+    "reply": "I cut the Risks section in `Launch.md` from six bullets to three. The plan says every section under Plan gets three bullets at most, so it was over the limit.\n\n```\n- One flatmate who won't install the app breaks the shared balance for the whole flat.\n- Splitwise is free and well known, so switching feels costly.\n- Launch week could overstretch us: the Android build must be prioritised (half the beta flats use Android), Product Hunt traffic may slow sign-up, and there is no support rota yet.\n```\n\n- **Merged:** the Android build, Product Hunt traffic and support rota points are now one \"launch week\" bullet, since they're all about being ready on the day.\n- **Dropped:** \"The colour scheme tests poorly with older users.\" It was the least relevant to a launch for flats. Add it back if you'd rather lose something else.\n- **Spelling:** \"prioritize\" and \"organized\" are now British spelling (\"prioritised\"; the support rota line was reworded so \"organised\" isn't needed), as the house rules ask.\n- **Kept:** Splitwise is still named, because Risks is internal and the rule only bans competitor names in customer-facing copy.\n\nI found a few things outside Risks that I didn't change:\n- **Splitwise Pro price:** the Pricing section says it costs \u00a35 a month, but `competitors.txt` (checked 2026-11-01) says \u00a32.99. At \u00a32.99, our \u00a33 plan isn't cheaper, so the line \"we are cheaper\" is wrong.\n- **Beta flat count:** Pricing says 40 beta flats signed up, but `beta.csv` lists 27.\n- **Android claim:** `b"
+  },
+  {
+    "run": 1,
+    "task": "risks",
+    "setup": "cc-long",
+    "score": 1.0,
+    "checks": {
+      "changed": true,
+      "max_three": true,
+      "british": true,
+      "no_exclamation": true,
+      "keeps_install": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 10,
+      "cacheRead": 496044,
+      "cacheWrite": 12220,
+      "output": 1699,
+      "steps": 5,
+      "secs": 23.8
+    },
+    "reply": "I've rewritten the Risks section in `Launch.md:2299`. It's now three grouped bullets instead of six:\n\n```\n- Adoption: one flatmate who won't install breaks the shared balance, and Splitwise is free and well known, so switching feels costly.\n- Product: half the beta flats use Android, so the Android build must be prioritised; the colour scheme tests poorly with older users.\n- Launch week: no support rota is organised yet, and a Product Hunt spike could slow sign-up.\n```\n\n- **Nothing dropped:** all six original risks are still there, merged into those three groups.\n- **Three bullets:** the Plan section says every section under it keeps to three bullets at most, and Risks had six.\n- **Spelling:** I changed \"prioritize\" and \"organized\" to British spelling, which the house rules at the top of the file require.\n- **Splitwise still named:** the competitor ban only covers customer-facing copy, and this is an internal risk list.\n\nThe Pricing section just above (`Launch.md:2293`) says Splitwise Pro costs \u00a35 a month. Your newer `competitors.txt` says \u00a32.99, so \"we are cheaper\" at \u00a33 a month per flat may no longer be true. I didn't change that section."
+  },
+  {
+    "run": 2,
+    "task": "email",
+    "setup": "anur",
+    "score": 1.0,
+    "checks": {
+      "made": true,
+      "subject": true,
+      "three_bullets": true,
+      "no_price": true,
+      "sign_off": true,
+      "no_exclamation": true,
+      "no_competitor": true,
+      "british": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 8,
+      "cacheRead": 379729,
+      "cacheWrite": 100668,
+      "output": 1894,
+      "steps": 4,
+      "secs": 28
+    },
+    "reply": "I've drafted the launch email in launch-email.md. It's ready for you to use. It's a new file, so nothing in Launch.md changes.\n\nIt follows the Email spec rules:\n\nSubject line: it is exactly \"Tally is live on Product Hunt\".\nBullets: there are exactly three. They ask readers to upvote and comment, to share it with their flat or friends, and to reply with feedback.\nPrice: it doesn't mention one. It doesn't say \"free\" either, since that's a price claim too.\nSign-off: it ends with \"Cheers, Maya from Tally\".\n\nIt also keeps to the plan's house rules. It uses British spelling (\"prioritise\"), has no exclamation marks and doesn't name any competitor.\n\nBefore it goes out, the email still needs the actual Product Hunt link. The first two bullets refer to it, but there's no URL in it yet."
+  },
+  {
+    "run": 2,
+    "task": "email",
+    "setup": "cc-fresh",
+    "score": 1.0,
+    "checks": {
+      "made": true,
+      "subject": true,
+      "three_bullets": true,
+      "no_price": true,
+      "sign_off": true,
+      "no_exclamation": true,
+      "no_competitor": true,
+      "british": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 12,
+      "cacheRead": 299014,
+      "cacheWrite": 33982,
+      "output": 2397,
+      "steps": 6,
+      "secs": 32.1
+    },
+    "reply": "I wrote the email and saved it to `launch-email.md` in the vault root, which is where the Launch email section says to put it:\n\n> **Subject:** Tally is live on Product Hunt\n>\n> Hi there,\n>\n> Today is the day: Tally is live on Product Hunt. Your flat was one of the first to try it, and much of what launches today was shaped by your feedback during the beta. Thank you.\n>\n> If you have a couple of minutes today, here is how you can help:\n>\n> - **Visit our Product Hunt page** and give us an upvote if Tally has made sharing bills in your flat a little easier: [PRODUCT HUNT LINK]\n> - **Leave a comment** about how your flat uses Tally. A real story from a real flat is worth more than anything we could write ourselves.\n> - **Tell your flatmates and friends.** Tally works best when everyone in the flat is on it, so if someone in yours has not joined yet, today is a good moment to nudge them.\n>\n> We will be online all day answering questions, so if anything looks odd, just reply to this email and we will sort it.\n>\n> Cheers, Maya from Tally\n\nIt follows the rules in `specs/Email spec.md`: the exact subject line, exactly three bullets, no price, and the \"Cheers, Maya from Tally\" sign-off. It also keeps the house rules at the top of Launch.md: British spelling, no exclamation marks and no competitor names.\n\n**Before sending:**\n- **Product Hunt link:** `[PRODUCT HUNT LINK]` is a placeholder. Swap in the real URL.\n- **Beta flat count:** Launch.md says 40 beta flats signed up, but `beta.csv`"
+  },
+  {
+    "run": 2,
+    "task": "email",
+    "setup": "cc-long",
+    "score": 1.0,
+    "checks": {
+      "made": true,
+      "subject": true,
+      "three_bullets": true,
+      "no_price": true,
+      "sign_off": true,
+      "no_exclamation": true,
+      "no_competitor": true,
+      "british": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 10,
+      "cacheRead": 497056,
+      "cacheWrite": 12528,
+      "output": 2231,
+      "steps": 5,
+      "secs": 32.6
+    },
+    "reply": "I wrote the email to `launch-email.md` in the vault root, where the Launch email section asked for it:\n\n> **Subject:** Tally is live on Product Hunt\n>\n> Hi,\n>\n> Today is the day: Tally is live on Product Hunt. Your flat helped shape it during the beta, so you are the first to know.\n>\n> - Thank you for testing Tally with your flatmates and telling us honestly what worked and what did not.\n> - If Tally has made splitting bills in your flat a little easier, an upvote or a short comment on Product Hunt today would mean a great deal to us.\n> - Know another shared flat that could use a better way to organise its bills? Send them our Product Hunt page so they can try it too.\n>\n> Thank you for being with us from the start.\n>\n> Cheers, Maya from Tally\n\nThe section points to `specs/Email spec.md`, and the email follows its rules: the exact subject line, exactly three bullets, no price, and the \"Cheers, Maya from Tally\" sign-off. It also follows the house rules at the top of Launch.md: British spelling, no exclamation marks and no competitor names.\n\nI didn't describe any features. The feature sections in the plan are planning notes, so I couldn't tell what's actually live.\n\nI noticed some other problems in Launch.md that I left alone:\n- **Pricing** says 40 beta flats, but `beta.csv` lists only 27.\n- **Pricing** puts Splitwise Pro at \u00a35. That's the archived 2025 price; `competitors.txt` now says \u00a32.99, so the \"we are cheaper\" claim no longer holds against a \u00a33 plan.\n- **Risks** breaks th"
+  },
+  {
+    "run": 2,
+    "task": "pricing",
+    "setup": "anur",
+    "score": 1.0,
+    "checks": {
+      "current_price": true,
+      "says_not_cheaper": true,
+      "flats_27": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 8,
+      "cacheRead": 380777,
+      "cacheWrite": 101665,
+      "output": 1502,
+      "steps": 6,
+      "secs": 27
+    },
+    "reply": "The claim is wrong on both counts. competitors.txt (checked 1 November 2026) puts Splitwise Pro at \u00a32.99 a month, not \u00a35, so \u00a33 a flat is actually 1p dearer, not cheaper. beta.csv lists 27 beta flats, not 40. The web didn't settle the UK price either: one source says \u00a33.99, an App Store listing says \u00a32.99, and Splitwise doesn't publish a UK figure, so check the UK App Store before quoting any comparison.\n\nSources:\n\nSplitwise vs Wise (Wise UK)\nSplitwise on the UK App Store (AppTail)\nSplitwise Pricing 2026"
+  },
+  {
+    "run": 2,
+    "task": "pricing",
+    "setup": "cc-fresh",
+    "score": 1.0,
+    "checks": {
+      "current_price": true,
+      "says_not_cheaper": true,
+      "flats_27": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 10,
+      "cacheRead": 233631,
+      "cacheWrite": 33605,
+      "output": 988,
+      "steps": 5,
+      "secs": 15.4
+    },
+    "reply": "No. The \"\u00a35 a month\" for Splitwise Pro comes from `Archive/Competitor prices 2025.md`, which says it has been replaced. The current `competitors.txt` (checked 2026-11-01) lists Splitwise Pro at \u00a32.99 a month, so Tally's \u00a33 plan is now slightly more expensive, not cheaper. The \"40 beta flats\" figure is wrong too: `beta.csv` lists only 27 flats."
+  },
+  {
+    "run": 2,
+    "task": "pricing",
+    "setup": "cc-long",
+    "score": 1.0,
+    "checks": {
+      "current_price": true,
+      "says_not_cheaper": true,
+      "flats_27": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 10,
+      "cacheRead": 495996,
+      "cacheWrite": 13557,
+      "output": 1194,
+      "steps": 5,
+      "secs": 20.7
+    },
+    "reply": "No, the claim is wrong. The section uses the archived 2025 price of \u00a35 for Splitwise Pro, but the newer `competitors.txt` (checked 2026-11-01) has it at \u00a32.99 a month, so Tally's \u00a33 plan is actually 1p more expensive. The beta count in the same paragraph is also off: it says 40 beta flats, but `beta.csv` lists 27."
+  },
+  {
+    "run": 2,
+    "task": "risks",
+    "setup": "anur",
+    "score": 1.0,
+    "checks": {
+      "changed": true,
+      "max_three": true,
+      "british": true,
+      "no_exclamation": true,
+      "keeps_install": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 6,
+      "cacheRead": 255785,
+      "cacheWrite": 99871,
+      "output": 1456,
+      "steps": 3,
+      "secs": 23
+    },
+    "reply": "I've put two ways to tighten this section on the cards. Both cut it to three bullets, since the Plan rule allows no more, and both fix \"prioritize\" and \"organized\" to British spelling.\n\nMerge all six keeps every risk by grouping them as adoption, product and launch week. Each bullet gets a bit denser as a result.\nTop three only keeps the risks that could break the launch itself: the flatmate who never installs, the Android build, and support and sign-up during launch week. It drops the Splitwise risk and the colour scheme. Those two could go in Pricing and the Accessibility audit section instead, if you still want them recorded.\n\nI've left Splitwise named in the first option. The house rule only bans naming competitors in customer-facing copy, and this plan is internal."
+  },
+  {
+    "run": 2,
+    "task": "risks",
+    "setup": "cc-fresh",
+    "score": 1.0,
+    "checks": {
+      "changed": true,
+      "max_three": true,
+      "british": true,
+      "no_exclamation": true,
+      "keeps_install": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 10,
+      "cacheRead": 229790,
+      "cacheWrite": 32206,
+      "output": 1487,
+      "steps": 5,
+      "secs": 18.4
+    },
+    "reply": "I cut the Risks section in `Launch.md:2299` from six bullets to three. The note under \"Plan\" says every section there keeps to three bullets at most, so I grouped the six risks rather than dropping any:\n\n```\n- Adoption: one flatmate who won't install breaks the shared balance, and Splitwise is free and familiar, so switching feels costly.\n- Product: half the beta flats use Android, so that build must be prioritised; the colour scheme tests poorly with older users.\n- Launch week: there is no support rota yet, and a Product Hunt spike could slow sign-up.\n```\n\nI also changed \"prioritize\" and \"organized\" to British spelling, as the house rules ask; \"organized\" went when the support-rota line was reworded.\n\nSplitwise is still named. The no-competitor rule covers customer-facing copy, and this is the internal plan. If any of this text ends up in customer copy, the name needs to come out."
+  },
+  {
+    "run": 2,
+    "task": "risks",
+    "setup": "cc-long",
+    "score": 1.0,
+    "checks": {
+      "changed": true,
+      "max_three": true,
+      "british": true,
+      "no_exclamation": true,
+      "keeps_install": true
+    },
+    "wrong": 0,
+    "usage": {
+      "input": 12,
+      "cacheRead": 594514,
+      "cacheWrite": 12240,
+      "output": 1969,
+      "steps": 6,
+      "secs": 26.8
+    },
+    "reply": "I tightened the Risks section in `Launch.md` from six bullets to three. The Plan section says its subsections keep to three bullets at most, so I combined the risks into three groups rather than cutting any:\n\n```markdown\n### Risks\n\n- Adoption: one flatmate who won't install breaks the shared balance, and Splitwise is free and familiar, so switching feels costly.\n- Product: half the beta flats use Android, so that build needs prioritising; the colour scheme tests poorly with older users.\n- Launch week: no support rota is organised yet, and a Product Hunt traffic spike could slow sign-up.\n```\n\nTwo other changes, because of the house rules at the top of the plan:\n- **British spelling:** \"prioritize\" and \"organized\" are now \"prioritising\" and \"organised\".\n- **Splitwise is still named.** The rule against naming competitors only covers customer-facing copy, and this is an internal list.\n\n**The Pricing section just above Risks is out of date, and the problem matters.** It says Splitwise Pro costs \u00a35 a month, \"so we are cheaper\" at \u00a33. Your `competitors.txt` (checked 2026-11-01) lists Splitwise Pro at \u00a32.99. At that price, Tally's \u00a33 plan is slightly more expensive, not cheaper. I haven't touched that section; tell me if you want it updated."
+  }
+]

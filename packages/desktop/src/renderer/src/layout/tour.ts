@@ -12,6 +12,8 @@ export type TourStep = {
   fallback?: string;
   side: "left" | "right" | "top";
   view: "page" | "map";
+  /** A switchable Core feature the step is about; the tour skips it while that's off. */
+  feature?: "links" | "history" | "actions";
   /** A side panel the step points into, opened for it. */
   panel?: "left" | "right";
   /** Show the map's moves with a ghost pointer: drag a box, then pick one. */
@@ -29,7 +31,7 @@ export const TOUR: readonly TourStep[] = [
   },
   {
     title: "Ask about a section",
-    text: "Click in a section and ask. The thread stays on that section and runs on your own agent.",
+    text: "Click in a section and ask, on your own agent. It starts from that section, the rules it links to and what earlier threads settled, not a blank chat.",
     target: ".right-sidebar",
     side: "left",
     view: "page",
@@ -46,6 +48,7 @@ export const TOUR: readonly TourStep[] = [
   },
   {
     title: "Build and check from the map",
+    feature: "actions",
     text: "Pick a box, then Build this section: the agent does what it says with its own tools, drafts, docs or code. Check this section tests its claims. The work hangs off the box.",
     target: ".think-actions",
     fallback: ".right-sidebar",
@@ -62,6 +65,10 @@ export const TOUR: readonly TourStep[] = [
     view: "page",
   },
 ];
+
+/** The steps to show: those about a switched-off Core feature are left out. */
+export const tourSteps = (flags: Record<"links" | "history" | "actions", boolean>) =>
+  TOUR.filter((s) => !s.feature || flags[s.feature]);
 
 export type Rect = { left: number; top: number; width: number; height: number };
 

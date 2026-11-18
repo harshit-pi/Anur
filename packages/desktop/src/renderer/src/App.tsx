@@ -3,7 +3,7 @@ import type { SectionTree } from "@anur/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { settled } from "./editor/pending-saves.ts";
-import { freeName } from "./layout/file-tree.ts";
+import { freeName, renamed } from "./layout/file-tree.ts";
 import type { FileActions } from "./regions/FileTree.tsx";
 import type { FileNotice } from "./regions/Regions.tsx";
 import { isViewable } from "./layout/file-tree.ts";
@@ -66,12 +66,13 @@ import {
 } from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
 import { SkillCard } from "./regions/SkillCard.tsx";
+import { UpdateCard } from "./regions/UpdateCard.tsx";
 import { OpenerCard } from "./regions/OpenerCard.tsx";
 import { Tour } from "./regions/Tour.tsx";
-import { TOUR } from "./layout/tour.ts";
-import { TipBubble } from "./regions/TipBubble.tsx";
-import { TIP_EVENT, isTipId, offerTip, type TipOffer } from "./layout/tips.ts";
+import { tourSteps } from "./layout/tour.ts";
+import { useFeatures } from "./features.ts";
 import { MapView } from "./regions/MapView.tsx";
+import { keepSame } from "./layout/keep-same.ts";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
 export function App() {
@@ -101,51 +102,11 @@ export function App() {
   const markedAt = useRef(0);
   /** Page or Map in the centre (task 7). */
   const [centerView, setCenterView] = useState<"page" | "map">("page");
+  const TOUR = tourSteps(useFeatures());
   /** The tour's step while it runs (null otherwise), and Help → Show the Tour Again. */
   const [tourStep, setTourStep] = useState<number | null>(null);
   const [tourAsked, setTourAsked] = useState(0);
   const tourChecked = useRef(false);
-  /** The one-time tip on screen, which ones were shown, and whether the tour has had its turn. */
-  const [tip, setTip] = useState<TipOffer | null>(null);
-  const tips = useRef<{ seen: Set<string>; enabled: boolean } | null>(null);
-  const tourSeen = useRef(false);
-  const tipBusy = useRef(false);
-  tipBusy.current = tip !== null || tourStep !== null;
-  useEffect(() => {
-    void anur.call("tips:seen", {}).then((r) => {
-      tips.current = { seen: new Set(r.seen), enabled: r.enabled };
-    });
-    void anur.call("tour:status", {}).then((t) => {
-      if (!t.show) tourSeen.current = true;
-    });
-    const onTip = (e: Event) => {
-      const offer = (e as CustomEvent<TipOffer>).detail;
-      const t = tips.current;
-      if (!t?.enabled || !isTipId(offer.id) || t.seen.has(offer.id)) return;
-      // Tips wait for the tour, and show one at a time.
-      if (tipBusy.current || !tourSeen.current) return;
-      tipBusy.current = true;
-      setTip(offer);
-    };
-    window.addEventListener(TIP_EVENT, onTip);
-    return () => {
-      window.removeEventListener(TIP_EVENT, onTip);
-    };
-  }, []);
-  const tipDone = useCallback(() => {
-    setTip((t) => {
-      if (t) {
-        tips.current?.seen.add(t.id);
-        void anur.call("tips:done", { id: t.id });
-      }
-      return null;
-    });
-  }, []);
-  // A third tab open: say what tabs can do.
-  const tabCount = tabs.tabs.length;
-  useEffect(() => {
-    if (tabCount >= 3) offerTip("tabs", document.querySelector(".tab-bar .tabs"));
-  }, [tabCount]);
   const centerNow = useRef(centerView);
   centerNow.current = centerView;
   const sectionsNow = useRef(sections);
@@ -187,8 +148,15 @@ export function App() {
     }
   }, []);
 
+  // Read in the open effect, not a dependency: a changed listing (an iCloud
+  // download, a file added) mustn't close and reopen the doc being read.
+  const folderNow = useRef(folder);
+  folderNow.current = folder;
+  const openedIn = folder?.path ?? null;
+
   // Open the picked doc; an offloaded one downloads from iCloud first.
   useEffect(() => {
+    const folder = folderNow.current;
     setDoc(null);
     setSections(null);
     setDocError(null);
@@ -216,7 +184,7 @@ export function App() {
     return () => {
       current = false;
     };
-  }, [selected, folder]);
+  }, [selected, openedIn]);
 
   // Each folder has its own tabs, remembered on this device.
   const folderPath = folder?.path ?? null;
@@ -238,7 +206,10 @@ export function App() {
   useEffect(() => {
     // A doc named in a thread, such as one an agent made (15.6), opens in this tab.
     const onOpen = (e: Event) => {
-      const { path } = (e as CustomEvent<{ path: string }>).detail;
+      const { path, heading } = (e as CustomEvent<{ path: string; heading?: string | null }>)
+        .detail;
+      // A linked section (8.3) opens where it is.
+      if (heading) setPendingHeading({ path, heading });
       openDocNow.current(path, false);
     };
     window.addEventListener("anur:open-path", onOpen);
@@ -356,10 +327,6 @@ export function App() {
     const record = (step: FileStep) => {
       history.current.record(step);
       setHistoryTick((n) => n + 1);
-      // The first change in the files panel: say it can be undone.
-      setTimeout(() => {
-        offerTip("files-undo", document.querySelector(".left-sidebar .sidebar-head"));
-      }, 400);
     };
     /** Move, stopping at the first that fails; returns those done. */
     const doMoves = (moves: Move[]) =>
@@ -500,6 +467,25 @@ export function App() {
         if (items.some((i) => i.isFolder && i.docs > 0) && !window.confirm(question)) return;
         const gone = await doTrash(items.map((i) => i.path));
         if (gone.length) record({ label: "Move to Trash", kind: "trash", items: gone });
+      },
+      importIncoming: async (data, into) => {
+        const r = await anur.call("file:incoming", { into, ...data });
+        if (r.kind === "failed") {
+          tell(r.reason);
+          return null;
+        }
+        setFolder(r.folder);
+        const paths = r.kind === "copied" ? r.paths : [r.path];
+        if (paths.length)
+          record({
+            label: r.kind === "made" ? "New doc" : "Add files",
+            kind: "create",
+            paths,
+            gone: [],
+          });
+        // Text made into a doc opens, so it can be read and named.
+        if (r.kind === "made") openDoc(r.path, false);
+        return paths;
       },
       importFiles: async (sources, into) => {
         const r = await anur.call("file:import", { sources, into });
@@ -723,6 +709,45 @@ export function App() {
     };
   }, [sections, centerView, doc]);
   /** A section deleted on the map: its heading, text and subsections, as one undoable edit. */
+  /**
+   * A section renamed on the map: its heading line changes, or a title is
+   * written. The title's new name is the file's too, as in the files panel.
+   */
+  const renameSection = useCallback(
+    (index: number, name: string) => {
+      const v = view.current;
+      const s = sections?.sections[index];
+      if (!v || !s) return;
+      const clean = name.replace(/\s+/g, " ").trim();
+      if (!s.headingRange) {
+        // A doc with no title yet: the name becomes its first line.
+        v.dispatch({ changes: { from: 0, insert: `# ${clean}\n\n` }, userEvent: "input.map" });
+      } else {
+        const line = v.state.doc.sliceString(s.headingRange.from, s.headingRange.to);
+        const m = /^(\s{0,3}#{1,6}[ \t]+)(.*?)([ \t]+#+[ \t]*)?$/.exec(line.replace(/\n$/, ""));
+        if (!m) return;
+        const from = s.headingRange.from + (m[1]?.length ?? 0);
+        v.dispatch({
+          changes: { from, to: from + (m[2]?.length ?? 0), insert: clean },
+          userEvent: "input.map",
+        });
+      }
+      if (index !== 0 || !selected || !fileActions || !folder) return;
+      const to = renamed(selected, clean.replace(/[*?"<>|#^[\]]/g, " "), false);
+      if (!to || to === selected) return;
+      const taken = folder.docs.some(
+        (d) => d.toLowerCase() === to.toLowerCase() && d.toLowerCase() !== selected.toLowerCase(),
+      );
+      if (taken) {
+        tell(
+          `A doc called “${to.split("/").pop() ?? to}” is already here, so the file keeps its name.`,
+        );
+        return;
+      }
+      void fileActions.move([{ from: selected, to }]);
+    },
+    [sections, selected, fileActions, folder, tell],
+  );
   const deleteSection = useCallback(
     (index: number) => {
       const v = view.current;
@@ -836,7 +861,6 @@ export function App() {
       });
   }, [tourStep]);
   const endTour = useCallback(() => {
-    tourSeen.current = true;
     setTourStep(null);
     setCenterView("page");
     void anur.call("tour:done", {});
@@ -900,7 +924,7 @@ export function App() {
       insertById(v, id);
     });
     const offFolder = anur.on("folder:changed", (f) => {
-      setFolder(f);
+      setFolder((was) => keepSame(was, f));
     });
     // An agent in a terminal asked to show a doc (6.7, 6.9).
     const offOpenDoc = anur.on("app:open-doc", ({ path, section }) => {
@@ -913,6 +937,7 @@ export function App() {
       else if (command === "back") setTabs(back);
       else if (command === "forward") setTabs(forward);
       else if (command === "tour") setTourAsked((n) => n + 1);
+      else if (command === "updates") setSettings("general");
       else setTabs((t) => cycle(t, command === "tab-next" ? 1 : -1));
     });
     return () => {
@@ -1072,9 +1097,11 @@ export function App() {
               onAddSection={addSection}
               onLink={addLink}
               onDelete={deleteSection}
+              onRename={renameSection}
               onUndo={undoOnPage}
               onRedo={redoOnPage}
               writable={folder?.mode === "writable" && doc.mode === "editable"}
+              docs={folder?.docs ?? []}
             />
           ) : centerView === "map" ? (
             // While a doc's sections are read, an empty map, so the page never shows through.
@@ -1166,10 +1193,10 @@ export function App() {
           onEnd={endTour}
         />
       ) : null}
-      {tip ? <TipBubble tip={tip} onDone={tipDone} /> : null}
       {/* The offer cards wait until the tour is over. */}
       {tourStep === null ? (
         <>
+          <UpdateCard />
           <SkillCard />
           <OpenerCard />
         </>

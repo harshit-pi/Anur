@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   ANUR_DIR,
@@ -7,6 +7,8 @@ import {
   VersionLine,
   anurPaths,
   buildSectionTree,
+  canonicalId,
+  describeChange,
   hasConflictMarkers,
   matchSections,
   mergeLines,
@@ -181,19 +183,79 @@ export class SectionVersions {
   locate(
     rel: string,
     text: string,
-  ): Promise<{ doc: DocId; tree: SectionTree; ids: SectionId[] } | null> {
-    let found: { doc: DocId; tree: SectionTree; ids: SectionId[] } | null = null;
+  ): Promise<{
+    doc: DocId;
+    tree: SectionTree;
+    ids: SectionId[];
+    canon: ReadonlyMap<SectionId, SectionId>;
+  } | null> {
+    let found: {
+      doc: DocId;
+      tree: SectionTree;
+      ids: SectionId[];
+      canon: ReadonlyMap<SectionId, SectionId>;
+    } | null = null;
     return this.run(async () => {
       const known = this.known.get(rel);
       if (known?.text === text) {
         this.loaded ??= this.docIds.load();
         await this.loaded;
-        found = { doc: await this.docIds.idFor(rel), tree: known.tree, ids: known.ids };
+        const doc = await this.docIds.idFor(rel);
+        found = { doc, tree: known.tree, ids: known.ids, canon: await this.canonOf(doc) };
         return;
       }
       const { doc, now } = await this.assign(rel, text, known ?? null);
-      if (now) found = { doc, tree: now.tree, ids: now.ids };
+      if (now) found = { doc, tree: now.tree, ids: now.ids, canon: await this.canonOf(doc) };
     }).then(() => found);
+  }
+
+  /** IDs joined to another by an alias or a Reattach, each to the ID it stands for now (11.1). */
+  private async canonOf(doc: DocId): Promise<ReadonlyMap<SectionId, SectionId>> {
+    const state = await this.sectionIds.state(doc);
+    const out = new Map<SectionId, SectionId>();
+    for (const rec of state.values()) if (rec.joinedTo) out.set(rec.id, canonicalId(state, rec.id));
+    return out;
+  }
+
+  /**
+   * Sections whose heading is gone (11.1): each with its last heading path,
+   * its last recorded text, and whether it has history to lose.
+   */
+  async orphansOf(
+    rel: string,
+  ): Promise<{ id: SectionId; path: string[]; text: string | null; history: boolean }[]> {
+    this.loaded ??= this.docIds.load();
+    await this.loaded;
+    const doc = await this.docIds.idFor(rel);
+    const list = await this.sectionIds.orphaned(doc);
+    return Promise.all(
+      list.map(async (r) => ({
+        id: r.id,
+        path: r.path,
+        text: await this.latest(doc, r.id),
+        history: await this.hasHistory(doc, r.id),
+      })),
+    );
+  }
+
+  /** Delete an orphan's history (11.2): every device's versions of it, at once. */
+  forget(rel: string, orphan: SectionId): Promise<void> {
+    return this.run(async () => {
+      this.loaded ??= this.docIds.load();
+      await this.loaded;
+      const doc = await this.docIds.idFor(rel);
+      if (!(await this.sectionIds.orphaned(doc)).some((r) => r.id === orphan)) return;
+      await rm(this.historyDir(doc, orphan), { recursive: true, force: true });
+    });
+  }
+
+  /** Reattach an orphan to the section a person picked (11.1): its threads and history follow. */
+  reattach(rel: string, orphan: SectionId, onto: SectionId): Promise<void> {
+    return this.run(async () => {
+      this.loaded ??= this.docIds.load();
+      await this.loaded;
+      await this.sectionIds.reattach(await this.docIds.idFor(rel), orphan, onto);
+    });
   }
 
   /**
@@ -271,18 +333,98 @@ export class SectionVersions {
         this.device,
       );
       try {
+        const before = await this.latest(doc, section);
         await w.append({
           kind: "version",
           cause: "apply",
           text,
           path: sectionPath.length > 0 ? sectionPath : [path.basename(doc)],
-          summary: "Applied from a thread",
+          summary: `From a thread: ${lower(describeChange(before, text))}`,
           preview,
           thread,
         });
       } finally {
         await w.close();
       }
+    });
+  }
+
+  /**
+   * Every version of one section, newest first, across devices (5.1): its
+   * text, when, what caused it, its summary, and the thread behind an Apply.
+   */
+  async list(
+    rel: string,
+    text: string,
+    sectionPath: readonly string[],
+  ): Promise<
+    {
+      id: string;
+      at: string;
+      cause: string;
+      summary: string;
+      text: string;
+      thread: string | null;
+    }[]
+  > {
+    const at = await this.locate(rel, text);
+    if (!at) return [];
+    const index = at.tree.sections.findIndex(
+      (s) => s.path.join("\u0000") === sectionPath.join("\u0000"),
+    );
+    const id = at.ids[index];
+    if (!id) return [];
+    // An orphan reattached here brings its versions with it (11.1).
+    const ids = [id, ...[...at.canon].flatMap(([from, to]) => (to === id ? [from] : []))];
+    const files = (
+      await Promise.all(
+        ids.map(async (one) => {
+          const dir = this.historyDir(at.doc, one);
+          const names = (await readdir(dir).catch(() => [] as string[])).filter((n) =>
+            n.endsWith(".jsonl"),
+          );
+          return Promise.all(
+            names.map(async (n) => (await readJsonlFile(path.join(dir, n), VersionLine)).lines),
+          );
+        }),
+      )
+    ).flat();
+    return mergeLines(...files)
+      .sort((a, b) => b.at.localeCompare(a.at) || b.seq - a.seq)
+      .map((l) => ({
+        id: l.id,
+        at: l.at,
+        cause: l.cause,
+        summary: l.summary,
+        text: l.text,
+        thread: l.thread,
+      }));
+  }
+
+  /**
+   * A person restored an older version of one section (5.3): the doc now
+   * reads `text`, and that section's new text is recorded as a "restore"
+   * version, so the typing that carried it isn't a second one.
+   */
+  restored(rel: string, text: string, sectionPath: readonly string[], from: string): Promise<void> {
+    return this.run(async () => {
+      // What was typed before the restore is a version first: no text is ever lost.
+      await this.closeSession(rel);
+      const before = this.known.get(rel) ?? null;
+      const { doc, now } = await this.assign(rel, text, before);
+      if (!now) return;
+      const i = now.tree.sections.findIndex(
+        (s) => s.path.join("\u0000") === sectionPath.join("\u0000"),
+      );
+      const id = now.ids[i];
+      if (i < 0 || !id) return;
+      const when = new Date(from).toLocaleString("en-GB", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      await this.write(doc, id, now, i, "restore", `Restored the version from ${when}`);
     });
   }
 
@@ -416,11 +558,16 @@ export class SectionVersions {
     id: SectionId,
     from: Known,
     i: number,
-    cause: "start" | "typing" | "outside",
+    cause: "start" | "typing" | "outside" | "restore",
     summary: string,
   ): Promise<void> {
     const section = from.tree.sections[i];
     if (!section || !this.recording()) return;
+    // A typed or outside change says what it changed (5.4).
+    if (cause === "typing" || cause === "outside") {
+      const said = describeChange(await this.latest(doc, id), subtreeOf(from, i));
+      summary = cause === "outside" ? `Outside Anur: ${lower(said)}` : said;
+    }
     const w = await JsonlWriter.open(
       path.join(this.anurDir, anurPaths.history(doc, id, this.device)),
       this.device,
@@ -440,6 +587,8 @@ export class SectionVersions {
     }
   }
 }
+
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 const subtreeOf = (k: Known, i: number) => {
   const s = k.tree.sections[i];

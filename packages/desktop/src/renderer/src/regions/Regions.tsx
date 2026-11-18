@@ -1,4 +1,3 @@
-import { formatTokens } from "../layout/tokens.ts";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
@@ -237,6 +236,7 @@ export function LeftSidebar({
         </button>
       </div>
       <FileTree
+        root={folder.path}
         docs={folder.docs}
         folders={folder.folders}
         files={folder.files}
@@ -505,8 +505,12 @@ export function Center({
         <div className="page-empty">
           <h1>Start with a folder</h1>
           <p>
-            Make a new folder for your docs, or open one you already have. Your docs stay plain
-            Markdown files that open in any editor.
+            Think beside your docs with your own agent. Each section gets its own threads, which
+            start from that section, the rules it links to and what earlier threads settled.
+          </p>
+          <p>
+            Make a new folder, or open one you already have. Your docs stay plain Markdown files
+            that open in any editor.
           </p>
           <div className="page-empty-buttons">
             <button className="primary-button" type="button" onClick={onNewFolder}>
@@ -605,7 +609,9 @@ export function OutlinePanel({
 export function RightSidebar({ hidden, think }: { hidden: boolean; think: React.ReactNode }) {
   return (
     <aside className="right-sidebar" aria-label="Think" hidden={hidden}>
-      {think}
+      <div className="right-main">{think}</div>
+      {/* A section's context and history, folded at the foot, filled by Think. */}
+      <div id="right-footer" className="right-footer" />
     </aside>
   );
 }
@@ -698,12 +704,12 @@ export function StatusBar({
         </button>
       ) : null}
       {threads ? (
-        <span className="status-item" title="Tokens from the agent's usage reports">
+        <span className="status-item">
           {threads.count === 0
             ? "No threads"
-            : `${threads.count === 1 ? "1 thread" : `${String(threads.count)} threads`}${
-                threads.tokens > 0 ? `, ${formatTokens(threads.tokens)} tokens` : ""
-              }`}
+            : threads.count === 1
+              ? "1 thread"
+              : `${String(threads.count)} threads`}
         </span>
       ) : null}
       {version ? <span className="status-item quiet">Anur {version}</span> : null}

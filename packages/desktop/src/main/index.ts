@@ -1,9 +1,9 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, mkdirSync } from "node:fs";
 import { readFile, realpath, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { FORMAT_VERSION, PreviewPart, docsBefore } from "@anur/core";
+import { FORMAT_VERSION, PreviewPart, docsBefore, subtreeText } from "@anur/core";
 import { AGENTS, type AgentId } from "../shared/agents.ts";
 import type { SessionOption } from "../agent/protocol.ts";
 import {
@@ -50,11 +50,28 @@ import {
 import { isInTrash, trashTelling } from "./folder/system-trash.ts";
 import { FILES_TYPE, filePathsPlist, readFilePaths } from "./folder/finder-clipboard.ts";
 import { FolderWatch } from "./folder/folder-watch.ts";
+import { agentMemoryMb } from "./threads/agent-memory.ts";
+import { docFromText, obsidianVaults, resolveIncoming } from "./folder/incoming.ts";
 import { planLinkUpdates } from "./folder/link-updates.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
 import { SectionVersions, lastSavedIn } from "./folder/versions.ts";
+import { sectionCommits } from "./folder/git-history.ts";
+import { suggestMatch } from "./folder/orphans.ts";
+import { personName } from "./folder/people.ts";
+import {
+  devicesStillOpen,
+  namesOf,
+  noteName,
+  noteOpened,
+  noteQuit,
+  removeSnapshots,
+  storageOf,
+  unusedAttachments,
+  unusedSnapshots,
+} from "./folder/storage.ts";
+import { SnapshotStore } from "../vault/snapshot-store.ts";
 import { loadDeviceId } from "../device/device-id.ts";
 import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
@@ -62,8 +79,23 @@ import { readRecent } from "./folder/recent.ts";
 import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
 import { buildMenu } from "./menu.ts";
-import { BUNDLE_ID, OpenerOffer, makeMarkdownOpener, markdownOpener } from "./default-opener.ts";
+import {
+  BUNDLE_ID,
+  DEV_BUNDLE_ID,
+  OpenerOffer,
+  makeMarkdownOpener,
+  markdownOpener,
+} from "./default-opener.ts";
+import {
+  checkNow,
+  download,
+  restartToUpdate,
+  setAuto,
+  startUpdates,
+  updateState,
+} from "./updater.ts";
 import { folderFor } from "./open-file.ts";
+import { offerMoveToApplications } from "./move-to-applications.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
 import { AgentChoices } from "./threads/agent-choices.ts";
 import { AnurSocket } from "./threads/anur-socket.ts";
@@ -81,17 +113,22 @@ const rendererUrl = () =>
   devUrl ?? pathToFileURL(path.join(here, "..", "renderer", "index.html")).href;
 const senders = trustedSenders(rendererUrl);
 
-// The app is called Anur. Its profile lives in "Anur Desktop", since
-// "Anur" in Application Support belongs to the Mac on the Go app. Checks run
-// in a throwaway profile, so they never share storage or locks with a copy
-// of Anur that is already open.
-app.setName("Anur");
+// Two apps from one code: Anur, the signed release people install, and
+// Anur Dev, what `pnpm dev` and local builds run. Only the name, profile,
+// bundle id and updates differ. Anur's profile is "Anur Desktop", where it
+// has always been; Anur Dev keeps its own, so it never touches Anur's data.
+// Checks run in a throwaway profile.
+const isRelease = app.isPackaged && app.getName() === "Anur";
+app.setName(isRelease ? "Anur" : "Anur Dev");
+const sharedProfile = path.join(app.getPath("appData"), "Anur Desktop");
 app.setPath(
   "userData",
   isCheck
     ? // ANUR_CHECK_PROFILE lets two check runs share one, to test what is remembered.
       (process.env.ANUR_CHECK_PROFILE ?? mkdtempSync(path.join(tmpdir(), "anur-check-")))
-    : path.join(app.getPath("appData"), "Anur Desktop"),
+    : isRelease
+      ? sharedProfile
+      : path.join(app.getPath("appData"), "Anur Dev"),
 );
 
 // For checks: ANUR_THEME=light or dark overrides the system theme.
@@ -119,7 +156,7 @@ function versionsFor(folder: FolderState): SectionVersions | null {
       },
       lastSavedIn(app.getPath("userData"), folder.path),
       undefined,
-      () => appSettings.get().sectionHistory,
+      () => appSettings.get().features.history,
     );
     versions.set(folder.path, v);
   }
@@ -152,13 +189,6 @@ void anurSocket.start().catch((e: unknown) => {
 });
 /** Anur in the person's Claude Code (group 6); set up once the app is ready. */
 let claudeSkill: ClaudeSkill | null = null;
-/** The one-time tips already shown on this Mac, kept in app support. */
-const tipsFile = () => path.join(app.getPath("userData"), "tips.json");
-const readTipsSeen = () =>
-  readFile(tipsFile(), "utf8").then(
-    (t) => (JSON.parse(t) as { seen?: string[] }).seen ?? [],
-    () => [],
-  );
 /** Whether the person turned down making Anur the opener for Markdown files. */
 const openerOffer = () => new OpenerOffer(app.getPath("userData"));
 
@@ -212,6 +242,20 @@ async function startClaudeSkill(): Promise<void> {
         const at = front();
         return at ? ((await t(at.win.webContents.id)?.threadsOf(rel, text)) ?? null) : null;
       },
+      search: async (words) => {
+        const at = front();
+        const threads = at ? t(at.win.webContents.id) : null;
+        return threads
+          ? threads.searchSectionsReport(words)
+          : { error: "Anur has no folder open." };
+      },
+      links: async (_f, rel, text, section) => {
+        const at = front();
+        const threads = at ? t(at.win.webContents.id) : null;
+        return threads
+          ? threads.linksReport(rel, text, section)
+          : { error: "Anur has no folder open." };
+      },
       propose: async (_f, rel, text, section, body, summary) => {
         const at = front();
         return at
@@ -263,6 +307,11 @@ async function startClaudeSkill(): Promise<void> {
 
 /** Agents whose choices were read this run; once per run is enough. */
 const probed = new Set<AgentId>();
+const probeFolder = () => {
+  const dir = path.join(app.getPath("userData"), "agent", "empty");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+};
 /** Each folder's threads, so a reply reaches the windows showing that folder. */
 const threads = new Map<string, Threads>();
 function threadsFor(folder: FolderState): Threads | null {
@@ -287,6 +336,14 @@ function threadsFor(folder: FolderState): Threads | null {
       rememberOptions: rememberChoices,
       mcp: { socket: anurSocket, script: path.join(here, "mcp-server.js") },
       autoApply: () => appSettings.get().autoApply,
+      features: () => appSettings.get().features,
+      people: async () => ({
+        me: await personName(folder.path, appSettings.get().name),
+        byDevice: await namesOf(folder.path),
+      }),
+      folderState: () =>
+        [...windows.keys()].map((id) => folders.current(id)).find((f) => f?.path === folder.path) ??
+        null,
       filesChanged: () => {
         for (const [id, win] of windows) {
           if (folders.current(id)?.path !== folder.path) continue;
@@ -377,6 +434,13 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
   if (folders.current(win.webContents.id)) target = createWindow();
   const outcome = await folders.open(target.webContents.id, folder);
   if (outcome.kind === "opened") {
+    // 11.4: other devices hold off Clean up while this one has the folder open.
+    if (device && outcome.folder.mode === "writable") {
+      const at = outcome.folder.path;
+      void personName(at, appSettings.get().name)
+        .then((name) => noteOpened(at, device as string, new Date(), name))
+        .catch(() => undefined);
+    }
     folderWatch.start(target.webContents.id, outcome.folder.path);
     target.setTitle(outcome.folder.name);
     target.setRepresentedFilename(outcome.folder.path);
@@ -576,34 +640,146 @@ const handlers: { [C in Channel]: Handler<C> } = {
   "settings:get": async (_request, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     return {
-      sectionHistory: appSettings.get().sectionHistory,
       commitAnur: folder ? await commitsAnur(folder.path) : null,
       defaultAgent: appSettings.get().defaultAgent,
       autoApply: appSettings.get().autoApply,
+      name: await personName(folder?.path ?? homedir(), appSettings.get().name),
     };
   },
-  "settings:set": async (
-    { sectionHistory, commitAnur, defaultAgent, autoApply },
-    { webContentsId },
-  ) => {
+  "settings:set": async ({ commitAnur, defaultAgent, autoApply, name }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
-    if (sectionHistory !== undefined) await appSettings.set({ sectionHistory });
+    if (name !== undefined) {
+      await appSettings.set({ name: name.trim().slice(0, 80) || null });
+      // Every open folder's note follows, so others see the new name on their next look.
+      for (const id of windows.keys()) {
+        const f = folders.current(id);
+        if (f && device && f.mode === "writable")
+          await noteName(f.path, device, await personName(f.path, appSettings.get().name));
+      }
+    }
     if (defaultAgent !== undefined) await appSettings.set({ defaultAgent });
     if (autoApply !== undefined) await appSettings.set({ autoApply });
     if (commitAnur !== undefined && folder?.mode === "writable") {
       await setCommitsAnur(folder.path, commitAnur);
     }
     return {
-      sectionHistory: appSettings.get().sectionHistory,
       commitAnur: folder ? await commitsAnur(folder.path) : null,
       defaultAgent: appSettings.get().defaultAgent,
       autoApply: appSettings.get().autoApply,
+      name: await personName(folder?.path ?? homedir(), appSettings.get().name),
     };
   },
   "thread:rename": async ({ thread, path: rel, text, title }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.rename(rel, text, thread, title) : false };
+  },
+  "thread:close": async ({ thread, path: rel, text, closed }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    return { ok: t ? await t.setClosed(rel, text, thread, closed) : false };
+  },
+  "thread:delete": async ({ thread }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    return t ? t.deleteThread(thread) : { kind: "refused", reason: "No folder is open." };
+  },
+  "storage:read": async (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || !device || folder.mode !== "writable")
+      return { kinds: [], cleanable: { count: 0, bytes: 0 }, blockedBy: [], attachments: [] };
+    const [kinds, unused, open, attachments] = await Promise.all([
+      storageOf(folder.path),
+      unusedSnapshots(folder.path),
+      devicesStillOpen(folder.path, device),
+      unusedAttachments(folder.path, folder.docs, folder.files),
+    ]);
+    return {
+      kinds,
+      cleanable: { count: unused.length, bytes: unused.reduce((n, s) => n + s.bytes, 0) },
+      blockedBy: open.map((d) => ({ openedAt: d.openedAt || null })),
+      attachments,
+    };
+  },
+  "storage:clean": async (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || !device || folder.mode !== "writable")
+      return { kind: "refused", reason: "Needs a folder Anur can write to." };
+    if ((await devicesStillOpen(folder.path, device)).length > 0)
+      return {
+        kind: "refused",
+        reason:
+          "Another device has this folder open, or didn't quit cleanly. Quit Anur there first.",
+      };
+    const store = new SnapshotStore(path.join(folder.path, ".anur"), device);
+    const found = await unusedSnapshots(folder.path);
+    const removed = await removeSnapshots(
+      folder.path,
+      found.map((f) => f.hash),
+      (h) => store.delete(h as never, "cleanup"),
+    );
+    return { kind: "ok", removed };
+  },
+  "attachment:trash": async ({ path: rel }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || folder.mode !== "writable" || !folder.files.includes(rel)) return { ok: false };
+    const unused = await unusedAttachments(folder.path, folder.docs, folder.files);
+    if (!unused.some((f) => f.path === rel)) return { ok: false };
+    await shell.trashItem(path.join(folder.path, rel));
+    return { ok: true };
+  },
+  "orphans:list": async ({ path: rel, text }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const v = folder ? versionsFor(folder) : null;
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !v || !t || !folder.docs.includes(rel)) return { orphans: [] };
+    const at = await v.locate(rel, text);
+    if (!at) return { orphans: [] };
+    const [gone, threads] = await Promise.all([v.orphansOf(rel), t.sectionsOfThreads(rel, text)]);
+    const live = at.tree.sections.map((s) => ({ path: s.path, text: subtreeText(text, s) }));
+    const orphans = gone
+      .map((o) => {
+        const on = threads.filter((x) => x.section === o.id);
+        const i = on.length > 0 || o.history ? suggestMatch(o, live) : null;
+        return {
+          id: o.id,
+          path: o.path,
+          threads: on.map((x) => ({ id: x.thread, title: x.title })),
+          history: o.history,
+          suggestion: i === null ? null : { index: i, path: at.tree.sections[i]?.path ?? [] },
+        };
+      })
+      // Only what something is behind: a gone heading with no threads or history is no loss.
+      .filter((o) => o.threads.length > 0 || o.history)
+      .sort((a, b) => b.threads.length - a.threads.length);
+    return { orphans };
+  },
+  "orphans:reattach": async ({ path: rel, text, orphan, section }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const v = folder ? versionsFor(folder) : null;
+    if (!folder || !v || !folder.docs.includes(rel))
+      return { kind: "refused", reason: "This folder is read-only." };
+    const at = await v.locate(rel, text);
+    const node = at?.tree.sections[section.index];
+    const onto = at?.ids[section.index];
+    if (!at || !node || !onto || node.path.join("\u0000") !== section.path.join("\u0000"))
+      return { kind: "refused", reason: "That section has moved; pick it again." };
+    try {
+      await v.reattach(rel, orphan as never, onto);
+    } catch (e) {
+      return { kind: "refused", reason: e instanceof Error ? e.message : String(e) };
+    }
+    return { kind: "ok" };
+  },
+  "orphans:delete": async ({ path: rel, text, orphan }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const v = folder ? versionsFor(folder) : null;
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !v || !t || !folder.docs.includes(rel)) return { ok: false };
+    if (!(await v.orphansOf(rel)).some((o) => o.id === orphan)) return { ok: false };
+    await t.forgetSection(rel, text, orphan as never);
+    await v.forget(rel, orphan as never);
+    return { ok: true };
   },
   "thread:undo-created": async ({ thread, id }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -616,6 +792,25 @@ const handlers: { [C in Channel]: Handler<C> } = {
         if (win && now) send(win, "folder:changed", now);
       });
     return r;
+  },
+  "thread:use-all": async ({ thread, open }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { used: 0, kept: [] };
+    return t.useAll(thread, open);
+  },
+  "thread:undo-all": async ({ thread, id, open }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !t) return { kind: "refused", reason: "No folder is open." };
+    const r = await t.undoAll(thread, id, open);
+    if (r.kind === "refused") return r;
+    // The open doc is written by its page, so ⌘Z covers the Undo too.
+    if (r.page) {
+      const w = windows.get(webContentsId);
+      if (w) send(w, "doc:replace", r.page);
+    }
+    return { kind: "undone", left: r.left };
   },
   "thread:auto-undo": async ({ thread, id }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -772,6 +967,34 @@ const handlers: { [C in Channel]: Handler<C> } = {
     ]);
     return { ok: true };
   },
+  "file:incoming": async ({ into, uriList, text, obsidianFiles }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    if (folder.mode !== "writable") return { kind: "failed", reason: "This folder is read-only." };
+    if (into !== "" && !folder.folders.includes(into))
+      return { kind: "failed", reason: `There's no folder ${into}.` };
+    const found = await resolveIncoming(
+      { uriList, text, obsidianFiles },
+      await obsidianVaults(app.getPath("appData")),
+    );
+    if (found.paths.length) {
+      const copied = await copyInto(folder, found.paths, into);
+      if (copied.kind === "failed") return copied;
+      const now = await folders.refresh(webContentsId);
+      return now ? { ...copied, folder: now } : { kind: "failed", reason: "The folder closed." };
+    }
+    if (!found.text) return { kind: "failed", reason: "There was nothing Anur could use in that." };
+    const file = await docFromText(path.join(folder.path, into), found.text);
+    const now = await folders.refresh(webContentsId);
+    return now
+      ? { kind: "made", path: into ? `${into}/${file}` : file, folder: now }
+      : { kind: "failed", reason: "The folder closed." };
+  },
+  "edit:paste": (_req, { webContentsId }) => {
+    const win = windows.get(webContentsId);
+    win?.webContents.paste();
+    return { ok: !!win };
+  },
   "file:import": async ({ sources, into }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
@@ -845,26 +1068,29 @@ const handlers: { [C in Channel]: Handler<C> } = {
       hub.send({
         type: "probe",
         agent,
-        cwd: folders.current(webContentsId)?.path ?? app.getPath("home"),
+        // No folder open: an empty folder of Anur's own. Home would have the
+        // agent look around it, and macOS ask about Downloads and Documents.
+        cwd: folders.current(webContentsId)?.path ?? probeFolder(),
       });
     }
     return { options: choices.get(agent) };
   },
   "thread:start": async (
-    { path: doc, text, section, message, agent, options, purpose },
+    { path: doc, text, section, message, agent, options, purpose, branch, files },
     { webContentsId },
   ) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!folder || !t || !folder.docs.includes(doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
-    return t.start(doc, text, section, message, agent, options, purpose);
+    return t.start(doc, text, section, message, agent, options, purpose, branch, files ?? []);
   },
-  "thread:send": async ({ thread, path: doc, text, message }, { webContentsId }) => {
+  "thread:send": async ({ thread, path: doc, text, message, files }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!folder || !t || !folder.docs.includes(doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
+    if (files?.length) await t.attach(doc, text, thread, files);
     return t.send(thread, doc, text, message);
   },
   "preview:list": async ({ path: doc, text }, { webContentsId }) => {
@@ -913,6 +1139,63 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (folder) threadsFor(folder)?.setOption(thread, id, value);
     return {};
   },
+  "history:list": async ({ path: rel, text, section }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const v = folder ? versionsFor(folder) : null;
+    if (!folder || !v) return { versions: [], commits: [] };
+    const [versions, commits] = await Promise.all([
+      v.list(rel, text, section.path),
+      sectionCommits(folder.path, rel, section.path),
+    ]);
+    return { versions, commits };
+  },
+  "history:restored": async ({ path: rel, text, section, from }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (folder) await versionsFor(folder)?.restored(rel, text, section, from);
+    return {};
+  },
+  "finding:decide": async ({ thread, id, status, claim, add }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { kind: "refused", reason: "No folder is open." };
+    if (add) return t.decideFinding(thread, { add });
+    if (!id || !status) return { kind: "refused", reason: "Say which finding, and keep or drop." };
+    return t.decideFinding(thread, { id, status, claim: claim ?? null });
+  },
+  "findings:list": async ({ path: rel, text, section }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { findings: [] };
+    const list = await t.listFindings(rel, text, section.index, section.path);
+    return {
+      findings: list.map((f) => ({
+        id: f.id,
+        thread: f.thread,
+        claim: f.claim,
+        source: f.source,
+        section: f.section,
+      })),
+    };
+  },
+  "links:of": async ({ path: rel, text, section }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { out: [], into: [] };
+    const { out, into } = await t.linksAround(rel, text, section.path);
+    const seen = new Set<string>();
+    return {
+      out: out
+        .filter((l) => l.doc !== rel)
+        .filter((l) => {
+          const key = `${l.doc ?? l.written}#${l.heading ?? ""}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map((l) => ({ doc: l.doc, heading: l.heading, written: l.written })),
+      into: into.map((l) => ({ doc: l.from.doc, path: l.from.path })),
+    };
+  },
   "inputs:list": async ({ path: rel, text, section }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
@@ -925,24 +1208,81 @@ const handlers: { [C in Channel]: Handler<C> } = {
         source: c.source,
         label: c.label,
         trust: c.trust,
+        local: c.local,
       })),
     };
+  },
+  "inputs:add": async ({ path: rel, text, section, thread, files, links }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder?.mode === "writable" ? threadsFor(folder) : null;
+    if (!t) return { error: "Inputs need a folder Anur can write to." };
+    const r = await t.addInputs(rel, text, section.index, section.path, thread, files, links);
+    const win = windows.get(webContentsId);
+    // An attachment copied into the folder shows in the files panel.
+    if ("added" in r && files.length && win) {
+      const now = await folders.refresh(webContentsId);
+      if (now) send(win, "folder:changed", now);
+    }
+    return r;
+  },
+  "inputs:pick-files": async (_req, { webContentsId }) => {
+    const win = windows.get(webContentsId);
+    if (!win) return { files: [] };
+    const picked = await dialog.showOpenDialog(win, {
+      title: "Attach files or folders",
+      buttonLabel: "Attach",
+      // Files and folders both, as in Claude: a folder goes as a whole.
+      properties: ["openFile", "openDirectory", "multiSelections"],
+    });
+    return { files: picked.canceled ? [] : picked.filePaths };
   },
   "inputs:remove": async ({ path: rel, text, thread, input }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.removeInput(rel, text, thread, input) : false };
   },
-  "tips:seen": async () => ({
-    seen: await readTipsSeen(),
-    // Checks don't see tips unless they ask, so other checks' screenshots stay clean.
-    enabled: !isCheck || !!process.env.ANUR_CHECK_TIPS,
+  "agent:sessions": async () => ({
+    live: hub.liveSessions(),
+    limit: appSettings.get().sessionLimit,
+    memoryMb: hub.liveSessions() > 0 ? await agentMemoryMb(hub.hostPid()) : null,
   }),
-  "tips:done": async ({ id }) => {
-    const seen = new Set(await readTipsSeen());
-    seen.add(id);
-    await writeFile(tipsFile(), JSON.stringify({ seen: [...seen] }));
-    return { ok: true };
+  "agent:set-session-limit": async ({ limit }) => {
+    await appSettings.set({ sessionLimit: limit });
+    hub.setLimit(limit);
+    return {
+      live: hub.liveSessions(),
+      limit,
+      memoryMb: hub.liveSessions() > 0 ? await agentMemoryMb(hub.hostPid()) : null,
+    };
+  },
+  "features:get": () => appSettings.get().features,
+  "features:set": async ({ id, on }) => {
+    const features = { ...appSettings.get().features, [id]: on };
+    await appSettings.set({ features });
+    for (const win of windows.values()) send(win, "features:changed", features);
+    return features;
+  },
+  "update:status": () => ({
+    state: updateState(),
+    version: app.getVersion(),
+    auto: appSettings.get().autoUpdate,
+  }),
+  "update:check": () => {
+    checkNow();
+    return { ok: updateState().kind !== "off" };
+  },
+  "update:download": () => {
+    download();
+    return { ok: updateState().kind === "downloading" };
+  },
+  "update:set-auto": async ({ auto }) => {
+    await appSettings.set({ autoUpdate: auto });
+    setAuto(auto);
+    return { auto };
+  },
+  "update:restart": () => {
+    restartToUpdate();
+    return { ok: updateState().kind === "ready" };
   },
   "tour:status": async () => {
     // Checks don't see it unless they ask, so other checks' screenshots stay clean.
@@ -965,7 +1305,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return {
       // Only the installed app can be the opener; a dev build would hand .md files to Electron.
       can: process.platform === "darwin" && (app.isPackaged || !!process.env.ANUR_CHECK_OPENER),
-      isAnur: current?.id === BUNDLE_ID,
+      isAnur: current?.id === (isRelease ? BUNDLE_ID : DEV_BUNDLE_ID),
       current: current?.name ?? null,
       dismissed: await openerOffer().dismissed(),
     };
@@ -976,7 +1316,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
       return { ok: true };
     }
     if (!app.isPackaged) return { ok: false };
-    return { ok: await makeMarkdownOpener(BUNDLE_ID) };
+    return { ok: await makeMarkdownOpener(isRelease ? BUNDLE_ID : DEV_BUNDLE_ID) };
   },
   "skill:status": async () =>
     claudeSkill
@@ -1078,6 +1418,9 @@ function createWindow(): BrowserWindow {
     title: "Anur",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 14, y: 14 },
+    // A click on a window that isn't in front also does what it lands on,
+    // so clicking a row in another Anur window then ⌘V pastes there.
+    acceptFirstMouse: true,
     webPreferences: {
       preload: path.join(here, "..", "preload", "index.cjs"),
       sandbox: true,
@@ -1099,6 +1442,8 @@ function createWindow(): BrowserWindow {
     docWatcher.stop(id);
     folderWatch.stop(id);
     senders.remove(id);
+    if (folder && device && folder.mode === "writable")
+      quitNotes.add(noteQuit(folder.path, device).catch(() => undefined));
     void folders.close(id);
   });
 
@@ -1274,6 +1619,11 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
           win.webContents.copy();
           await new Promise((r) => setTimeout(r, 300));
         }
+        // ANUR_SCREENSHOT_PASTE pastes where the page's focus is, as Edit → Paste does.
+        if (process.env.ANUR_SCREENSHOT_PASTE) {
+          win.webContents.paste();
+          await new Promise((r) => setTimeout(r, 1200));
+        }
         if (process.env.ANUR_SCREENSHOT_PALETTE) {
           win.webContents.sendInputEvent({ type: "keyDown", keyCode: "K", modifiers: ["meta"] });
           await new Promise((r) => setTimeout(r, 300));
@@ -1297,6 +1647,7 @@ void app.whenReady().then(async () => {
   choices = new AgentChoices(app.getPath("userData"));
   await choices.load();
   await appSettings.load();
+  hub.setLimit(appSettings.get().sessionLimit);
   device = await loadDeviceId(app.getPath("userData")).catch((e: unknown) => {
     console.error("Anur couldn't read this install's device ID:", e);
     return null;
@@ -1305,6 +1656,8 @@ void app.whenReady().then(async () => {
   folders = new FolderService(
     app.getPath("userData"),
     isCheck ? (process.env.ANUR_CHECK_HOME ?? undefined) : undefined,
+    // Anur and Anur Dev share locks, so they never both write one folder.
+    isCheck ? app.getPath("userData") : sharedProfile,
   );
   // No page in Anur needs the camera, microphone, location or notifications.
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
@@ -1312,6 +1665,11 @@ void app.whenReady().then(async () => {
   });
   registerIpc();
   void startClaudeSkill();
+  if (isRelease) await offerMoveToApplications();
+  if (isRelease)
+    startUpdates(appSettings.get().autoUpdate, (state) => {
+      for (const win of windows.values()) send(win, "app:update-state", state);
+    });
   // A built app takes its icon from its bundle; in dev, show the diamond in the Dock too.
   if (!app.isPackaged && process.platform === "darwin") {
     app.dock?.setIcon(path.join(here, "..", "..", "build", "icon.png"));
@@ -1323,6 +1681,10 @@ void app.whenReady().then(async () => {
       },
       newFolder: () => {
         void newFolder(focusedOrNew());
+      },
+      checkUpdates: () => {
+        checkNow();
+        send(focusedOrNew(), "app:command", { command: "updates" });
       },
       newWindow: () => {
         createWindow();
@@ -1386,6 +1748,15 @@ app.on("will-quit", (event) => {
     hub.stop();
     anurSocket.close();
     await Promise.all([...threads.values()].map((t) => t.close()));
+    // Windows close before will-quit: their notes are written by now or soon (11.4).
+    await Promise.all(quitNotes);
+    await Promise.all(
+      [...windows.keys()].map(async (id) => {
+        const f = folders.current(id);
+        if (f && device && f.mode === "writable")
+          await noteQuit(f.path, device).catch(() => undefined);
+      }),
+    );
     await folders.closeAll();
   };
   // Never more than a few seconds: a stuck write mustn't keep the app open.
@@ -1398,6 +1769,8 @@ app.on("will-quit", (event) => {
     });
 });
 let cleanedUp = false;
+/** Each closed window's "quit cleanly" note, awaited before the app exits (11.4). */
+const quitNotes = new Set<Promise<void>>();
 
 // A window with unsaved typing holds its close until the save lands
 // (the page's beforeunload), then closes itself; a quit carries on after it.

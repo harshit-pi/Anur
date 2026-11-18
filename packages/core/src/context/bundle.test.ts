@@ -267,3 +267,59 @@ describe("an embedded base in the bundle (4.11)", () => {
     expect(expandEmbeds("![[Gone.base]]", new Map())).toBe("![[Gone.base]]");
   });
 });
+
+describe("linked sections (group 8)", () => {
+  const text = "# Plan\n\n## Pricing\n\nSee [[Pricing#Plans]].\n";
+  const tree = buildSectionTree(text, { fileName: "Plan.md" });
+  it("brings each linked section's text, labelled with its file, and names broken links", () => {
+    const b = buildBundle({
+      text,
+      tree,
+      index: 1,
+      docPath: "Plan.md",
+      linked: [{ label: "Pricing.md › Plans", path: "Pricing.md", text: "Paid: £4." }],
+      broken: ["Nowhere"],
+    });
+    expect(b.markdown).toContain("## Linked from this section: Pricing.md › Plans\n\nPaid: £4.");
+    expect(b.markdown).toContain("- [[Nowhere]]");
+    expect(b.parts.some((p) => p.kind === "linked")).toBe(true);
+  });
+
+  it("leaves out what doesn't fit the budget, naming it with its path", () => {
+    const b = buildBundle({
+      text,
+      tree,
+      index: 1,
+      docPath: "Plan.md",
+      budget: 200,
+      linked: [
+        { label: "A.md", path: "A.md", text: "a".repeat(50) },
+        { label: "B.md", path: "notes/B.md", text: "b".repeat(500) },
+      ],
+    });
+    expect(b.markdown).toContain("## Linked from this section: A.md");
+    expect(b.markdown).toContain("## Linked, not included");
+    expect(b.markdown).toContain("- B.md: `notes/B.md`");
+    expect(b.markdown).not.toContain("bbbb");
+  });
+});
+
+describe("findings (16.1)", () => {
+  it("carries kept findings with their sources, and asks for new ones through the tool", () => {
+    const text = "# Plan\n\n## Pricing\n\nSplitwise is £5.\n";
+    const b = buildBundle({
+      text,
+      tree: buildSectionTree(text, { fileName: "Plan.md" }),
+      index: 1,
+      docPath: "Plan.md",
+      findings: [
+        { claim: "Splitwise Pro is £2.99 a month.", source: "competitors.txt", section: "Pricing" },
+      ],
+    });
+    expect(b.markdown).toContain("## Findings kept on this section");
+    expect(b.markdown).toContain(
+      "- Splitwise Pro is £2.99 a month. (source: competitors.txt) [on Pricing]",
+    );
+    expect(b.markdown).toContain("anur_propose_finding");
+  });
+});

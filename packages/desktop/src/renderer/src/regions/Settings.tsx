@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import type { FolderState } from "../../../shared/ipc-contract.ts";
+import type { FolderState, UpdateState } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import type { AgentStatus } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
+import { useFeatures } from "../features.ts";
+import { FEATURES } from "../../../shared/features.ts";
 import { CloseIcon } from "./Icons.tsx";
 import { type ThemePref, applyTheme, loadTheme, saveTheme } from "./theme-pref.ts";
 
@@ -12,21 +14,22 @@ import { type ThemePref, applyTheme, loadTheme, saveTheme } from "./theme-pref.t
  * says which, so nothing on this screen is a switch that does nothing.
  */
 
-export type SettingsSection = "general" | "appearance" | "agent" | "core" | "community";
+export type SettingsSection = "general" | "appearance" | "agent" | "storage" | "core" | "community";
 
 const SECTIONS: { id: SettingsSection; label: string; group?: string }[] = [
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
   { id: "agent", label: "Agent" },
+  { id: "storage", label: "Storage" },
   { id: "core", label: "Core plugins", group: "Plugins" },
   { id: "community", label: "Community plugins" },
 ];
 
 type MainSettings = {
-  sectionHistory: boolean;
   commitAnur: boolean | null;
   defaultAgent: AgentId;
   autoApply: boolean;
+  name: string;
 };
 
 function Switch({
@@ -72,6 +75,115 @@ function Row({
       </div>
       {children}
     </div>
+  );
+}
+
+/** Where updates stand, with Check now, Download or Restart, and the automatic switch. */
+function UpdateRows() {
+  const [s, setS] = useState<{ state: UpdateState; version: string; auto: boolean } | null>(null);
+  useEffect(() => {
+    void anur.call("update:status", {}).then(setS);
+    return anur.on("app:update-state", (state) => {
+      setS((old) => (old ? { ...old, state } : old));
+    });
+  }, []);
+  if (!s) return null;
+  const { state, version, auto } = s;
+  const off = state.kind === "off";
+  const at = (iso: string) =>
+    new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const detail =
+    state.kind === "off"
+      ? "Anur Dev doesn't update itself. The Anur you install from the download link does."
+      : state.kind === "idle"
+        ? `Anur ${version} is up to date.${state.checkedAt ? ` Checked at ${at(state.checkedAt)}.` : ""}`
+        : state.kind === "checking"
+          ? "Checking for a new version…"
+          : state.kind === "available"
+            ? `Anur ${state.version} is available. You're on ${version}.`
+            : state.kind === "downloading"
+              ? `Downloading Anur ${state.version}… ${String(state.percent)}%`
+              : state.kind === "ready"
+                ? `Anur ${state.version} is ready. Restart to use it, or it installs when you quit.`
+                : `Couldn't check for updates: ${state.reason}.`;
+  const action =
+    state.kind === "idle" || state.kind === "error"
+      ? { label: "Check now", run: () => void anur.call("update:check", {}) }
+      : state.kind === "available"
+        ? { label: "Download", run: () => void anur.call("update:download", {}) }
+        : state.kind === "ready"
+          ? { label: "Restart", run: () => void anur.call("update:restart", {}) }
+          : null;
+  return (
+    <>
+      <Row title="Updates" detail={detail}>
+        {action ? (
+          <button type="button" className="settings-button" onClick={action.run}>
+            {action.label}
+          </button>
+        ) : null}
+      </Row>
+      <Row
+        title="Install updates automatically"
+        detail="New versions download in the background and install when you quit or restart. Off, Anur only tells you one is available."
+      >
+        <Switch
+          on={auto}
+          label="Install updates automatically"
+          disabled={off}
+          onChange={(on) => {
+            void anur.call("update:set-auto", { auto: on }).then((r) => {
+              setS((old) => (old ? { ...old, auto: r.auto } : old));
+            });
+          }}
+        />
+      </Row>
+    </>
+  );
+}
+
+/** Live sessions and the agents' memory, with the limit past which idle ones close (13.3, 13.4). */
+function SessionsRow() {
+  const [s, setS] = useState<{ live: number; limit: number; memoryMb: number | null } | null>(null);
+  useEffect(() => {
+    const load = () => void anur.call("agent:sessions", {}).then(setS);
+    load();
+    const every = setInterval(load, 5000);
+    return () => {
+      clearInterval(every);
+    };
+  }, []);
+  const memory =
+    s?.memoryMb == null
+      ? ""
+      : s.memoryMb >= 1024
+        ? `, using ${(s.memoryMb / 1024).toFixed(1)} GB`
+        : `, using ${String(s.memoryMb)} MB`;
+  return (
+    <Row
+      title="Live sessions"
+      detail={
+        s
+          ? `${s.live === 0 ? "None live now" : `${String(s.live)} live now${memory}`}. Past the limit, sessions idle for a few minutes close; each reopens with its chat when its thread is next used.`
+          : "Checking…"
+      }
+    >
+      <select
+        className="settings-select"
+        aria-label="Live session limit"
+        value={s?.limit ?? 8}
+        disabled={!s}
+        onChange={(e) => {
+          void anur.call("agent:set-session-limit", { limit: Number(e.target.value) }).then(setS);
+        }}
+      >
+        {[2, 4, 6, 8, 12, 16, 20].map((n) => (
+          <option key={n} value={n}>
+            {`Up to ${String(n)}`}
+          </option>
+        ))}
+      </select>
+    </Row>
   );
 }
 
@@ -198,6 +310,117 @@ function SkillRow() {
   );
 }
 
+const sizeOf = (bytes: number) =>
+  bytes < 1024
+    ? `${String(bytes)} B`
+    : bytes < 1024 * 1024
+      ? `${(bytes / 1024).toFixed(0)} KB`
+      : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+type Storage = {
+  kinds: { kind: string; bytes: number; files: number }[];
+  cleanable: { count: number; bytes: number };
+  blockedBy: { openedAt: string | null }[];
+  attachments: { path: string; bytes: number }[];
+};
+
+/** Storage (11.5, 11.6): what `.anur/` holds, Clean up, and attachments nothing uses. */
+function StoragePane({ folder }: { folder: FolderState | null }) {
+  const [s, setS] = useState<Storage | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    setS(null);
+    void anur.call("storage:read", {}).then(setS);
+  }, [folder?.path, n]);
+  if (folder?.mode !== "writable")
+    return <Row title="Storage" detail="Open a folder Anur can write to." />;
+  if (!s) return <p className="settings-row-detail">Reading .anur/…</p>;
+  const total = s.kinds.reduce((t, k) => t + k.bytes, 0);
+  const since = s.blockedBy
+    .map((b) => (b.openedAt ? new Date(b.openedAt).toLocaleDateString() : null))
+    .filter((x) => x !== null);
+  return (
+    <>
+      <Row
+        title="What .anur/ holds"
+        detail={`${sizeOf(total)} of threads, history and what threads read, kept beside your files.`}
+      />
+      <table className="settings-storage">
+        <tbody>
+          {s.kinds.map((k) => (
+            <tr key={k.kind}>
+              <td>{k.kind.charAt(0).toUpperCase() + k.kind.slice(1)}</td>
+              <td>{sizeOf(k.bytes)}</td>
+              <td className="quiet">
+                {String(k.files)} {k.files === 1 ? "file" : "files"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <Row
+        title="Clean up"
+        detail={
+          s.blockedBy.length > 0
+            ? `Another device has this folder open, or didn't quit cleanly${since.length ? ` (opened ${since.join(", ")})` : ""}. Quit Anur there first, so nothing it is still writing goes.`
+            : s.cleanable.count === 0
+              ? "Nothing to clean: every snapshot is in use or newer than 30 days."
+              : `${String(s.cleanable.count)} ${s.cleanable.count === 1 ? "snapshot" : "snapshots"} nothing points to, unused for 30 days: ${sizeOf(s.cleanable.bytes)}.`
+        }
+      >
+        <button
+          type="button"
+          className="settings-button"
+          disabled={s.blockedBy.length > 0 || s.cleanable.count === 0}
+          onClick={() => {
+            void anur.call("storage:clean", {}).then((r) => {
+              setNote(
+                r.kind === "ok"
+                  ? `Removed ${String(r.removed)} ${r.removed === 1 ? "snapshot" : "snapshots"}.`
+                  : r.reason,
+              );
+              setN((x) => x + 1);
+            });
+          }}
+        >
+          Clean up
+        </button>
+      </Row>
+      {note ? <p className="settings-row-detail">{note}</p> : null}
+      <Row
+        title="Unused attachments"
+        detail={
+          s.attachments.length === 0
+            ? "None: every image and attached file is linked or used."
+            : "Images and attached files no doc links and no thread uses. Each goes to the Trash only when you say."
+        }
+      />
+      {s.attachments.length > 0 ? (
+        <ul className="settings-attachments">
+          {s.attachments.map((a) => (
+            <li key={a.path}>
+              <span className="settings-attachment-path">{a.path}</span>
+              <span className="quiet">{sizeOf(a.bytes)}</span>
+              <button
+                type="button"
+                className="settings-button"
+                onClick={() => {
+                  void anur.call("attachment:trash", { path: a.path }).then(() => {
+                    setN((x) => x + 1);
+                  });
+                }}
+              >
+                Move to Trash
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
+}
+
 export function Settings({
   section,
   onSection,
@@ -215,6 +438,7 @@ export function Settings({
   onTour: (() => void) | null;
 }) {
   const [main, setMain] = useState<MainSettings | null>(null);
+  const features = useFeatures();
   const [theme, setTheme] = useState<ThemePref>(() => loadTheme(window.localStorage));
 
   useEffect(() => {
@@ -260,6 +484,26 @@ export function Settings({
                 {folder ? "Open another folder…" : "Open a folder…"}
               </button>
             </Row>
+            <Row
+              title="Your name"
+              detail="Shown on threads you start, to others who open a shared folder. Empty uses git's name, else your Mac account's."
+            >
+              <input
+                key={main?.name ?? ""}
+                className="settings-input"
+                aria-label="Your name"
+                defaultValue={main?.name ?? ""}
+                maxLength={80}
+                onBlur={(e) => {
+                  if (e.currentTarget.value.trim() !== (main?.name ?? ""))
+                    void anur.call("settings:set", { name: e.currentTarget.value }).then(setMain);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+              />
+            </Row>
+            <UpdateRows />
             <OpenerRow />
             <Row
               title="Tour"
@@ -295,6 +539,13 @@ export function Settings({
                 }}
               />
             </Row>
+          </>
+        );
+      case "storage":
+        return (
+          <>
+            <h2>Storage</h2>
+            <StoragePane folder={folder} />
           </>
         );
       case "appearance":
@@ -351,31 +602,6 @@ export function Settings({
                 ))}
               </select>
             </Row>
-            {main ? (
-              <Row
-                title={AGENTS[main.defaultAgent].name}
-                detail={
-                  status?.connected === true
-                    ? `Connected: version ${status.agent?.agent ?? "unknown"}, through its ACP adapter ${status.agent?.adapter ?? ""}.`
-                    : status?.connected === false
-                      ? (status.reason ?? "Not connected.")
-                      : "Connects when a thread first needs it."
-                }
-              >
-                <span className="settings-status">
-                  {status?.connected === true
-                    ? "Connected"
-                    : status?.connected === false
-                      ? "Not connected"
-                      : "Not started"}
-                </span>
-              </Row>
-            ) : null}
-            {AGENT_IDS.filter((id) => !AGENTS[id].runsThreads).map((id) => (
-              <Row key={id} title={AGENTS[id].name} detail={AGENTS[id].why ?? ""}>
-                <span className="settings-status">Not yet</span>
-              </Row>
-            ))}
             <Row
               title="Use agents' edits as they land"
               detail="An agent's edit changes the doc at once, instead of waiting as a proposal for you to use. Each is noted in its thread, with Undo; edits that clash with your typing stay proposals. Options are always yours to pick."
@@ -388,7 +614,42 @@ export function Settings({
                 }}
               />
             </Row>
-            <SkillRow />
+            <SessionsRow />
+            {/* Then each agent on its own: how it's connected, and what Anur adds to it. */}
+            {AGENT_IDS.map((id) => (
+              <section key={id} className="settings-group" aria-label={AGENTS[id].name}>
+                <h3>{AGENTS[id].name}</h3>
+                {!AGENTS[id].runsThreads ? (
+                  <Row title="Connection" detail={AGENTS[id].why ?? ""}>
+                    <span className="settings-status">Not yet</span>
+                  </Row>
+                ) : (
+                  <Row
+                    title="Connection"
+                    detail={
+                      id !== main?.defaultAgent
+                        ? "Connects when a thread on it first needs it."
+                        : status?.connected === true
+                          ? `Connected: version ${status.agent?.agent ?? "unknown"}, through its ACP adapter ${status.agent?.adapter ?? ""}.`
+                          : status?.connected === false
+                            ? (status.reason ?? "Not connected.")
+                            : "Connects when a thread first needs it."
+                    }
+                  >
+                    <span className="settings-status">
+                      {id !== main?.defaultAgent
+                        ? "Not started"
+                        : status?.connected === true
+                          ? "Connected"
+                          : status?.connected === false
+                            ? "Not connected"
+                            : "Not started"}
+                    </span>
+                  </Row>
+                )}
+                {id === "claude-code" ? <SkillRow /> : null}
+              </section>
+            ))}
           </>
         );
       case "core":
@@ -397,39 +658,25 @@ export function Settings({
             <h2>Core plugins</h2>
             <p className="settings-lede">
               What every doc needs: the page and its map, and threads beside them. These two are
-              always on; the rest can be turned off.
+              always on; turn the rest off and everything they add goes, in every window.
             </p>
-            <Row
-              title="Page and map"
-              detail="Every doc as a page and as a map drawn from its headings: boxes to move, add, link and open."
-            >
-              <span className="settings-status">Always on</span>
-            </Row>
-            <Row
-              title="Think"
-              detail="Threads on each section, each its own chat with your agent: options to pick, edits to use, its inputs kept."
-            >
-              <span className="settings-status">Always on</span>
-            </Row>
-            <Row
-              title="Links as context"
-              detail="A link to another section draws a line and adds its text to what the agent reads. Arrives with group 8."
-            >
-              <Switch on={false} label="Links as context" disabled />
-            </Row>
-            <Row
-              title="Section history"
-              detail="Keeps every version of a section's text: when a doc is first opened, each typing session, and changes made outside Anur. Off, no new versions are written."
-            >
-              <Switch
-                on={main?.sectionHistory ?? true}
-                label="Section history"
-                disabled={!main}
-                onChange={(on) => {
-                  change({ sectionHistory: on });
-                }}
-              />
-            </Row>
+            {FEATURES.map((f) =>
+              f.always ? (
+                <Row key={f.id} title={f.name} detail={f.what}>
+                  <span className="settings-status">Always on</span>
+                </Row>
+              ) : (
+                <Row key={f.id} title={f.name} detail={f.what}>
+                  <Switch
+                    on={features[f.id]}
+                    label={f.name}
+                    onChange={(on) => {
+                      void anur.call("features:set", { id: f.id, on });
+                    }}
+                  />
+                </Row>
+              ),
+            )}
           </>
         );
       case "community":

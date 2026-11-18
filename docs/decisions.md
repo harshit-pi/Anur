@@ -138,3 +138,90 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - The rest of the wait before a first action, one to two seconds, is the model's, as in Claude Code.
 - A running turn shows "Thinking…" for ten seconds, then how long it has been working ("Working for 4 min 12 s…"), so a long build doesn't read as stuck.
 - A thread's mode and model pickers show their values, as a new thread's do.
+
+## Inputs: reads only, and the machine's own stays on it
+
+- Only reads become inputs: files, pages, searches, other MCP servers' answers, and shell commands made only of reading programs (cat, ls, rg, git log…) with nothing written to a file. Commands that write, run, build or test are the agent's own work, and reading back a file the thread wrote brings nothing in.
+- What came from the person's machine outside the folder (a file, a command's output, another MCP server's answer, the chat behind `/anur doc`) keeps its content in Anur's local app data, never `.anur/`, which is shared and often committed. The input line keeps its label and hash, marked `local`; another person's agent sees it exists and reads it again itself. Think marks it "kept local".
+- Build says first, in one line, what it will build and what it relies on, so the person can stop it early. On a section with several steps it builds the first that fits one sitting and lists the rest as next steps.
+
+## Steps folded, as in Claude's apps
+
+- A run of two or more tool calls shows as one line ("▸ 7 steps · Edit working copy of Launch.md") that opens to list them. Failures are counted on that line; a doc edit Anur sent to the working copy isn't one.
+- While a turn runs, the line under the steps says what it's doing now: "Working for 1 min 12 s · Write pitch.md".
+- What the agent writes before a step is saved as its own message, where it was written, so a reloaded thread reads as it ran: a note, its steps, the next note, the report.
+
+## Links as context (group 8)
+
+- A link index in main parses every doc's wiki links, by modified time, so a doc is parsed again only when it changes; the open doc's links come from its page. Docs still in iCloud are never read. (The design put this in an index process; main is enough at today's folder sizes.)
+- Only the links in a section's own text count, not its subsections' (each has its own threads), so a doc's title doesn't gather every link in the doc, "Related" lists included. Each link is taken once. There's no count cap: the budget bounds the size.
+- A thread's bundle carries the sections its section links to in other docs, one link deep: a heading link brings that section with its subsections, a doc link brings the doc. What doesn't fit the budget left after the doc is named with its path; links that go nowhere are named as broken. Links within the doc aren't repeated: the bundle has the doc.
+- Think lists a section's links ("A new thread here reads these too") and, folded, the sections that link to it, each once, each opening where it is. `anur_links` gives threads and terminal agents the same, as paths.
+- A link to a missing doc is faded on the page and in Think, as in Obsidian. On the map, a link to another doc's section is a small box under its section that opens it.
+
+## History and Restore (group 5)
+
+- Think shows a section's History, folded: its versions newest first, from every device, each with when, its cause (typed, from a thread, changed outside, restored, first seen) and a one-line summary read from the change itself ("Changed “£4” to “£3”", "Added 2 lines").
+- In a git repo, the commits that changed that section are listed too, each with the section's text then; reading them never writes.
+- A version opens to its text against now: amber for what only it has, struck through for what only now has. Restore puts it back into that section only, as one change ⌘Z undoes, recorded as a "restore" version; anything typed before it is recorded first, so no text is lost. A version from a thread opens that thread.
+
+## Change sets (group 9)
+
+- A thread whose edits touch more than one section or doc shows them as one change set: "3 edits in 2 docs", each opening where it is, with Use all.
+- Use all uses the open doc's edits through its page, one by one, then every other doc's in its file, doc by doc. What clashed with the text stays a proposal and is named. One "Used all" note in the thread holds one Undo.
+- Undo goes back by a three-way merge per doc, so typing made since stays; the open doc goes back through its page, so ⌘Z covers it. A doc that clashes is named and left for its History.
+- A new doc an agent makes is kept with Undo (15.6) rather than shown as a new-doc preview.
+- The working line under a thread's steps gives only the time; the steps line already names the step.
+
+## The check card, problems first
+
+- A check's card leads with what needs a look: "Of 13 claims, 2 are wrong, 1 is missing", then those claims, wrong first, then missing, then unsupported. Claims that hold fold into one line. Each claim is its verdict and the claim on one line, with a short note under it; the source shows on hover. A link points to the corrected text when there is one.
+
+## A wide map wraps; links are a badge
+
+- A parent's children sit in rows of at most four, wrapping in reading order, so a doc with many sections grows down rather than endlessly sideways and opens readable. Lines run as a trunk from the parent, a rail along each row and a short drop to each box, with a spine down the left joining the rows; a dragged box goes back to a curve.
+- A section's links to other docs are one badge on its box ("→ 6"); a click lists them, each opening where it is. The list opens upward from a box low in the view.
+- Think no longer repeats the section's text under its heading: the page shows it, and so does hovering a map box. It sits behind `SHOW_SECTION_TEXT`, off, to turn back on if missed.
+
+## Findings (16.1, 16.2)
+
+- A finding is a claim a thread established, with its source. The agent proposes one with `anur_propose_finding`; the person keeps it (reworded if they like) or drops it. Only kept findings carry: to every new thread on that section and the sections under it, listed in the bundle with their sources and marked settled unless a source read now contradicts one.
+- A Check's wrong or missing claims each offer "Keep as a finding", which keeps what the source says.
+- Think lists a section's kept findings under Context and history, each with × to drop it.
+- Not carried: unkept proposals, and conclusions in a thread's chat. A wrong finding carried forward pollutes with authority, so a person always decides.
+
+## The head-to-head eval (16.5), and a cap on the doc in full
+
+- Three tasks on a 2,300-line doc with rules elsewhere, a stale archive and decoy docs, scored by script, three runs each (evals/head-to-head). Anur 0.98, Claude Code fresh 1.00, Claude Code after six unrelated tasks 0.96 with one stale fact; quality sits near the ceiling for all three.
+- Cost told them apart: Anur sent the whole doc in every bundle, about 153k weighted tokens a task against Claude Code's 65k. With the rest of a doc sent in full only up to about 15k tokens (`DOC_FULL_MAX`), and as an outline past that, Anur scored 1.00 at 62k, with the fewest steps.
+- 16.3 (inputs given in full) is dropped: the eval shows the agent reads what it needs, and more in the bundle costs more for nothing.
+
+## The long-chat eval
+
+- One Claude Code chat worked through 40 tasks across the decoy docs (about 790k tokens of context by the end), then each target task ran three times in a fork of it.
+- Quality held: 0.96, no stale facts, one miss (a correction left out). Cost did not: 156k weighted tokens a task against Anur's 62k, as every step re-reads the afternoon's context. Anur's measured edge is cost and speed in long sessions, not fewer mistakes.
+- The grader no longer counts quoting a doc's old figure, to correct it, as using a stale fact.
+
+## Orphans, closing and Clean up (group 11)
+
+- A section whose heading is gone keeps its threads and history under Orphaned in Think, with the live section most like it suggested by its last text and heading. Reattach moves its threads and history there; Delete removes its threads, their previews, its inputs and its history at once, after a confirm. Only orphans with something behind them are listed.
+- Every lookup of a thread's section follows Reattach and alias links, so a reattached thread shows on its new section and its versions join that section's history.
+- A thread can be closed (hidden; "Show closed" brings it back) or deleted with a confirm. A running thread can't be deleted.
+- Each device writes `.anur/open/<device>.json`: when it opened the folder and when it last quit cleanly.
+- Settings, Storage lists what `.anur/` holds by kind. Clean up removes only snapshots older than 30 days that no record names, searching every record for the hash so a kind this app doesn't know still keeps its snapshot. It is off while another device has the folder open or didn't quit cleanly; a device gone over 30 days no longer counts.
+- Unused attachments: images, and files attached as inputs whose input was removed, that no doc names. Listed for review; each goes to the system Trash only on a click.
+
+## Who started a thread, only when it isn't you
+
+- A thread someone else started shows their name: beside the time in the list, "started by Duy on 18 Nov" under its title, and over each message they wrote. Your own threads and messages show no name, so the screen is unchanged until someone else's work arrives.
+- Each device writes its person's name into `.anur/open/<device>.json`: the name set in Settings → General, else git's `user.name` for the folder, else the Mac account's full name. A thread is yours when its device is this one or its device's name is yours, so your other Mac's threads count as yours too. A device with no name yet shows as "Another device".
+
+## Before sharing: the answer first, plain steps, and why on the first screen
+
+From a first-run walkthrough on real Claude (Ask, Check and Build on a launch plan):
+
+- A finished turn's reply leads it. The agent writes its answer last, after the findings and options it made, so Think moves the reply above the turn's first card and the cards follow under "From this answer". A running turn stays in the order it arrives. This is display only; no prompt asks the agent to answer first, which it couldn't do reliably before reading.
+- Steps read as what they did ("Read competitors.txt, beta.csv and 1 more", "Searched the folder"), never the raw command with the folder's full path. The summary doesn't say "failed": the agent usually recovers, and a failed step still shows × when the steps are opened. A turn that failed shows its own error.
+- Steps a card stands for (proposing a finding, offering options, reporting a check) are hidden; the card is the record.
+- The start page and the tour's second step say why in one line: a thread starts from its section, the rules it links to and what earlier threads settled, not a blank chat.
+- The "Use Anur from Claude Code" card waits until a thread has answered on this device, so it never greets someone who hasn't seen Anur yet.

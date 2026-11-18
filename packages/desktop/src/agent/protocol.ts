@@ -93,7 +93,9 @@ export type ToMain =
     }
   | { type: "error"; thread: string; turn: string | null; message: string }
   /** The session's context in use and its model's window, as the agent reports them (4.9). */
-  | { type: "context"; thread: string; turn: string; used: number; size: number };
+  | { type: "context"; thread: string; turn: string; used: number; size: number }
+  /** How many sessions are live in the agents now (13.4). */
+  | { type: "sessions"; live: number };
 
 export type ToHost =
   | { type: "connect"; agent: AgentId }
@@ -106,6 +108,8 @@ export type ToHost =
   | { type: "permission"; request: string; option: string | null }
   | { type: "option"; thread: string; id: string; value: string }
   | { type: "close"; thread: string }
+  /** How many sessions may stay live before idle ones close (13.3). */
+  | { type: "limit"; max: number }
   /** Open a session ahead, for the next thread: the click then skips the session's start. */
   | { type: "warm"; spec: SessionSpec };
 

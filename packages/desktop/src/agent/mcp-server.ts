@@ -17,6 +17,23 @@ type Rpc = { jsonrpc: "2.0"; id?: number | string | null; method?: string; param
 
 const TOOLS = [
   {
+    name: "anur_search_sections",
+    description:
+      "Find sections across the folder open in Anur by their words: every section whose own text has all the words, as doc and heading path, with its matching lines. Case is ignored. Read one in full with anur_read_section.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        words: {
+          type: "string",
+          description:
+            'The words to look for, such as "retry timing"; a section matches when it has every one.',
+        },
+      },
+      required: ["words"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "anur_read_section",
     description:
       "Read one section of a doc in the opened folder, by its heading. Returns the section's own text, from its heading to its first subheading, with its subsections' headings listed. While this thread has a working copy of the doc, it reads the working copy, so your own edits show. Use it to read a section outside the ones this thread was given, such as a sibling's full text.",
@@ -35,6 +52,47 @@ const TOOLS = [
         },
       },
       required: ["section"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "anur_links",
+    description:
+      "Where a section's links go and which sections link to it, across the opened folder: doc and heading paths only, never their text (read one with anur_read_section). Broken links are marked. Leave both arguments out for this thread's own section.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        section: {
+          type: "string",
+          description:
+            "The section's heading, or its path from the doc's title, such as \"Notifications > Retry timing\".",
+        },
+        doc: {
+          type: "string",
+          description:
+            "The doc's path in the folder, such as \"notes/plan.md\". Leave it out for this thread's own doc.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "anur_propose_finding",
+    description:
+      "Propose a finding: a fact this thread established that later threads on this section should know, such as a corrected price or a confirmed date, with the file, doc or page it came from. The person keeps or drops it; kept findings reach every new thread on this section. Propose only what you checked against a source, one claim per call.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        claim: {
+          type: "string",
+          description: "The fact, in one or two sentences, standing on its own.",
+        },
+        source: {
+          type: "string",
+          description: "Where it came from: a path in the folder, a doc, or a URL.",
+        },
+      },
+      required: ["claim", "source"],
       additionalProperties: false,
     },
   },
@@ -179,6 +237,23 @@ const sectionArg = {
 /** The tools an agent in the person's own terminal gets (6.5 to 6.9). */
 const TERMINAL_TOOLS = [
   {
+    name: "anur_search_sections",
+    description:
+      "Find sections across the folder open in Anur by their words: every section whose own text has all the words, as doc and heading path, with its matching lines. Case is ignored. Read one in full with anur_read_section.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        words: {
+          type: "string",
+          description:
+            'The words to look for, such as "retry timing"; a section matches when it has every one.',
+        },
+      },
+      required: ["words"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "anur_outline",
     description:
       "A doc's headings, as a tree, each with its section ID and how many threads it has in Anur.",
@@ -197,6 +272,24 @@ const TERMINAL_TOOLS = [
       type: "object",
       properties: { doc: docArg, section: sectionArg },
       required: ["doc", "section"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "anur_links",
+    description:
+      "Where a section's links go and which sections link to it, across the folder open in Anur: doc and heading paths only. Broken links are marked. Leave out the section for the doc's title.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        doc: docArg,
+        section: {
+          type: "string",
+          description:
+            'The section\'s heading or its path, such as "Notifications > Retry timing".',
+        },
+      },
+      required: ["doc"],
       additionalProperties: false,
     },
   },
@@ -286,7 +379,10 @@ function write(message: object): void {
 }
 
 /** One tool call, answered by Anur over the socket. */
-function call(tool: string, args: unknown): Promise<{ text?: string; error?: string }> {
+function call(
+  tool: string,
+  args: unknown,
+): Promise<{ text?: string; error?: string; image?: { data: string; mimeType: string } }> {
   const to = reach();
   if (!to)
     return Promise.resolve({
@@ -350,7 +446,14 @@ async function handle(m: Rpc): Promise<void> {
       reply(
         r.error
           ? { content: [{ type: "text", text: r.error }], isError: true }
-          : { content: [{ type: "text", text: r.text ?? "" }] },
+          : {
+              content: [
+                { type: "text", text: r.text ?? "" },
+                ...(r.image
+                  ? [{ type: "image", data: r.image.data, mimeType: r.image.mimeType }]
+                  : []),
+              ],
+            },
       );
       return;
     }

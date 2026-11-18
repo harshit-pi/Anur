@@ -24,7 +24,7 @@ import { formattingKeymap } from "./commands.ts";
 import { insertMenu } from "./insert-menu.ts";
 import { type ClickedLink, linkClicks } from "./link-click.ts";
 import { editLink, linkEditor } from "./link-editor.ts";
-import { livePreview } from "./live-preview/live-preview.ts";
+import { knownDocs, livePreview } from "./live-preview/live-preview.ts";
 import { restoreFolds, sectionFolding } from "./fold/section-fold.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { editorFilter } from "./editor-filter.ts";
@@ -116,6 +116,8 @@ export function Page({
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const preview = useRef(new Compartment());
+  /** The folder's docs, so links to missing docs show faded (8.5). */
+  const known = useRef(new Compartment());
   const sourceNow = useRef(source);
   sourceNow.current = source;
   // Read when a doc opens; a folder's list changing doesn't reopen the doc.
@@ -243,8 +245,11 @@ export function Page({
       force = false,
       /** Used as it landed, by the setting: a quieter word, and kept as a proposal on a clash. */
       auto = false,
+      /** Part of Use all (9.4): no word of its own; Use all says it once. */
+      quiet = false,
     ): Promise<boolean> => {
       const conflict = () => {
+        if (quiet) return;
         flash(
           auto
             ? `Kept the agent's edit to ${part.path.at(-1) ?? "a section"} as a proposal: that section changed where it did.`
@@ -255,7 +260,7 @@ export function Page({
       };
       const s = sectionFor(editor.state, part.path);
       if (!s || !part.section) {
-        if (!auto) flash("That section isn't on the page any more.", null, 6000);
+        if (!auto && !quiet) flash("That section isn't on the page any more.", null, 6000);
         return false;
       }
       const current = editor.state.sliceDoc(s.subtreeRange.from, s.subtreeRange.to);
@@ -272,7 +277,7 @@ export function Page({
         applied: made.text,
       });
       if (r.kind === "refused") {
-        flash(r.reason, null, 6000);
+        if (!quiet) flash(r.reason, null, 6000);
         return false;
       }
       // Typing may have landed while History was written: apply onto the section as it is now.
@@ -292,6 +297,7 @@ export function Page({
       const after = editor.state.doc;
       const remaining = withPart(thread, sectionKey(part.path), null);
       await savePreview(thread, remaining);
+      if (quiet) return true;
       flash(
         auto
           ? `Used the agent's edit to ${part.path.at(-1) ?? "the section"}.`
@@ -379,6 +385,59 @@ export function Page({
       const at = partOf(e);
       if (at) void savePreview(at.thread, withPart(at.thread, sectionKey(at.part.path), null));
     };
+    // Restore from History (5.3): one version back into its section only, as one change ⌘Z undoes.
+    const onRestore = (e: Event) => {
+      const {
+        path: sectionPath,
+        text: version,
+        from,
+      } = (e as CustomEvent<{ path: string[]; text: string; from: string }>).detail;
+      const tree = sectionsOf(editor.state, doc.path.split("/").pop() ?? doc.path);
+      const s = tree.sections.find((x) => x.path.join("\u0000") === sectionPath.join("\u0000"));
+      if (!s) return;
+      const now = editor.state.doc.sliceString(s.subtreeRange.from, s.subtreeRange.to);
+      // Keep the section's own trailing break, so the next heading stays where it was.
+      const tail = /\s*$/.exec(now)?.[0] ?? "";
+      const insert = version.replace(/\s*$/, "") + tail;
+      if (insert === now) return;
+      editor.dispatch({
+        changes: { from: s.subtreeRange.from, to: s.subtreeRange.to, insert },
+        userEvent: "restore.version",
+        scrollIntoView: true,
+      });
+      void anur.call("history:restored", {
+        path: doc.path,
+        text: editor.state.doc.toString(),
+        section: sectionPath,
+        from,
+      });
+    };
+    // Use all (9.4): this page's edits from the thread, one by one, then the other docs' in main.
+    const onUseAll = (e: Event) => {
+      const { thread } = (e as CustomEvent<{ thread: string }>).detail;
+      void (async () => {
+        const before = editor.state.doc.toString();
+        const mine = editor.state.field(previewState).previews.find((p) => p.thread === thread);
+        const used: string[][] = [];
+        for (const part of mine?.parts ?? [])
+          if (await applyPreviewPart(thread, part, false, false, true)) used.push(part.path);
+        const after = editor.state.doc.toString();
+        const r = await anur.call("thread:use-all", {
+          thread,
+          open: { path: doc.path, before, after, sections: used },
+        });
+        const docs = `${String(r.used)} doc${r.used === 1 ? "" : "s"}`;
+        flash(
+          r.kept.length > 0
+            ? `Used this thread's edits in ${docs}. Kept as proposals, as their sections changed: ${r.kept.join(", ")}.`
+            : `Used this thread's edits in ${docs}. Undo is in the thread.`,
+          null,
+          9000,
+        );
+      })();
+    };
+    window.addEventListener("anur:use-all", onUseAll);
+    window.addEventListener("anur:restore-section", onRestore);
     window.addEventListener("anur:use-preview", onUsePreview);
     window.addEventListener("anur:drop-preview", onDropPreview);
     const offPreviews = anur.on("preview:changed", ({ path }) => {
@@ -422,6 +481,7 @@ export function Page({
                 pageHighlight,
                 sectionFolding(doc.path),
                 preview.current.of(previewFor(sourceNow.current)),
+                known.current.of(knownDocs.of({ docs: docsNow.current, path: doc.path })),
                 ...(editable ? [insertMenu(docsNow.current), linkEditor] : []),
                 linkClicks((link, inNewTab) => {
                   const problem = openLinkNow.current(link, inNewTab);
@@ -680,6 +740,8 @@ export function Page({
       window.removeEventListener("beforeunload", beforeUnload);
       window.removeEventListener("anur:show-preview", onShowPreview);
       window.removeEventListener("anur:use-preview", onUsePreview);
+      window.removeEventListener("anur:restore-section", onRestore);
+      window.removeEventListener("anur:use-all", onUseAll);
       window.removeEventListener("anur:drop-preview", onDropPreview);
       offPreviews();
       offReplace();
@@ -715,6 +777,12 @@ export function Page({
   useEffect(() => {
     view.current?.dispatch({ effects: preview.current.reconfigure(previewFor(source)) });
   }, [source]);
+  useEffect(() => {
+    // A doc added, renamed or deleted can mend or break a link: refade them.
+    view.current?.dispatch({
+      effects: known.current.reconfigure(knownDocs.of({ docs, path: doc.path })),
+    });
+  }, [docs, doc.path]);
 
   /** Put the cursor on the next conflict after it, or the first. */
   const nextConflict = () => {

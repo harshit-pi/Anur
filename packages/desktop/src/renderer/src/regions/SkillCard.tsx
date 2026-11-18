@@ -4,16 +4,59 @@ import { anur } from "../bridge.ts";
 /**
  * The first-launch card (6.1): add `/anur` to the person's Claude Code, or
  * not now. Nothing is installed until they choose Add; afterwards a tip
- * says what they can now type. Shown once Claude Code is found.
+ * says what they can now type. Shown once Claude Code is found and a
+ * thread has answered, so it never greets someone who hasn't seen Anur yet.
  */
+const ANSWERED = "anur.threadAnswered";
+
+/** Whether a thread has answered on this device: the card waits for that. */
+function threadAnswered(): boolean {
+  try {
+    return window.localStorage.getItem(ANSWERED) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function noteThreadAnswered() {
+  try {
+    window.localStorage.setItem(ANSWERED, "1");
+  } catch {
+    // Storage off: the card waits for the next answer instead.
+  }
+}
+
 export function SkillCard() {
   const [show, setShow] = useState<"offer" | "tip" | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
+    let off: (() => void) | null = null;
+    let current = true;
     void anur.call("skill:status", {}).then((s) => {
-      if (s.claude && !s.added && !s.dismissed) setShow("offer");
+      if (!current || !s.claude || s.added || s.dismissed) return;
+      // Offered once a thread has answered: first see what a doc here can do.
+      if (threadAnswered()) {
+        setShow("offer");
+        return;
+      }
+      off = anur.on("thread:event", (e) => {
+        if (
+          e.kind === "thread" &&
+          !e.thread.busy &&
+          e.thread.items.some((i) => i.kind === "message" && i.role === "agent")
+        ) {
+          noteThreadAnswered();
+          setShow("offer");
+          off?.();
+          off = null;
+        }
+      });
     });
+    return () => {
+      current = false;
+      off?.();
+    };
   }, []);
   if (!show) return null;
   return (

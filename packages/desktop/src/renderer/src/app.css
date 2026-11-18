@@ -226,6 +226,8 @@ button {
 .right-sidebar {
   grid-area: right;
   border-left: 1px solid var(--rule);
+  /* White like the page: the chat is read and written, the files panel only navigated. */
+  background: var(--sheet);
 }
 
 .sidebar-head {
@@ -303,6 +305,10 @@ button {
   font-size: 17px;
   line-height: 1.6;
   color: var(--ink2);
+}
+
+.page-empty p + p {
+  margin-top: 12px;
 }
 
 /* 6. Status bar. */
@@ -1790,7 +1796,41 @@ body.resizing * {
 }
 
 .think-working {
-  font-style: italic;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--graphite);
+  font-size: 13.5px;
+}
+
+.think-working-mark {
+  display: inline-flex;
+  animation: think-working-pulse 1.6s ease-in-out infinite;
+}
+
+.think-working-what {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.think-working-time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes think-working-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .think-working-mark {
+    animation: none;
+  }
 }
 
 .think-options {
@@ -2068,6 +2108,21 @@ body.resizing * {
   height: 7px;
   border-radius: 50%;
   background: var(--amber);
+}
+
+.map-rename {
+  flex: 1;
+  min-width: 0;
+  margin: -2px -4px;
+  padding: 1px 4px;
+  border: 1px solid var(--blue);
+  border-radius: 4px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  box-shadow: 0 0 0 3px var(--blue-wash);
+  outline: none;
 }
 
 .map-add {
@@ -2726,6 +2781,86 @@ body.resizing * {
   font-size: 12px;
 }
 
+/* Group 11: closing and deleting threads, and the orphaned list. */
+.think-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.think-top-actions {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.think-more.danger,
+.think-button.danger {
+  color: var(--red);
+}
+
+.think-more:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.think-closed-toggle {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.think-orphans-why {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.think-orphan-head {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.think-orphan-gone {
+  color: var(--graphite);
+  text-decoration: line-through;
+}
+
+.think-orphan p {
+  margin: 2px 0;
+  font-size: 12px;
+}
+
+.think-orphan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.think-orphan-actions .quiet-action {
+  color: var(--graphite);
+}
+
+.think-orphan-actions select {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.think-orphan-actions .think-button {
+  align-self: auto;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
 /* Actions (group 15): Build and Check on a section. */
 .think-actions {
   display: flex;
@@ -2771,8 +2906,39 @@ body.resizing * {
 .think-claim {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 2px;
+}
+
+.think-claim-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.think-claim-line .think-verdict {
+  flex: none;
+}
+
+.think-claim-note {
+  padding-left: 2px;
+  font-size: 12.5px;
+}
+
+.think-check-fine {
+  margin-top: 8px;
+}
+
+.think-check-fine > summary {
+  cursor: pointer;
+}
+
+.think-check-fine ul {
+  margin-top: 8px;
+}
+
+.think-check-fix {
+  margin-top: 10px;
+  font-size: 13px;
 }
 
 .think-verdict {
@@ -2801,11 +2967,8 @@ body.resizing * {
 
 .think-source {
   font-style: normal;
-  opacity: 0.8;
-}
-
-.think-source::before {
-  content: "— ";
+  text-decoration: underline dotted;
+  cursor: help;
 }
 
 .think-link {
@@ -3002,58 +3165,997 @@ body.resizing * {
   outline-offset: 2px;
 }
 
-/* A one-time tip: a small dark note beside what it's about. */
-.tip-bubble {
-  position: fixed;
-  z-index: 150;
-  width: 260px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--ink);
-  color: var(--sheet);
-  box-shadow: 0 8px 24px var(--shadow);
-  font: 13px/1.45 var(--font-ui);
-  animation: tip-in 0.18s ease-out;
+/* One agent's own settings, under its name. */
+.settings-group {
+  margin-top: 22px;
 }
 
-.tip-bubble::before {
-  content: "";
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  background: var(--ink);
-  transform: rotate(45deg);
+.settings-group h3 {
+  margin: 0 0 2px;
+  font-size: 15px;
+  color: var(--ink);
 }
 
-.tip-bubble.right::before {
-  left: -5px;
-  top: 17px;
+/* A run of tool calls, folded into one line (as in Claude's apps). */
+.think-steps {
+  align-self: stretch;
+  min-width: 0;
 }
 
-.tip-bubble.below::before {
-  left: 16px;
-  top: -5px;
+.think-steps > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 8px;
+  border-left: 2px solid var(--rule);
+  color: var(--graphite);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
 }
 
-.tip-bubble strong {
-  display: block;
-  margin-bottom: 2px;
+.think-steps > summary::-webkit-details-marker {
+  display: none;
 }
 
-.tip-got {
-  display: block;
-  margin-top: 6px;
+.think-steps > summary::before {
+  content: "▸";
+  flex: none;
+  font-size: 10px;
+}
+
+.think-steps[open] > summary::before {
+  content: "▾";
+}
+
+.think-steps > summary:hover {
+  color: var(--ink);
+}
+
+.think-steps-count {
+  flex: none;
+  font-weight: 600;
+}
+
+.think-steps-last {
+  min-width: 0;
+  opacity: 0.85;
+}
+
+.think-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 2px 10px;
+}
+
+/* A section's links (8.3): where they go, and what links here. */
+.think-links ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 8px;
   padding: 0;
-  border: 0;
-  background: none;
-  color: var(--blue-wash);
-  font: 600 13px var(--font-ui);
+  list-style: none;
+}
+
+.think-links .think-link {
+  text-align: left;
+  text-decoration: none;
+}
+
+.think-links .think-link:hover {
+  text-decoration: underline;
+}
+
+.think-link-broken {
+  color: var(--graphite);
+  opacity: 0.7;
+}
+
+/* A link to another doc's section (8.6): opens where it goes. */
+.map-linkbox {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--blue-wash);
+  border-radius: 18px;
+  background: var(--paper);
+  color: var(--blue);
+  font: 13px var(--font-ui);
   cursor: pointer;
 }
 
-@keyframes tip-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
+.map-linkbox:hover {
+  border-color: var(--blue);
+}
+
+.map-linkbox.broken {
+  color: var(--graphite);
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* A section's history (group 5). */
+.think-history ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.think-history-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 3px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ink);
+  font: 13px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.think-history-row:hover,
+.think-history li.open .think-history-row {
+  background: var(--blue-wash);
+}
+
+.think-history-when {
+  flex: none;
+  width: 72px;
+  color: var(--graphite);
+}
+
+.think-history-cause {
+  flex: none;
+  font-weight: 600;
+}
+
+.think-history-summary {
+  min-width: 0;
+  color: var(--graphite);
+}
+
+.think-history-body {
+  margin: 4px 0 8px 4px;
+}
+
+.think-history-text {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--paper);
+  font: 12.5px/1.5 var(--font-ui);
+  white-space: pre-wrap;
+}
+
+.think-history-text .differs {
+  background: var(--amber-wash);
+}
+
+.think-history-text .gone {
+  color: var(--graphite);
+  text-decoration: line-through;
+}
+
+.think-history-key {
+  display: flex;
+  gap: 12px;
+  margin: -4px 0 8px;
+  font-size: 11.5px;
+}
+
+.think-history-key .differs {
+  padding: 0 4px;
+  background: var(--amber-wash);
+}
+
+.think-history-key .gone {
+  text-decoration: line-through;
+}
+
+/* A thread's change set (9.3): its edits across sections and docs, used together. */
+.think-changeset ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+/* The right panel: Think scrolls; a section's context and history fold at its foot. */
+.right-sidebar:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+
+.right-main {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+}
+
+.right-footer {
+  flex: none;
+  max-height: 45vh;
+  overflow: auto;
+  border-top: 1px solid var(--rule);
+  background: var(--sheet);
+}
+
+.right-footer:empty {
+  display: none;
+}
+
+.right-footer-panel {
+  padding: 8px 16px 12px;
+}
+
+.right-footer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 6px;
+  font-size: 13px;
+}
+
+/* Quotes and Obsidian callouts in Think and the map's hover, drawn as on the page. */
+.md-quote {
+  margin: 4px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--rule);
+  color: var(--graphite);
+}
+
+.md-callout {
+  margin: 4px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--blue);
+  border-radius: 4px;
+  background: var(--blue-wash);
+}
+
+.md-callout-title {
+  margin-bottom: 2px;
+  color: var(--ink);
+}
+
+.md-callout-type {
+  margin-right: 8px;
+  color: var(--blue);
+  font-weight: 650;
+}
+
+.md-callout.green {
+  border-left-color: var(--green);
+  background: var(--green-wash, var(--blue-wash));
+}
+
+.md-callout.green .md-callout-type {
+  color: var(--green);
+}
+
+.md-callout.amber {
+  border-left-color: var(--amber);
+  background: var(--amber-wash);
+}
+
+.md-callout.amber .md-callout-type {
+  color: var(--amber);
+}
+
+.md-callout.red {
+  border-left-color: var(--red);
+  background: var(--red-wash);
+}
+
+.md-callout.red .md-callout-type {
+  color: var(--red);
+}
+
+.md-callout.grey {
+  border-left-color: var(--slate);
+  background: var(--hover);
+}
+
+.md-callout.grey .md-callout-type {
+  color: var(--graphite);
+}
+
+.md-callout p:last-child,
+.md-quote p:last-child {
+  margin-bottom: 0;
+}
+
+/* A section's links to other docs (8.6): one badge, a list on a click. */
+.map-linkcount {
+  flex: none;
+  padding: 1px 7px;
+  border: 1px solid var(--blue-wash);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--blue);
+  font: 600 11.5px/16px var(--font-ui);
+  cursor: pointer;
+}
+
+.map-linkcount:hover,
+.map-linkcount.open {
+  border-color: var(--blue);
+}
+
+.map-linklist {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  max-width: 320px;
+  padding: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.map-linkitem {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--blue);
+  font: 13px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-linkitem:hover {
+  background: var(--blue-wash);
+}
+
+.map-linkitem.broken {
+  color: var(--graphite);
+  cursor: default;
+}
+
+.map-edge.rail {
+  stroke-linejoin: round;
+}
+
+.map-linklist.up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+/* How full a thread's context is (as in Claude's apps): a ring by the pickers. */
+.think-ring {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  cursor: default;
+}
+
+.think-ring-track {
+  fill: none;
+  stroke: var(--rule);
+  stroke-width: 2.5;
+}
+
+.think-ring-fill {
+  fill: none;
+  stroke: var(--blue);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+/* Branch from a reply (10.5): a small link under it, shown on hover. */
+.think-message-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.think-message-wrap.person {
+  align-items: flex-end;
+}
+
+.think-branch {
+  align-self: flex-start;
+  margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--slate);
+  font: 12px var(--font-ui);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.think-message-wrap:hover .think-branch,
+.think-branch:focus-visible {
+  opacity: 1;
+}
+
+.think-branch:hover {
+  color: var(--blue);
+}
+
+.think-branched {
+  margin: 4px 0 8px;
+  font-size: 12.5px;
+}
+
+.think-branching {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 8px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--blue-wash);
+  color: var(--ink2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.think.think-drop {
+  outline: 2px dashed var(--blue);
+  outline-offset: -6px;
+  border-radius: 10px;
+}
+
+/* Attachments in the composer (10.4): chips above the text, a paperclip by the pickers. */
+.think-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.think-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: 12.5px var(--font-ui);
+}
+
+.think-chip button {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--slate);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.think-attach {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--slate);
+  cursor: pointer;
+}
+
+.think-attach:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* An attachment as sent, above the person's message in the chat. */
+.think-sent-attachment {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: 3px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--slate);
+  font: 12.5px var(--font-ui);
+}
+
+/* Findings (16.1): what a thread established, kept or dropped by a person. */
+.think-finding {
+  padding: 8px 12px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--green);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.think-finding.proposed {
+  border-left-color: var(--blue);
+}
+
+.think-finding.dropped {
+  opacity: 0.6;
+  border-left-color: var(--rule);
+}
+
+.think-finding-label {
+  margin-right: 6px;
+  color: var(--graphite);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.think-finding.proposed .think-finding-label {
+  margin-bottom: 2px;
+  color: var(--blue);
+}
+
+.think-finding-edit {
+  width: 100%;
+  margin: 4px 0;
+}
+
+.think-kept {
+  color: var(--green);
+}
+
+/* ── Think as a chat (mockup: Think chat) ─────────────────────────────── */
+
+/* One header line: back, the thread's name, its section. */
+.think-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.think-head .think-back {
+  padding: 0 6px 2px;
+  border-radius: 6px;
+  color: var(--slate);
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.think-head .think-back:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.think-head-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.think-head .think-title {
+  margin: 0;
+  font-size: 15px;
+}
+
+.think-head .think-where {
+  padding: 0;
+  background: none;
+  color: var(--blue);
+}
+
+/* Both sides read as chat: a light bubble for the person, plain sans text for the reply. */
+.think-message.person {
+  align-self: flex-end;
+  max-width: 86%;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--blue-wash);
+  color: var(--ink);
+}
+
+.think-reply {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+}
+
+.think-message.agent {
+  max-width: 100%;
+  padding: 0;
+  background: none;
+  font-family: var(--font-ui);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.think-message.agent p,
+.think-message.agent ul,
+.think-message.agent ol {
+  margin: 0 0 10px;
+}
+
+.think-message.agent li {
+  margin-bottom: 4px;
+}
+
+.think-message.agent.folded {
+  position: relative;
+  max-height: 260px;
+  overflow: hidden;
+}
+
+.think-message.agent.folded::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 56px;
+  background: linear-gradient(transparent, var(--sheet));
+}
+
+.think-showall {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font: 12.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.think-who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  color: var(--graphite);
+  font-size: 12px;
+}
+
+.agent-mark {
+  flex: none;
+}
+
+.agent-mark-letter {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: var(--rule);
+  color: var(--ink);
+  font: 600 10px var(--font-ui);
+}
+
+/* Copy, Branch from here, Use in doc: under a reply, on hover. */
+.think-reply-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.think-reply:hover .think-reply-actions,
+.think-reply-actions:focus-within {
+  opacity: 1;
+}
+
+.think-reply-actions button {
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--slate);
+  font: 12px var(--font-ui);
+  cursor: pointer;
+}
+
+.think-reply-actions button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* A step in words: ✓ done, ● going, × failed. */
+.think-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--slate);
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.think-step-mark {
+  color: var(--blue);
+}
+
+.think-step.completed .think-step-mark {
+  color: var(--green);
+}
+
+.think-step.failed .think-step-mark {
+  color: var(--red);
+}
+
+/* Files as cards: their type and name. */
+.file-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  padding: 5px 8px 5px 5px;
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--sheet);
+}
+
+.file-card-type {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--blue-wash);
+  color: var(--blue);
+  font: 600 9px var(--font-ui);
+}
+
+.file-card-name {
+  min-width: 0;
+  max-width: 220px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 12.5px var(--font-ui);
+  text-align: left;
+}
+
+button.file-card-name {
+  cursor: pointer;
+}
+
+button.file-card-name:hover {
+  text-decoration: underline;
+}
+
+.file-card-x {
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--graphite);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.think-sent-attachment {
+  align-self: flex-end;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.think-attachments li {
+  display: contents;
+}
+
+/* The thread list: name, when, the last line; counts on hover; branches indented. */
+.think-thread-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.think-thread-title {
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.think-thread-when {
+  flex: none;
+  color: var(--graphite);
+  font-size: 12px;
+}
+
+.think-thread-last {
+  overflow: hidden;
+  color: var(--slate);
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.think-thread-meta {
+  display: none;
+  color: var(--graphite);
+  font-size: 11.5px;
+}
+
+.think-thread:hover .think-thread-meta {
+  display: block;
+}
+
+.think-thread.branch {
+  position: relative;
+  width: calc(100% - 18px);
+  margin-left: 18px;
+}
+
+.think-thread.branch::before {
+  content: "↳";
+  position: absolute;
+  left: -16px;
+  top: 8px;
+  color: var(--pencil);
+}
+
+.think-running-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--blue);
+  vertical-align: 1px;
+}
+
+/* The composer as one box that grows: no handle; send turns blue once there's text. */
+.think-composer {
+  gap: 4px;
+  padding: 8px 8px 6px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  background: var(--sheet);
+}
+
+.think-composer:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+.think-composer .think-input {
+  min-height: 24px;
+  max-height: 220px;
+  padding: 2px 0 4px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  outline: none;
+  resize: none;
+}
+
+.think-send {
+  background: var(--rule);
+}
+
+.think-send.ready {
+  background: var(--blue);
+}
+
+.think-context {
+  color: var(--graphite);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+/* Steps as one quiet line, like a single step. */
+.think-steps summary {
+  color: var(--slate);
+  font-size: 12.5px;
+}
+
+/* Room for the pickers beside the paperclip. */
+.think-composer .think-pickers {
+  gap: 0;
+  min-width: 0;
+}
+
+/* Settings, Storage (11.5, 11.6). */
+.settings-storage {
+  width: 100%;
+  margin: 0 0 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.settings-storage td {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.settings-storage td:nth-child(2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-storage td:nth-child(3) {
+  width: 90px;
+  padding-left: 16px;
+  text-align: right;
+}
+
+.settings-attachments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-attachments li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+}
+
+.settings-attachment-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Who wrote it, on others' threads and messages only. */
+.think-by {
+  margin: 0 4px 2px;
+  color: var(--graphite);
+  font-size: 11px;
+}
+
+.think-started-by {
+  margin-left: 6px;
+}
+
+.settings-input {
+  flex: none;
+  width: 160px;
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.think-thread-by {
+  color: var(--ink);
+}
+
+.think-orphan-actions .think-more {
+  align-self: center;
+}
+
+/* A finished turn's reply leads; the cards it made follow under this. */
+.think-from-answer {
+  margin: 10px 0 -2px;
+  font-size: 12px;
 }

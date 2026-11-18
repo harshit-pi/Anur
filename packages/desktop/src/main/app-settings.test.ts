@@ -7,11 +7,27 @@ import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts
 const dir = () => mkdtempSync(path.join(tmpdir(), "anur-settings-"));
 
 describe("settings main acts on", () => {
-  it("keep section history on by default, and remember a change", async () => {
+  it("keep every Core feature on by default, and remember a change", async () => {
     const d = dir();
-    expect((await new AppSettingsStore(d).load()).sectionHistory).toBe(true);
-    await new AppSettingsStore(d).set({ sectionHistory: false });
-    expect((await new AppSettingsStore(d).load()).sectionHistory).toBe(false);
+    expect((await new AppSettingsStore(d).load()).features).toEqual({
+      links: true,
+      history: true,
+      actions: true,
+    });
+    const store = new AppSettingsStore(d);
+    await store.load();
+    await store.set({ features: { links: true, history: false, actions: false } });
+    expect((await new AppSettingsStore(d).load()).features).toEqual({
+      links: true,
+      history: false,
+      actions: false,
+    });
+  });
+
+  it("carry the old history switch over once", async () => {
+    const d = dir();
+    writeFileSync(path.join(d, "app-settings.json"), JSON.stringify({ sectionHistory: false }));
+    expect((await new AppSettingsStore(d).load()).features.history).toBe(false);
   });
 
   it("commit .anur/ by removing its ignore file, and stop by writing it back", async () => {
