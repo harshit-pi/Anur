@@ -91,13 +91,13 @@ function withEvent(
 }
 
 /** A section's own text, without its heading line. */
-function bodyOf(text: string, s: SectionNode): string {
+export function bodyOf(text: string, s: SectionNode): string {
   const from = s.headingRange ? s.headingRange.to : s.ownRange.from;
   return text.slice(from, s.ownRange.to).trim();
 }
 
 /** Light Markdown for a reply: paragraphs, bullets and inline styles. */
-function Markdown({ text }: { text: string }) {
+export function Markdown({ text }: { text: string }) {
   const blocks = text.split(/\n{2,}/);
   return (
     <>
