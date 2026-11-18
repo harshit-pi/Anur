@@ -66,6 +66,7 @@ import {
 } from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
 import { SkillCard } from "./regions/SkillCard.tsx";
+import { OpenerCard } from "./regions/OpenerCard.tsx";
 import { MapView } from "./regions/MapView.tsx";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
@@ -1069,6 +1070,7 @@ export function App() {
         />
       ) : null}
       <SkillCard />
+      <OpenerCard />
       <CommandPalette
         open={paletteOpen}
         onClose={() => {
