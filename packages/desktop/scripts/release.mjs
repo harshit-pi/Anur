@@ -90,7 +90,17 @@ await build({
       notarize: true,
     },
     // The DMG is signed too: Gatekeeper rejects an unsigned one on some Macs.
-    dmg: { title: "Anur ${version}", sign: true },
+    dmg: {
+      title: "Anur ${version}",
+      sign: true,
+      // Finder shows its toolbar and path bar on disk images now, so the icons
+      // sit centred in what's left of the 540 × 380 window, not in all of it.
+      window: { width: 540, height: 380 },
+      contents: [
+        { x: 140, y: 140, type: "file" },
+        { x: 400, y: 140, type: "link", path: "/Applications" },
+      ],
+    },
   },
 });
 
