@@ -62,7 +62,14 @@ import { readRecent } from "./folder/recent.ts";
 import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
 import { buildMenu } from "./menu.ts";
-import { BUNDLE_ID, OpenerOffer, makeMarkdownOpener, markdownOpener } from "./default-opener.ts";
+import {
+  BUNDLE_ID,
+  DEV_BUNDLE_ID,
+  OpenerOffer,
+  makeMarkdownOpener,
+  markdownOpener,
+} from "./default-opener.ts";
+import { restartToUpdate, startUpdates, updateReady } from "./updater.ts";
 import { folderFor } from "./open-file.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
 import { AgentChoices } from "./threads/agent-choices.ts";
@@ -81,17 +88,22 @@ const rendererUrl = () =>
   devUrl ?? pathToFileURL(path.join(here, "..", "renderer", "index.html")).href;
 const senders = trustedSenders(rendererUrl);
 
-// The app is called Anur. Its profile lives in "Anur Desktop", since
-// "Anur" in Application Support belongs to the Mac on the Go app. Checks run
-// in a throwaway profile, so they never share storage or locks with a copy
-// of Anur that is already open.
-app.setName("Anur");
+// Two apps from one code: Anur, the signed release people install, and
+// Anur Dev, what `pnpm dev` and local builds run. Only the name, profile,
+// bundle id and updates differ. Anur's profile is "Anur Desktop", where it
+// has always been; Anur Dev keeps its own, so it never touches Anur's data.
+// Checks run in a throwaway profile.
+const isRelease = app.isPackaged && app.getName() === "Anur";
+app.setName(isRelease ? "Anur" : "Anur Dev");
+const sharedProfile = path.join(app.getPath("appData"), "Anur Desktop");
 app.setPath(
   "userData",
   isCheck
     ? // ANUR_CHECK_PROFILE lets two check runs share one, to test what is remembered.
       (process.env.ANUR_CHECK_PROFILE ?? mkdtempSync(path.join(tmpdir(), "anur-check-")))
-    : path.join(app.getPath("appData"), "Anur Desktop"),
+    : isRelease
+      ? sharedProfile
+      : path.join(app.getPath("appData"), "Anur Dev"),
 );
 
 // For checks: ANUR_THEME=light or dark overrides the system theme.
@@ -927,6 +939,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.removeInput(rel, text, thread, input) : false };
   },
+  "update:status": () => ({ ready: updateReady() }),
+  "update:restart": () => {
+    restartToUpdate();
+    return { ok: updateReady() !== null };
+  },
   "tour:status": async () => {
     // Checks don't see it unless they ask, so other checks' screenshots stay clean.
     if (isCheck && !process.env.ANUR_CHECK_TOUR) return { show: false };
@@ -948,7 +965,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return {
       // Only the installed app can be the opener; a dev build would hand .md files to Electron.
       can: process.platform === "darwin" && (app.isPackaged || !!process.env.ANUR_CHECK_OPENER),
-      isAnur: current?.id === BUNDLE_ID,
+      isAnur: current?.id === (isRelease ? BUNDLE_ID : DEV_BUNDLE_ID),
       current: current?.name ?? null,
       dismissed: await openerOffer().dismissed(),
     };
@@ -959,7 +976,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
       return { ok: true };
     }
     if (!app.isPackaged) return { ok: false };
-    return { ok: await makeMarkdownOpener(BUNDLE_ID) };
+    return { ok: await makeMarkdownOpener(isRelease ? BUNDLE_ID : DEV_BUNDLE_ID) };
   },
   "skill:status": async () =>
     claudeSkill
@@ -1288,6 +1305,8 @@ void app.whenReady().then(async () => {
   folders = new FolderService(
     app.getPath("userData"),
     isCheck ? (process.env.ANUR_CHECK_HOME ?? undefined) : undefined,
+    // Anur and Anur Dev share locks, so they never both write one folder.
+    isCheck ? app.getPath("userData") : sharedProfile,
   );
   // No page in Anur needs the camera, microphone, location or notifications.
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
@@ -1295,6 +1314,10 @@ void app.whenReady().then(async () => {
   });
   registerIpc();
   void startClaudeSkill();
+  if (isRelease)
+    startUpdates((version) => {
+      for (const win of windows.values()) send(win, "app:update-ready", { version });
+    });
   // A built app takes its icon from its bundle; in dev, show the diamond in the Dock too.
   if (!app.isPackaged && process.platform === "darwin") {
     app.dock?.setIcon(path.join(here, "..", "..", "build", "icon.png"));

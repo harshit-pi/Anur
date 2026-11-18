@@ -526,6 +526,16 @@ export const ipcContract = {
     request: z.object({ paths: z.array(z.string().max(1024)).max(1000) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
+  /** A downloaded update waiting for a restart, for a window that opened after it came. */
+  "update:status": {
+    request: z.object({}).strict(),
+    response: z.object({ ready: z.string().nullable() }),
+  },
+  /** Quit and put the downloaded update in place, then open again. */
+  "update:restart": {
+    request: z.object({}).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Whether to show the first-run tour: not yet seen on this Mac. */
   "tour:status": {
     request: z.object({}).strict(),
@@ -958,6 +968,8 @@ export const ipcEvents = {
   }),
   /** An agent in a terminal asked to show a doc (6.7, 6.9): open it, at a section if given. */
   "app:open-doc": z.object({ path: z.string(), section: z.string().nullable() }),
+  /** A new version of Anur downloaded; a restart puts it in place. */
+  "app:update-ready": z.object({ version: z.string() }),
   /** A doc's previews changed, as when a thread's turn ended with edits. */
   "preview:changed": z.object({ path: z.string() }),
   /** A thread changed: all of it, or a reply arriving piece by piece. */

@@ -66,6 +66,7 @@ import {
 } from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
 import { SkillCard } from "./regions/SkillCard.tsx";
+import { UpdateCard } from "./regions/UpdateCard.tsx";
 import { OpenerCard } from "./regions/OpenerCard.tsx";
 import { Tour } from "./regions/Tour.tsx";
 import { TOUR } from "./layout/tour.ts";
@@ -1121,6 +1122,7 @@ export function App() {
       {/* The offer cards wait until the tour is over. */}
       {tourStep === null ? (
         <>
+          <UpdateCard />
           <SkillCard />
           <OpenerCard />
         </>
