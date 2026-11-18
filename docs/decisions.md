@@ -144,3 +144,9 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - Only reads become inputs: files, pages, searches, other MCP servers' answers, and shell commands made only of reading programs (cat, ls, rg, git log…) with nothing written to a file. Commands that write, run, build or test are the agent's own work, and reading back a file the thread wrote brings nothing in.
 - What came from the person's machine outside the folder (a file, a command's output, another MCP server's answer, the chat behind `/anur doc`) keeps its content in Anur's local app data, never `.anur/`, which is shared and often committed. The input line keeps its label and hash, marked `local`; another person's agent sees it exists and reads it again itself. Think marks it "kept local".
 - Build says first, in one line, what it will build and what it relies on, so the person can stop it early. On a section with several steps it builds the first that fits one sitting and lists the rest as next steps.
+
+## Steps folded, as in Claude's apps
+
+- A run of two or more tool calls shows as one line ("▸ 7 steps · Edit working copy of Launch.md") that opens to list them. Failures are counted on that line; a doc edit Anur sent to the working copy isn't one.
+- While a turn runs, the line under the steps says what it's doing now: "Working for 1 min 12 s · Write pitch.md".
+- What the agent writes before a step is saved as its own message, where it was written, so a reloaded thread reads as it ran: a note, its steps, the next note, the report.

@@ -765,8 +765,14 @@ export function Think({
           />
         ) : null}
         <div className="think-chat" aria-live="polite">
-          {thread.items.map((item, i) =>
-            item.kind === "message" ? (
+          {foldSteps(thread.items).map(({ item, i, steps }) =>
+            steps ? (
+              <StepsFold
+                key={`steps-${String(i)}`}
+                steps={steps}
+                running={thread.busy && i + steps.length === thread.items.length}
+              />
+            ) : item.kind === "message" ? (
               <div key={i} className={`think-message ${item.role}`}>
                 {item.role === "agent" ? <Markdown text={item.text} /> : item.text}
               </div>
@@ -957,7 +963,17 @@ export function Think({
             ),
           )}
           {thread.busy && thread.items.at(-1)?.kind !== "message" && asks.length === 0 ? (
-            <Working since={thread.busySince ?? null} />
+            <Working
+              since={thread.busySince ?? null}
+              step={(() => {
+                const last = thread.items.at(-1);
+                return last?.kind === "tool" &&
+                  last.status !== "completed" &&
+                  last.status !== "failed"
+                  ? toolLabel(last.title)
+                  : null;
+              })()}
+            />
           ) : null}
           {asks.map((p) =>
             p.plan ? (
@@ -1306,7 +1322,7 @@ export function Think({
 }
 
 /** While a turn runs: "Thinking…" at first, then how long it has been working. */
-function Working({ since }: { since: number | null }) {
+function Working({ since, step }: { since: number | null; step: string | null }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => {
@@ -1323,7 +1339,76 @@ function Working({ since }: { since: number | null }) {
       : secs < 60
         ? `Working for ${String(secs)} s…`
         : `Working for ${String(Math.floor(secs / 60))} min ${String(secs % 60).padStart(2, "0")} s…`;
-  return <div className="think-working quiet">{label}</div>;
+  return (
+    <div className="think-working quiet">
+      {label}
+      {step ? <span className="think-working-step"> · {step}</span> : null}
+    </div>
+  );
+}
+
+type ToolItem = Extract<ThreadItem, { kind: "tool" }>;
+
+/**
+ * The thread's items, with each run of two or more tool calls gathered into
+ * one fold, as Claude's apps show them: the steps are there, a click away.
+ */
+function foldSteps(
+  items: ThreadItem[],
+): { item: ThreadItem; i: number; steps: ToolItem[] | null }[] {
+  const out: { item: ThreadItem; i: number; steps: ToolItem[] | null }[] = [];
+  let run: ToolItem[] = [];
+  let start = 0;
+  const flush = () => {
+    const [first] = run;
+    if (run.length === 1 && first) out.push({ item: first, i: start, steps: null });
+    else if (first) out.push({ item: first, i: start, steps: run });
+    run = [];
+  };
+  items.forEach((item, i) => {
+    if (item.kind === "tool") {
+      if (run.length === 0) start = i;
+      run.push(item);
+      return;
+    }
+    flush();
+    out.push({ item, i, steps: null });
+  });
+  flush();
+  return out;
+}
+
+/** A run of tool calls as one line: how many, and what the last few did; open for all of them. */
+function StepsFold({ steps, running }: { steps: ToolItem[]; running: boolean }) {
+  // A doc edit Anur sent to the working copy "fails" first, then runs there: not a failure.
+  const redirected = (t: ToolItem) =>
+    t.status === "failed" &&
+    steps.some((x) => {
+      const m = /^(\w+) (.+)$/.exec(t.title);
+      return m !== null && x.title === `${m[1] ?? ""} working copy of ${m[2] ?? ""}`;
+    });
+  const failed = steps.filter((s) => s.status === "failed" && !redirected(s)).length;
+  const last = toolLabel(steps.at(-1)?.title ?? "");
+  return (
+    <details className="think-steps">
+      <summary>
+        <span className="think-steps-count">
+          {String(steps.filter((t) => !redirected(t)).length)} steps{running ? " so far" : ""}
+          {failed > 0 ? `, ${String(failed)} failed` : ""}
+        </span>
+        <span className="think-steps-last truncate">{last}</span>
+      </summary>
+      <div className="think-steps-list">
+        {steps.map((t) =>
+          redirected(t) ? null : (
+            <div key={t.toolUse} className={`think-tool ${t.status}`} title={t.title}>
+              {toolLabel(t.title)}
+            </div>
+          ),
+        )}
+      </div>
+    </details>
+  );
 }
 
 const VERDICT: Record<"holds" | "wrong" | "unsupported" | "missing", string> = {
