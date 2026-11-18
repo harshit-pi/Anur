@@ -1,5 +1,6 @@
-# A local, unsigned build for trying Anur as a real app. Signing,
-# notarising and automatic updates come with group 13.
+# A local, unsigned build: `pnpm package` makes "Anur Dev.app" from this.
+# `pnpm release <version>` adds signing, notarising, the DMG and the update
+# feed on top of it (scripts/release.mjs) and makes "Anur.app".
 appId: ai.heyanur.anur-desktop
 productName: Anur
 directories:
@@ -15,6 +16,8 @@ mac:
   darkModeSupport: true
   target: dir
   identity: null
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
   # Anur can open .md files from Finder; it asks before becoming their default.
   extendInfo:
     CFBundleDocumentTypes:
@@ -37,3 +40,6 @@ mac:
             - markdown
           public.mime-type:
             - text/markdown
+publish:
+  provider: generic
+  url: https://do7t8q39ulre5.cloudfront.net/

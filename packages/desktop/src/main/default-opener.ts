@@ -7,7 +7,9 @@ import path from "node:path";
  * making it Anur when the person asks. Launch Services is asked through a
  * short JXA script, since Electron has no call for file types.
  */
+/** The released app's bundle id, and Anur Dev's beside it. */
 export const BUNDLE_ID = "ai.heyanur.anur-desktop";
+export const DEV_BUNDLE_ID = "ai.heyanur.anur-desktop.dev";
 
 /** The types a .md file can be: the one this Mac gives ".md", and Markdown's usual one. */
 const TYPES = `const types = [...new Set([

@@ -27,6 +27,8 @@ export class FolderService {
   constructor(
     private readonly appSupportDir: string,
     private readonly home: string = homedir(),
+    /** Where folder locks live; shared by Anur and Anur Dev, so one can't open what the other holds. */
+    private readonly lockDir: string = appSupportDir,
   ) {}
 
   current(windowId: number): FolderState | null {
@@ -51,7 +53,7 @@ export class FolderService {
     const other = this.windowFor(folder);
     if (other !== null) return { kind: "elsewhere", windowId: other };
 
-    const lock = await acquireFolderLock(this.appSupportDir, folder);
+    const lock = await acquireFolderLock(this.lockDir, folder);
     if (!lock.ok) return { kind: "refused", reason: heldMessage(lock.heldBy) };
 
     try {
