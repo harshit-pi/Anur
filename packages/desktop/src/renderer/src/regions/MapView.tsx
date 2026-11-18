@@ -112,17 +112,33 @@ export function MapView({
   const [peek, setPeek] = useState<number | null>(null);
   const peekTimer = useRef(0);
   const peekWant = useRef<number | null>(null);
+  const peekClose = useRef(0);
+  /** Pointer on a box opens its text after a moment; the text stays while the pointer is on it. */
   const onHover = (e: React.PointerEvent) => {
-    const el = (e.target as HTMLElement).closest<HTMLElement>("[data-section]");
+    const target = e.target as HTMLElement;
+    if (target.closest(".map-peek")) {
+      window.clearTimeout(peekClose.current);
+      return;
+    }
+    const el = target.closest<HTMLElement>("[data-section]");
     const i = el ? Number(el.dataset.section) : null;
+    if (i === null) {
+      // A moment to cross the gap from the box to its text.
+      peekWant.current = null;
+      window.clearTimeout(peekTimer.current);
+      window.clearTimeout(peekClose.current);
+      peekClose.current = window.setTimeout(() => {
+        setPeek(null);
+      }, 300);
+      return;
+    }
+    window.clearTimeout(peekClose.current);
     if (i === peekWant.current) return;
     peekWant.current = i;
     window.clearTimeout(peekTimer.current);
-    setPeek(null);
-    if (i !== null)
-      peekTimer.current = window.setTimeout(() => {
-        setPeek(i);
-      }, 450);
+    peekTimer.current = window.setTimeout(() => {
+      setPeek(i);
+    }, 450);
   };
   const placeNew = useRef<{ path: string[]; at: Pos } | null>(null);
   const textNow = useRef(docText);
@@ -392,6 +408,8 @@ export function MapView({
     const el = host.current;
     if (!el) return;
     const wheel = (e: WheelEvent) => {
+      // The section's text under the pointer scrolls itself.
+      if (!(e.ctrlKey || e.metaKey) && (e.target as HTMLElement).closest(".map-peek")) return;
       e.preventDefault();
       setView((v) => {
         if (!v) return v;
@@ -779,9 +797,14 @@ export function MapView({
         const right = (b.x + b.w / 2) * v.z + v.x + 12;
         const left = (b.x - b.w / 2) * v.z + v.x - 12 - 320;
         const x = r && right + 320 > r.width ? Math.max(8, left) : right;
-        const y = Math.max(8, Math.min((b.y - b.h / 2) * v.z + v.y, (r?.height ?? 600) - 280 - 60));
+        const y = Math.max(8, Math.min((b.y - b.h / 2) * v.z + v.y, (r?.height ?? 600) - 320 - 60));
         return (
-          <div className="map-peek" style={{ left: x, top: y }} role="tooltip">
+          <div
+            className="map-peek"
+            style={{ left: x, top: y }}
+            role="note"
+            aria-label={`${s.path.at(-1) ?? ""}: its text`}
+          >
             <div className="map-peek-name">{s.path.at(-1)}</div>
             {body ? <Markdown text={body} /> : <p className="quiet">No text yet.</p>}
           </div>
