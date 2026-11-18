@@ -2595,6 +2595,7 @@ function CheckCard({
     verdict: keyof typeof VERDICT;
     source: string;
     note: string;
+    about?: "fact" | "wording" | undefined;
   }[];
   corrected: boolean;
 }) {
@@ -2621,7 +2622,8 @@ function CheckCard({
         <span className="think-source" title={c.source}>
           source
         </span>
-        {onKeep && (c.verdict === "wrong" || c.verdict === "missing") ? (
+        {/* Only a fact is worth carrying to new threads, not a typo (17.3). */}
+        {onKeep && (c.verdict === "wrong" || c.verdict === "missing") && c.about !== "wording" ? (
           kept.has(claims.indexOf(c)) ? (
             <span className="think-kept"> · kept as a finding</span>
           ) : (

@@ -201,6 +201,12 @@ const TOOLS = [
                 description: "The file, doc, page or data checked against.",
               },
               note: { type: "string", description: "One line: what the source says." },
+              about: {
+                type: "string",
+                enum: ["fact", "wording"],
+                description:
+                  "fact: what the section claims is so (a number, a date, a name, what something does). wording: a spelling, grammar or format slip.",
+              },
             },
             required: ["claim", "verdict", "source", "note"],
             additionalProperties: false,

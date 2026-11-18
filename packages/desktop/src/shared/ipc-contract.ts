@@ -139,6 +139,7 @@ export const ThreadItem = z.discriminatedUnion("kind", [
         verdict: z.enum(["holds", "wrong", "unsupported", "missing"]),
         source: z.string(),
         note: z.string(),
+        about: z.enum(["fact", "wording"]).optional(),
       }),
     ),
     corrected: z.boolean(),

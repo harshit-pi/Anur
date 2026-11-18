@@ -268,6 +268,8 @@ export const CheckLine = LineEnvelope.extend({
       verdict: z.enum(["holds", "wrong", "unsupported", "missing"]),
       source: z.string(),
       note: z.string(),
+      /** A claim of fact, or a wording slip; older lines have none and read as fact. */
+      about: z.enum(["fact", "wording"]).optional(),
     }),
   ),
   /** Whether it proposed corrected text, as the thread's edit. */

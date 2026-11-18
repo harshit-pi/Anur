@@ -337,6 +337,26 @@ describe("Threads", () => {
     expect(await readFile(path.join(folder, "pricing.md"), "utf8")).toBe(other);
   });
 
+  it("marks a check's spelling slips as wording, and anything unmarked as a fact (17.3)", async () => {
+    const { threads: t, reply } = await setup();
+    const r = await t.start("plan.md", DOC, risks, "Check this section.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    await tool(r.thread.id, "anur_report_check", {
+      claims: [
+        { claim: "The host costs £5.", verdict: "wrong", source: "invoice", note: "It's £40." },
+        { claim: "teh host", verdict: "wrong", source: "-", note: "Spelling.", about: "wording" },
+      ],
+    });
+    await reply(r.thread.id, "Checked.");
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === r.thread.id);
+    const check = view?.items.find((i) => i.kind === "check");
+    if (check?.kind !== "check") throw new Error("no check");
+    expect(check.claims.map((c) => c.about)).toEqual(["fact", "wording"]);
+  });
+
   it("carries a kept finding to new threads on the section, and never an unkept one", async () => {
     const { threads: t, sent, reply } = await setup();
     const a = await t.start("plan.md", DOC, risks, "What does the host cost?");

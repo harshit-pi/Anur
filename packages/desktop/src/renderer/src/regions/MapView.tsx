@@ -3,6 +3,7 @@ import { boxSize, mapLayout, resolveWiki, type MapNode, type SectionTree } from 
 import type { PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { useFeatures } from "../features.ts";
+import { changeSummary } from "../layout/change-summary.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
 
 /**
@@ -67,6 +68,18 @@ const plainLine = (text: string) =>
     .replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "")
     .replace(/[*_`[\]]/g, "")
     .trim();
+/** A section's text as plain words, every line, for comparing two versions of it. */
+const plainText = (text: string) =>
+  text
+    .split("\n")
+    .filter((l) => l.trim() && !/^\s*(\||```)/.test(l))
+    .map((l) =>
+      l
+        .replace(/^\s*(?:#{1,6}|>|[-*+]|\d+[.)])\s+/, "")
+        .replace(/[*_`[\]]/g, "")
+        .trim(),
+    )
+    .join(" ");
 const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
 const plural = (n: number, noun: string) => `${String(n)} ${noun}${n === 1 ? "" : "s"}`;
 const samePath = (a: readonly string[] | null, b: readonly string[]) =>
@@ -383,7 +396,12 @@ export function MapView({
         const t = threads.find((x) => x.id === p.thread);
         if (!part || !t) continue;
         const eid = `p:${p.thread}`;
-        const firstLine = clip(plainLine(part.proposed.replace(/^#{1,6}[ \t].*\n?/, "")), 46);
+        const body = (t: string) => t.replace(/^#{1,6}[ \t].*\n?/, "");
+        // The change itself ("£5 → £2.99"), not the section's opening words (17.2).
+        const firstLine = changeSummary(
+          plainText(body(docText().slice(s.ownRange.from, s.ownRange.to))),
+          plainText(body(part.proposed)),
+        );
         // Under its thread when the thread is on this section; else under the section it edits.
         const under = samePath(t.path, s.path) ? `t:${t.id}` : id;
         nodes.push({
@@ -1264,26 +1282,40 @@ export function MapView({
           </div>
         );
       })()}
-      <div className="map-legend" aria-hidden="true">
-        <span>
-          <i className="map-key section" /> Section
-        </span>
-        <span>
-          <i className="map-key thread" /> Thread
-        </span>
-        <span>
-          <i className="map-key preview" /> Thread with a preview
-        </span>
-        <span>
-          <i className="map-key option" /> Option
-        </span>
-        <span>
-          <i className="map-key edit" /> Proposed edit
-        </span>
-        <span>
-          <i className="map-key link" /> Link
-        </span>
-      </div>
+      {(() => {
+        // Only the marks on this map (17.1); before any thread, what will appear.
+        const has = (k: Box["kind"]) => boxes.some((b) => b.kind === k);
+        const withPreview = boxes.some(
+          (b) => b.kind === "thread" && b.thread && previewed.has(b.thread.id),
+        );
+        const keys = [
+          { cls: "section", label: "Section", on: true },
+          {
+            cls: "thread",
+            label: "Thread",
+            on: boxes.some((b) => b.kind === "thread" && !(b.thread && previewed.has(b.thread.id))),
+          },
+          { cls: "preview", label: "Thread with a preview", on: withPreview },
+          { cls: "option", label: "Option", on: has("option") },
+          { cls: "edit", label: "Proposed edit", on: has("edit") },
+          { cls: "link", label: "Link", on: has("link") },
+        ].filter((k) => k.on);
+        if (!has("thread"))
+          return (
+            <div className="map-legend map-hint">
+              Ask on a section and its thread appears here, under it.
+            </div>
+          );
+        return (
+          <div className="map-legend" aria-hidden="true">
+            {keys.map((k) => (
+              <span key={k.cls}>
+                <i className={`map-key ${k.cls}`} /> {k.label}
+              </span>
+            ))}
+          </div>
+        );
+      })()}
       <div className="map-tools">
         <button
           type="button"

@@ -1,4 +1,4 @@
-import { EditorState, type TransactionSpec } from "@codemirror/state";
+import { EditorSelection, EditorState, type TransactionSpec } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { bodyRange, putOption, renameSection, sectionNow } from "./section-range.ts";
 import { markdownSupport, sectionsOf } from "./sections.ts";
@@ -95,5 +95,67 @@ describe("a picked option", () => {
         "On the 1st.\n\n### Smart retry\n\nRetry when the card is likely to pass.\n\n## Next",
       ),
     );
+  });
+});
+
+describe("Use this keeps the cursor in the thread's section (17.4)", () => {
+  const doc =
+    "# Plan\n\n## Pricing\n\nThe plan costs £5.\nPaid monthly.\n\n## Risks\n\nThe host.\n";
+  const sectionAt = (st: EditorState, pos: number) =>
+    sectionsOf(st, "doc.md")
+      .sections.filter((x) => x.ownRange.from <= pos && pos < x.ownRange.to)
+      .at(-1)
+      ?.path.at(-1);
+  const each = (
+    use: (main: { state: EditorState; dispatch: (s: TransactionSpec) => void }) => void,
+  ) => {
+    const left: number[] = [];
+    for (let pos = doc.indexOf("## Pricing"); pos < doc.indexOf("## Risks"); pos++) {
+      let now = EditorState.create({
+        doc,
+        selection: EditorSelection.cursor(pos),
+        extensions: [markdownSupport()],
+      });
+      const main = {
+        get state() {
+          return now;
+        },
+        dispatch: (spec: TransactionSpec) => {
+          now = now.update(spec).state;
+        },
+      };
+      use(main);
+      if (sectionAt(now, now.selection.main.head) !== "Pricing") left.push(pos);
+    }
+    return left;
+  };
+
+  it("for an option, wherever the cursor was", () => {
+    expect(
+      each((main) => {
+        putOption(
+          main,
+          "doc.md",
+          section(doc, "Pricing"),
+          { title: "x", text: "£2.99." },
+          "replace",
+        );
+      }),
+    ).toEqual([]);
+  });
+
+  it("for a proposed edit, which replaces the whole section", () => {
+    expect(
+      each((main) => {
+        const s = section(doc, "Pricing");
+        main.dispatch({
+          changes: {
+            from: s.subtreeRange.from,
+            to: s.subtreeRange.to,
+            insert: "## Pricing\n\nThe plan costs £2.99.\n\n",
+          },
+        });
+      }),
+    ).toEqual([]);
   });
 });
