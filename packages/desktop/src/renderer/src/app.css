@@ -2645,3 +2645,13 @@ body.resizing * {
 .skill-card-actions .think-more {
   align-self: center;
 }
+
+.think-title[contenteditable="plaintext-only"] {
+  outline: none;
+  cursor: text;
+  border-radius: 4px;
+}
+
+.think-title[contenteditable="plaintext-only"]:hover {
+  background: var(--hover);
+}

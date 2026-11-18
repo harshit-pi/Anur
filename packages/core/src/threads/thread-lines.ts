@@ -159,6 +159,12 @@ export const AutoUndoneLine = LineEnvelope.extend({
   used: z.string().min(1),
 });
 
+/** The person renamed the thread; the latest name wins. */
+export const RenamedLine = LineEnvelope.extend({
+  kind: z.literal("renamed"),
+  title: z.string().min(1).max(200),
+});
+
 /** The person chose to explore an option before picking: the thread digs into it. */
 export const OptionExploredLine = LineEnvelope.extend({
   kind: z.literal("option-explored"),
@@ -179,6 +185,7 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   InputRemovedLine,
   AutoUsedLine,
   AutoUndoneLine,
+  RenamedLine,
 ]);
 export type KnownThreadLine = z.infer<typeof KnownThreadLine>;
 
@@ -196,6 +203,7 @@ const KNOWN_KINDS = new Set([
   "input-removed",
   "auto-used",
   "auto-undone",
+  "renamed",
 ]);
 
 /** A kind added by a later version of format 1; kept as written. */

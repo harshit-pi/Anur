@@ -667,7 +667,41 @@ export function Think({
         ) : (
           <span className="think-where quiet">Its section is gone</span>
         )}
-        <h2 className="think-title">{thread.title}</h2>
+        <h2
+          className="think-title"
+          // Click to rename: the name shows here, in the list and on the map.
+          contentEditable={writable ? "plaintext-only" : false}
+          suppressContentEditableWarning
+          spellCheck={false}
+          title={writable ? "Click to rename" : undefined}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
+            if (e.key === "Escape") {
+              e.currentTarget.textContent = thread.title;
+              e.currentTarget.blur();
+            }
+          }}
+          onBlur={(e) => {
+            const name = e.currentTarget.textContent.replace(/\s+/g, " ").trim();
+            if (!name || !docPath) {
+              e.currentTarget.textContent = thread.title;
+              return;
+            }
+            if (name === thread.title) return;
+            setThreads((ts) => ts.map((t) => (t.id === thread.id ? { ...t, title: name } : t)));
+            void anur.call("thread:rename", {
+              thread: thread.id,
+              path: docPath,
+              text: docText(),
+              title: name,
+            });
+          }}
+        >
+          {thread.title}
+        </h2>
         {thread.tokens ? (
           <SizeMeter
             tokens={thread.tokens}

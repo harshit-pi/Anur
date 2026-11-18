@@ -453,7 +453,8 @@ export class Threads {
       id: thread,
       section: start.section,
       path: index >= 0 ? (at.tree.sections[index]?.path ?? null) : null,
-      title: start.title,
+      // The person's own name for it, if they gave one; else its first message.
+      title: lines.findLast((l) => l.kind === "renamed")?.title ?? start.title,
       closed,
       busy: Boolean(live?.turn),
       reads,
@@ -1485,6 +1486,17 @@ export class Threads {
     return thread;
   }
 
+  /** The person renamed a thread: in Think, its list and on the map. */
+  async rename(rel: string, text: string, thread: string, title: string): Promise<boolean> {
+    const own = await this.docOfThread(thread);
+    const name = title.replace(/\s+/g, " ").trim().slice(0, 200);
+    if (!own || !name) return false;
+    await this.append(own, thread, { kind: "renamed", title: name });
+    const live = this.live.get(thread);
+    await this.refresh(live?.rel ?? rel, live?.docText ?? text, thread);
+    return true;
+  }
+
   // ---- Edits used as they land (Settings, Agent) ----
 
   /** The doc a thread belongs to: its live one, else the doc whose threads hold it. */
@@ -1655,6 +1667,7 @@ const KNOWN = new Set([
   "input-removed",
   "auto-used",
   "auto-undone",
+  "renamed",
 ]);
 
 /**

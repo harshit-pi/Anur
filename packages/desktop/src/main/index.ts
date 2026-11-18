@@ -557,6 +557,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
       autoApply: appSettings.get().autoApply,
     };
   },
+  "thread:rename": async ({ thread, path: rel, text, title }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    return { ok: t ? await t.rename(rel, text, thread, title) : false };
+  },
   "thread:auto-undo": async ({ thread, id }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;

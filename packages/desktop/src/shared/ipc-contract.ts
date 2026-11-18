@@ -346,6 +346,18 @@ export const ipcContract = {
       autoApply: z.boolean(),
     }),
   },
+  /** Rename a thread, so the person can tell it apart in Think and on the map. */
+  "thread:rename": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        path: z.string().max(4096),
+        text: z.string(),
+        title: z.string().max(400),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Take back an edit used as it landed, from its note in the thread. */
   "thread:auto-undo": {
     request: z.object({ thread: z.string().max(200), id: z.string().max(100) }).strict(),
