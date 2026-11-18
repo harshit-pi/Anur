@@ -2104,6 +2104,21 @@ body.resizing * {
   background: var(--amber);
 }
 
+.map-rename {
+  flex: 1;
+  min-width: 0;
+  margin: -2px -4px;
+  padding: 1px 4px;
+  border: 1px solid var(--blue);
+  border-radius: 4px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  box-shadow: 0 0 0 3px var(--blue-wash);
+  outline: none;
+}
+
 .map-add {
   position: absolute;
   transform: translate(-50%, -50%);
