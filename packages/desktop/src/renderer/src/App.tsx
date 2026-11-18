@@ -850,6 +850,8 @@ export function App() {
         map={
           centerView === "map" && doc && !holding && doc.path === selected && sections ? (
             <MapView
+              // A fresh map for each doc: its own framing, positions and history.
+              key={doc.path}
               docPath={doc.path}
               tree={sections}
               docText={docText}
