@@ -17,6 +17,7 @@ import { anur } from "../bridge.ts";
 import { CloseIcon } from "../regions/Icons.tsx";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { pagePath } from "./bases/base-widget.ts";
+import { pageUpdates } from "./page-updates.ts";
 import { imagePasteDrop, imageSelection } from "./images/image-widget.ts";
 import { formattingKeymap } from "./commands.ts";
 import { insertMenu } from "./insert-menu.ts";
@@ -382,6 +383,7 @@ export function Page({
             : []),
           EditorView.contentAttributes.of({ "aria-label": `Page: ${fileName}` }),
           EditorView.updateListener.of((u) => {
+            for (const listen of pageUpdates) listen(u);
             if (u.selectionSet || u.docChanged) onCursorRef.current?.(u.state.selection.main.head);
             if (!u.docChanged) return;
             saver?.changed();

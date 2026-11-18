@@ -62,3 +62,10 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - The page stays mounted under the map, so a section added on the map goes through the editor like typing, with Undo.
 - A box is always a section: a box drawn from another's handle is a subsection of it. An arrow dropped on another box is a link, `[[#Heading]]` at the end of the source's text, so the file holds it and the map draws every same-doc link as an arrow.
 - Delete on the map removes the section with everything under it. ⌘Z on the map undoes the map's own steps in order: box moves are kept by the map, edits to the file are undone through the page's history.
+
+## Writing in Think
+
+- Think's section text is a second CodeMirror view of the page, not a copy: each keystroke is forwarded to the page as an edit at the section's place, so the page stays the only writer of the file, and ⌘Z there undoes in the page's one history.
+- Edits made on the page, by Apply or by undo show in Think as they land; the section's place is mapped through each page change and taken again from the parse when the outline refreshes.
+- The heading is edited in place too; only its words change, never its level or marks.
+- It looks as the read-only text did: no box, no white field.

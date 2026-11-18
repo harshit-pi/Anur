@@ -109,6 +109,7 @@ export function App() {
   const view = useRef<EditorView | null>(null);
   /** The page's text as it stands, for threads: unsaved typing included. */
   const docText = useCallback(() => view.current?.state.doc.toString() ?? "", []);
+  const pageView = useCallback(() => view.current, []);
   const onView = useCallback((v: EditorView | null) => {
     view.current = v;
     // Check runs only: a probe can set a selection exactly as a mouse would.
@@ -802,6 +803,7 @@ export function App() {
             writable={folder?.mode === "writable" && doc?.mode === "editable"}
             request={threadRequest}
             onJump={jumpTo}
+            page={pageView}
           />
         }
       />

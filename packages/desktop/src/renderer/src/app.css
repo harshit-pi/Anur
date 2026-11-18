@@ -1501,9 +1501,20 @@ body.resizing * {
   mask-image: linear-gradient(to bottom, #000 70%, transparent);
 }
 
-.think-text.open {
+.think-text.open,
+.think-text:focus-within {
   max-height: none;
   mask-image: none;
+}
+
+/* The section's text and name are editable in place, with no field drawn around them. */
+.think-text .cm-editor {
+  cursor: text;
+}
+
+.think-section[contenteditable="plaintext-only"] {
+  outline: none;
+  cursor: text;
 }
 
 .think-text p,
