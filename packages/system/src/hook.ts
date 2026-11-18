@@ -6,6 +6,7 @@
  */
 import { rmSync } from "node:fs";
 import path from "node:path";
+import { CHOICES_ASK, choicesIn, lastReply } from "./choices.ts";
 import { scanSystem } from "./system.ts";
 import {
   folderFor,
@@ -28,7 +29,8 @@ export type HookInput = {
 
 export type HookResult =
   | { kind: "skipped"; why: string }
-  | { kind: "marked"; folder: string }
+  /** `context` goes back to Claude Code as the prompt's additional context. */
+  | { kind: "marked"; folder: string; context: string }
   | { kind: "nothing"; folder: string }
   | { kind: "reported"; folder: string; report: TaskReport; file: string };
 
@@ -40,7 +42,7 @@ export function handleHook(input: HookInput, folderOverride?: string): HookResul
   const session = input.session_id ?? "session";
   if (input.hook_event_name === "UserPromptSubmit") {
     saveMark(folder, markTask(folder, session, input.prompt ?? ""));
-    return { kind: "marked", folder };
+    return { kind: "marked", folder, context: CHOICES_ASK };
   }
   if (input.hook_event_name === "Stop") {
     const mark = readMark(folder, session);
@@ -51,6 +53,7 @@ export function handleHook(input: HookInput, folderOverride?: string): HookResul
       force: true,
     });
     if (!report) return { kind: "nothing", folder };
+    if (input.transcript_path) report.choices = choicesIn(lastReply(input.transcript_path));
     return { kind: "reported", folder, report, file: saveReport(folder, report) };
   }
   return { kind: "skipped", why: `not a task boundary: ${input.hook_event_name ?? "none"}` };

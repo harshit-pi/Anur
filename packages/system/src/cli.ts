@@ -20,6 +20,16 @@ if (cmd === "hook") {
     const at = args.indexOf("--folder");
     const result = handleHook(input, at >= 0 ? args[at + 1] : undefined);
     if (result.kind === "reported") process.stderr.write(`anur: task report ${result.file}\n`);
+    // Claude Code reads this from stdout and adds it to the prompt's context.
+    if (result.kind === "marked")
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "UserPromptSubmit",
+            additionalContext: result.context,
+          },
+        }),
+      );
   } catch (e) {
     process.stderr.write(`anur: ${e instanceof Error ? e.message : String(e)}\n`);
   }

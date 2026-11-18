@@ -422,6 +422,54 @@ function StoragePane({ folder }: { folder: FolderState | null }) {
   );
 }
 
+/**
+ * The task hooks in Claude Code (group 21): Anur's own plugin, added on the
+ * person's click, that reports what each task changed in folders opened here.
+ */
+function TaskHooksRow() {
+  const [s, setS] = useState<{ claude: boolean; added: boolean; current: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    void anur.call("taskHooks:status", {}).then(setS);
+  }, [n]);
+  if (!s) return null;
+  const act = (action: "add" | "remove") => {
+    setBusy(true);
+    setNote(null);
+    void anur.call("taskHooks:act", { action }).then((r) => {
+      setBusy(false);
+      if (r.kind === "failed") setNote(r.reason);
+      setN((x) => x + 1);
+    });
+  };
+  const detail = !s.claude
+    ? "Claude Code isn't installed on this computer."
+    : s.added
+      ? "Added to Claude Code. After each task in a folder opened in Anur, a report of what it changed across the repos. Elsewhere it does nothing."
+      : "Adds Anur's plugin to Claude Code: after each task in a folder opened in Anur, a report of what it changed across the repos, ranked. Elsewhere it does nothing.";
+  return (
+    <>
+      <Row title="Task reports in Claude Code" detail={detail}>
+        {s.claude ? (
+          <button
+            type="button"
+            className="settings-button"
+            disabled={busy}
+            onClick={() => {
+              act(s.added ? "remove" : "add");
+            }}
+          >
+            {busy ? "Working…" : s.added ? "Remove" : "Add to Claude Code"}
+          </button>
+        ) : null}
+      </Row>
+      {note ? <p className="settings-row-detail">{note}</p> : null}
+    </>
+  );
+}
+
 /** Plugins Anur ships, each with a switch for this window's folder (19.4). */
 function PluginRows({ folder }: { folder: FolderState | null }) {
   const [list, setList] = useState<{ id: string; name: string; what: string; on: boolean }[]>([]);
@@ -454,6 +502,7 @@ function PluginRows({ folder }: { folder: FolderState | null }) {
           />
         </Row>
       ))}
+      {list.some((p) => p.id === "engineering") ? <TaskHooksRow /> : null}
       {note ? <p className="settings-row-detail">{note}</p> : null}
     </>
   );

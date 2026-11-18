@@ -51,3 +51,4 @@ export {
   type TaskMark,
   type TaskReport,
 } from "./tasks.ts";
+export { CHOICES_ASK, choicesIn, lastReply } from "./choices.ts";

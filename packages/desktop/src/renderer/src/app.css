@@ -1966,6 +1966,154 @@ body.resizing * {
   box-shadow: 0 2px 12px var(--shadow);
 }
 
+/* The task tab (21.3): the change report first, three lines before "more". */
+.task-view {
+  height: 100%;
+  overflow: auto;
+  padding: 32px 48px;
+  font-family: var(--font-ui);
+  color: var(--ink);
+}
+
+.task-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.task-meta {
+  margin: 4px 0 20px;
+  color: var(--graphite);
+  font-size: 13px;
+}
+
+.report {
+  border-top: 1px solid var(--rule);
+}
+
+.report-row {
+  display: grid;
+  grid-template-columns: 110px 1fr auto;
+  gap: 14px;
+  align-items: baseline;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 14px;
+}
+
+.report-label {
+  color: var(--slate);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.report-label.data,
+.report-label.auth {
+  color: var(--ink);
+}
+
+.report-label.choice {
+  color: var(--blue);
+}
+
+.report-what {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.report-what.choice {
+  font-family: var(--font-pen);
+  font-style: italic;
+}
+
+.report-what.choice code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
+  font-style: normal;
+}
+
+.report-how {
+  color: var(--graphite);
+}
+
+.report-text {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--slate);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-cite {
+  color: var(--graphite);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+.report-more {
+  margin-top: 10px;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.report-more .quiet {
+  font-weight: 400;
+}
+
+.task-foot {
+  margin-top: 28px;
+  font-size: 13px;
+}
+
+/* Recent tasks atop the system tab. */
+.system-tasks {
+  margin-bottom: 20px;
+}
+
+.system-tasks h2 {
+  margin: 0 0 8px;
+  color: var(--graphite);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.system-task {
+  display: flex;
+  width: 100%;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.system-task:hover,
+.system-task:focus-visible {
+  border-color: var(--blue);
+}
+
+.system-task .quiet {
+  margin-left: auto;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 /* The system tab (group 20): repos, then groups, then parts, one level per click. */
 .system-view {
   height: 100%;

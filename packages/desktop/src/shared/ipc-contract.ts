@@ -66,6 +66,30 @@ export const MenuEntry: z.ZodType<MenuEntry, MenuEntry> = z.lazy(() =>
 );
 
 /** Whether threads can run, and why not (Architecture, "When the agent is not connected"). */
+/** A task's change report (group 21), as `@anur/system` writes it. */
+export const TaskReportView = z.object({
+  id: z.string(),
+  session: z.string(),
+  prompt: z.string(),
+  startedAt: z.string(),
+  endedAt: z.string(),
+  repos: z.array(
+    z.object({ dir: z.string(), from: z.string().nullable(), to: z.string().nullable() }),
+  ),
+  lines: z.array(
+    z.object({
+      category: z.enum(["data", "auth", "calls", "ui", "other"]),
+      repo: z.string(),
+      part: z.string().nullable(),
+      file: z.string(),
+      line: z.number().nullable(),
+      text: z.string(),
+      how: z.enum(["added", "changed", "deleted"]),
+    }),
+  ),
+  choices: z.array(z.string()),
+});
+
 export const AgentStatus = z.object({
   /** Which agent this is about. */
   id: AgentIdSchema,
@@ -1334,6 +1358,29 @@ export const ipcContract = {
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
+  /** The folder's task reports from Claude Code, newest first (group 21). */
+  "tasks:list": {
+    request: z.object({}).strict(),
+    response: z.object({ reports: z.array(TaskReportView) }),
+  },
+  /** One task report, for its tab. */
+  "tasks:get": {
+    request: z.object({ id: z.string().max(200) }).strict(),
+    response: z.object({ report: TaskReportView.nullable() }),
+  },
+  /** The `anur` plugin's task hooks in the person's Claude Code (group 21). */
+  "taskHooks:status": {
+    request: z.object({}).strict(),
+    response: z.object({ claude: z.boolean(), added: z.boolean(), current: z.boolean() }),
+  },
+  /** Add the task hooks to Claude Code, or remove them. */
+  "taskHooks:act": {
+    request: z.object({ action: z.enum(["add", "remove"]) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("done") }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
   /** Stop the thread's running turn. */
   "thread:stop": {
     request: z.object({ thread: z.string().max(200) }).strict(),
@@ -1416,6 +1463,8 @@ export const ipcEvents = {
   }),
   /** Insert in the menu bar: put this block where the page's cursor is. */
   "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
+  /** A task report arrived in the window's folder (group 21). */
+  "tasks:changed": z.object({}),
   /** The folder's repos changed on disk: the system tab reads them again (20.8). */
   "system:changed": z.object({}),
   /** The agent connected, or couldn't, and why. */
