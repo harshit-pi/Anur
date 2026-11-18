@@ -1,4 +1,3 @@
-import { formatTokens } from "../layout/tokens.ts";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
@@ -701,12 +700,12 @@ export function StatusBar({
         </button>
       ) : null}
       {threads ? (
-        <span className="status-item" title="Tokens from the agent's usage reports">
+        <span className="status-item">
           {threads.count === 0
             ? "No threads"
-            : `${threads.count === 1 ? "1 thread" : `${String(threads.count)} threads`}${
-                threads.tokens > 0 ? `, ${formatTokens(threads.tokens)} tokens` : ""
-              }`}
+            : threads.count === 1
+              ? "1 thread"
+              : `${String(threads.count)} threads`}
         </span>
       ) : null}
       {version ? <span className="status-item quiet">Anur {version}</span> : null}

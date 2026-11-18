@@ -3284,3 +3284,24 @@ body.resizing * {
   padding-top: 6px;
   font-size: 13px;
 }
+
+/* How full a thread's context is (as in Claude's apps): a ring by the pickers. */
+.think-ring {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  cursor: default;
+}
+
+.think-ring-track {
+  fill: none;
+  stroke: var(--rule);
+  stroke-width: 2.5;
+}
+
+.think-ring-fill {
+  fill: none;
+  stroke: var(--blue);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
