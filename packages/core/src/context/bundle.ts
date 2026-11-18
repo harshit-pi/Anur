@@ -90,7 +90,7 @@ export type BundleInput = {
    * its path in the folder and its text. What fits the budget left after
    * the doc goes in; the rest are named as left out, farthest first.
    */
-  linked?: readonly { label: string; path: string; text: string }[];
+  linked?: readonly { label: string; path: string; text: string; nameOnly?: boolean }[];
   /** Links in this section that go nowhere, as written: "Spec#Plans". */
   broken?: readonly string[];
 };
@@ -256,7 +256,7 @@ export function buildBundle({
   let used = parts.reduce((n, p) => n + p.text.length, 0);
   const leftOut: { label: string; path: string }[] = [];
   for (const l of linked) {
-    if (used + l.text.length <= budget) {
+    if (!l.nameOnly && used + l.text.length <= budget) {
       parts.push({ kind: "linked", label: l.label, detail: "linked, its text", text: l.text });
       used += l.text.length;
     } else leftOut.push(l);
@@ -309,9 +309,9 @@ export function buildBundle({
   }
   if (leftOut.length > 0)
     lines.push(
-      "## Linked, but left out for size",
+      "## Linked, not included",
       "",
-      "This section links to these too; they didn't fit. Read any you need with your own Read tool.",
+      "This section links to these too; they were left out to keep this short. Read any you need with your own Read tool.",
       "",
       ...leftOut.map((l) => `- ${l.label}: \`${l.path}\``),
       "",

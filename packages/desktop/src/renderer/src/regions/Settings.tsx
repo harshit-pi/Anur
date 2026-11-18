@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { FolderState } from "../../../shared/ipc-contract.ts";
+import type { FolderState, UpdateState } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import type { AgentStatus } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
@@ -72,6 +72,70 @@ function Row({
       </div>
       {children}
     </div>
+  );
+}
+
+/** Where updates stand, with Check now, Download or Restart, and the automatic switch. */
+function UpdateRows() {
+  const [s, setS] = useState<{ state: UpdateState; version: string; auto: boolean } | null>(null);
+  useEffect(() => {
+    void anur.call("update:status", {}).then(setS);
+    return anur.on("app:update-state", (state) => {
+      setS((old) => (old ? { ...old, state } : old));
+    });
+  }, []);
+  if (!s) return null;
+  const { state, version, auto } = s;
+  const off = state.kind === "off";
+  const at = (iso: string) =>
+    new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const detail =
+    state.kind === "off"
+      ? "Anur Dev doesn't update itself. The Anur you install from the download link does."
+      : state.kind === "idle"
+        ? `Anur ${version} is up to date.${state.checkedAt ? ` Checked at ${at(state.checkedAt)}.` : ""}`
+        : state.kind === "checking"
+          ? "Checking for a new version…"
+          : state.kind === "available"
+            ? `Anur ${state.version} is available. You're on ${version}.`
+            : state.kind === "downloading"
+              ? `Downloading Anur ${state.version}… ${String(state.percent)}%`
+              : state.kind === "ready"
+                ? `Anur ${state.version} is ready. Restart to use it, or it installs when you quit.`
+                : `Couldn't check for updates: ${state.reason}.`;
+  const action =
+    state.kind === "idle" || state.kind === "error"
+      ? { label: "Check now", run: () => void anur.call("update:check", {}) }
+      : state.kind === "available"
+        ? { label: "Download", run: () => void anur.call("update:download", {}) }
+        : state.kind === "ready"
+          ? { label: "Restart", run: () => void anur.call("update:restart", {}) }
+          : null;
+  return (
+    <>
+      <Row title="Updates" detail={detail}>
+        {action ? (
+          <button type="button" className="settings-button" onClick={action.run}>
+            {action.label}
+          </button>
+        ) : null}
+      </Row>
+      <Row
+        title="Install updates automatically"
+        detail="New versions download in the background and install when you quit or restart. Off, Anur only tells you one is available."
+      >
+        <Switch
+          on={auto}
+          label="Install updates automatically"
+          disabled={off}
+          onChange={(on) => {
+            void anur.call("update:set-auto", { auto: on }).then((r) => {
+              setS((old) => (old ? { ...old, auto: r.auto } : old));
+            });
+          }}
+        />
+      </Row>
+    </>
   );
 }
 
@@ -260,6 +324,7 @@ export function Settings({
                 {folder ? "Open another folder…" : "Open a folder…"}
               </button>
             </Row>
+            <UpdateRows />
             <OpenerRow />
             <Row
               title="Tour"

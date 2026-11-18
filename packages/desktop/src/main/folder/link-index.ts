@@ -107,8 +107,10 @@ export class LinkIndex {
   }
 
   /**
-   * The links written in one section of a doc and its subsections, in
-   * reading order; `text` is the open doc's text, when it is open.
+   * The links written in one section's own text, in reading order; not its
+   * subsections', which have their own threads, so a doc's title doesn't
+   * gather every link in the doc, "Related" lists included. `text` is the
+   * open doc's text, when it is open.
    */
   async linksOut(
     rel: string,
@@ -120,7 +122,8 @@ export class LinkIndex {
       text !== undefined
         ? this.linksOf(rel, buildSectionTree(text, { fileName: path.basename(rel) }))
         : (this.entries.get(rel)?.links ?? []);
-    return links.filter((l) => startsWith(l.from.path, sectionPath));
+    const want = sectionPath.join("\u0000");
+    return links.filter((l) => l.from.path.join("\u0000") === want);
   }
 
   /**
@@ -133,15 +136,25 @@ export class LinkIndex {
     const wanted = sectionPath.join("\u0000");
     const isTitle = sectionPath.length <= 1;
     const out: IndexedLink[] = [];
+    const seen = new Set<string>();
     for (const e of this.entries.values())
       for (const l of e.links) {
+        // Each linking section once, however many times it links here.
+        const from = `${l.from.doc}\u0000${l.from.path.join("\u0000")}`;
+        if (seen.has(from)) continue;
         if (l.doc !== rel || (l.from.doc === rel && startsWith(l.from.path, sectionPath))) continue;
         if (l.heading === null) {
-          if (isTitle) out.push(l);
+          if (isTitle) {
+            seen.add(from);
+            out.push(l);
+          }
           continue;
         }
         const at = resolveHeading(sections, l.heading);
-        if (at !== null && sections[at]?.path.join("\u0000") === wanted) out.push(l);
+        if (at !== null && sections[at]?.path.join("\u0000") === wanted) {
+          seen.add(from);
+          out.push(l);
+        }
       }
     return out;
   }

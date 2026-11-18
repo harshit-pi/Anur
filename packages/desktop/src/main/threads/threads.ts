@@ -130,7 +130,7 @@ type Live = {
   created?: Map<string, string>;
   /** The sections this thread's section links to in other docs, for its bundle (group 8). */
   linked?: {
-    linked: { label: string; path: string; text: string }[];
+    linked: { label: string; path: string; text: string; nameOnly?: boolean }[];
     broken: string[];
   };
   /** Files this thread wrote, as absolute paths: reading them back isn't an input. */
@@ -1359,12 +1359,15 @@ export class Threads {
     section: SectionId,
     rel: string,
     text: string,
-  ): Promise<{ linked: { label: string; path: string; text: string }[]; broken: string[] }> {
+  ): Promise<{
+    linked: { label: string; path: string; text: string; nameOnly?: boolean }[];
+    broken: string[];
+  }> {
     const index = at.ids.indexOf(section);
     const node = at.tree.sections[index];
     if (!node) return { linked: [], broken: [] };
     const out = await this.links.linksOut(rel, node.path, text);
-    const linked: { label: string; path: string; text: string }[] = [];
+    const linked: { label: string; path: string; text: string; nameOnly?: boolean }[] = [];
     const broken: string[] = [];
     const seen = new Set<string>();
     for (const l of out) {

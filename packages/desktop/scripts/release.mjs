@@ -11,7 +11,8 @@
  *   aws sso login --profile aws-anur
  */
 import { execFileSync } from "node:child_process";
-import { readdirSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Arch, Platform, build } from "electron-builder";
 
@@ -88,7 +89,18 @@ await build({
       gatekeeperAssess: false,
       notarize: true,
     },
-    dmg: { title: "Anur ${version}" },
+    // The DMG is signed too: Gatekeeper rejects an unsigned one on some Macs.
+    dmg: {
+      title: "Anur ${version}",
+      sign: true,
+      // Finder shows its toolbar and path bar on disk images now, so the icons
+      // sit centred in what's left of the 540 × 380 window, not in all of it.
+      window: { width: 540, height: 380 },
+      contents: [
+        { x: 140, y: 140, type: "file" },
+        { x: 400, y: 140, type: "link", path: "/Applications" },
+      ],
+    },
   },
 });
 
@@ -113,6 +125,26 @@ const appPath = path.join(dist, "mac-universal", "Anur.app");
 run("codesign", ["--verify", "--deep", "--strict", appPath]);
 run("spctl", ["--assess", "--type", "execute", "--verbose", appPath]);
 run("xcrun", ["stapler", "validate", path.join(dist, dmg)]);
+run("spctl", [
+  "--assess",
+  "--type",
+  "open",
+  "--context",
+  "context:primary-signature",
+  "--verbose",
+  path.join(dist, dmg),
+]);
+// Stapling changed the DMG, so the feed's size and checksum for it are redone.
+const feedFile = path.join(dist, "latest-mac.yml");
+const dmgBytes = readFileSync(path.join(dist, dmg));
+const sha = createHash("sha512").update(dmgBytes).digest("base64");
+writeFileSync(
+  feedFile,
+  readFileSync(feedFile, "utf8").replace(
+    new RegExp(String.raw`(- url: ${dmg.replaceAll(".", "\\.")}\n\s+sha512: )\S+(\n\s+size: )\d+`),
+    `$1${sha}$2${String(dmgBytes.length)}`,
+  ),
+);
 
 // 5. Up to S3: versioned files kept for good, the stable names short-lived.
 step("Upload");
