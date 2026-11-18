@@ -24,14 +24,39 @@ async function hostFor(folder: string, plugins: string[]): Promise<PluginHost> {
   return host;
 }
 
-/** Sections from every source that applies to the folder. */
+/** Each folder's watchers, by source, started the first time it is read. */
+const watching = new Map<string, Map<string, () => void>>();
+
+/**
+ * Sections from every source that applies to the folder. Each source that
+ * watches starts once, and `onChange` says the folder should be read again.
+ */
 export async function sectionsFor(
   folder: string,
   plugins: string[],
+  onChange: (folder: string) => void = () => undefined,
 ): Promise<{ id: string; sections: SourcedSection[] }[]> {
   const host = await hostFor(folder, plugins);
+  const sources = host.sectionSources();
+  const stops = watching.get(folder) ?? new Map<string, () => void>();
+  watching.set(folder, stops);
+  // A source whose plugin was switched off stops watching.
+  for (const [id, stop] of stops)
+    if (!sources.some((s) => s.id === id)) {
+      stop();
+      stops.delete(id);
+    }
   const out: { id: string; sections: SourcedSection[] }[] = [];
-  for (const s of host.sectionSources())
-    if (await s.applies(folder)) out.push({ id: s.id, sections: await s.sections(folder) });
+  for (const s of sources) {
+    if (!(await s.applies(folder))) continue;
+    out.push({ id: s.id, sections: await s.sections(folder) });
+    if (s.watch && !stops.has(s.id))
+      stops.set(
+        s.id,
+        s.watch(folder, () => {
+          onChange(folder);
+        }),
+      );
+  }
   return out;
 }

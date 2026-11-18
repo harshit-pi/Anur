@@ -25,6 +25,8 @@ export function SystemView({ onPlugins }: { onPlugins: () => void }) {
   }, []);
   useEffect(() => {
     read();
+    // A build file changed in one of the repos: read again (20.8).
+    return anur.on("system:changed", read);
   }, [read]);
 
   if (shown.kind === "reading") return <div className="system-view quiet">Reading the repos…</div>;

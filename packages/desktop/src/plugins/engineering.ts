@@ -1,5 +1,5 @@
 import { API_VERSION, type Plugin, type SourcedSection } from "@anur/core";
-import { findRepoDirs, groupParts, scanSystem, type PartGroup } from "@anur/system";
+import { findRepoDirs, groupParts, scanSystem, watchSystem, type PartGroup } from "@anur/system";
 
 /**
  * The engineering plugin (Design - Engineering Plugin): a system across
@@ -31,6 +31,8 @@ export const engineering: Plugin = {
       id: "system",
       applies: (folder) => Promise.resolve(findRepoDirs(folder).length > 0),
       sections: (folder) => Promise.resolve(systemSections(folder)),
+      // One watcher per repo (20.8): a build file's change reads the system again.
+      watch: (folder, onChange) => watchSystem(folder, onChange),
     });
   },
 };

@@ -58,6 +58,8 @@ export type SectionSource = {
   /** Whether this source has sections in the folder at all. */
   applies(folder: string): Promise<boolean>;
   sections(folder: string): Promise<SourcedSection[]>;
+  /** Calls `onChange` when the folder's sections may have changed; returns a stop. */
+  watch?(folder: string, onChange: () => void): () => void;
 };
 
 export type Edge = {
