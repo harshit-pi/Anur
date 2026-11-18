@@ -167,8 +167,8 @@ Engineering decisions made while building Anur, newest first, each with why. The
 
 ## Change sets (group 9)
 
-- A thread whose edits touch more than one section or doc shows them as one change set: "3 edits in 2 docs", each opening where it is, with Use all.
-- Use all uses the open doc's edits through its page, one by one, then every other doc's in its file, doc by doc. What clashed with the text stays a proposal and is named. One "Used all" note in the thread holds one Undo.
+- A thread whose edits touch more than one section or doc shows one bar at the foot of the chat, above the reply box: "3 edits in Plan", with Use all 3. Each edit has its own card above it. With "as they land" on, the bar counts only edits kept as proposals, and a line above the reply box says edits apply as they land, with a Change link to Settings.
+- Use all uses the open doc's edits through its page, going round again while any lands (an edit to a section and one to its subsections overlap), then every other doc's in its file, doc by doc. What clashed with the text stays a proposal and is named. One "Used all" note in the thread holds one Undo; it is one short line ("Used 5 edits in Plan"), and earlier ones fold to a link.
 - Undo goes back by a three-way merge per doc, so typing made since stays; the open doc goes back through its page, so ⌘Z covers it. A doc that clashes is named and left for its History.
 - A new doc an agent makes is kept with Undo (15.6) rather than shown as a new-doc preview.
 - The working line under a thread's steps gives only the time; the steps line already names the step.

@@ -3377,14 +3377,46 @@ body.resizing * {
   text-decoration: line-through;
 }
 
-/* A thread's change set (9.3): its edits across sections and docs, used together. */
-.think-changeset ul {
+/* A thread's change set (9.3): one bar at the foot of the chat, above the reply box. */
+.think-changeset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--amber);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.think-changeset-text {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 6px 0 8px;
-  padding: 0;
-  list-style: none;
+}
+
+.think-changeset-text .quiet {
+  color: var(--graphite);
+}
+
+.think-changed.compact {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+}
+
+.think-earlier {
+  align-self: flex-start;
+  font-size: 11px;
+}
+
+/* Says when agents' edits apply as they land, above the reply box. */
+.think-state {
+  margin: 0;
+  font-size: 11px;
+  color: var(--graphite);
 }
 
 /* The right panel: Think scrolls; a section's context and history fold at its foot. */

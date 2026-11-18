@@ -417,10 +417,21 @@ export function Page({
       const { thread } = (e as CustomEvent<{ thread: string }>).detail;
       void (async () => {
         const before = editor.state.doc.toString();
-        const mine = editor.state.field(previewState).previews.find((p) => p.thread === thread);
         const used: string[][] = [];
-        for (const part of mine?.parts ?? [])
-          if (await applyPreviewPart(thread, part, false, false, true)) used.push(part.path);
+        // Edits to a section and to its subsections overlap: one landing changes the text
+        // another was made against. So go round again over what is left, while any lands;
+        // each lands in one click, and only a real clash stays a proposal.
+        for (let pass = 0; pass < 8; pass++) {
+          const left =
+            editor.state.field(previewState).previews.find((p) => p.thread === thread)?.parts ?? [];
+          let landed = false;
+          for (const part of left)
+            if (await applyPreviewPart(thread, part, false, false, true)) {
+              used.push(part.path);
+              landed = true;
+            }
+          if (!landed) break;
+        }
         const after = editor.state.doc.toString();
         const r = await anur.call("thread:use-all", {
           thread,

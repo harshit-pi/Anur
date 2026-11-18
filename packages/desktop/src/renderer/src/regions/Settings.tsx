@@ -466,7 +466,11 @@ export function Settings({
   }, [main]);
 
   const change = (c: Partial<Omit<MainSettings, "commitAnur"> & { commitAnur: boolean }>) => {
-    void anur.call("settings:set", c).then(setMain);
+    void anur.call("settings:set", c).then((now) => {
+      setMain(now);
+      // The side chat shows whether edits apply as they land.
+      window.dispatchEvent(new CustomEvent("anur:settings-changed"));
+    });
   };
   const [pageFont, setPageFont] = useState<PageFont>(() => loadPageFont(window.localStorage));
   const pickPageFont = (f: PageFont) => {
