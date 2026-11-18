@@ -2394,3 +2394,8 @@ body.resizing * {
 .think-pickers .think-option:has(select:disabled) .think-pick {
   opacity: 0.6;
 }
+
+.think-tokens {
+  margin: -4px 0 0;
+  font-size: 12px;
+}

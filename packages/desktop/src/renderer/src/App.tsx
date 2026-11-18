@@ -543,6 +543,32 @@ export function App() {
     },
     [sections],
   );
+  /** The open doc's threads and their tokens, for the status bar (4.10). */
+  const [docThreads, setDocThreads] = useState<{ count: number; tokens: number } | null>(null);
+  const docPathNow = doc && sections ? doc.path : null;
+  useEffect(() => {
+    setDocThreads(null);
+    if (!docPathNow) return;
+    let current = true;
+    const load = () => {
+      void anur.call("thread:list", { path: docPathNow, text: docText() }).then((r) => {
+        if (!current) return;
+        const open = r.threads.filter((t) => !t.closed);
+        setDocThreads({
+          count: open.length,
+          tokens: r.threads.reduce((sum, t) => sum + (t.tokens?.used ?? 0), 0),
+        });
+      });
+    };
+    load();
+    const off = anur.on("thread:event", (e) => {
+      if (e.kind === "thread" && e.path === docPathNow) load();
+    });
+    return () => {
+      current = false;
+      off();
+    };
+  }, [docPathNow, docText]);
   // A link's heading: once its doc is open and parsed, scroll to it.
   useEffect(() => {
     // Wait until the page shows that doc: until then, the sections are the old doc's.
@@ -829,6 +855,7 @@ export function App() {
         onToggleSource={() => {
           setSource((s) => !s);
         }}
+        threads={docThreads}
       />
       {open.left ? (
         <Resizer
