@@ -251,3 +251,11 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - On the team's own `~/workspace`, 17 repos and 150 parts; the repos without parts are Amplify backends, scripts and docs, with no build file.
 - `anur-system scan <folder>` prints the system; `--json`, `--pin` and `--known <file>` are for the hook and CI.
 - The engineering plugin registers the system as a section source: repos as sections, parts beneath. Still to come in group 20: the system tab, where the model's proposed names are accepted and new parts show "unreviewed", and one watcher per repo.
+
+## Groups: one level at a time (group 20)
+
+- No level of the system shows more than twelve boxes where a rule can help. A repo with more parts gets groups between it and its parts, as anur-living-map opens its levels.
+- Groups come by rule from part names: tables, queues, storage, topics, keys and secrets, caches, monitoring, schedules, and services for the rest. A kind with one part joins services.
+- A group still above twelve splits by the word most of its parts share, then the next, plural or not; parts sharing no word go to "Other".
+- Groups are a view: a part's ID and path never change with them. The model's proposals (20.6) may rename or merge them, accepted by a person.
+- On the team's largest repo, 103 parts become eight groups; its biggest, services (37), opens to seven, of which "Other" still holds 13 for the model to name.

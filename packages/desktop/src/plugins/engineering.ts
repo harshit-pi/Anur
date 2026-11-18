@@ -1,5 +1,5 @@
 import { API_VERSION, type Plugin, type SourcedSection } from "@anur/core";
-import { findRepoDirs, scanSystem } from "@anur/system";
+import { findRepoDirs, groupParts, scanSystem, type PartGroup } from "@anur/system";
 
 /**
  * The engineering plugin (Design - Engineering Plugin): a system across
@@ -35,20 +35,48 @@ export const engineering: Plugin = {
   },
 };
 
-/** A folder's repos, each a section, with its parts as sections beneath it. */
+/**
+ * A folder's repos, each a section, with its parts beneath it. A repo with
+ * more than twelve parts puts groups between, by rule (`groupParts`), so the
+ * map opens one level at a time; a part's ID and path never change with them.
+ */
 export function systemSections(folder: string): SourcedSection[] {
   const scan = scanSystem(folder);
   const out: SourcedSection[] = [];
   for (const r of scan.repos) {
     const repoId = `repo:${r.id ?? r.dir}`;
     out.push({ id: repoId, path: [r.dir], text: r.github ?? "", parent: null });
-    for (const p of scan.parts.filter((x) => x.repo === r.dir))
+    const parts = scan.parts.filter((x) => x.repo === r.dir);
+    // Two parts may share a name; each is placed once, in order.
+    const left = [...parts];
+    const partSection = (name: string, parent: string) => {
+      const i = left.findIndex((x) => x.name === name);
+      if (i < 0) return;
+      const p = left.splice(i, 1)[0];
+      if (!p) return;
       out.push({
         id: `part:${p.id}`,
         path: [r.dir, p.name],
         text: `${p.kind} in ${p.file}`,
-        parent: repoId,
+        parent,
       });
+    };
+    const place = (groups: PartGroup[], parent: string, trail: string[]) => {
+      for (const g of groups) {
+        const id = `group:${r.id ?? r.dir}/${g.key}`;
+        out.push({
+          id,
+          path: [r.dir, ...trail, g.name],
+          text: `${String(g.parts.length)} parts, grouped by name`,
+          parent,
+        });
+        if (g.groups) place(g.groups, id, [...trail, g.name]);
+        else for (const n of g.parts) partSection(n, id);
+      }
+    };
+    const groups = groupParts(parts.map((p) => p.name));
+    if (groups) place(groups, repoId, []);
+    for (const p of [...left]) partSection(p.name, repoId);
   }
   return out;
 }

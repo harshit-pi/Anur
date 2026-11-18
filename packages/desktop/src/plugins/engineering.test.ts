@@ -34,3 +34,35 @@ describe("the engineering plugin's section source (group 20)", () => {
     expect(main.sectionSources()).toEqual([]);
   });
 });
+
+describe("a repo with many parts opens one level at a time (group 20)", () => {
+  it("puts groups between the repo and its parts, keeping every part's ID", async () => {
+    const { makeRepo } = await import("../../../system/src/fixtures.ts");
+    const dir = mkdtempSync(path.join(tmpdir(), "anur-eng-"));
+    const stacks = [
+      ...["Users", "Orders", "Wallets", "Banks"].map((n) => `${n}DynamoDBStack`),
+      ...["Trades", "Deposits", "Links"].map((n) => `${n}SQSStack`),
+      ...["Webhook", "Order", "Tax", "Forms", "Reports", "Alerts", "Ledger"].map(
+        (n) => `${n}Stack`,
+      ),
+    ];
+    makeRepo(
+      path.join(dir, "big"),
+      {
+        "cdk.json": JSON.stringify({ app: "npx ts-node bin/app.ts" }),
+        "bin/app.ts": stacks.map((s) => `new ${s}(app, "${s}");`).join("\n"),
+      },
+      null,
+    );
+    const sections = systemSections(dir);
+    const top = sections.find((s) => s.parent === null);
+    if (!top) throw new Error("no repo");
+    const under = (id: string) => sections.filter((s) => s.parent === id);
+    expect(under(top.id).map((s) => s.path.at(-1))).toEqual(["Tables", "Queues", "Services"]);
+    expect(under(top.id).every((s) => s.id.startsWith("group:"))).toBe(true);
+    const parts = sections.filter((s) => s.id.startsWith("part:"));
+    expect(parts.map((s) => s.path.at(-1)).sort()).toEqual([...stacks].sort());
+    // A part's path is its repo and name, whatever group it sits in.
+    expect(parts.every((s) => s.path.length === 2)).toBe(true);
+  });
+});
