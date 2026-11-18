@@ -1,9 +1,23 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  renameSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { FolderState } from "../../shared/ipc-contract.ts";
-import { copyInto, createFolder, duplicateDoc, moveEntry, trashEntry } from "./file-ops.ts";
+import {
+  copyInto,
+  createFolder,
+  duplicateDoc,
+  moveEntry,
+  restoreEntry,
+  trashEntry,
+} from "./file-ops.ts";
 import { listDocs } from "./list-docs.ts";
 
 /** Plan.md, Ideas/Gift.md, Ideas/Deep/Box.md, an empty Archive and a code-only src. */
@@ -123,11 +137,12 @@ describe("the files panel on disk", () => {
     const trashed: string[] = [];
     const trash = (full: string) => {
       trashed.push(path.relative(f.path, full));
-      return Promise.resolve();
+      return Promise.resolve(null);
     };
     expect(await trashEntry(f, "Ideas", trash)).toEqual({
       kind: "trashed",
       docs: ["Ideas/Deep/Box.md", "Ideas/Gift.md"],
+      trashed: null,
     });
     expect(trashed).toEqual(["Ideas"]);
     expect((await trashEntry(f, "src", trash)).kind).toBe("failed");
@@ -214,5 +229,56 @@ describe("copyInto", () => {
     });
     const ro = await folder("read-only");
     expect((await copyInto(ro, [path.join(src, "Plan.md")], "")).kind).toBe("failed");
+  });
+});
+
+describe("restoreEntry", () => {
+  /** A stand-in Trash: a folder named .Trash beside the test folder. */
+  const fakeTrash = (f: FolderState) => {
+    const bin = path.join(path.dirname(f.path), `${path.basename(f.path)}-bin`, ".Trash");
+    mkdirSync(bin, { recursive: true });
+    return (full: string) => {
+      const place = path.join(bin, path.basename(full));
+      renameSync(full, place);
+      return Promise.resolve(place);
+    };
+  };
+  const inTrash = (full: string) => full.includes("/.Trash/");
+
+  it("puts a trashed folder back where it was, docs and all", async () => {
+    const f = await folder();
+    const gone = await trashEntry(f, "Ideas", fakeTrash(f));
+    if (gone.kind !== "trashed" || !gone.trashed) throw new Error("not trashed");
+    expect(existsSync(path.join(f.path, "Ideas"))).toBe(false);
+    const after = await describe_(f.path);
+    expect(await restoreEntry(after, "Ideas", gone.trashed, inTrash)).toEqual({
+      kind: "restored",
+      path: "Ideas",
+    });
+    expect(readFileSync(path.join(f.path, "Ideas", "Deep", "Box.md"), "utf8")).toBe("# Box\n");
+  });
+
+  it("won't write over a new file in its place, nor take from outside a Trash", async () => {
+    const f = await folder();
+    const gone = await trashEntry(f, "Plan.md", fakeTrash(f));
+    if (gone.kind !== "trashed" || !gone.trashed) throw new Error("not trashed");
+    writeFileSync(path.join(f.path, "Plan.md"), "# New plan\n");
+    const r = await restoreEntry(f, "Plan.md", gone.trashed, inTrash);
+    expect(r.kind).toBe("failed");
+    expect(readFileSync(path.join(f.path, "Plan.md"), "utf8")).toBe("# New plan\n");
+    expect(existsSync(gone.trashed)).toBe(true);
+    const elsewhere = path.join(f.path, "Ideas", "Gift.md");
+    expect((await restoreEntry(f, "Gift.md", elsewhere, inTrash)).kind).toBe("failed");
+    expect(existsSync(elsewhere)).toBe(true);
+  });
+
+  it("says to use Put Back when the item has left the Trash", async () => {
+    const f = await folder();
+    const r = await restoreEntry(f, "Plan.md", "/nowhere/.Trash/Plan.md", inTrash);
+    expect(r).toEqual({
+      kind: "failed",
+      reason:
+        "Plan.md is no longer where it was in the Trash. Find Plan.md in the Trash and choose Put Back.",
+    });
   });
 });

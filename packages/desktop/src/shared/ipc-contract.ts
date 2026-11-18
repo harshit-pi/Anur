@@ -442,7 +442,21 @@ export const ipcContract = {
   "file:trash": {
     request: z.object({ path: z.string().max(1024) }).strict(),
     response: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("trashed"), docs: z.array(z.string()), folder: FolderState }),
+      z.object({
+        kind: z.literal("trashed"),
+        docs: z.array(z.string()),
+        /** Where it landed in the Trash, for Undo; null when that isn't known. */
+        trashed: z.string().nullable(),
+        folder: FolderState,
+      }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /** Undo a trash: move the item back from the Trash to where it was. */
+  "file:restore": {
+    request: z.object({ path: z.string().max(1024), trashed: z.string().max(4096) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("restored"), path: z.string(), folder: FolderState }),
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
