@@ -172,3 +172,7 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - Undo goes back by a three-way merge per doc, so typing made since stays; the open doc goes back through its page, so ⌘Z covers it. A doc that clashes is named and left for its History.
 - A new doc an agent makes is kept with Undo (15.6) rather than shown as a new-doc preview.
 - The working line under a thread's steps gives only the time; the steps line already names the step.
+
+## The check card, problems first
+
+- A check's card leads with what needs a look: "Of 13 claims, 2 are wrong, 1 is missing", then those claims, wrong first, then missing, then unsupported. Claims that hold fold into one line. Each claim is its verdict and the claim on one line, with a short note under it; the source shows on hover. A link points to the corrected text when there is one.

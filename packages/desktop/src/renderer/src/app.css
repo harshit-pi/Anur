@@ -2771,8 +2771,39 @@ body.resizing * {
 .think-claim {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 2px;
+}
+
+.think-claim-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.think-claim-line .think-verdict {
+  flex: none;
+}
+
+.think-claim-note {
+  padding-left: 2px;
+  font-size: 12.5px;
+}
+
+.think-check-fine {
+  margin-top: 8px;
+}
+
+.think-check-fine > summary {
+  cursor: pointer;
+}
+
+.think-check-fine ul {
+  margin-top: 8px;
+}
+
+.think-check-fix {
+  margin-top: 10px;
+  font-size: 13px;
 }
 
 .think-verdict {
@@ -2801,11 +2832,8 @@ body.resizing * {
 
 .think-source {
   font-style: normal;
-  opacity: 0.8;
-}
-
-.think-source::before {
-  content: "— ";
+  text-decoration: underline dotted;
+  cursor: help;
 }
 
 .think-link {
