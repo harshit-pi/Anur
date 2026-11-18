@@ -92,6 +92,7 @@ export function MapView({
   onAddSection,
   onLink,
   onDelete,
+  onRename,
   onUndo,
   onRedo,
   writable,
@@ -109,6 +110,8 @@ export function MapView({
   onLink: (from: number, to: number) => void;
   /** Delete the section at `index` with everything under it; false when it can't be. */
   onDelete: (index: number) => boolean;
+  /** Rename the section at `index`: its heading in the doc changes, so the page follows. */
+  onRename: (index: number, name: string) => void;
   /** Undo and redo the page's last edit. */
   onUndo: () => void;
   onRedo: () => void;
@@ -146,6 +149,8 @@ export function MapView({
   const userMoved = useRef(false);
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
   /** Naming a new box: where it goes, and its parent when it was drawn from a box. */
+  /** The section being renamed in its box, by index. */
+  const [renaming, setRenaming] = useState<number | null>(null);
   const [adding, setAdding] = useState<{ at: Pos; screen: Pos; parent?: number } | null>(null);
   /** An arrow being drawn from a box's handle. */
   const [linking, setLinking] = useState<{ from: string; to: Pos; over: number | null } | null>(
@@ -761,6 +766,11 @@ export function MapView({
       redo();
       return;
     }
+    if ((e.key === "Enter" || e.key === "F2") && writable && tree.sections[selected]) {
+      e.preventDefault();
+      setRenaming(selected);
+      return;
+    }
     if ((e.key === "Backspace" || e.key === "Delete") && writable) {
       e.preventDefault();
       const parent = tree.sections[selected]?.parent ?? 0;
@@ -1086,9 +1096,44 @@ export function MapView({
               onPointerDown={(e) => {
                 onBoxDown(e, b);
               }}
+              onDoubleClick={() => {
+                if (writable) setRenaming(b.index);
+              }}
             >
               <div className="map-box-head">
-                <span className="map-box-name">{b.heading}</span>
+                {renaming === b.index ? (
+                  <input
+                    className="map-rename"
+                    aria-label="Section name"
+                    defaultValue={b.heading}
+                    autoFocus
+                    onFocus={(e) => {
+                      e.currentTarget.select();
+                    }}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter") e.currentTarget.blur();
+                      if (e.key === "Escape") {
+                        setRenaming(null);
+                        host.current?.focus();
+                      }
+                    }}
+                    onBlur={(e) => {
+                      const name = e.currentTarget.value.trim();
+                      setRenaming(null);
+                      if (name && name !== b.heading) {
+                        onRename(b.index, name);
+                        record({ kind: "doc" });
+                      }
+                      host.current?.focus();
+                    }}
+                  />
+                ) : (
+                  <span className="map-box-name">{b.heading}</span>
+                )}
                 {b.outLinks ? (
                   <button
                     type="button"
