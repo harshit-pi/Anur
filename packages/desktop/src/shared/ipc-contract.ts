@@ -216,6 +216,16 @@ export const ipcContract = {
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
   },
+  /** Make a new folder where the person picks, then open it, empty, to start writing. */
+  "folder:new": {
+    request: z.object({}).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("opened"), folder: FolderState }),
+      z.object({ kind: z.literal("cancelled") }),
+      z.object({ kind: z.literal("elsewhere") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
   /** Read one of the folder's docs for the page; iCloud docs are downloaded first. */
   "doc:open": {
     request: z.object({ path: z.string() }).strict(),

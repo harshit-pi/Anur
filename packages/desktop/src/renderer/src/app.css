@@ -668,6 +668,34 @@ body.resizing * {
   cursor: pointer;
 }
 
+.page-empty-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.page-empty-buttons .primary-button {
+  margin-top: 0;
+}
+
+.secondary-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 15px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.secondary-button:hover {
+  background: var(--hover);
+}
+
 .kbd {
   opacity: 0.8;
   font-size: 12px;

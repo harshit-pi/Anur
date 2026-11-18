@@ -7,6 +7,7 @@ import { INSERT_ITEMS, type InsertId } from "../shared/insert-items.ts";
  */
 export function buildMenu(actions: {
   openFolder: () => void;
+  newFolder: () => void;
   newWindow: () => void;
   insert: (id: InsertId) => void;
   command: (c: "tab-new" | "tab-close" | "back" | "forward" | "tab-next" | "tab-prev") => void;
@@ -27,6 +28,7 @@ export function buildMenu(actions: {
           },
         },
         { label: "New Window", accelerator: "CmdOrCtrl+Shift+N", click: actions.newWindow },
+        { label: "New Folder…", click: actions.newFolder },
         { label: "Open Folder…", accelerator: "CmdOrCtrl+O", click: actions.openFolder },
         { type: "separator" },
         {
