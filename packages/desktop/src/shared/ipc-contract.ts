@@ -555,6 +555,7 @@ export const ipcContract = {
           ),
           reviewed: z.array(z.string()),
           asking: z.boolean(),
+          askingSince: z.string().nullable(),
           failed: z.string().nullable(),
         }),
       }),
