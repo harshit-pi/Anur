@@ -131,8 +131,6 @@ type Live = {
   proposedTo?: Map<string, string>;
   /** When the running turn started, for "Working for 3 min". */
   turnAt?: number;
-  /** A tool ran since the last text: the next text starts a paragraph. */
-  afterTool?: boolean;
   /** The session's context and the model's window, as the agent last reported them (4.9). */
   context?: { used: number; size: number } | null;
   /** The window known when the turn started: this thread's last, or its agent's (4.2). */
@@ -1045,15 +1043,24 @@ export class Threads {
         this.picked.delete(thread);
         return;
       case "text":
-        // Text after a tool call is a new paragraph, as the agent wrote it.
-        if (live.afterTool && live.text && !live.text.endsWith("\n")) live.text += "\n\n";
-        live.afterTool = false;
         live.text += m.text;
         this.d.emit({ kind: "text", thread, turn: m.turn, text: m.text });
         return;
       case "tool": {
-        live.afterTool = true;
         const prev = live.tools.get(m.toolUse);
+        // What the agent wrote before this step is kept as its own message,
+        // where it was written: a reloaded thread reads as it ran, a note
+        // and then its steps, never all the notes piled before the report.
+        const said = prev ? "" : live.text.trim();
+        if (said) {
+          live.text = "";
+          await this.append(live.doc, thread, {
+            kind: "message",
+            turn: m.turn,
+            role: "agent",
+            text: said,
+          });
+        }
         // A path into the working copies reads as what it is: the working copy of that doc.
         const title = (m.title || prev?.title || "A tool")
           .split(`${this.copiesOf(thread)}/`)

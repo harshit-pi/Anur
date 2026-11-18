@@ -3068,3 +3068,61 @@ body.resizing * {
   font-size: 15px;
   color: var(--ink);
 }
+
+/* A run of tool calls, folded into one line (as in Claude's apps). */
+.think-steps {
+  align-self: stretch;
+  min-width: 0;
+}
+
+.think-steps > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 8px;
+  border-left: 2px solid var(--rule);
+  color: var(--graphite);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.think-steps > summary::-webkit-details-marker {
+  display: none;
+}
+
+.think-steps > summary::before {
+  content: "▸";
+  flex: none;
+  font-size: 10px;
+}
+
+.think-steps[open] > summary::before {
+  content: "▾";
+}
+
+.think-steps > summary:hover {
+  color: var(--ink);
+}
+
+.think-steps-count {
+  flex: none;
+  font-weight: 600;
+}
+
+.think-steps-last {
+  min-width: 0;
+  opacity: 0.85;
+}
+
+.think-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 2px 10px;
+}
+
+.think-working-step {
+  font-style: normal;
+}
