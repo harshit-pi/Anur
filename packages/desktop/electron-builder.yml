@@ -15,3 +15,25 @@ mac:
   darkModeSupport: true
   target: dir
   identity: null
+  # Anur can open .md files from Finder; it asks before becoming their default.
+  extendInfo:
+    CFBundleDocumentTypes:
+      - CFBundleTypeName: Markdown document
+        CFBundleTypeRole: Editor
+        LSHandlerRank: Alternate
+        LSItemContentTypes:
+          - net.daringfireball.markdown
+        CFBundleTypeExtensions:
+          - md
+          - markdown
+    UTImportedTypeDeclarations:
+      - UTTypeIdentifier: net.daringfireball.markdown
+        UTTypeDescription: Markdown document
+        UTTypeConformsTo:
+          - public.plain-text
+        UTTypeTagSpecification:
+          public.filename-extension:
+            - md
+            - markdown
+          public.mime-type:
+            - text/markdown

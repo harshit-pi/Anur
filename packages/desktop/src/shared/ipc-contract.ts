@@ -471,6 +471,22 @@ export const ipcContract = {
     request: z.object({ paths: z.array(z.string().max(1024)).max(1000) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
+  /** Which app opens .md files from Finder, and whether Anur can be it (an installed Mac app). */
+  "opener:status": {
+    request: z.object({}).strict(),
+    response: z.object({
+      can: z.boolean(),
+      isAnur: z.boolean(),
+      /** The app that opens them now, by name; null when none is set. */
+      current: z.string().nullable(),
+      dismissed: z.boolean(),
+    }),
+  },
+  /** Make Anur open .md files, or turn the offer down. */
+  "opener:act": {
+    request: z.object({ action: z.enum(["make", "dismiss"]) }).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Put text on the clipboard, which works whether or not the window has focus. */
   "clipboard:write": {
     request: z.object({ text: z.string().max(100_000) }).strict(),

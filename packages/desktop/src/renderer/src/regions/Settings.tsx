@@ -75,6 +75,50 @@ function Row({
   );
 }
 
+/** Which app opens .md files from Finder, with a button to make it Anur. */
+function OpenerRow() {
+  const [s, setS] = useState<{ can: boolean; isAnur: boolean; current: string | null } | null>(
+    null,
+  );
+  const [failed, setFailed] = useState(false);
+  const load = () => {
+    void anur.call("opener:status", {}).then(setS);
+  };
+  useEffect(load, []);
+  return (
+    <Row
+      title="Open Markdown files with Anur"
+      detail={
+        failed
+          ? "macOS didn't allow the change."
+          : !s
+            ? "Checking…"
+            : !s.can
+              ? "Only the installed Anur app can open .md files from Finder."
+              : s.isAnur
+                ? "Anur opens .md files from Finder, in the folder they belong to."
+                : `${s.current ?? "No app"} opens .md files from Finder now.`
+      }
+    >
+      {s?.can && !s.isAnur ? (
+        <button
+          type="button"
+          className="settings-button"
+          onClick={() => {
+            setFailed(false);
+            void anur.call("opener:act", { action: "make" }).then((r) => {
+              if (!r.ok) setFailed(true);
+              load();
+            });
+          }}
+        >
+          Use Anur
+        </button>
+      ) : null}
+    </Row>
+  );
+}
+
 /** Anur in the person's Claude Code (6.2): added or not, with Add, Update and Remove. */
 function SkillRow() {
   const [s, setS] = useState<{ added: boolean; claude: boolean; current: boolean } | null>(null);
@@ -213,6 +257,7 @@ export function Settings({
                 {folder ? "Open another folder…" : "Open a folder…"}
               </button>
             </Row>
+            <OpenerRow />
             <Row
               title="Commit Anur's data with git"
               detail={

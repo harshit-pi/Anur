@@ -1,6 +1,6 @@
 import { mkdtempSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { readFile, realpath, writeFile } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { FORMAT_VERSION, PreviewPart, docsBefore } from "@anur/core";
@@ -54,6 +54,8 @@ import { readRecent } from "./folder/recent.ts";
 import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
 import { buildMenu } from "./menu.ts";
+import { BUNDLE_ID, OpenerOffer, makeMarkdownOpener, markdownOpener } from "./default-opener.ts";
+import { folderFor } from "./open-file.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
 import { AgentChoices } from "./threads/agent-choices.ts";
 import { AnurSocket } from "./threads/anur-socket.ts";
@@ -142,6 +144,8 @@ void anurSocket.start().catch((e: unknown) => {
 });
 /** Anur in the person's Claude Code (group 6); set up once the app is ready. */
 let claudeSkill: ClaudeSkill | null = null;
+/** Whether the person turned down making Anur the opener for Markdown files. */
+const openerOffer = () => new OpenerOffer(app.getPath("userData"));
 
 /** The front window, and the folder it shows. */
 function front() {
@@ -881,6 +885,24 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.removeInput(rel, text, thread, input) : false };
   },
+  "opener:status": async () => {
+    const current = await markdownOpener();
+    return {
+      // Only the installed app can be the opener; a dev build would hand .md files to Electron.
+      can: process.platform === "darwin" && (app.isPackaged || !!process.env.ANUR_CHECK_OPENER),
+      isAnur: current?.id === BUNDLE_ID,
+      current: current?.name ?? null,
+      dismissed: await openerOffer().dismissed(),
+    };
+  },
+  "opener:act": async ({ action }) => {
+    if (action === "dismiss") {
+      await openerOffer().dismiss();
+      return { ok: true };
+    }
+    if (!app.isPackaged) return { ok: false };
+    return { ok: await makeMarkdownOpener(BUNDLE_ID) };
+  },
   "skill:status": async () =>
     claudeSkill
       ? claudeSkill.status()
@@ -1025,6 +1047,54 @@ function createWindow(): BrowserWindow {
 function focusedOrNew(): BrowserWindow {
   return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? createWindow();
 }
+
+/** Once the window's page is up and listening; a new window gets a moment to mount. */
+const whenLoaded = (win: BrowserWindow) =>
+  win.webContents.isLoading()
+    ? new Promise<void>((resolve) => {
+        win.webContents.once("did-finish-load", () => {
+          setTimeout(resolve, 400);
+        });
+      })
+    : Promise.resolve();
+
+/** A Markdown file opened from Finder: open the folder it belongs to, then the doc. */
+async function openMarkdownFile(chosen: string) {
+  const file = await realpath(chosen).catch(() => chosen);
+  const open = [...windows.keys()].flatMap((id) => folders.current(id)?.path ?? []);
+  const recent = await readRecent(app.getPath("userData")).catch(() => []);
+  const folder = await folderFor(file, open, recent, homedir());
+  const id = folders.windowFor(folder);
+  let target = id === null ? undefined : windows.get(id);
+  if (!target) {
+    const win = focusedOrNew();
+    await whenLoaded(win);
+    const outcome = await openFolderIn(win, folder);
+    const at =
+      outcome.kind === "opened"
+        ? folders.windowFor(outcome.folder.path)
+        : outcome.kind === "elsewhere"
+          ? outcome.windowId
+          : null;
+    target = at === null ? undefined : windows.get(at);
+  }
+  const root = target ? folders.current(target.webContents.id)?.path : undefined;
+  if (!target || !root) return;
+  await whenLoaded(target);
+  if (target.isMinimized()) target.restore();
+  target.focus();
+  const rel = path.relative(root, file).split(path.sep).join("/");
+  send(target, "app:open-doc", { path: rel, section: null });
+}
+
+/** Files macOS asked Anur to open before it was ready, as when a double-click launched it. */
+const filesToOpen: string[] = [];
+let readyForFiles = false;
+app.on("open-file", (event, file) => {
+  event.preventDefault();
+  if (readyForFiles) void openMarkdownFile(file);
+  else filesToOpen.push(file);
+});
 
 /** For checks: ANUR_SCREENSHOT=<file.png> saves the first window once drawn, then quits. */
 function screenshotThenQuit(win: BrowserWindow, file: string) {
@@ -1198,10 +1268,17 @@ void app.whenReady().then(async () => {
   const shot = process.env.ANUR_SCREENSHOT;
   if (shot) screenshotThenQuit(win, shot);
 
-  // Reopen a folder: ANUR_OPEN_FOLDER for checks, otherwise the last one opened.
+  // Reopen a folder: ANUR_OPEN_FOLDER for checks, otherwise the last one opened;
+  // a file double-clicked in Finder opens its own folder instead.
   const reopen =
     process.env.ANUR_OPEN_FOLDER ??
-    (isCheck ? undefined : (await readRecent(app.getPath("userData")))[0]);
+    (isCheck || filesToOpen.length > 0
+      ? undefined
+      : (await readRecent(app.getPath("userData")))[0]);
+  readyForFiles = true;
+  for (const file of filesToOpen.splice(0)) await openMarkdownFile(file);
+  // ANUR_CHECK_OPEN_FILE stands in for a double-click in Finder.
+  if (process.env.ANUR_CHECK_OPEN_FILE) void openMarkdownFile(process.env.ANUR_CHECK_OPEN_FILE);
   if (reopen) {
     win.webContents.once("did-finish-load", () => {
       void openFolderIn(win, reopen);
