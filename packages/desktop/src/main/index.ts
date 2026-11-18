@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { FORMAT_VERSION, PreviewPart } from "@anur/core";
+import { FORMAT_VERSION, PreviewPart, docsBefore } from "@anur/core";
 import { AGENTS, type AgentId } from "../shared/agents.ts";
 import type { SessionOption } from "../agent/protocol.ts";
 import {
@@ -34,6 +34,7 @@ import { readImage, saveImage } from "./folder/images.ts";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
 import { createDoc, searchFolder } from "./folder/search.ts";
 import { createFolder, duplicateDoc, moveEntry, trashEntry } from "./folder/file-ops.ts";
+import { planLinkUpdates } from "./folder/link-updates.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
@@ -433,6 +434,53 @@ const handlers: { [C in Channel]: Handler<C> } = {
     letGoOf(webContentsId, gone.docs);
     const now = await folders.refresh(webContentsId);
     return now ? { ...gone, folder: now } : { kind: "failed", reason: "The folder closed." };
+  },
+  "links:plan": async ({ moves }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { docs: 0, links: 0 };
+    const changes = await planLinkUpdates(folder, moves);
+    return { docs: changes.length, links: changes.reduce((n, c) => n + c.links, 0) };
+  },
+  "links:update": async ({ moves }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || folder.mode !== "writable") return { docs: 0, links: 0, skipped: 0 };
+    const changes = await planLinkUpdates(folder, moves);
+    let docs = 0;
+    let links = 0;
+    let skipped = 0;
+    const before = docsBefore(folder.docs, moves);
+    for (const c of changes) {
+      // An open doc is written by its page, so typing not yet saved stays and ⌘Z undoes it.
+      const pages = [...shownDoc].filter(
+        ([win, rel]) => rel === c.rel && folders.current(win)?.path === folder.path,
+      );
+      if (pages.length > 0) {
+        for (const [win] of pages) {
+          const w = windows.get(win);
+          if (w)
+            send(w, "links:rewrite", {
+              path: c.rel,
+              was: c.was,
+              moves: [...moves],
+              before,
+              after: folder.docs,
+            });
+        }
+      } else {
+        const full = path.join(folder.path, c.rel);
+        // Changed since it was read: leave it rather than write over someone's edit.
+        if ((await readFile(full, "utf8").catch(() => null)) !== c.text) {
+          skipped++;
+          continue;
+        }
+        await writeFileAtomic(full, c.next);
+        void versionsFor(folder)?.wroteClosed(c.rel, c.next);
+        threadsFor(folder)?.ownWrite(c.rel, c.next);
+      }
+      docs++;
+      links += c.links;
+    }
+    return { docs, links, skipped };
   },
   "link:open-external": async ({ url }) => {
     // Only the web and mail: a link in a doc never runs anything on this Mac.

@@ -160,6 +160,13 @@ export class SectionVersions {
     });
   }
 
+  /** Anur rewrote a closed doc, as for links: its text is Anur's own, not a change from outside. */
+  wroteClosed(rel: string, text: string): Promise<void> {
+    return this.run(async () => {
+      await this.memory?.write(rel, text);
+    });
+  }
+
   /** Every open session, as at quit. */
   endAll(): Promise<void> {
     return this.run(async () => {

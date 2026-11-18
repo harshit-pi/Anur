@@ -7,6 +7,7 @@ import {
   conflictsIn,
   merge3,
   rejectHunks,
+  rewriteLinks,
   type PreviewPart,
   type SectionTree,
 } from "@anur/core";
@@ -320,6 +321,15 @@ export function Page({
       if (span) editor.dispatch({ changes: span, userEvent: "restore.revert" });
     });
 
+    // Links that a rename or move broke, written again here so ⌘Z takes them back.
+    const offRelink = anur.on("links:rewrite", ({ path, was, moves, before, after }) => {
+      if (path !== doc.path || closed || editor.state.readOnly) return;
+      const now = editor.state.doc.toString();
+      const { text, changed } = rewriteLinks(now, was, path, moves, before, after);
+      const span = changed > 0 ? diffSpan(now, text) : null;
+      if (span) editor.dispatch({ changes: span, userEvent: "input.links" });
+    });
+
     const editor = new EditorView({
       parent: host.current,
       state: EditorState.create({
@@ -598,6 +608,7 @@ export function Page({
       window.removeEventListener("anur:show-preview", onShowPreview);
       offPreviews();
       offReplace();
+      offRelink();
       offOutside();
       clearTimeout(sectionsTimer);
       clearTimeout(noticeTimer);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { headingKey, resolveHref, resolveWiki } from "./links.ts";
+import { headingKey, resolveHref, resolveWiki } from "./resolve.ts";
 
 const DOCS = [
   "Ideas/Agent/Debate.md",
