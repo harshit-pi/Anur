@@ -154,6 +154,7 @@ Engineering decisions made while building Anur, newest first, each with why. The
 ## Links as context (group 8)
 
 - A link index in main parses every doc's wiki links, by modified time, so a doc is parsed again only when it changes; the open doc's links come from its page. Docs still in iCloud are never read. (The design put this in an index process; main is enough at today's folder sizes.)
+- Only the links in a section's own text count, not its subsections' (each has its own threads), so a doc's title doesn't gather every link in the doc, "Related" lists included. Each link is taken once. There's no count cap: the budget bounds the size.
 - A thread's bundle carries the sections its section links to in other docs, one link deep: a heading link brings that section with its subsections, a doc link brings the doc. What doesn't fit the budget left after the doc is named with its path; links that go nowhere are named as broken. Links within the doc aren't repeated: the bundle has the doc.
-- Think lists a section's links ("A new thread here reads these too") and the sections that link to it, each opening where it is. `anur_links` gives threads and terminal agents the same, as paths.
+- Think lists a section's links ("A new thread here reads these too") and, folded, the sections that link to it, each once, each opening where it is. `anur_links` gives threads and terminal agents the same, as paths.
 - A link to a missing doc is faded on the page and in Think, as in Obsidian. On the map, a link to another doc's section is a small box under its section that opens it.

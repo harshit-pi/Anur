@@ -298,6 +298,7 @@ describe("linked sections (group 8)", () => {
       ],
     });
     expect(b.markdown).toContain("## Linked from this section: A.md");
+    expect(b.markdown).toContain("## Linked, not included");
     expect(b.markdown).toContain("- B.md: `notes/B.md`");
     expect(b.markdown).not.toContain("bbbb");
   });
