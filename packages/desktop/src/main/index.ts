@@ -60,6 +60,8 @@ import { SectionVersions, lastSavedIn } from "./folder/versions.ts";
 import { sectionCommits } from "./folder/git-history.ts";
 import { suggestMatch } from "./folder/orphans.ts";
 import { personName } from "./folder/people.ts";
+import { PluginHost, PluginRefused } from "@anur/core";
+import { FIRST_PARTY, pluginById } from "../plugins/index.ts";
 import {
   devicesStillOpen,
   namesOf,
@@ -314,6 +316,39 @@ const probeFolder = () => {
 };
 /** Each folder's threads, so a reply reaches the windows showing that folder. */
 const threads = new Map<string, Threads>();
+/** The plugins switched on for a folder, in Anur's own order (group 19). */
+function pluginsOn(folderPath: string): string[] {
+  const on = appSettings.get().plugins[folderPath] ?? [];
+  return FIRST_PARTY.map((p) => p.manifest.id).filter((id) => on.includes(id));
+}
+
+/** Main's plugin host for each folder: it keeps main's points (context providers, surfaces). */
+const pluginHosts = new Map<string, PluginHost>();
+
+async function syncPlugins(folderPath: string): Promise<PluginHost> {
+  let host = pluginHosts.get(folderPath);
+  if (!host) {
+    host = new PluginHost("main");
+    pluginHosts.set(folderPath, host);
+  }
+  const want = new Set(pluginsOn(folderPath));
+  for (const p of host.plugins()) if (!want.has(p.manifest.id)) await host.unload(p.manifest.id);
+  const have = new Set(host.plugins().map((p) => p.manifest.id));
+  for (const id of want) {
+    const p = pluginById(id);
+    if (p && !have.has(id))
+      await host.load(p).catch((e: unknown) => {
+        if (e instanceof PluginRefused) console.error(`Anur couldn't load ${id}:`, e.message);
+        else throw e;
+      });
+  }
+  return host;
+}
+
+async function pluginHostFor(folderPath: string): Promise<PluginHost> {
+  return pluginHosts.get(folderPath) ?? syncPlugins(folderPath);
+}
+
 function threadsFor(folder: FolderState): Threads | null {
   const ids = versionsFor(folder);
   if (!device || !ids) return null;
@@ -337,6 +372,18 @@ function threadsFor(folder: FolderState): Threads | null {
       mcp: { socket: anurSocket, script: path.join(here, "mcp-server.js") },
       autoApply: () => appSettings.get().autoApply,
       features: () => appSettings.get().features,
+      plugins: {
+        ids: () => pluginsOn(folder.path),
+        context: async (rel, section) => {
+          const host = await pluginHostFor(folder.path);
+          return Promise.all(
+            host.contextProviders().map(async (c) => ({
+              label: c.label,
+              lines: await c.provide({ folder: folder.path, doc: rel, section }).catch(() => []),
+            })),
+          );
+        },
+      },
       people: async () => ({
         me: await personName(folder.path, appSettings.get().name),
         byDevice: await namesOf(folder.path),
@@ -727,6 +774,37 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!unused.some((f) => f.path === rel)) return { ok: false };
     await shell.trashItem(path.join(folder.path, rel));
     return { ok: true };
+  },
+  "plugins:list": (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const on = folder ? pluginsOn(folder.path) : [];
+    return {
+      folder: folder?.path ?? null,
+      plugins: FIRST_PARTY.map((p) => ({
+        id: p.manifest.id,
+        name: p.manifest.name,
+        what: p.manifest.what,
+        on: on.includes(p.manifest.id),
+      })),
+    };
+  },
+  "plugins:set": async ({ id, on }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder)
+      return {
+        kind: "refused",
+        reason: "Open a folder first: plugins are switched on per folder.",
+      };
+    if (!pluginById(id)) return { kind: "refused", reason: `Anur has no plugin "${id}".` };
+    const now = pluginsOn(folder.path).filter((x) => x !== id);
+    if (on) now.push(id);
+    await appSettings.set({ plugins: { ...appSettings.get().plugins, [folder.path]: now } });
+    try {
+      await syncPlugins(folder.path);
+    } catch (e) {
+      return { kind: "refused", reason: e instanceof Error ? e.message : String(e) };
+    }
+    return { kind: "ok" };
   },
   "orphans:list": async ({ path: rel, text }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

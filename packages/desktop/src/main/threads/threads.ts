@@ -92,6 +92,11 @@ export type ThreadDeps = {
   features?: () => FeatureFlags;
   /** Who uses each device, and this person's own name, to show who started others' threads. */
   people?: () => Promise<{ me: string | null; byDevice: ReadonlyMap<string, string> }>;
+  /** Plugins switched on for this folder (group 19): their IDs, for the MCP server, and their context lines. */
+  plugins?: {
+    ids: () => string[];
+    context: (rel: string, section: string[]) => Promise<{ label: string; lines: string[] }[]>;
+  };
   /** The folder as a window shows it: its docs and what's still in iCloud, for section search. */
   folderState?: () => FolderState | null;
   /** Whether a doc is open in a window: its page writes it, never main. */
@@ -161,6 +166,8 @@ type Live = {
   };
   /** Findings kept on this thread's section and above it, for its bundle (16.1). */
   findings?: KeptFinding[];
+  /** Lines plugins add for this thread's section (group 19). */
+  pluginLines?: { label: string; lines: string[] }[];
   /** Files this thread wrote, as absolute paths: reading them back isn't an input. */
   made?: Set<string>;
   /** Other docs this thread proposed edits to, with the sections last said. */
@@ -932,6 +939,10 @@ export class Threads {
     live.waiting = live.proposed?.length ? { still, gone } : null;
     live.carried = await this.carriedFor(at, start.section, thread);
     live.findings = await this.findingsFor(at, start.section);
+    live.pluginLines =
+      (await this.d.plugins
+        ?.context(rel, at.tree.sections[indexIn(at, start.section)]?.path ?? [])
+        .catch(() => [])) ?? [];
     live.linked = await this.linkedFor(at, start.section, rel, text);
     // An embedded base reaches the agent as its table, not as the embed line (4.11).
     live.embeds = new Map();
@@ -1017,6 +1028,7 @@ export class Threads {
         until: f.until,
       })),
       embeds: live.embeds ?? new Map(),
+      extra: live.pluginLines ?? [],
       linked: live.linked?.linked ?? [],
       broken: live.linked?.broken ?? [],
     }).markdown;
@@ -1106,6 +1118,8 @@ export class Threads {
                 { name: "ELECTRON_RUN_AS_NODE", value: "1" },
                 { name: "ANUR_SOCKET", value: mcp.socket.path },
                 { name: "ANUR_TOKEN", value: token },
+                { name: "ANUR_PLUGINS", value: (this.d.plugins?.ids() ?? []).join(",") },
+                { name: "ANUR_FOLDER", value: this.d.folder },
               ],
             }
           : null,

@@ -304,6 +304,24 @@ describe("linked sections (group 8)", () => {
   });
 });
 
+describe("plugin context (group 19)", () => {
+  it("adds each plugin's lines under its label, and nothing for an empty one", () => {
+    const text = "# Plan\n\n## Checkout\n\nRetries.\n";
+    const b = buildBundle({
+      text,
+      tree: buildSectionTree(text, { fileName: "Plan.md" }),
+      index: 1,
+      docPath: "Plan.md",
+      extra: [
+        { label: "Decided on this part", lines: ["- Three retries, not infinite."] },
+        { label: "Nothing here", lines: [] },
+      ],
+    });
+    expect(b.markdown).toContain("## Decided on this part\n\n- Three retries, not infinite.");
+    expect(b.markdown).not.toContain("## Nothing here");
+  });
+});
+
 describe("decisions", () => {
   it("lists people's decisions apart from findings, with who, what they replaced and until", () => {
     const text = "# Plan\n\n## Pricing\n\nSplitwise is £5.\n";

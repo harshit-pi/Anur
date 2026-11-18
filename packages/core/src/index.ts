@@ -182,3 +182,5 @@ export {
   type Move,
 } from "./links/index.ts";
 export { SETTLE_AT, isQuestion, quotedFrom, settleRule, type Settle } from "./decisions/settle.ts";
+export * from "./plugins/api.ts";
+export { PluginHost, PluginRefused } from "./plugins/host.ts";

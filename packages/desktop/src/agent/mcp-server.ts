@@ -1,3 +1,5 @@
+import { PluginHost } from "@anur/core";
+import { pluginById } from "../plugins/index.ts";
 import { readFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { createInterface } from "node:readline";
@@ -248,6 +250,26 @@ const TOOLS = [
  * launch that only the person can read, so a restarted Anur is found again.
  */
 const terminalFile = process.env.ANUR_TERMINAL ?? "";
+
+/** Plugins the folder switched on (group 19): their MCP tools run here, in this process. */
+const plugins = new PluginHost("mcp");
+const pluginsReady = Promise.all(
+  (process.env.ANUR_PLUGINS ?? "")
+    .split(",")
+    .flatMap((id) => {
+      const p = pluginById(id.trim());
+      return p ? [p] : [];
+    })
+    .map((p) =>
+      plugins.load(p).catch((e: unknown) => {
+        process.stderr.write(`Anur couldn't load plugin ${p.manifest.id}: ${String(e)}\n`);
+      }),
+    ),
+);
+const pluginTools = () =>
+  plugins
+    .mcpTools()
+    .map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
 const inTerminal = !process.env.ANUR_TOKEN && terminalFile !== "";
 
 function reach(): { socket: string; token: string } | null {
@@ -476,11 +498,25 @@ async function handle(m: Rpc): Promise<void> {
       reply({});
       return;
     case "tools/list":
-      reply({ tools: inTerminal ? TERMINAL_TOOLS : TOOLS });
+      await pluginsReady;
+      reply({ tools: [...(inTerminal ? TERMINAL_TOOLS : TOOLS), ...pluginTools()] });
       return;
     case "tools/call": {
       const p = (m.params ?? {}) as { name?: unknown; arguments?: unknown };
       const name = typeof p.name === "string" ? p.name : "";
+      await pluginsReady;
+      const own = plugins.mcpTools().find((t) => t.name === name);
+      if (own) {
+        const r = await own
+          .call(p.arguments ?? {}, { folder: process.env.ANUR_FOLDER ?? process.cwd() })
+          .catch((e: unknown) => ({ error: String(e) }));
+        reply(
+          "error" in r
+            ? { content: [{ type: "text", text: r.error }], isError: true }
+            : { content: [{ type: "text", text: r.text }] },
+        );
+        return;
+      }
       if (!(inTerminal ? TERMINAL_TOOLS : TOOLS).some((t) => t.name === name)) {
         reply({ content: [{ type: "text", text: `Anur has no tool ${name}.` }], isError: true });
         return;

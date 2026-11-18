@@ -84,6 +84,8 @@ export type BundleInput = {
    * for `![[Ideas.base]]` (4.11), by the embed's target. Counted in the budget.
    */
   embeds?: ReadonlyMap<string, string>;
+  /** Lines plugins' context providers add for this section (group 19), each under its label. */
+  extra?: readonly { label: string; lines: readonly string[] }[];
   /**
    * The sections this section links to in other docs, one link deep, in
    * reading order (group 8): each with its label ("Pricing.md › Plans"),
@@ -185,6 +187,7 @@ export function buildBundle({
   linked = [],
   broken = [],
   findings = [],
+  extra = [],
 }: BundleInput): Bundle {
   const section = tree.sections[index];
   if (!section) throw new Error(`no section at index ${String(index)}`);
@@ -367,6 +370,7 @@ export function buildBundle({
       ),
       "",
     );
+  for (const e of extra) if (e.lines.length > 0) lines.push(`## ${e.label}`, "", ...e.lines, "");
   if (leftOut.length > 0)
     lines.push(
       "## Linked, not included",

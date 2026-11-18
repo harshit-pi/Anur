@@ -23,7 +23,7 @@ const SECTIONS: { id: SettingsSection; label: string; group?: string }[] = [
   { id: "agent", label: "Agent" },
   { id: "storage", label: "Storage" },
   { id: "core", label: "Core plugins", group: "Plugins" },
-  { id: "community", label: "Community plugins" },
+  { id: "community", label: "Plugins" },
 ];
 
 type MainSettings = {
@@ -422,6 +422,43 @@ function StoragePane({ folder }: { folder: FolderState | null }) {
   );
 }
 
+/** Plugins Anur ships, each with a switch for this window's folder (19.4). */
+function PluginRows({ folder }: { folder: FolderState | null }) {
+  const [list, setList] = useState<{ id: string; name: string; what: string; on: boolean }[]>([]);
+  const [note, setNote] = useState<string | null>(null);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    void anur.call("plugins:list", {}).then((r) => {
+      setList(r.plugins);
+    });
+  }, [folder?.path, n]);
+  return (
+    <>
+      {list.map((p) => (
+        <Row
+          key={p.id}
+          title={p.name}
+          detail={folder ? p.what : `${p.what} Open a folder to switch it on.`}
+        >
+          <Switch
+            on={p.on}
+            label={`${p.name} for this folder`}
+            disabled={!folder}
+            onChange={(on) => {
+              setNote(null);
+              void anur.call("plugins:set", { id: p.id, on }).then((r) => {
+                if (r.kind === "refused") setNote(r.reason);
+                setN((x) => x + 1);
+              });
+            }}
+          />
+        </Row>
+      ))}
+      {note ? <p className="settings-row-detail">{note}</p> : null}
+    </>
+  );
+}
+
 export function Settings({
   section,
   onSection,
@@ -714,11 +751,13 @@ export function Settings({
       case "community":
         return (
           <>
-            <h2>Community plugins</h2>
-            <p className="settings-lede">Installed by you. Anur's core works without them.</p>
+            <h2>Plugins</h2>
+            <p className="settings-lede">
+              Plugins Anur ships, each switched on for one folder. Anur's core works without them.
+            </p>
+            <PluginRows folder={folder} />
             <div className="settings-empty">
-              No plugins yet. Plugins come once the engineering plugin is built, with an API
-              modelled on Obsidian's: a plugin adds to the seven regions, never new ones.
+              Plugins from others come later, once each can run in its own sandbox.
             </div>
           </>
         );
