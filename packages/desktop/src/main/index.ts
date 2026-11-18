@@ -415,7 +415,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
       webContentsId,
       moved.docs.map((d) => d.from),
     );
-    await versionsFor(folder)?.moved(moved.docs);
+    await versionsFor(folder)?.moved(moved.docs.filter((d) => /\.md$/i.test(d.to)));
     const now = await folders.refresh(webContentsId);
     return now ? { ...moved, folder: now } : { kind: "failed", reason: "The folder closed." };
   },
@@ -449,7 +449,8 @@ const handlers: { [C in Channel]: Handler<C> } = {
     let docs = 0;
     let links = 0;
     let skipped = 0;
-    const before = docsBefore(folder.docs, moves);
+    const all = [...folder.docs, ...folder.files];
+    const before = docsBefore(all, moves);
     for (const c of changes) {
       // An open doc is written by its page, so typing not yet saved stays and ⌘Z undoes it.
       const pages = [...shownDoc].filter(
@@ -464,7 +465,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
               was: c.was,
               moves: [...moves],
               before,
-              after: folder.docs,
+              after: all,
             });
         }
       } else {
@@ -495,7 +496,8 @@ const handlers: { [C in Channel]: Handler<C> } = {
   },
   "doc:reveal": async ({ path: doc, how }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
-    if (!folder?.docs.includes(doc) && !folder?.folders.includes(doc)) return { ok: false };
+    if (!folder || ![...folder.docs, ...folder.files, ...folder.folders].includes(doc))
+      return { ok: false };
     const file = path.join(folder.path, doc);
     if (how === "finder") {
       shell.showItemInFolder(file);

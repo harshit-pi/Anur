@@ -6,6 +6,7 @@ import {
   docCount,
   dropTarget,
   folderOf,
+  isViewable,
   renamed,
   type Sort,
   type TreeNode,
@@ -34,6 +35,7 @@ const DRAG_TYPE = "application/x-anur-path";
 export function FileTree({
   docs,
   folders = [],
+  files = [],
   times = {},
   sort = "name",
   offloaded = [],
@@ -47,6 +49,8 @@ export function FileTree({
 }: {
   docs: readonly string[];
   folders?: readonly string[];
+  /** Attachments, such as images and PDFs, listed among the docs. */
+  files?: readonly string[];
   times?: Readonly<Record<string, readonly [number, number]>>;
   sort?: Sort;
   /** Docs whose bytes are still in iCloud: marked, and fetched when opened. */
@@ -64,7 +68,10 @@ export function FileTree({
   /** The header asked for a new doc or folder. */
   request?: MakeRequest | null;
 }) {
-  const tree = useMemo(() => buildTree(docs, folders, sort, times), [docs, folders, sort, times]);
+  const tree = useMemo(
+    () => buildTree(docs, folders, sort, times, files),
+    [docs, folders, sort, times, files],
+  );
   const folderSet = useMemo(() => new Set(folders), [folders]);
   const inCloud = useMemo(() => new Set(offloaded), [offloaded]);
   const [open, setOpen] = useState<Set<string>>(() => new Set());
@@ -134,12 +141,24 @@ export function FileTree({
     // Only a new request: a changed folder list must not make another.
   }, [request]);
 
+  /** The row being named, read at blur: ↩ and Escape have already settled it by then. */
+  const editingNow = useRef(editing);
+  editingNow.current = editing;
   const finishRename = async (path: string, typed: string) => {
+    if (editingNow.current !== path) return;
+    editingNow.current = null;
     setEditing(null);
     const to = renamed(path, typed, isFolder(path));
     if (!actions || !to || to === path) return;
     if (await actions.move(path, to)) setFocused(to);
     list.current?.focus();
+  };
+  /** A doc or an image opens in a tab; any other file in its default app. */
+  const openNode = (node: TreeNode, inNewTab: boolean) => {
+    if (node.kind === "doc" || (node.kind === "file" && isViewable(node.path)))
+      onSelect(node.path, inNewTab);
+    else if (node.kind === "file")
+      void anur.call("doc:reveal", { path: node.path, how: "default-app" });
   };
   const trash = (node: TreeNode) => {
     void actions?.trash(node.path, node.kind === "folder", docCount(node));
@@ -161,7 +180,10 @@ export function FileTree({
             { id: "trash", label: "Move to Trash", enabled: editable },
           ]
         : [
-            { id: "open-tab", label: "Open in new tab" },
+            ...(node.kind === "doc" || isViewable(node.path)
+              ? [{ id: "open-tab", label: "Open in new tab" }]
+              : []),
+            ...(node.kind === "file" ? [{ id: "open-app", label: "Open in default app" }] : []),
             { separator: true },
             { id: "rename", label: "Rename", enabled: editable },
             { id: "duplicate", label: "Duplicate", enabled: editable },
@@ -179,6 +201,8 @@ export function FileTree({
       else if (id === "copy-path") void anur.call("clipboard:write", { text: node.path });
       else if (id === "trash") trash(node);
       else if (id === "open-tab") onSelect(node.path, true);
+      else if (id === "open-app")
+        void anur.call("doc:reveal", { path: node.path, how: "default-app" });
       else if (id === "duplicate") void actions?.duplicate(node.path);
     });
   };
@@ -261,7 +285,7 @@ export function FileTree({
       if (!n) return;
       setFocused(n.path);
       scrollPending.current = true;
-      if (n.kind === "doc") onSelect(n.path, false);
+      if (n.kind === "doc" || (n.kind === "file" && isViewable(n.path))) onSelect(n.path, false);
     };
     if (e.key === "ArrowDown") go(at < 0 ? rows[0] : rows[at + 1]);
     else if (e.key === "ArrowUp") go(rows[at - 1]);
@@ -281,10 +305,11 @@ export function FileTree({
   };
 
   const row = (n: TreeNode, depth: number) => {
-    const isDoc = n.kind === "doc";
+    const isDoc = n.kind !== "folder";
     const classes = [
       "tree-row",
       isDoc ? "doc" : "",
+      n.kind === "file" ? "file" : "",
       isDoc && selected === n.path ? "selected" : "",
       focused === n.path ? "focused" : "",
       !isDoc && dropOn === n.path ? "drop-into" : "",
@@ -309,14 +334,16 @@ export function FileTree({
             }}
             onKeyDown={(e) => {
               e.stopPropagation();
-              if (e.key === "Enter") e.currentTarget.blur();
+              // ↩ and Escape settle the name themselves; a click away settles it on blur.
+              if (e.key === "Enter") void finishRename(n.path, e.currentTarget.value);
               if (e.key === "Escape") {
-                e.currentTarget.value = n.name;
-                e.currentTarget.blur();
+                editingNow.current = null;
+                setEditing(null);
+                list.current?.focus();
               }
             }}
             onBlur={(e) => {
-              void finishRename(n.path, e.currentTarget.value);
+              if (editingNow.current === n.path) void finishRename(n.path, e.currentTarget.value);
             }}
           />
         </div>
@@ -349,12 +376,13 @@ export function FileTree({
         }}
         onClick={(e) => {
           setFocused(n.path);
-          if (isDoc) onSelect(n.path, e.metaKey || e.ctrlKey);
+          if (isDoc) openNode(n, e.metaKey || e.ctrlKey);
           else toggle(n.path);
         }}
       >
         {caret}
         <span className="truncate">{n.name}</span>
+        {n.kind === "file" && n.ext ? <span className="file-ext">{n.ext}</span> : null}
         {inCloud.has(n.path) ? (
           <span className="cloud-mark" aria-label="in iCloud">
             ☁

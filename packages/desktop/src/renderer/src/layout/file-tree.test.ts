@@ -60,4 +60,20 @@ describe("files panel names", () => {
     expect(renamed("Ideas/Plan.md", "  ", false)).toBeNull();
     expect(renamed("Plan.md", "..hidden", false)).toBe("hidden.md");
   });
+
+  it("lists attachments among docs, by name, with their ending apart", () => {
+    const tree = buildTree(["b.md"], ["img"], "name", {}, ["a.png", "img/c.pdf"]);
+    expect(tree.map((n) => [n.kind, n.name])).toEqual([
+      ["folder", "img"],
+      ["file", "a"],
+      ["doc", "b"],
+    ]);
+    expect(tree[1]).toEqual({ kind: "file", name: "a", ext: "png", path: "a.png" });
+  });
+
+  it("keep an attachment's ending when renamed", () => {
+    expect(renamed("img/photo.png", "cover", false)).toBe("img/cover.png");
+    expect(renamed("img/photo.png", "cover.png", false)).toBe("img/cover.png");
+    expect(renamed("spec.pdf", "Spec v2", false)).toBe("Spec v2.pdf");
+  });
 });

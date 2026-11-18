@@ -23,7 +23,7 @@ async function describe_(
   root: string,
   mode: FolderState["mode"] = "writable",
 ): Promise<FolderState> {
-  const { docs, folders } = await listDocs(root);
+  const { docs, folders, files } = await listDocs(root);
   return {
     name: "f",
     path: root,
@@ -31,6 +31,7 @@ async function describe_(
     reason: null,
     docs,
     folders,
+    files,
     times: {},
     truncated: false,
     cloud: null,
@@ -133,5 +134,32 @@ describe("the files panel on disk", () => {
     expect(
       await trashEntry(f, "Plan.md", () => Promise.reject(new Error("no Trash here"))),
     ).toEqual({ kind: "failed", reason: "Couldn't move it to the Trash: no Trash here" });
+  });
+
+  it("shows images, PDFs and other attachments, and moves and copies them keeping their ending", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "anur-files-"));
+    mkdirSync(path.join(root, "attachments"));
+    mkdirSync(path.join(root, "src"));
+    writeFileSync(path.join(root, "Plan.md"), "# Plan\n");
+    writeFileSync(path.join(root, "attachments", "photo.png"), "png");
+    writeFileSync(path.join(root, "attachments", "spec.pdf"), "pdf");
+    writeFileSync(path.join(root, "src", "main.ts"), "");
+    writeFileSync(path.join(root, "notes.txt"), "");
+    const f = await describe_(root);
+    expect(f.files).toEqual(["attachments/photo.png", "attachments/spec.pdf"]);
+    expect(f.folders).toEqual(["attachments"]);
+    expect(await moveEntry(f, "attachments/photo.png", "Cover.png")).toEqual({
+      kind: "moved",
+      to: "Cover.png",
+      docs: [{ from: "attachments/photo.png", to: "Cover.png" }],
+    });
+    expect(await moveEntry(f, "attachments/spec.pdf", "attachments/spec.md")).toEqual({
+      kind: "failed",
+      reason: "The name has to end in .pdf.",
+    });
+    expect(await duplicateDoc(f, "attachments/spec.pdf")).toEqual({
+      kind: "created",
+      path: "attachments/spec copy.pdf",
+    });
   });
 });

@@ -5,7 +5,12 @@
  */
 export type TreeNode =
   | { kind: "folder"; name: string; path: string; children: TreeNode[] }
-  | { kind: "doc"; name: string; path: string };
+  | { kind: "doc"; name: string; path: string }
+  /** An attachment, such as an image or a PDF: its name without the ending, and the ending. */
+  | { kind: "file"; name: string; ext: string; path: string };
+
+/** Attachments that open in a tab of their own; the rest open in their default app. */
+export const isViewable = (p: string) => /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(p);
 
 export const SORTS = ["name", "name-desc", "modified", "created"] as const;
 export type Sort = (typeof SORTS)[number];
@@ -15,6 +20,7 @@ export function buildTree(
   folderPaths: readonly string[] = [],
   sort: Sort = "name",
   times: Readonly<Record<string, readonly [number, number]>> = {},
+  files: readonly string[] = [],
 ): TreeNode[] {
   const root: TreeNode[] = [];
   const folders = new Map<string, TreeNode[]>([["", root]]);
@@ -36,6 +42,17 @@ export function buildTree(
     const dir = slash < 0 ? "" : p.slice(0, slash);
     folderFor(dir).push({ kind: "doc", name: p.slice(slash + 1).replace(/\.md$/i, ""), path: p });
   }
+  for (const p of files) {
+    const slash = p.lastIndexOf("/");
+    const base = p.slice(slash + 1);
+    const dot = base.lastIndexOf(".");
+    folderFor(slash < 0 ? "" : p.slice(0, slash)).push({
+      kind: "file",
+      name: dot > 0 ? base.slice(0, dot) : base,
+      ext: dot > 0 ? base.slice(dot + 1).toLowerCase() : "",
+      path: p,
+    });
+  }
 
   const collator = new Intl.Collator(undefined, { sensitivity: "base", numeric: true });
   const byName = (a: TreeNode, b: TreeNode) =>
@@ -44,14 +61,15 @@ export function buildTree(
   const docOrder = (a: TreeNode, b: TreeNode) =>
     sort === "modified" || sort === "created" ? at(b) - at(a) || byName(a, b) : byName(a, b);
   const order = (nodes: TreeNode[]) => {
+    // Folders first; docs and attachments together, as Obsidian lists them.
     nodes.sort((a, b) =>
-      a.kind !== b.kind
+      (a.kind === "folder") !== (b.kind === "folder")
         ? a.kind === "folder"
           ? -1
           : 1
         : a.kind === "folder"
-          ? collator.compare(a.name, b.name) * (sort === "name-desc" ? -1 : 1)
-          : docOrder(a, b),
+          ? byName(a, b)
+          : docOrder(a, b) || a.path.localeCompare(b.path),
     );
     for (const n of nodes) if (n.kind === "folder") order(n.children);
   };
@@ -59,9 +77,9 @@ export function buildTree(
   return root;
 }
 
-/** How many docs a folder holds, at any depth. */
+/** How many docs and files a folder holds, at any depth. */
 export function docCount(node: TreeNode): number {
-  return node.kind === "doc" ? 1 : node.children.reduce((n, c) => n + docCount(c), 0);
+  return node.kind === "folder" ? node.children.reduce((n, c) => n + docCount(c), 0) : 1;
 }
 
 /** The folder a new doc or folder goes in: the folder itself, or a doc's folder. */
@@ -92,8 +110,10 @@ export function dropTarget(from: string, into: string): string | null {
   return to;
 }
 
-/** A name typed in the tree, made a path beside the old one; a doc keeps ".md". */
+/** A name typed in the tree, made a path beside the old one; a doc or file keeps its ending. */
 export function renamed(path: string, typed: string, isFolder: boolean): string | null {
+  const dot = path.lastIndexOf(".");
+  const ending = isFolder || dot <= path.lastIndexOf("/") ? "" : path.slice(dot);
   const name = typed
     .replace(/[\\/:]/g, " ")
     .replace(/\s+/g, " ")
@@ -101,5 +121,7 @@ export function renamed(path: string, typed: string, isFolder: boolean): string 
     .replace(/^\.+/, "");
   if (!name) return null;
   const dir = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
-  return `${dir}${name}${isFolder || /\.md$/i.test(name) ? "" : ".md"}`;
+  if (isFolder) return `${dir}${name}`;
+  const want = ending || ".md";
+  return `${dir}${name}${name.toLowerCase().endsWith(want.toLowerCase()) ? "" : want}`;
 }
