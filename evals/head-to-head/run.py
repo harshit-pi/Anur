@@ -65,10 +65,12 @@ LONG_CHAT = [
 ]
 
 
-def claude(prompt: str, cwd: str, resume: str | None = None) -> dict:
+def claude(prompt: str, cwd: str, resume: str | None = None, fork: bool = False) -> dict:
     args = ["claude", "-p", prompt, "--output-format", "json", "--permission-mode", "auto"]
     if resume:
         args += ["--resume", resume]
+        if fork:
+            args.append("--fork-session")
     t0 = time.time()
     out = subprocess.run(args, cwd=cwd, capture_output=True, text=True, timeout=900)
     try:
