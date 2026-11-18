@@ -32,6 +32,7 @@ import {
   DEFAULT_AGENT,
   TERMINAL_EDIT,
   UNSAVED_EDIT,
+  AGENTS,
   isAgentId,
   type AgentId,
 } from "../../shared/agents.ts";
@@ -126,6 +127,8 @@ type Live = {
   created?: Map<string, string>;
   /** Other docs this thread proposed edits to, with the sections last said. */
   proposedTo?: Map<string, string>;
+  /** When the running turn started, for "Working for 3 min". */
+  turnAt?: number;
   /** A tool ran since the last text: the next text starts a paragraph. */
   afterTool?: boolean;
   /** The session's context and the model's window, as the agent last reported them (4.9). */
@@ -189,6 +192,10 @@ export class Threads {
   }
   private snapshotStore: SnapshotStore | null = null;
   /** Docs agents made this run, so a note's Undo can remove one while it's unchanged. */
+  /** The session opened ahead for the next thread, by its reserved ID. */
+  private spare: { thread: string; agent: AgentId } | null = null;
+  private spareOpening = false;
+  private closed = false;
   private readonly createdUndo = new Map<string, { rel: string; text: string }>();
   /** What each auto-used edit replaced, so its note's Undo can restore it while this app runs. */
   private readonly autoUndo = new Map<string, { rel: string; before: string; after: string }>();
@@ -375,7 +382,35 @@ export class Threads {
   }
 
   /** Every thread on the doc, each with its section's heading path in `text`. */
+  /**
+   * One session kept open ahead, on the default agent, for the next thread:
+   * its first message then skips the session's start. Main reserves the
+   * thread's ID now; the session holds nothing until a thread takes it.
+   */
+  private async ensureSpare(): Promise<void> {
+    const agent = this.d.defaultAgent();
+    if (this.spare?.agent === agent || this.spareOpening || this.closed) return;
+    if (!AGENTS[agent].runsThreads || this.d.hub.status(agent).connected !== true) return;
+    if (this.spare) this.d.hub.send({ type: "close", thread: this.spare.thread });
+    this.spareOpening = true;
+    try {
+      const thread = newThreadId();
+      const spec = await this.spec(thread, agent, null);
+      // The folder may have closed while the spec was written.
+      if (this.isClosed()) return;
+      this.d.hub.send({ type: "warm", spec });
+      this.spare = { thread, agent };
+    } finally {
+      this.spareOpening = false;
+    }
+  }
+
+  private isClosed(): boolean {
+    return this.closed;
+  }
+
   async list(rel: string, text: string): Promise<ThreadView[]> {
+    void this.ensureSpare();
     for (const live of this.live.values()) if (live.rel === rel) live.docText = text;
     const at = await this.d.locate(rel, text);
     if (!at) return [];
@@ -479,6 +514,7 @@ export class Threads {
       title: lines.findLast((l) => l.kind === "renamed")?.title ?? start.title,
       closed,
       busy: Boolean(live?.turn),
+      busySince: live?.turn ? (live.turnAt ?? null) : null,
       reads,
       items,
       options: this.options.get(thread) ?? [],
@@ -519,7 +555,11 @@ export class Threads {
     const section = at.ids[index];
     if (index < 0 || !section)
       return { kind: "refused", reason: "That section changed; try again." };
-    const thread = newThreadId();
+    // The spare session, if one is open on this agent: the thread takes its ID.
+    const runOn = agent ?? this.d.defaultAgent();
+    const spare = this.spare?.agent === runOn ? this.spare : null;
+    if (spare) this.spare = null;
+    const thread = spare?.thread ?? newThreadId();
     const name = at.tree.sections[index]?.path.at(-1) ?? "this section";
     await this.append(at.doc, thread, {
       kind: "thread",
@@ -543,6 +583,7 @@ export class Threads {
     // Picks made before the first message: the host sets them as the session opens.
     for (const o of options) this.setOption(thread, o.id, o.value);
     await this.send(thread, rel, text, message, at.doc, undefined, shown);
+    void this.ensureSpare();
     const v = await this.view(at, rel, text, thread);
     return v
       ? { kind: "started", thread: v }
@@ -591,6 +632,7 @@ export class Threads {
     else this.exploring.delete(thread);
     const turn = newTurnId();
     live.turn = turn;
+    live.turnAt = Date.now();
     live.text = "";
     live.tools = new Map();
     live.written = new Set();
@@ -1849,6 +1891,9 @@ export class Threads {
 
   /** Close every file this folder's threads write. */
   async close(): Promise<void> {
+    this.closed = true;
+    if (this.spare) this.d.hub.send({ type: "close", thread: this.spare.thread });
+    this.spare = null;
     for (const w of this.writers.values()) await (await w).close().catch(() => undefined);
     this.writers.clear();
     for (const [thread, live] of this.live) {

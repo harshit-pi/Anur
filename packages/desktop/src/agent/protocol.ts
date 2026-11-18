@@ -105,7 +105,9 @@ export type ToHost =
   | { type: "cancel"; thread: string }
   | { type: "permission"; request: string; option: string | null }
   | { type: "option"; thread: string; id: string; value: string }
-  | { type: "close"; thread: string };
+  | { type: "close"; thread: string }
+  /** Open a session ahead, for the next thread: the click then skips the session's start. */
+  | { type: "warm"; spec: SessionSpec };
 
 export type AgentVersions = { agent: string; adapter: string };
 
