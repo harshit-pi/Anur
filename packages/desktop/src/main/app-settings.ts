@@ -24,6 +24,8 @@ export type AppSettings = {
   sessionLimit: number;
   /** The name others see on this person's threads; null takes git's, else the Mac's. */
   name: string | null;
+  /** Plugins switched on, by folder path (group 19). */
+  plugins: Record<string, string[]>;
 };
 
 const DEFAULTS: AppSettings = {
@@ -33,6 +35,7 @@ const DEFAULTS: AppSettings = {
   autoUpdate: true,
   sessionLimit: 8,
   name: null,
+  plugins: {},
 };
 
 /** The limits Settings offers; anything else saved reads as the default. */
@@ -61,6 +64,7 @@ export class AppSettingsStore {
         autoUpdate: raw.autoUpdate !== false,
         sessionLimit: sessionLimitOf(raw.sessionLimit),
         name: typeof raw.name === "string" && raw.name.trim() ? raw.name.trim().slice(0, 80) : null,
+        plugins: pluginsFrom(raw.plugins),
       };
     } catch {
       this.current = { ...DEFAULTS };
@@ -77,6 +81,15 @@ export class AppSettingsStore {
     await writeFileAtomic(this.file, JSON.stringify(this.current, null, 1));
     return this.current;
   }
+}
+
+/** Saved plugin switches: folder paths to plugin IDs; anything malformed is dropped. */
+function pluginsFrom(raw: unknown): Record<string, string[]> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string[]> = {};
+  for (const [folder, ids] of Object.entries(raw as Record<string, unknown>))
+    if (Array.isArray(ids)) out[folder] = ids.filter((x): x is string => typeof x === "string");
+  return out;
 }
 
 /** True when the folder commits `.anur/` with git: its ignore file is gone. */

@@ -487,6 +487,24 @@ export const ipcContract = {
     request: z.object({ path: z.string().max(4096) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
+  /** Plugins Anur ships, and whether each is on for this window's folder (19.4). */
+  "plugins:list": {
+    request: z.object({}).strict(),
+    response: z.object({
+      folder: z.string().nullable(),
+      plugins: z.array(
+        z.object({ id: z.string(), name: z.string(), what: z.string(), on: z.boolean() }),
+      ),
+    }),
+  },
+  /** Switch a plugin on or off for this window's folder; new threads pick it up. */
+  "plugins:set": {
+    request: z.object({ id: z.string().max(100), on: z.boolean() }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
   /** Close or reopen a thread (11.3): closed ones are hidden until a person shows them. */
   "thread:close": {
     request: z

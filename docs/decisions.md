@@ -232,3 +232,11 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - The agent records one with `anur_note_decision`. It settles with no click, shown as one line with Undo, only when the words are word for word in something the person typed in that thread, they aren't a question, and the agent's confidence is 0.7 or more (Opus at 0.7 kept 92% right on 286 real messages). Otherwise it asks once: "Keep this for later work?", Keep or Just this once. Words the person never typed are refused, so nothing is put in anyone's mouth.
 - Kept decisions reach every new thread on the section and below, listed apart from findings as "Decided by Sam (3 Nov): … Instead of: …". The agent is told to follow them, to say in a line when it relied on one, and to ask rather than go against one.
 - Names show only on someone else's decisions. In a real run, a new thread asked to cut the price below a competitor answered "No. On 18 November Harshit decided…".
+
+## The plugin API (group 19)
+
+- Six points, in `packages/core/src/plugins`, headless so the app, the pre-commit hook and CI share them: section source, edge detector, context provider, map layer, surface, MCP tools under a prefix.
+- Each point runs in one process: detectors and section sources in the index process, context providers and surfaces in main, map layers in the renderer, MCP tools in the MCP server. A plugin loads in each process, and each host keeps only its own points.
+- A manifest declares `apiVersion`, the points, the MCP prefix, the surfaces and the folders. Every registration is checked against it, and an undeclared one fails the load and leaves nothing behind. Network and file access aren't enforced until a sandbox exists (Design - Extensions).
+- Plugins Anur ships are switched on per folder, remembered on this Mac, in Settings → Plugins. Context providers add labelled lines to a thread's bundle; MCP tools reach the agent through the session's MCP server.
+- Engineering is the first plugin, declared but empty until group 20. Core's own features move behind the API after the first week (group 27). Section sources and map layers are wired into the page and map when the engineering plugin first draws something.
