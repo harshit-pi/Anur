@@ -306,8 +306,14 @@ describe("Threads", () => {
     const copies = path.join(support, "agent", "copies", r.thread.id);
     await writeFile(path.join(copies, "pricing.md"), other.replace("£4", "£3"));
     await reply(r.thread.id, "Proposed.");
-    const view = (await t.list("plan.md", DOC)).find((x) => x.id === r.thread.id);
-    expect(view?.items.find((i) => i.kind === "proposed")).toEqual({
+    // The turn's merge runs after it ends; wait for it rather than a fixed time.
+    const proposed = async () =>
+      (await t.list("plan.md", DOC))
+        .find((x) => x.id === r.thread.id)
+        ?.items.find((i) => i.kind === "proposed");
+    for (let n = 0; n < 50 && !(await proposed()); n++)
+      await new Promise((res) => setTimeout(res, 100));
+    expect(await proposed()).toEqual({
       kind: "proposed",
       doc: "pricing.md",
       sections: [["Pricing", "Plans"]],
