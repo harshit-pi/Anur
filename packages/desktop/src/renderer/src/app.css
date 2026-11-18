@@ -3435,3 +3435,42 @@ body.resizing * {
   stroke-width: 2.5;
   stroke-linecap: round;
 }
+
+/* Findings (16.1): what a thread established, kept or dropped by a person. */
+.think-finding {
+  padding: 8px 12px;
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--green);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.think-finding.proposed {
+  border-left-color: var(--blue);
+}
+
+.think-finding.dropped {
+  opacity: 0.6;
+  border-left-color: var(--rule);
+}
+
+.think-finding-label {
+  margin-right: 6px;
+  color: var(--graphite);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+.think-finding.proposed .think-finding-label {
+  margin-bottom: 2px;
+  color: var(--blue);
+}
+
+.think-finding-edit {
+  width: 100%;
+  margin: 4px 0;
+}
+
+.think-kept {
+  color: var(--green);
+}
