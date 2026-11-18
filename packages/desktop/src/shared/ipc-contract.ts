@@ -541,6 +541,27 @@ export const ipcContract = {
     request: z.object({ url: z.string().max(4096) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
+  /** What another app dropped or pasted that isn't plain files: addresses, links, text. */
+  "file:incoming": {
+    request: z
+      .object({
+        into: z.string().max(1024),
+        uriList: z.string().max(100_000),
+        text: z.string().max(1_000_000),
+        obsidianFiles: z.string().max(100_000),
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("copied"), paths: z.array(z.string()), folder: FolderState }),
+      z.object({ kind: z.literal("made"), path: z.string(), folder: FolderState }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /** Paste into the page as Edit → Paste does, so the paste event carries every kind of data. */
+  "edit:paste": {
+    request: z.object({}).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Files copied in Finder, or in Anur, as full paths. */
   "clipboard:read-files": {
     request: z.object({}).strict(),

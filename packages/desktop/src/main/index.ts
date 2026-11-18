@@ -50,6 +50,7 @@ import {
 import { isInTrash, trashTelling } from "./folder/system-trash.ts";
 import { FILES_TYPE, filePathsPlist, readFilePaths } from "./folder/finder-clipboard.ts";
 import { FolderWatch } from "./folder/folder-watch.ts";
+import { docFromText, obsidianVaults, resolveIncoming } from "./folder/incoming.ts";
 import { planLinkUpdates } from "./folder/link-updates.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
@@ -816,6 +817,34 @@ const handlers: { [C in Channel]: Handler<C> } = {
       new ClipboardItem({ [FILES_TYPE]: filePathsPlist(full), "text/plain": full.join("\n") }),
     ]);
     return { ok: true };
+  },
+  "file:incoming": async ({ into, uriList, text, obsidianFiles }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    if (folder.mode !== "writable") return { kind: "failed", reason: "This folder is read-only." };
+    if (into !== "" && !folder.folders.includes(into))
+      return { kind: "failed", reason: `There's no folder ${into}.` };
+    const found = await resolveIncoming(
+      { uriList, text, obsidianFiles },
+      await obsidianVaults(app.getPath("appData")),
+    );
+    if (found.paths.length) {
+      const copied = await copyInto(folder, found.paths, into);
+      if (copied.kind === "failed") return copied;
+      const now = await folders.refresh(webContentsId);
+      return now ? { ...copied, folder: now } : { kind: "failed", reason: "The folder closed." };
+    }
+    if (!found.text) return { kind: "failed", reason: "There was nothing Anur could use in that." };
+    const file = await docFromText(path.join(folder.path, into), found.text);
+    const now = await folders.refresh(webContentsId);
+    return now
+      ? { kind: "made", path: into ? `${into}/${file}` : file, folder: now }
+      : { kind: "failed", reason: "The folder closed." };
+  },
+  "edit:paste": (_req, { webContentsId }) => {
+    const win = windows.get(webContentsId);
+    win?.webContents.paste();
+    return { ok: !!win };
   },
   "file:import": async ({ sources, into }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
