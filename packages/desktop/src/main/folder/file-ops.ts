@@ -39,10 +39,13 @@ const exists = (full: string) =>
 
 const isFolderIn = (folder: FolderState, rel: string) => folder.folders.includes(rel);
 
-/** Docs at or under `rel`, which is a doc or a folder. */
+/** Docs and files at or under `rel`, which is a doc, a file or a folder. */
 export function docsUnder(folder: FolderState, rel: string): string[] {
-  return folder.docs.filter((d) => d === rel || d.startsWith(`${rel}/`));
+  return [...folder.docs, ...folder.files].filter((d) => d === rel || d.startsWith(`${rel}/`));
 }
+
+const isFileIn = (folder: FolderState, rel: string) =>
+  folder.docs.includes(rel) || folder.files.includes(rel);
 
 export async function createFolder(
   folder: FolderState,
@@ -74,10 +77,13 @@ export async function moveEntry(
   if (typeof src !== "string") return src;
   const dest = checkPath(folder, to);
   if (typeof dest !== "string") return dest;
-  const isDoc = folder.docs.includes(src);
+  const isDoc = isFileIn(folder, src);
   if (!isDoc && !isFolderIn(folder, src)) return failed(`There's no ${src} in this folder.`);
   if (src === dest) return { kind: "moved", to: dest, docs: [] };
-  if (isDoc && !dest.toLowerCase().endsWith(".md")) return failed("A doc's name ends in .md.");
+  // A doc stays a doc and an image an image: the ending can't change.
+  const ending = path.posix.extname(src).toLowerCase();
+  if (isDoc && path.posix.extname(dest).toLowerCase() !== ending)
+    return failed(`The name has to end in ${ending}.`);
   if (!isDoc && (dest === src || dest.startsWith(`${src}/`)))
     return failed("A folder can't go inside itself.");
   const destFull = path.join(folder.path, dest);
@@ -97,7 +103,7 @@ export async function moveEntry(
   return { kind: "moved", to: dest, docs };
 }
 
-/** A copy beside the doc: "Plan copy.md", then "Plan copy 2.md". */
+/** A copy beside the doc or file: "Plan copy.md", then "Plan copy 2.md". */
 export async function duplicateDoc(
   folder: FolderState,
   requested: string,
@@ -105,10 +111,11 @@ export async function duplicateDoc(
   if (folder.mode !== "writable") return failed("This folder is read-only.");
   const src = checkPath(folder, requested);
   if (typeof src !== "string") return src;
-  if (!folder.docs.includes(src)) return failed(`There's no ${src} in this folder.`);
-  const stem = src.replace(/\.md$/i, "");
+  if (!isFileIn(folder, src)) return failed(`There's no ${src} in this folder.`);
+  const ending = path.posix.extname(src);
+  const stem = src.slice(0, src.length - ending.length);
   for (let n = 1; n < 1000; n++) {
-    const rel = `${stem} copy${n === 1 ? "" : ` ${String(n)}`}.md`;
+    const rel = `${stem} copy${n === 1 ? "" : ` ${String(n)}`}${ending}`;
     try {
       await copyFile(
         path.join(folder.path, src),
@@ -132,7 +139,7 @@ export async function trashEntry(
   if (folder.mode !== "writable") return failed("This folder is read-only.");
   const rel = checkPath(folder, requested);
   if (typeof rel !== "string") return rel;
-  if (!folder.docs.includes(rel) && !isFolderIn(folder, rel))
+  if (!isFileIn(folder, rel) && !isFolderIn(folder, rel))
     return failed(`There's no ${rel} in this folder.`);
   try {
     await trash(path.join(folder.path, rel));

@@ -23,7 +23,9 @@ export const FolderState = z.object({
   docs: z.array(z.string()),
   /** Folders holding docs at any depth, and empty ones; relative, sorted. */
   folders: z.array(z.string()),
-  /** Each doc's last change and creation times, in ms, for sorting. */
+  /** Attachments shown beside docs: images, PDFs, audio, video, canvases and bases. */
+  files: z.array(z.string()),
+  /** Each doc and file's last change and creation times, in ms, for sorting. */
   times: z.record(z.string(), z.tuple([z.number(), z.number()])),
   /** True when the folder had more files than Anur lists. */
   truncated: z.boolean(),
@@ -332,14 +334,14 @@ export const ipcContract = {
       z.object({
         kind: z.literal("moved"),
         to: z.string(),
-        /** Each doc that moved, from its old path to its new one. */
+        /** Each doc and file that moved, from its old path to its new one. */
         docs: z.array(z.object({ from: z.string(), to: z.string() })),
         folder: FolderState,
       }),
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
-  /** A copy of a doc beside it, named "<name> copy". */
+  /** A copy of a doc or file beside it, named "<name> copy". */
   "file:duplicate": {
     request: z.object({ path: z.string().max(1024) }).strict(),
     response: z.discriminatedUnion("kind", [

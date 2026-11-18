@@ -69,7 +69,7 @@ export class FolderService {
 
   /** What the sidebar and banners need to know about a folder, read fresh from disk. */
   private async describe(folder: string, readOnlyReason: string | null): Promise<FolderState> {
-    const { docs, truncated, folders } = await listDocs(folder);
+    const { docs, truncated, folders, files } = await listDocs(folder);
     const cloud = cloudProviderOf(folder, this.home);
     const gitInCloud =
       cloud !== null &&
@@ -84,7 +84,8 @@ export class FolderService {
       reason: readOnlyReason,
       docs,
       folders,
-      times: await docTimes(folder, docs),
+      files,
+      times: await docTimes(folder, [...docs, ...files]),
       truncated,
       cloud,
       gitInCloud,

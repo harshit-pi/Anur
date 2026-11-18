@@ -229,6 +229,7 @@ export function LeftSidebar({
       <FileTree
         docs={folder.docs}
         folders={folder.folders}
+        files={folder.files}
         times={folder.times}
         sort={sort}
         offloaded={folder.offloaded}
