@@ -193,6 +193,8 @@ export const ThreadView = z.object({
   title: z.string(),
   closed: z.boolean(),
   busy: z.boolean(),
+  /** When the running turn started (ms since epoch); null while idle. */
+  busySince: z.number().nullable().optional(),
   /** What the agent reads in this thread: the bundle's parts, as the reads line lists them. */
   reads: z.array(z.object({ label: z.string(), detail: z.string() })),
   items: z.array(ThreadItem),

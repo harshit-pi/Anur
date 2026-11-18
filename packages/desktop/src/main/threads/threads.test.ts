@@ -297,6 +297,22 @@ describe("Threads", () => {
     expect(preview?.parts[0]?.proposed).toContain("The host has no tests yet; CI is red.");
   });
 
+  it("opens a session ahead, and the next thread takes it", async () => {
+    const { threads: t, sent } = await setup();
+    await t.list("plan.md", DOC);
+    await new Promise((r) => setTimeout(r, 50));
+    const warm = sent.find((m) => m.type === "warm");
+    if (warm?.type !== "warm") throw new Error("no spare session was opened");
+    const r = await t.start("plan.md", DOC, risks, "Tighten the risk.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    expect(r.thread.id).toBe(warm.spec.thread);
+    // A new spare for the thread after this one.
+    await new Promise((res) => setTimeout(res, 50));
+    const spares = sent.filter((m) => m.type === "warm");
+    expect(spares).toHaveLength(2);
+    expect(spares[1]?.type === "warm" && spares[1].spec.thread).not.toBe(r.thread.id);
+  });
+
   it("says in the thread when its edit lands in another doc", async () => {
     const { folder, support, threads: t, reply } = await setup();
     const other = "# Pricing\n\n## Plans\n\nPaid: £4.\n";

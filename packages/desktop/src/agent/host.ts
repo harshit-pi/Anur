@@ -65,6 +65,12 @@ export class AgentHost {
   /** The turn running in each session, so updates reach the right thread. */
   private readonly running = new Map<string, Turn>();
   private readonly permissions = new Map<string, (option: string | null) => void>();
+  /** Spare sessions opened ahead, not yet taken by a thread's first message. */
+  private readonly warmed = new Set<string>();
+  /** Each session's mode and model as last reported, to repeat when a spare is taken. */
+  private readonly lastOptions = new Map<string, SessionOption[]>();
+  /** Spare sessions still opening. */
+  private readonly warming = new Set<string>();
   /** Each session's hook log, to match its tool calls against. */
   private readonly hookLogs = new Map<string, string>();
   /** Each thread's chosen mode and model, applied to its session whenever one starts. */
@@ -105,8 +111,13 @@ export class AgentHost {
         this.permissions.delete(m.request);
         return;
       case "close":
+        if (this.warmed.has(m.thread)) void this.closeWarm(m.thread);
         this.sessions.delete(m.thread);
         this.chosen.delete(m.thread);
+        this.lastOptions.delete(m.thread);
+        return;
+      case "warm":
+        void this.warm(m.spec);
         return;
       case "option":
         void this.setOption(m.thread, m.id, m.value);
@@ -232,9 +243,59 @@ export class AgentHost {
     return true;
   }
 
+  /**
+   * A session opened ahead for a thread that doesn't exist yet: the thread's
+   * first message then skips the session's start (about a third of a second).
+   * Main reserves the thread's ID and sends its spec; nothing runs in it.
+   */
+  private async warm(spec: SessionSpec): Promise<void> {
+    if (this.sessions.has(spec.thread)) return;
+    if (!(await this.connect(spec.agent))) return;
+    const c = this.connected(spec.agent);
+    if (!c) return;
+    this.warming.add(spec.thread);
+    try {
+      await this.session(c, spec);
+      this.warmed.add(spec.thread);
+    } catch {
+      // The thread's first message opens its session, as before.
+      this.sessions.delete(spec.thread);
+    } finally {
+      this.warming.delete(spec.thread);
+    }
+  }
+
+  /** A spare session no thread took: closed, so its agent process ends. */
+  private async closeWarm(thread: string): Promise<void> {
+    const live = this.sessions.get(thread);
+    this.warmed.delete(thread);
+    const c = live ? this.connected(live.agent) : null;
+    if (live && c)
+      await c.conn.agent
+        .request(acp.methods.agent.session.close, { sessionId: live.id })
+        .catch(() => undefined);
+  }
+
   private async session(c: Connected, spec: SessionSpec): Promise<string> {
+    // A spare still opening: wait for it rather than open a second session.
+    for (let i = 0; i < 100 && this.warming.has(spec.thread); i++)
+      await new Promise((r) => setTimeout(r, 50));
     const live = this.sessions.get(spec.thread);
-    if (live?.agent === spec.agent) return live.id;
+    if (live?.agent === spec.agent) {
+      if (this.warmed.delete(spec.thread))
+        // The spare is this thread's now: main records its session, as for a new one.
+        this.send({
+          type: "session",
+          thread: spec.thread,
+          session: live.id,
+          agent: spec.agent,
+          event: "started",
+        });
+      // Its mode and model, which main didn't hear while no thread had this ID.
+      const options = this.lastOptions.get(spec.thread);
+      if (options) this.send({ type: "options", thread: spec.thread, options });
+      return live.id;
+    }
     const adapter = this.env.adapters[spec.agent];
     if (!adapter) throw new Error(`${AGENTS[spec.agent].name} can't run threads yet.`);
     const meta = adapter.sessionMeta(spec.guard);
@@ -314,6 +375,7 @@ export class AgentHost {
         .catch(() => null);
       if (res) current = optionsOf(res.configOptions);
     }
+    this.lastOptions.set(spec.thread, current);
     this.send({ type: "options", thread: spec.thread, options: current });
   }
 
@@ -426,7 +488,10 @@ export class AgentHost {
         value,
       })
       .catch(() => null);
-    if (res) this.send({ type: "options", thread, options: optionsOf(res.configOptions) });
+    if (res) {
+      this.lastOptions.set(thread, optionsOf(res.configOptions));
+      this.send({ type: "options", thread, options: optionsOf(res.configOptions) });
+    }
   }
 
   private async prompt(spec: SessionSpec, turn: string, text: string): Promise<void> {

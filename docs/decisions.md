@@ -131,3 +131,10 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - Every box has a second line saying what's under it ("4 sections", "1 thread") or what sets it apart: an option's one-line why (`anur_offer_options` now asks for it), "Exploring…" while the agent works on it, an edit's first line.
 - A thread is a pill that reads as its name, in the doc's italic. A proposed edit has Use on its box, which puts it in the doc as Use in Think does.
 - A wide map opens at 75% on its title, so names stay readable; Fit shows the whole of it.
+
+## Starting a thread faster
+
+- Anur keeps one Claude Code session open ahead, on the default agent, under a thread ID it reserves. The next thread (a message, Build or Check) takes it and skips the session's start, about a third of a second; a new spare opens behind it. An untaken spare is closed with the folder.
+- The rest of the wait before a first action, one to two seconds, is the model's, as in Claude Code.
+- A running turn shows "Thinking…" for ten seconds, then how long it has been working ("Working for 4 min 12 s…"), so a long build doesn't read as stuck.
+- A thread's mode and model pickers show their values, as a new thread's do.

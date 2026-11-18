@@ -957,7 +957,7 @@ export function Think({
             ),
           )}
           {thread.busy && thread.items.at(-1)?.kind !== "message" && asks.length === 0 ? (
-            <div className="think-working quiet">Thinking…</div>
+            <Working since={thread.busySince ?? null} />
           ) : null}
           {asks.map((p) =>
             p.plan ? (
@@ -1050,37 +1050,26 @@ export function Think({
                   }}
                 />
                 {thread.options.map((o) => (
-                  <label key={o.id} className="think-option">
-                    <span className="quiet">{o.name}</span>
-                    <select
-                      aria-label={o.name}
-                      value={o.current}
-                      disabled={thread.busy}
-                      title={o.choices.find((c) => c.value === o.current)?.description ?? undefined}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setThreads((ts) =>
-                          ts.map((t) =>
-                            t.id === thread.id
-                              ? {
-                                  ...t,
-                                  options: t.options.map((x) =>
-                                    x.id === o.id ? { ...x, current: value } : x,
-                                  ),
-                                }
-                              : t,
-                          ),
-                        );
-                        void anur.call("thread:option", { thread: thread.id, id: o.id, value });
-                      }}
-                    >
-                      {o.choices.map((c) => (
-                        <option key={c.value} value={c.value}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <OptionPicker
+                    key={o.id}
+                    option={o}
+                    disabled={thread.busy}
+                    onChange={(value) => {
+                      setThreads((ts) =>
+                        ts.map((t) =>
+                          t.id === thread.id
+                            ? {
+                                ...t,
+                                options: t.options.map((x) =>
+                                  x.id === o.id ? { ...x, current: value } : x,
+                                ),
+                              }
+                            : t,
+                        ),
+                      );
+                      void anur.call("thread:option", { thread: thread.id, id: o.id, value });
+                    }}
+                  />
                 ))}
               </>
             }
@@ -1306,6 +1295,27 @@ export function Think({
       ) : null}
     </div>
   );
+}
+
+/** While a turn runs: "Thinking…" at first, then how long it has been working. */
+function Working({ since }: { since: number | null }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => {
+      window.clearInterval(t);
+    };
+  }, []);
+  const secs = since ? Math.max(0, Math.round((now - since) / 1000)) : 0;
+  const label =
+    secs < 10
+      ? "Thinking…"
+      : secs < 60
+        ? `Working for ${String(secs)} s…`
+        : `Working for ${String(Math.floor(secs / 60))} min ${String(secs % 60).padStart(2, "0")} s…`;
+  return <div className="think-working quiet">{label}</div>;
 }
 
 const VERDICT: Record<"holds" | "wrong" | "unsupported" | "missing", string> = {
