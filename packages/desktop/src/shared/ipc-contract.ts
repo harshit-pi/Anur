@@ -221,6 +221,8 @@ export const ThreadView = z.object({
   tokens: z
     .object({
       used: z.int().nonnegative(),
+      /** Of `used`, what was read back from the prompt cache, at a fraction of the price. */
+      cached: z.int().nonnegative().optional(),
       context: z.int().nonnegative(),
       /** The context after the first turn: the meter counts growth from here (4.9). */
       first: z.int().nonnegative(),
