@@ -30,6 +30,8 @@ export type FileActions = {
   move: (moves: { from: string; to: string }[]) => Promise<boolean>;
   duplicate: (path: string) => Promise<void>;
   trash: (items: { path: string; isFolder: boolean; docs: number }[]) => Promise<void>;
+  /** Links, addresses or text another app dropped or pasted: the files they name, or a new doc. */
+  importIncoming: (data: IncomingData, into: string) => Promise<string[] | null>;
   /** Copy files from anywhere, by full path, into a folder; resolves with the new paths. */
   importFiles: (sources: string[], into: string) => Promise<string[] | null>;
   /** Turn back, or redo, the panel's last change; resolves with the paths it touched. */
@@ -41,6 +43,16 @@ export type FileActions = {
 
 /** A request from the panel's header: make a doc or a folder where the keys are. */
 export type MakeRequest = { kind: "doc" | "folder"; n: number };
+
+/** What a drop or paste from another app carries besides files. */
+export type IncomingData = { uriList: string; text: string; obsidianFiles: string };
+const incomingOf = (dt: DataTransfer): IncomingData => ({
+  uriList: dt.getData("text/uri-list"),
+  text: dt.getData("text/plain"),
+  obsidianFiles: dt.getData("obsidian/files"),
+});
+/** Kinds of data another app hands over that the panel can make into files. */
+const INCOMING_TYPES = ["Files", "text/uri-list", "text/plain", "obsidian/files"];
 
 /** The full paths a drag from another window carries; none if it isn't a list of them. */
 function pathsIn(data: string): string[] {
@@ -238,7 +250,10 @@ export function FileTree({
     });
   };
   /** Paste into `into`: rows cut here move; anything copied, here or in Finder, is copied. */
-  const paste = async (into: string) => {
+  /** Where a paste from the menu goes, once Edit → Paste brings its data back as an event. */
+  const pasteInto = useRef<string | null>(null);
+  /** `data` is read from the paste event at once: its clipboard can't be read after it ends. */
+  const paste = async (into: string, data: IncomingData | null = null) => {
     if (!actions || !editable) return;
     const { paths: onClip } = await anur.call("clipboard:read-files", {});
     const ours =
@@ -258,7 +273,18 @@ export function FileTree({
         );
       return;
     }
-    if (onClip.length === 0) return;
+    if (onClip.length === 0) {
+      if (!data) {
+        // From the menu: paste as Edit → Paste does, so the event brings links and text too.
+        pasteInto.current = into;
+        list.current?.focus();
+        void anur.call("edit:paste", {});
+        return;
+      }
+      const made = await actions.importIncoming(data, into);
+      if (made?.length) landed(into, made);
+      return;
+    }
     const made = await actions.importFiles(onClip, into);
     if (made?.length) landed(into, made);
   };
@@ -390,7 +416,10 @@ export function FileTree({
   };
   /** Files dragged in from Finder or another app, to be copied in. */
   const fromOutside = (e: DragEvent) =>
-    !dragging.current && editable && e.dataTransfer.types.includes("Files");
+    !dragging.current &&
+    editable &&
+    !e.dataTransfer.types.includes(PATHS_TYPE) &&
+    INCOMING_TYPES.some((t) => e.dataTransfer.types.includes(t));
   /** Rows dragged from another Anur window's files panel, to be copied in. */
   const fromOtherWindow = (e: DragEvent) =>
     !dragging.current && editable && e.dataTransfer.types.includes(PATHS_TYPE);
@@ -428,7 +457,14 @@ export function FileTree({
       const sources = other
         ? pathsIn(e.dataTransfer.getData(PATHS_TYPE))
         : [...e.dataTransfer.files].map((f) => anur.pathOf(f)).filter(Boolean);
-      if (sources.length === 0) return;
+      if (sources.length === 0) {
+        // No files: an app's link, an address or text, made into files by main.
+        if (!other)
+          void actions.importIncoming(incomingOf(e.dataTransfer), into).then((made) => {
+            if (made?.length) landed(into, made);
+          });
+        return;
+      }
       void actions.importFiles(sources, into).then((made) => {
         if (made?.length) landed(into, made);
       });
@@ -630,8 +666,8 @@ export function FileTree({
   };
 
   // ⌘C, ⌘X and ⌘V, from the keys or the Edit menu, while the tree has focus.
-  const clipNow = useRef({ copyOut, paste, pickedWith, intoFor, focused, editing });
-  clipNow.current = { copyOut, paste, pickedWith, intoFor, focused, editing };
+  const clipNow = useRef({ copyOut, paste, pickedWith, intoFor, focused, editing, pasteInto });
+  clipNow.current = { copyOut, paste, pickedWith, intoFor, focused, editing, pasteInto };
   useEffect(() => {
     const on = (kind: "copy" | "cut" | "paste") => (e: ClipboardEvent) => {
       const now = clipNow.current;
@@ -639,8 +675,11 @@ export function FileTree({
       if (!list.current || !el || !list.current.contains(el) || el.tagName === "INPUT") return;
       if (now.editing) return;
       e.preventDefault();
-      if (kind === "paste") void now.paste(now.intoFor(now.focused));
-      else now.copyOut(now.pickedWith(now.focused), kind);
+      if (kind === "paste") {
+        const into = now.pasteInto.current ?? now.intoFor(now.focused);
+        now.pasteInto.current = null;
+        void now.paste(into, e.clipboardData ? incomingOf(e.clipboardData) : null);
+      } else now.copyOut(now.pickedWith(now.focused), kind);
     };
     const copy = on("copy");
     const cut = on("cut");

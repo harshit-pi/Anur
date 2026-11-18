@@ -337,6 +337,46 @@ describe("Threads", () => {
     expect(await readFile(path.join(folder, "pricing.md"), "utf8")).toBe(other);
   });
 
+  it("uses a thread's edits across docs at once, and one Undo takes them back, keeping typing since", async () => {
+    const { folder, support, threads: t, reply } = await setup();
+    const other = "# Pricing\n\n## Plans\n\nPaid: £4.\n\n## Notes\n\nNone.\n";
+    await writeFile(path.join(folder, "pricing.md"), other);
+    const r = await t.start("plan.md", DOC, risks, "Fix both.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const copies = path.join(support, "agent", "copies", r.thread.id);
+    await writeFile(path.join(copies, "pricing.md"), other.replace("£4", "£3"));
+    await writeFile(path.join(copies, "plan.md"), DOC.replace("untested", "tested"));
+    await reply(r.thread.id, "Both proposed.");
+    for (let n = 0; n < 50; n++) {
+      const v = (await t.list("plan.md", DOC)).find((x) => x.id === r.thread.id);
+      if ((v?.changeSet ?? []).length === 2) break;
+      await new Promise((res) => setTimeout(res, 100));
+    }
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === r.thread.id);
+    expect(view?.changeSet?.map((c) => c.doc)).toEqual(["plan.md", "pricing.md"]);
+    // The page used plan.md's edit; main uses the rest.
+    const after = DOC.replace("untested", "tested");
+    const used = await t.useAll(r.thread.id, {
+      path: "plan.md",
+      before: DOC,
+      after,
+      sections: [["Plan", "Risks"]],
+    });
+    expect(used).toEqual({ used: 2, kept: [] });
+    expect(await readFile(path.join(folder, "pricing.md"), "utf8")).toContain("£3");
+    // Typing in pricing.md since, away from the edit, stays through Undo.
+    const typed = other.replace("£4", "£3").replace("None.", "None yet.");
+    await writeFile(path.join(folder, "pricing.md"), typed);
+    const v2 = (await t.list("plan.md", after)).find((x) => x.id === r.thread.id);
+    const note = v2?.items.find((i) => i.kind === "used-all");
+    if (note?.kind !== "used-all") throw new Error("no used-all note");
+    const undone = await t.undoAll(r.thread.id, note.id, { path: "plan.md", text: after });
+    expect(undone).toEqual({ kind: "undone", left: [], page: { path: "plan.md", text: DOC } });
+    expect(await readFile(path.join(folder, "pricing.md"), "utf8")).toBe(
+      other.replace("None.", "None yet."),
+    );
+  });
+
   it("keeps a doc the agent makes, revises it in place, and takes it back on Undo", async () => {
     const { folder, support, threads: t, reply, sent } = await setup();
     const r = await t.start("plan.md", DOC, risks, "-", undefined, [], "build");

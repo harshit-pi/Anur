@@ -16,6 +16,7 @@ import { formatTokens } from "../layout/tokens.ts";
 import { SectionEditor } from "../editor/section-editor.tsx";
 import { putOption, renameSection } from "../editor/section-range.ts";
 import type { EditorView } from "@codemirror/view";
+import { createPortal } from "react-dom";
 import { inlineRuns } from "../layout/inline-markdown.ts";
 
 /**
@@ -933,6 +934,42 @@ export function Think({
               </div>
             ) : item.kind === "check" ? (
               <CheckCard key={i} claims={item.claims} corrected={item.corrected} />
+            ) : item.kind === "used-all" ? (
+              <div key={i} className="think-changed auto" role="status">
+                <span>
+                  {item.undone ? "Taken back: " : "Used all: "}
+                  {item.docs
+                    .map(
+                      (d) =>
+                        `${d.doc.replace(/\.md$/i, "")} (${d.sections.map((p) => p.at(-1) ?? "").join(", ")})`,
+                    )
+                    .join("; ")}
+                  .{item.kept.length > 0 ? ` Kept as proposals: ${item.kept.join(", ")}.` : ""}
+                </span>
+                {item.undoable ? (
+                  <button
+                    type="button"
+                    className="think-button"
+                    onClick={() => {
+                      void anur
+                        .call("thread:undo-all", {
+                          thread: thread.id,
+                          id: item.id,
+                          open: docPath ? { path: docPath, text: docText() } : null,
+                        })
+                        .then((r) => {
+                          if (r.kind === "refused") setError(r.reason);
+                          else if (r.left.length > 0)
+                            setError(
+                              `Couldn't take back ${r.left.join(", ")}: it changed where the edits did. Use its History.`,
+                            );
+                        });
+                    }}
+                  >
+                    Undo
+                  </button>
+                ) : null}
+              </div>
             ) : item.kind === "proposed" ? (
               <div key={i} className="think-changed auto" role="status">
                 <span>
@@ -991,17 +1028,7 @@ export function Think({
             ),
           )}
           {thread.busy && thread.items.at(-1)?.kind !== "message" && asks.length === 0 ? (
-            <Working
-              since={thread.busySince ?? null}
-              step={(() => {
-                const last = thread.items.at(-1);
-                return last?.kind === "tool" &&
-                  last.status !== "completed" &&
-                  last.status !== "failed"
-                  ? toolLabel(last.title)
-                  : null;
-              })()}
-            />
+            <Working since={thread.busySince ?? null} />
           ) : null}
           {asks.map((p) =>
             p.plan ? (
@@ -1043,6 +1070,7 @@ export function Think({
         </div>
         {notConnected(thread.agent)}
         {error ? <p className="think-error">{error}</p> : null}
+        {!thread.busy ? <ChangeSet thread={thread} writable={writable} /> : null}
         {!thread.busy
           ? (previews.find((p) => p.thread === thread.id)?.parts ?? []).map((part) => (
               <EditCard
@@ -1213,126 +1241,133 @@ export function Think({
           {showText ? "Show less" : "Show all its text"}
         </button>
       ) : null}
-      {features.links && (links.out.length > 0 || links.into.length > 0) ? (
-        <div className="think-links">
-          {links.out.length > 0 ? (
-            <>
-              <div className="think-subhead">Links</div>
-              <p className="quiet think-inputs-note">A new thread here reads these too.</p>
-              <ul>
-                {links.out.map((l) => (
-                  <li key={`${l.doc ?? l.written}#${l.heading ?? ""}`}>
-                    {l.doc ? (
+      <SectionFooter>
+        {features.links && (links.out.length > 0 || links.into.length > 0) ? (
+          <div className="think-links">
+            {links.out.length > 0 ? (
+              <>
+                <div className="think-subhead">Links</div>
+                <p className="quiet think-inputs-note">A new thread here reads these too.</p>
+                <ul>
+                  {links.out.map((l) => (
+                    <li key={`${l.doc ?? l.written}#${l.heading ?? ""}`}>
+                      {l.doc ? (
+                        <button
+                          type="button"
+                          className="think-link"
+                          onClick={() => {
+                            window.dispatchEvent(
+                              new CustomEvent("anur:open-path", {
+                                detail: { path: l.doc, heading: l.heading },
+                              }),
+                            );
+                          }}
+                        >
+                          {linkLabel(l.doc, l.heading)}
+                        </button>
+                      ) : (
+                        <span
+                          className="think-link-broken"
+                          title="No doc by that name in the folder"
+                        >
+                          {l.written} · no such doc
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+            {links.into.length > 0 ? (
+              <details className="think-linked-from">
+                <summary className="think-subhead">
+                  Linked from ({String(links.into.length)})
+                </summary>
+                <ul>
+                  {links.into.map((l) => (
+                    <li key={`${l.doc}#${l.path.join(">")}`}>
                       <button
                         type="button"
                         className="think-link"
                         onClick={() => {
                           window.dispatchEvent(
                             new CustomEvent("anur:open-path", {
-                              detail: { path: l.doc, heading: l.heading },
+                              detail: {
+                                path: l.doc,
+                                heading: l.path.length > 1 ? l.path.slice(1).join("#") : null,
+                              },
                             }),
                           );
                         }}
                       >
-                        {linkLabel(l.doc, l.heading)}
+                        {linkLabel(l.doc, l.path.length > 1 ? l.path.slice(1).join("#") : null)}
                       </button>
-                    ) : (
-                      <span className="think-link-broken" title="No doc by that name in the folder">
-                        {l.written} · no such doc
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
-          {links.into.length > 0 ? (
-            <details className="think-linked-from">
-              <summary className="think-subhead">Linked from ({String(links.into.length)})</summary>
-              <ul>
-                {links.into.map((l) => (
-                  <li key={`${l.doc}#${l.path.join(">")}`}>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
+        {docPath && features.history ? (
+          <SectionHistory
+            key={sectionKey}
+            docPath={docPath}
+            docText={docText}
+            section={section}
+            writable={writable}
+            onThread={(id) => {
+              setOpen(id);
+            }}
+          />
+        ) : null}
+        {inputs.length > 0 ? (
+          <details className="think-inputs">
+            <summary className="think-subhead">Inputs ({String(inputs.length)})</summary>
+            <p className="quiet think-inputs-note">
+              Earlier threads picked these up; new threads here and below can read them.
+            </p>
+            <ul>
+              {inputs.map((i) => (
+                <li key={i.id}>
+                  <span className="think-input-source">{i.source}</span>
+                  <span className="truncate" title={i.label}>
+                    {i.label}
+                  </span>
+                  {i.trust === "untrusted" ? <span className="quiet">untrusted</span> : null}
+                  {i.local ? (
+                    <span
+                      className="quiet"
+                      title="Read from outside the folder: its content stays on the device that read it, and never goes into .anur/ or git"
+                    >
+                      kept local
+                    </span>
+                  ) : null}
+                  {writable ? (
                     <button
                       type="button"
-                      className="think-link"
+                      className="think-input-remove"
+                      aria-label={`Remove ${i.label}`}
+                      title="Remove: new threads won't receive it"
                       onClick={() => {
-                        window.dispatchEvent(
-                          new CustomEvent("anur:open-path", {
-                            detail: {
-                              path: l.doc,
-                              heading: l.path.length > 1 ? l.path.slice(1).join("#") : null,
-                            },
-                          }),
-                        );
+                        setInputs((all) => all.filter((x) => x.id !== i.id));
+                        void anur.call("inputs:remove", {
+                          path: docPath,
+                          text: docText(),
+                          thread: i.thread,
+                          input: i.id,
+                        });
                       }}
                     >
-                      {linkLabel(l.doc, l.path.length > 1 ? l.path.slice(1).join("#") : null)}
+                      ×
                     </button>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
-        </div>
-      ) : null}
-      {docPath && features.history ? (
-        <SectionHistory
-          key={sectionKey}
-          docPath={docPath}
-          docText={docText}
-          section={section}
-          writable={writable}
-          onThread={(id) => {
-            setOpen(id);
-          }}
-        />
-      ) : null}
-      {inputs.length > 0 ? (
-        <details className="think-inputs">
-          <summary className="think-subhead">Inputs ({String(inputs.length)})</summary>
-          <p className="quiet think-inputs-note">
-            Earlier threads picked these up; new threads here and below can read them.
-          </p>
-          <ul>
-            {inputs.map((i) => (
-              <li key={i.id}>
-                <span className="think-input-source">{i.source}</span>
-                <span className="truncate" title={i.label}>
-                  {i.label}
-                </span>
-                {i.trust === "untrusted" ? <span className="quiet">untrusted</span> : null}
-                {i.local ? (
-                  <span
-                    className="quiet"
-                    title="Read from outside the folder: its content stays on the device that read it, and never goes into .anur/ or git"
-                  >
-                    kept local
-                  </span>
-                ) : null}
-                {writable ? (
-                  <button
-                    type="button"
-                    className="think-input-remove"
-                    aria-label={`Remove ${i.label}`}
-                    title="Remove: new threads won't receive it"
-                    onClick={() => {
-                      setInputs((all) => all.filter((x) => x.id !== i.id));
-                      void anur.call("inputs:remove", {
-                        path: docPath,
-                        text: docText(),
-                        thread: i.thread,
-                        input: i.id,
-                      });
-                    }}
-                  >
-                    ×
-                  </button>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </details>
-      ) : null}
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </SectionFooter>
       {here.length === 0 ? (
         <h3 className="think-subhead">No threads on this section yet</h3>
       ) : (
@@ -1424,7 +1459,7 @@ export function Think({
 }
 
 /** While a turn runs: "Thinking…" at first, then how long it has been working. */
-function Working({ since, step }: { since: number | null; step: string | null }) {
+function Working({ since }: { since: number | null }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => {
@@ -1441,12 +1476,7 @@ function Working({ since, step }: { since: number | null; step: string | null })
       : secs < 60
         ? `Working for ${String(secs)} s…`
         : `Working for ${String(Math.floor(secs / 60))} min ${String(secs % 60).padStart(2, "0")} s…`;
-  return (
-    <div className="think-working quiet">
-      {label}
-      {step ? <span className="think-working-step"> · {step}</span> : null}
-    </div>
-  );
+  return <div className="think-working quiet">{label}</div>;
 }
 
 type ToolItem = Extract<ThreadItem, { kind: "tool" }>;
@@ -1889,6 +1919,106 @@ function SectionHistory({
         })}
       </ul>
     </details>
+  );
+}
+
+/**
+ * A thread's change set (9.3): every edit it proposes now, by doc and
+ * section, when there's more than one; each opens where it is, and Use all
+ * uses every one (9.4).
+ */
+function ChangeSet({ thread, writable }: { thread: ThreadView; writable: boolean }) {
+  const set = thread.changeSet ?? [];
+  const count = set.reduce((n, d) => n + d.sections.length, 0);
+  if (count < 2) return null;
+  return (
+    <div
+      className="think-offer edit think-changeset"
+      role="group"
+      aria-label="Edits from this thread"
+    >
+      <div className="think-offer-head">
+        <strong>
+          {String(count)} edits in {String(set.length)} doc{set.length === 1 ? "" : "s"}
+        </strong>
+        <span className="quiet">Not in the docs yet</span>
+      </div>
+      <ul>
+        {set.flatMap((d) =>
+          d.sections.map((p) => (
+            <li key={`${d.doc}#${p.join(">")}`}>
+              <button
+                type="button"
+                className="think-link"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("anur:open-path", {
+                      detail: { path: d.doc, heading: p.length > 1 ? p.slice(1).join("#") : null },
+                    }),
+                  );
+                }}
+              >
+                {linkLabel(d.doc, p.length > 1 ? p.slice(1).join("#") : null)}
+              </button>
+            </li>
+          )),
+        )}
+      </ul>
+      {writable ? (
+        <div className="think-offer-actions">
+          <button
+            type="button"
+            className="think-button primary"
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent("anur:use-all", { detail: { thread: thread.id } }),
+              );
+            }}
+          >
+            Use all
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * What a section draws on and how it got here, at the foot of the right
+ * panel like the outline in the left: its links, what links to it, its
+ * inputs and its history. Folded by default; the fold is remembered.
+ */
+function SectionFooter({ children }: { children: React.ReactNode }) {
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  const [open, setOpenState] = useState(() => {
+    try {
+      return window.localStorage.getItem("anur.sectionContext") === "open";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    setEl(document.getElementById("right-footer"));
+  }, []);
+  if (!el) return null;
+  return createPortal(
+    <details
+      className="right-footer-panel"
+      open={open}
+      onToggle={(e) => {
+        const now = e.currentTarget.open;
+        setOpenState(now);
+        try {
+          window.localStorage.setItem("anur.sectionContext", now ? "open" : "closed");
+        } catch {
+          // A remembered fold is a nicety.
+        }
+      }}
+    >
+      <summary className="left-outline-head">Context and history</summary>
+      <div className="right-footer-body">{children}</div>
+    </details>,
+    el,
   );
 }
 

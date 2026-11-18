@@ -460,6 +460,25 @@ export function App() {
         const gone = await doTrash(items.map((i) => i.path));
         if (gone.length) record({ label: "Move to Trash", kind: "trash", items: gone });
       },
+      importIncoming: async (data, into) => {
+        const r = await anur.call("file:incoming", { into, ...data });
+        if (r.kind === "failed") {
+          tell(r.reason);
+          return null;
+        }
+        setFolder(r.folder);
+        const paths = r.kind === "copied" ? r.paths : [r.path];
+        if (paths.length)
+          record({
+            label: r.kind === "made" ? "New doc" : "Add files",
+            kind: "create",
+            paths,
+            gone: [],
+          });
+        // Text made into a doc opens, so it can be read and named.
+        if (r.kind === "made") openDoc(r.path, false);
+        return paths;
+      },
       importFiles: async (sources, into) => {
         const r = await anur.call("file:import", { sources, into });
         if (r.kind === "failed") {
