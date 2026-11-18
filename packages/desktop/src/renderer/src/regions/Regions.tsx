@@ -18,9 +18,11 @@ import {
   NewFolderIcon,
   SortIcon,
   PluginsIcon,
+  SystemIcon,
   SearchIcon,
   SettingsIcon,
 } from "./Icons.tsx";
+import { SYSTEM_TAB } from "../layout/system-levels.ts";
 import type { SaveStatus } from "../editor/autosave.ts";
 import { PROVIDERS, cloudSummary, markNoticeSeen, noticeSeen } from "./cloud-notice.ts";
 
@@ -37,6 +39,8 @@ export function Ribbon({
   onSearch,
   onSettings,
   onPlugins,
+  onSystem,
+  systemOpen,
 }: {
   filesOpen: boolean;
   onFiles: () => void;
@@ -44,6 +48,9 @@ export function Ribbon({
   onSearch: () => void;
   onSettings: () => void;
   onPlugins: () => void;
+  /** Open the system tab; null when the Engineering plugin is off. */
+  onSystem: (() => void) | null;
+  systemOpen: boolean;
 }) {
   return (
     <nav className="ribbon" aria-label="Ribbon">
@@ -67,6 +74,18 @@ export function Ribbon({
       >
         <SearchIcon />
       </button>
+      {onSystem ? (
+        <button
+          className={`ribbon-button${systemOpen ? " active" : ""}`}
+          type="button"
+          aria-label="System"
+          aria-pressed={systemOpen}
+          title="System: the folder's repos and their parts"
+          onClick={onSystem}
+        >
+          <SystemIcon />
+        </button>
+      ) : null}
       <div className="ribbon-spacer" />
       <button
         className="ribbon-button"
@@ -373,6 +392,8 @@ export function Center({
   onMerge: (copy: string) => void;
 }) {
   const [copied, setCopied] = useState<string | null>(null);
+  // The system tab is no file: no path to walk, nothing to link or move.
+  const isSystem = selected === SYSTEM_TAB;
   return (
     <main className="center">
       <div className="path-row">
@@ -397,7 +418,9 @@ export function Center({
           <ForwardIcon />
         </button>
         <nav className="path crumbs" aria-label="Path" title={selected ?? undefined}>
-          {selected ? (
+          {isSystem ? (
+            <span className="crumb">System</span>
+          ) : selected ? (
             crumbs(selected).map((c, i) => (
               <Fragment key={`${String(i)}-${c.label}`}>
                 {i > 0 ? (
@@ -423,7 +446,7 @@ export function Center({
             <span className="quiet">No doc</span>
           )}
         </nav>
-        <div className="path-actions">
+        <div className="path-actions" hidden={isSystem}>
           {copied ? (
             <span className="copied" role="status">
               Copied <span className="copied-link">{copied}</span>

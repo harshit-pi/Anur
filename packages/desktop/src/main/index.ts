@@ -100,6 +100,7 @@ import {
 import { folderFor } from "./open-file.ts";
 import { offerMoveToApplications } from "./move-to-applications.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
+import { IndexProcess, indexEntry } from "./index-process/client.ts";
 import { AgentChoices } from "./threads/agent-choices.ts";
 import { AnurSocket } from "./threads/anur-socket.ts";
 import { Threads } from "./threads/threads.ts";
@@ -165,6 +166,8 @@ function versionsFor(folder: FolderState): SectionVersions | null {
   }
   return v;
 }
+/** The index process, where plugins read folders; started when first asked (group 20). */
+const indexProcess = new IndexProcess(indexEntry(here));
 /** The agent host, shared by every window; started when a thread first needs it (3.1). */
 let choices: AgentChoices;
 const hub = new AgentHub(
@@ -788,6 +791,17 @@ const handlers: { [C in Channel]: Handler<C> } = {
         on: on.includes(p.manifest.id),
       })),
     };
+  },
+  "system:sections": async (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const on = folder ? pluginsOn(folder.path) : [];
+    if (!folder || !on.includes("engineering")) return { kind: "off" };
+    try {
+      const sources = await indexProcess.sections(folder.path, on);
+      return { kind: "ok", sections: sources.flatMap((s) => s.sections) };
+    } catch (e) {
+      return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
+    }
   },
   "plugins:set": async ({ id, on }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -1808,6 +1822,7 @@ app.on("will-quit", (event) => {
     await Promise.all([...versions.values()].map((v) => v.endAll()));
     docWatcher.stopAll();
     hub.stop();
+    indexProcess.stop();
     anurSocket.close();
     await Promise.all([...threads.values()].map((t) => t.close()));
     // Windows close before will-quit: their notes are written by now or soon (11.4).

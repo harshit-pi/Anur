@@ -34,6 +34,7 @@ export function CommandPalette({
   onSwitchView,
   onThread,
   onAsk,
+  onSystem,
 }: {
   open: boolean;
   onClose: () => void;
@@ -48,6 +49,8 @@ export function CommandPalette({
   onThread: (() => void) | null;
   /** Ask, the whole-doc thread (4.8); null with no doc open. */
   onAsk: (() => void) | null;
+  /** Open the system tab, when the Engineering plugin is on. */
+  onSystem: (() => void) | null;
 }) {
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Found | null>(null);
@@ -112,6 +115,9 @@ export function CommandPalette({
     { kind: "command" as const, name: "Switch Page and Map", hint: "⇧⌘M", run: onSwitchView },
     { kind: "command" as const, name: "Start a thread on this section", hint: "", run: onThread },
     { kind: "command" as const, name: "Thread on the whole doc", hint: "", run: onAsk },
+    ...(onSystem
+      ? [{ kind: "command" as const, name: "Open the system map", hint: "", run: onSystem }]
+      : []),
   ].filter(
     (c) =>
       q === "" || c.name.startsWith("New doc") || c.name.toLowerCase().includes(q.toLowerCase()),

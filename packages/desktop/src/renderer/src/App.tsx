@@ -16,6 +16,8 @@ import {
   type Move,
 } from "./layout/file-history.ts";
 import { ImageView } from "./regions/ImageView.tsx";
+import { SystemView } from "./regions/SystemView.tsx";
+import { SYSTEM_TAB } from "./layout/system-levels.ts";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import type { SaveStatus } from "./editor/autosave.ts";
 import { Page, type OpenDoc, type SavedView } from "./editor/Page.tsx";
@@ -37,6 +39,7 @@ import {
   newTab,
   noTabs,
   open as openInTab,
+  showSystem,
   prune,
   renamePaths,
   saveTabs,
@@ -173,7 +176,7 @@ export function App() {
     setSections(null);
     setDocError(null);
     // An image shows in its own view, not on the page.
-    if (!selected || isViewable(selected)) {
+    if (!selected || isViewable(selected) || selected === SYSTEM_TAB) {
       setOpening(null);
       return;
     }
@@ -210,6 +213,21 @@ export function App() {
   useEffect(() => {
     if (folderPath) saveTabs(window.localStorage, folderPath, tabs);
   }, [tabs, folderPath]);
+  // The system tab shows while Engineering is on for the folder (group 20).
+  const [engineeringOn, setEngineeringOn] = useState(false);
+  useEffect(() => {
+    if (!folderPath || settings) return;
+    let current = true;
+    void anur.call("plugins:list", {}).then((r) => {
+      if (current) setEngineeringOn(r.plugins.some((p) => p.id === "engineering" && p.on));
+    });
+    return () => {
+      current = false;
+    };
+  }, [folderPath, settings]);
+  const openSystem = useCallback(() => {
+    setTabs((t) => showSystem(t));
+  }, []);
   const openDocNow = useRef<(path: string, inNewTab: boolean) => void>(() => undefined);
   const openDoc = useCallback((path: string, inNewTab: boolean) => {
     setTabs((t) => openInTab(t, path, inNewTab));
@@ -1061,6 +1079,8 @@ export function App() {
         onPlugins={() => {
           setSettings("core");
         }}
+        onSystem={engineeringOn ? openSystem : null}
+        systemOpen={selected === SYSTEM_TAB}
       />
       <LeftSidebar
         folder={shown}
@@ -1078,7 +1098,13 @@ export function App() {
         selected={selected}
         page={
           // Only the doc the tab shows: after a rename the old one mustn't mount for a moment.
-          selected && isViewable(selected) ? (
+          selected === SYSTEM_TAB ? (
+            <SystemView
+              onPlugins={() => {
+                setSettings("core");
+              }}
+            />
+          ) : selected && isViewable(selected) ? (
             <ImageView path={selected} />
           ) : doc && !holding && doc.path === selected ? (
             <Page
@@ -1239,6 +1265,7 @@ export function App() {
             : null
         }
         onAsk={doc && sections ? ask : null}
+        onSystem={engineeringOn ? openSystem : null}
       />
       {settings ? (
         <Settings

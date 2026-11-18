@@ -6,6 +6,7 @@
  */
 
 import type { MenuEntry } from "../../../shared/ipc-contract.ts";
+import { SYSTEM_TAB } from "./system-levels.ts";
 
 export type Tab = {
   id: string;
@@ -67,6 +68,7 @@ export const currentDoc = (t: Tabs) => docOf(activeTab(t));
 export function titleOf(tab: Tab): string {
   const path = docOf(tab);
   if (!path) return "New tab";
+  if (path === SYSTEM_TAB) return "System";
   return (path.split("/").pop() ?? path).replace(/\.md$/i, "");
 }
 
@@ -96,6 +98,12 @@ export function open(t: Tabs, path: string, inNewTab = false): Tabs {
   if (inNewTab || !tab || (tab.pinned && docOf(tab) !== null)) return newTab(t, path);
   const history = [...tab.history.slice(0, tab.index + 1), path];
   return replaceTab(t, { ...tab, history, index: history.length - 1 });
+}
+
+/** The system tab: the one already open, else a new one. */
+export function showSystem(t: Tabs): Tabs {
+  const there = t.tabs.find((x) => docOf(x) === SYSTEM_TAB);
+  return there ? select(t, there.id) : newTab(t, SYSTEM_TAB);
 }
 
 /** Show a tab; a folded group it is in unfolds. */
@@ -311,7 +319,8 @@ export function renamePaths(t: Tabs, moves: readonly { from: string; to: string 
  * tab whose own doc is gone closes.
  */
 export function prune(t: Tabs, docs: readonly string[]): Tabs {
-  const has = new Set(docs);
+  // The system tab is no file, and stays.
+  const has = new Set([...docs, SYSTEM_TAB]);
   let result = t;
   for (const tab of t.tabs) {
     const current = docOf(tab);

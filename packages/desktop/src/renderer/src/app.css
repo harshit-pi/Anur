@@ -1966,6 +1966,102 @@ body.resizing * {
   box-shadow: 0 2px 12px var(--shadow);
 }
 
+/* The system tab (group 20): repos, then groups, then parts, one level per click. */
+.system-view {
+  height: 100%;
+  overflow: auto;
+  padding: 24px 32px;
+  font-family: var(--font-ui);
+}
+
+.system-trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.system-trail button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  cursor: pointer;
+}
+
+.system-trail [aria-current] {
+  font-weight: 600;
+}
+
+.system-step {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.system-sep {
+  color: var(--graphite);
+}
+
+.system-trail .system-rescan {
+  margin-left: auto;
+  color: var(--slate);
+}
+
+.system-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.system-box {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+
+.system-box.opens {
+  cursor: pointer;
+}
+
+.system-box.opens:hover,
+.system-box.opens:focus-visible {
+  border-color: var(--blue);
+  background: var(--hover);
+}
+
+.system-box.part {
+  background: transparent;
+}
+
+.system-box.empty {
+  border-style: dashed;
+  background: transparent;
+  opacity: 0.7;
+}
+
+.system-name {
+  overflow-wrap: anywhere;
+}
+
+.system-line {
+  color: var(--graphite);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 /* The map (task 7): the doc's sections as boxes on a whiteboard. */
 .page:has(~ .map) {
   display: none;
@@ -4332,4 +4428,8 @@ button.file-card-name:hover {
   color: var(--green);
   font-size: 11px;
   font-weight: 650;
+}
+
+.path-actions[hidden] {
+  display: none;
 }
