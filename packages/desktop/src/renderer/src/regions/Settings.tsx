@@ -3,7 +3,6 @@ import type { FolderState } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import type { AgentStatus } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
-import { isCollapsed, setCollapsed } from "../editor/properties/properties-widget.ts";
 import { CloseIcon } from "./Icons.tsx";
 import { type ThemePref, applyTheme, loadTheme, saveTheme } from "./theme-pref.ts";
 
@@ -169,7 +168,6 @@ export function Settings({
 }) {
   const [main, setMain] = useState<MainSettings | null>(null);
   const [theme, setTheme] = useState<ThemePref>(() => loadTheme(window.localStorage));
-  const [folded, setFolded] = useState(isCollapsed);
 
   useEffect(() => {
     void anur.call("settings:get", {}).then(setMain);
@@ -213,19 +211,6 @@ export function Settings({
               <button type="button" className="settings-button" onClick={onOpenFolder}>
                 {folder ? "Open another folder…" : "Open a folder…"}
               </button>
-            </Row>
-            <Row
-              title="Properties start folded"
-              detail="The Properties box at the top of a doc opens folded away, in every doc and folder."
-            >
-              <Switch
-                on={folded}
-                label="Properties start folded"
-                onChange={(on) => {
-                  setFolded(on);
-                  setCollapsed(on);
-                }}
-              />
             </Row>
             <Row
               title="Commit Anur's data with git"
