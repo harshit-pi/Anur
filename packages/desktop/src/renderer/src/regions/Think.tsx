@@ -931,6 +931,42 @@ export function Think({
               </div>
             ) : item.kind === "check" ? (
               <CheckCard key={i} claims={item.claims} corrected={item.corrected} />
+            ) : item.kind === "used-all" ? (
+              <div key={i} className="think-changed auto" role="status">
+                <span>
+                  {item.undone ? "Taken back: " : "Used all: "}
+                  {item.docs
+                    .map(
+                      (d) =>
+                        `${d.doc.replace(/\.md$/i, "")} (${d.sections.map((p) => p.at(-1) ?? "").join(", ")})`,
+                    )
+                    .join("; ")}
+                  .{item.kept.length > 0 ? ` Kept as proposals: ${item.kept.join(", ")}.` : ""}
+                </span>
+                {item.undoable ? (
+                  <button
+                    type="button"
+                    className="think-button"
+                    onClick={() => {
+                      void anur
+                        .call("thread:undo-all", {
+                          thread: thread.id,
+                          id: item.id,
+                          open: docPath ? { path: docPath, text: docText() } : null,
+                        })
+                        .then((r) => {
+                          if (r.kind === "refused") setError(r.reason);
+                          else if (r.left.length > 0)
+                            setError(
+                              `Couldn't take back ${r.left.join(", ")}: it changed where the edits did. Use its History.`,
+                            );
+                        });
+                    }}
+                  >
+                    Undo
+                  </button>
+                ) : null}
+              </div>
             ) : item.kind === "proposed" ? (
               <div key={i} className="think-changed auto" role="status">
                 <span>
@@ -989,17 +1025,7 @@ export function Think({
             ),
           )}
           {thread.busy && thread.items.at(-1)?.kind !== "message" && asks.length === 0 ? (
-            <Working
-              since={thread.busySince ?? null}
-              step={(() => {
-                const last = thread.items.at(-1);
-                return last?.kind === "tool" &&
-                  last.status !== "completed" &&
-                  last.status !== "failed"
-                  ? toolLabel(last.title)
-                  : null;
-              })()}
-            />
+            <Working since={thread.busySince ?? null} />
           ) : null}
           {asks.map((p) =>
             p.plan ? (
@@ -1041,6 +1067,7 @@ export function Think({
         </div>
         {notConnected(thread.agent)}
         {error ? <p className="think-error">{error}</p> : null}
+        {!thread.busy ? <ChangeSet thread={thread} writable={writable} /> : null}
         {!thread.busy
           ? (previews.find((p) => p.thread === thread.id)?.parts ?? []).map((part) => (
               <EditCard
@@ -1422,7 +1449,7 @@ export function Think({
 }
 
 /** While a turn runs: "Thinking…" at first, then how long it has been working. */
-function Working({ since, step }: { since: number | null; step: string | null }) {
+function Working({ since }: { since: number | null }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => {
@@ -1439,12 +1466,7 @@ function Working({ since, step }: { since: number | null; step: string | null })
       : secs < 60
         ? `Working for ${String(secs)} s…`
         : `Working for ${String(Math.floor(secs / 60))} min ${String(secs % 60).padStart(2, "0")} s…`;
-  return (
-    <div className="think-working quiet">
-      {label}
-      {step ? <span className="think-working-step"> · {step}</span> : null}
-    </div>
-  );
+  return <div className="think-working quiet">{label}</div>;
 }
 
 type ToolItem = Extract<ThreadItem, { kind: "tool" }>;
@@ -1887,6 +1909,67 @@ function SectionHistory({
         })}
       </ul>
     </details>
+  );
+}
+
+/**
+ * A thread's change set (9.3): every edit it proposes now, by doc and
+ * section, when there's more than one; each opens where it is, and Use all
+ * uses every one (9.4).
+ */
+function ChangeSet({ thread, writable }: { thread: ThreadView; writable: boolean }) {
+  const set = thread.changeSet ?? [];
+  const count = set.reduce((n, d) => n + d.sections.length, 0);
+  if (count < 2) return null;
+  return (
+    <div
+      className="think-offer edit think-changeset"
+      role="group"
+      aria-label="Edits from this thread"
+    >
+      <div className="think-offer-head">
+        <strong>
+          {String(count)} edits in {String(set.length)} doc{set.length === 1 ? "" : "s"}
+        </strong>
+        <span className="quiet">Not in the docs yet</span>
+      </div>
+      <ul>
+        {set.flatMap((d) =>
+          d.sections.map((p) => (
+            <li key={`${d.doc}#${p.join(">")}`}>
+              <button
+                type="button"
+                className="think-link"
+                onClick={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("anur:open-path", {
+                      detail: { path: d.doc, heading: p.length > 1 ? p.slice(1).join("#") : null },
+                    }),
+                  );
+                }}
+              >
+                {linkLabel(d.doc, p.length > 1 ? p.slice(1).join("#") : null)}
+              </button>
+            </li>
+          )),
+        )}
+      </ul>
+      {writable ? (
+        <div className="think-offer-actions">
+          <button
+            type="button"
+            className="think-button primary"
+            onClick={() => {
+              window.dispatchEvent(
+                new CustomEvent("anur:use-all", { detail: { thread: thread.id } }),
+              );
+            }}
+          >
+            Use all
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

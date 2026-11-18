@@ -146,6 +146,15 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     doc: z.string(),
     undoable: z.boolean(),
   }),
+  /** Use all (9.4): edits used across docs at once; `undoable` while one Undo can take them back. */
+  z.object({
+    kind: z.literal("used-all"),
+    id: z.string(),
+    docs: z.array(z.object({ doc: z.string(), sections: z.array(z.array(z.string())) })),
+    kept: z.array(z.string()),
+    undoable: z.boolean(),
+    undone: z.boolean(),
+  }),
   /** An edit this thread proposed to another doc: shown on that doc's page. */
   z.object({
     kind: z.literal("proposed"),
@@ -193,6 +202,10 @@ export const ThreadView = z.object({
   title: z.string(),
   closed: z.boolean(),
   busy: z.boolean(),
+  /** Every edit this thread proposes now, by doc and section (9.3). */
+  changeSet: z
+    .array(z.object({ doc: z.string(), sections: z.array(z.array(z.string())) }))
+    .optional(),
   /** When the running turn started (ms since epoch); null while idle. */
   busySince: z.number().nullable().optional(),
   /** What the agent reads in this thread: the bundle's parts, as the reads line lists them. */
@@ -936,6 +949,40 @@ export const ipcContract = {
       })
       .strict(),
     response: z.object({}),
+  },
+  /**
+   * Use all (9.4): the page has used the open doc's edits (`open`, its text
+   * before and after); main uses the rest in their files and notes it once.
+   */
+  "thread:use-all": {
+    request: z
+      .object({
+        thread: z.string(),
+        open: z
+          .object({
+            path: z.string(),
+            before: z.string(),
+            after: z.string(),
+            sections: z.array(z.array(z.string())),
+          })
+          .nullable(),
+      })
+      .strict(),
+    response: z.object({ used: z.number(), kept: z.array(z.string()) }),
+  },
+  /** One Undo for a Use all (9.5); `open` is the open doc's text now. */
+  "thread:undo-all": {
+    request: z
+      .object({
+        thread: z.string(),
+        id: z.string(),
+        open: z.object({ path: z.string(), text: z.string() }).nullable(),
+      })
+      .strict(),
+    response: z.union([
+      z.object({ kind: z.literal("undone"), left: z.array(z.string()) }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
   },
   /** A person removes an input: it no longer reaches new threads (4.4). */
   "inputs:remove": {

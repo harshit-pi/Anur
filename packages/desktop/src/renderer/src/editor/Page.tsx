@@ -245,8 +245,11 @@ export function Page({
       force = false,
       /** Used as it landed, by the setting: a quieter word, and kept as a proposal on a clash. */
       auto = false,
+      /** Part of Use all (9.4): no word of its own; Use all says it once. */
+      quiet = false,
     ): Promise<boolean> => {
       const conflict = () => {
+        if (quiet) return;
         flash(
           auto
             ? `Kept the agent's edit to ${part.path.at(-1) ?? "a section"} as a proposal: that section changed where it did.`
@@ -257,7 +260,7 @@ export function Page({
       };
       const s = sectionFor(editor.state, part.path);
       if (!s || !part.section) {
-        if (!auto) flash("That section isn't on the page any more.", null, 6000);
+        if (!auto && !quiet) flash("That section isn't on the page any more.", null, 6000);
         return false;
       }
       const current = editor.state.sliceDoc(s.subtreeRange.from, s.subtreeRange.to);
@@ -274,7 +277,7 @@ export function Page({
         applied: made.text,
       });
       if (r.kind === "refused") {
-        flash(r.reason, null, 6000);
+        if (!quiet) flash(r.reason, null, 6000);
         return false;
       }
       // Typing may have landed while History was written: apply onto the section as it is now.
@@ -294,6 +297,7 @@ export function Page({
       const after = editor.state.doc;
       const remaining = withPart(thread, sectionKey(part.path), null);
       await savePreview(thread, remaining);
+      if (quiet) return true;
       flash(
         auto
           ? `Used the agent's edit to ${part.path.at(-1) ?? "the section"}.`
@@ -408,6 +412,31 @@ export function Page({
         from,
       });
     };
+    // Use all (9.4): this page's edits from the thread, one by one, then the other docs' in main.
+    const onUseAll = (e: Event) => {
+      const { thread } = (e as CustomEvent<{ thread: string }>).detail;
+      void (async () => {
+        const before = editor.state.doc.toString();
+        const mine = editor.state.field(previewState).previews.find((p) => p.thread === thread);
+        const used: string[][] = [];
+        for (const part of mine?.parts ?? [])
+          if (await applyPreviewPart(thread, part, false, false, true)) used.push(part.path);
+        const after = editor.state.doc.toString();
+        const r = await anur.call("thread:use-all", {
+          thread,
+          open: { path: doc.path, before, after, sections: used },
+        });
+        const docs = `${String(r.used)} doc${r.used === 1 ? "" : "s"}`;
+        flash(
+          r.kept.length > 0
+            ? `Used this thread's edits in ${docs}. Kept as proposals, as their sections changed: ${r.kept.join(", ")}.`
+            : `Used this thread's edits in ${docs}. Undo is in the thread.`,
+          null,
+          9000,
+        );
+      })();
+    };
+    window.addEventListener("anur:use-all", onUseAll);
     window.addEventListener("anur:restore-section", onRestore);
     window.addEventListener("anur:use-preview", onUsePreview);
     window.addEventListener("anur:drop-preview", onDropPreview);
@@ -712,6 +741,7 @@ export function Page({
       window.removeEventListener("anur:show-preview", onShowPreview);
       window.removeEventListener("anur:use-preview", onUsePreview);
       window.removeEventListener("anur:restore-section", onRestore);
+      window.removeEventListener("anur:use-all", onUseAll);
       window.removeEventListener("anur:drop-preview", onDropPreview);
       offPreviews();
       offReplace();
