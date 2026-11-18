@@ -52,6 +52,14 @@ export default defineConfig(
     },
   },
   {
+    // Electron hands out its own windows and menus (getFocusedWindow, buildFromTemplate),
+    // made inside Electron rather than by `new`, which this rule can't tell apart.
+    files: ["packages/desktop/src/main/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-unsafe-class-instance-assignment": "off",
+    },
+  },
+  {
     // The renderer is sandboxed with no Node: it reaches everything through the preload.
     files: ["packages/desktop/src/renderer/**/*.{ts,tsx}"],
     rules: {
