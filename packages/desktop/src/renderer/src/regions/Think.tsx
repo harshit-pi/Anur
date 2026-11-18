@@ -257,22 +257,37 @@ const START_FRESH_AT = 0.4;
  */
 function SizeMeter({
   tokens,
+  steps,
   onStartFresh,
 }: {
-  tokens: { used: number; context: number; first: number; window: number | null };
+  tokens: {
+    used: number;
+    cached?: number | undefined;
+    context: number;
+    first: number;
+    window: number | null;
+  };
+  /** Tool calls so far, for the total's wording. */
+  steps: number;
   onStartFresh: () => void;
 }) {
   const share = tokens.window ? Math.min(1, tokens.context / tokens.window) : null;
   const grown = tokens.window ? (tokens.context - tokens.first) / tokens.window : 0;
   return (
     <div className="think-meter" title="From the agent's usage reports">
-      <div className="think-meter-line quiet">
-        <span>{formatTokens(tokens.used)} tokens used</span>
-        {share !== null && tokens.window ? (
-          <span>
-            context {String(Math.round(share * 100))}% of {formatTokens(tokens.window)}
-          </span>
-        ) : null}
+      <div className="think-meter-line">
+        <span>
+          Context {formatTokens(tokens.context)}
+          {tokens.window ? ` of ${formatTokens(tokens.window)}` : ""}
+        </span>
+        <span
+          className="quiet"
+          title="Every step sends the conversation again; most of it is read back from the cache, at a fraction of the price"
+        >
+          {formatTokens(tokens.used)} processed
+          {steps > 0 ? ` over ${countOf(steps, "step")}` : ""}
+          {tokens.cached && tokens.cached / tokens.used > 0.5 ? ", mostly from cache" : ""}
+        </span>
       </div>
       {share !== null ? (
         <div className="think-meter-bar" aria-hidden="true">
@@ -778,6 +793,7 @@ export function Think({
         {thread.tokens ? (
           <SizeMeter
             tokens={thread.tokens}
+            steps={thread.items.filter((i) => i.kind === "tool").length}
             onStartFresh={() => {
               // A new thread on the thread's own section, from its text and inputs only.
               const i = tree.sections.findIndex(

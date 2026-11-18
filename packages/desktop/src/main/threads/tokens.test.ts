@@ -28,6 +28,7 @@ describe("a thread's tokens", () => {
     ];
     expect(tokensOf(lines)).toEqual({
       used: 4 + 668 + 66_786 + 28_515 + 6 + 1_365 + 118_794 + 31_291,
+      cached: 66_786 + 118_794,
       context: 6 + 1_365 + 118_794 + 31_291,
       first: 4 + 668 + 66_786 + 28_515,
       window: null,

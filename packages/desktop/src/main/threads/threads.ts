@@ -2278,6 +2278,7 @@ const KNOWN = new Set([
  */
 export function tokensOf(lines: readonly KnownThreadLine[]) {
   let used = 0;
+  let cached = 0;
   let context = 0;
   let first: number | null = null;
   let window: number | null = null;
@@ -2287,12 +2288,13 @@ export function tokensOf(lines: readonly KnownThreadLine[]) {
     const u = l.usage;
     any = true;
     used += u.input + u.output + u.cacheRead + u.cacheWrite;
+    cached += u.cacheRead;
     // The agent's own measure of its context when it gave one; else the usage report's.
     context = l.context?.used ?? u.input + u.cacheRead + u.cacheWrite + u.output;
     first ??= context;
     if (l.context) window = l.context.size;
   }
-  return any ? { used, context, first: first ?? context, window } : null;
+  return any ? { used, cached, context, first: first ?? context, window } : null;
 }
 
 /** Every file under `dir`, relative to it, with forward slashes. */
