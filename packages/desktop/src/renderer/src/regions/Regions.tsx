@@ -322,6 +322,7 @@ export function Center({
   folder,
   selected,
   page,
+  map,
   opening,
   docNote,
   docError,
@@ -345,6 +346,8 @@ export function Center({
   onForward: (() => void) | null;
   /** The open doc's page, once it has loaded. */
   page: ReactNode;
+  /** The map, when the tab shows it; the page stays mounted under it. */
+  map?: ReactNode;
   /** What is happening while a doc loads, such as a download from iCloud. */
   opening: string | null;
   docNote: string | null;
@@ -456,7 +459,10 @@ export function Center({
         </div>
       ) : null}
       {page ? (
-        page
+        <>
+          {page}
+          {map}
+        </>
       ) : opening ? (
         <div className="page-empty">
           <p className="quiet">{opening}</p>

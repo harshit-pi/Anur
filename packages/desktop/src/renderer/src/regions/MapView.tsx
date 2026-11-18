@@ -1,0 +1,611 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { boxSize, mapLayout, type MapNode, type SectionTree } from "@anur/core";
+import type { ThreadView } from "../../../shared/ipc-contract.ts";
+import { anur } from "../bridge.ts";
+
+/**
+ * The map (task 7; Mock 3): the doc's sections as boxes, the title in the
+ * middle, threads hanging off their sections. It is drawn from the
+ * headings, so editing the page redraws it.
+ *
+ * As on a whiteboard (Excalidraw, draw.io): drag the background or scroll to
+ * pan, pinch or ⌘-scroll to zoom, drag a box anywhere and it stays there,
+ * double-click empty space to add a section there. A click on a box shows
+ * its section in Think. Arrow keys move between boxes; Shift+arrow nudges
+ * the selected box. Moving a box never changes the file.
+ */
+
+type Pos = { x: number; y: number };
+type View = { x: number; y: number; z: number };
+type Box = {
+  id: string;
+  kind: "section" | "thread";
+  index: number;
+  thread?: ThreadView;
+  heading: string;
+  line: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  side: -1 | 0 | 1;
+  parent: string | null;
+};
+
+const CHIP = { w: 176, h: 28 };
+const samePath = (a: readonly string[] | null, b: readonly string[]) =>
+  a !== null && a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** A section's first line of prose, as its box shows it: no code, tables or Markdown marks. */
+function firstLine(text: string, tree: SectionTree, i: number): string {
+  const s = tree.sections[i];
+  if (!s) return "";
+  const from = s.headingRange ? s.headingRange.to : s.ownRange.from;
+  let fenced = false;
+  for (const raw of text.slice(from, s.ownRange.to).split("\n")) {
+    const l = raw.trim();
+    if (/^(```|~~~)/.test(l)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (
+      fenced ||
+      l === "" ||
+      l.startsWith("|") ||
+      /^(---+|\*\*\*+|<)/.test(l) ||
+      l.startsWith("![")
+    )
+      continue;
+    return l
+      .replace(/^(?:[-*+]|\d+[.)]|>)\s+(\[[ xX]\]\s+)?/, "")
+      .replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_m, t: string, alias?: string) => alias ?? t)
+      .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+      .replace(/(\*\*|__|\*|_|`|==|~~)/g, "")
+      .trim()
+      .slice(0, 90);
+  }
+  return "";
+}
+
+/** One key per section: its heading path, and which of its namesakes it is. */
+function keysOf(tree: SectionTree): string[] {
+  const seen = new Map<string, number>();
+  return tree.sections.map((s) => {
+    const path = s.path.join("\u0000");
+    const n = seen.get(path) ?? 0;
+    seen.set(path, n + 1);
+    return `${path}\u0001${String(n)}`;
+  });
+}
+
+export function MapView({
+  docPath,
+  tree,
+  docText,
+  selected,
+  onSelect,
+  onAddSection,
+  writable,
+}: {
+  docPath: string;
+  tree: SectionTree;
+  docText: () => string;
+  /** The section shown in Think, by index. */
+  selected: number;
+  onSelect: (index: number) => void;
+  /** Add a section named `name` under the section at `parent`; returns its heading path. */
+  onAddSection: (parent: number, name: string) => string[] | null;
+  /** False when the doc can't be edited: boxes still move, but none can be added. */
+  writable: boolean;
+}) {
+  const host = useRef<HTMLDivElement>(null);
+  /** Section IDs by heading path, so a heading added above can't hand a box another's ID. */
+  const [ids, setIds] = useState<Map<string, string>>(new Map());
+  const [moved, setMoved] = useState<Record<string, Pos>>({});
+  const [threads, setThreads] = useState<ThreadView[]>([]);
+  const [previewed, setPreviewed] = useState<Set<string>>(new Set());
+  const [view, setView] = useState<View | null>(null);
+  const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
+  const [adding, setAdding] = useState<{ at: Pos; screen: Pos } | null>(null);
+  const placeNew = useRef<{ path: string[]; at: Pos } | null>(null);
+  const textNow = useRef(docText);
+  textNow.current = docText;
+
+  // Section IDs and saved positions, read again when the headings change.
+  const headings = tree.sections.map((s) => s.path.join("\u0000")).join("\u0001");
+  useEffect(() => {
+    let current = true;
+    const keys = keysOf(tree);
+    void anur.call("map:read", { path: docPath, text: textNow.current() }).then((r) => {
+      if (!current) return;
+      setIds(new Map(r.ids.map((id, i) => [keys[i] ?? id, id])));
+      setMoved(r.positions);
+    });
+    return () => {
+      current = false;
+    };
+  }, [docPath, headings]);
+
+  // Threads hang off their sections; a dot marks one with a preview waiting.
+  useEffect(() => {
+    let current = true;
+    const load = () => {
+      const text = textNow.current();
+      void anur.call("thread:list", { path: docPath, text }).then((r) => {
+        if (current) setThreads(r.threads.filter((t) => !t.closed));
+      });
+      void anur.call("preview:list", { path: docPath, text }).then((r) => {
+        if (current) setPreviewed(new Set(r.previews.map((p) => p.thread)));
+      });
+    };
+    load();
+    const off = anur.on("thread:event", (e) => {
+      if (e.kind === "thread" && e.path === docPath) load();
+    });
+    const offPreviews = anur.on("preview:changed", ({ path }) => {
+      if (path === docPath) load();
+    });
+    return () => {
+      current = false;
+      off();
+      offPreviews();
+    };
+  }, [docPath, headings]);
+
+  const keys = useMemo(() => keysOf(tree), [tree]);
+  const idOf = useCallback(
+    (index: number) => {
+      const key = keys[index] ?? String(index);
+      return ids.get(key) ?? `new:${key}`;
+    },
+    [ids, keys],
+  );
+
+  // The layout: sections, with each section's threads as its nearest children.
+  const boxes = useMemo(() => {
+    const text = docText();
+    const nodes: MapNode[] = [];
+    const info = new Map<string, Omit<Box, "x" | "y" | "w" | "h" | "side">>();
+    for (const s of tree.sections) {
+      const id = idOf(s.index);
+      const heading = s.path.at(-1) ?? "";
+      const line = firstLine(text, tree, s.index);
+      const size = boxSize(heading, line);
+      nodes.push({ id, parent: s.parent === null ? null : idOf(s.parent), ...size });
+      info.set(id, {
+        id,
+        kind: "section",
+        index: s.index,
+        heading,
+        line,
+        parent: s.parent === null ? null : idOf(s.parent),
+      });
+      for (const t of threads.filter((t) => samePath(t.path, s.path))) {
+        const tid = `t:${t.id}`;
+        nodes.push({ id: tid, parent: id, ...CHIP });
+        info.set(tid, {
+          id: tid,
+          kind: "thread",
+          index: s.index,
+          thread: t,
+          heading: t.title,
+          line: "",
+          parent: id,
+        });
+      }
+    }
+    // Threads before subsections, so they sit nearest their section.
+    nodes.sort((a, b) => Number(b.id.startsWith("t:")) - Number(a.id.startsWith("t:")));
+    const placed = mapLayout(
+      [nodes.find((n) => n.parent === null), ...nodes.filter((n) => n.parent !== null)].filter(
+        (n): n is MapNode => Boolean(n),
+      ),
+    );
+    const out: Box[] = [];
+    for (const [id, p] of placed) {
+      const i = info.get(id);
+      if (!i) continue;
+      out.push({ ...i, x: p.x, y: p.y, w: p.w, h: p.h, side: p.side });
+    }
+    // A moved box sits where it was put; its threads move with it.
+    const byId = new Map(out.map((b) => [b.id, b]));
+    for (const b of out) {
+      const own = b.kind === "section" ? b.id : b.parent;
+      const anchor = own ? byId.get(own) : undefined;
+      const put = own ? (drag?.id === own ? null : moved[own]) : undefined;
+      const dragging = drag && own === drag.id ? drag : null;
+      if (!anchor) continue;
+      const dx = (put ? put.x - anchor.x : 0) + (dragging ? dragging.dx : 0);
+      const dy = (put ? put.y - anchor.y : 0) + (dragging ? dragging.dy : 0);
+      if (b.kind === "thread") {
+        b.x += dx;
+        b.y += dy;
+      }
+    }
+    for (const b of out) {
+      if (b.kind !== "section") continue;
+      const put = moved[b.id];
+      if (put) {
+        b.x = put.x;
+        b.y = put.y;
+      }
+      if (drag?.id === b.id) {
+        b.x += drag.dx;
+        b.y += drag.dy;
+      }
+    }
+    return out;
+  }, [tree, threads, idOf, moved, drag, docText]);
+
+  const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
+
+  // A section added by double-click is put where it was drawn, once it has an ID.
+  useEffect(() => {
+    const want = placeNew.current;
+    if (!want) return;
+    const s = tree.sections.find((x) => samePath(x.path, want.path));
+    const id = s ? ids.get(keys[s.index] ?? "") : undefined;
+    if (!s || !id) return;
+    placeNew.current = null;
+    setMoved((m) => ({ ...m, [id]: want.at }));
+    void anur.call("map:save", {
+      path: docPath,
+      text: textNow.current(),
+      positions: { [id]: want.at },
+    });
+    onSelect(s.index);
+  }, [tree, ids, keys, docPath, onSelect]);
+
+  // Start with the title in the middle, everything in view.
+  useEffect(() => {
+    const el = host.current;
+    if (!el || view || boxes.length === 0) return;
+    const r = el.getBoundingClientRect();
+    const xs = boxes.flatMap((b) => [b.x - b.w / 2, b.x + b.w / 2]);
+    const ys = boxes.flatMap((b) => [b.y - b.h / 2, b.y + b.h / 2]);
+    const w = Math.max(...xs) - Math.min(...xs) + 120;
+    const h = Math.max(...ys) - Math.min(...ys) + 120;
+    const z = Math.min(1, r.width / w, r.height / h);
+    const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+    const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+    setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
+  }, [boxes, view]);
+
+  // The selected box stays in view: arrow keys and new sections pan to it.
+  const selectedId = idOf(selected);
+  useEffect(() => {
+    const el = host.current;
+    const b = boxes.find((x) => x.id === selectedId);
+    if (!el || !b || drag) return;
+    const r = el.getBoundingClientRect();
+    setView((v) => {
+      if (!v) return v;
+      const pad = 40;
+      const left = (b.x - b.w / 2) * v.z + v.x;
+      const right = (b.x + b.w / 2) * v.z + v.x;
+      const top = (b.y - b.h / 2) * v.z + v.y;
+      const bottom = (b.y + b.h / 2) * v.z + v.y;
+      const dx = left < pad ? pad - left : right > r.width - pad ? r.width - pad - right : 0;
+      const dy = top < pad ? pad - top : bottom > r.height - 60 ? r.height - 60 - bottom : 0;
+      return dx === 0 && dy === 0 ? v : { ...v, x: v.x + dx, y: v.y + dy };
+    });
+    // Only when the selection or the boxes change, not on every pan.
+  }, [selectedId, boxes]);
+
+  const toWorld = useCallback(
+    (clientX: number, clientY: number): Pos => {
+      const r = host.current?.getBoundingClientRect();
+      const v = view ?? { x: 0, y: 0, z: 1 };
+      return {
+        x: (clientX - (r?.left ?? 0) - v.x) / v.z,
+        y: (clientY - (r?.top ?? 0) - v.y) / v.z,
+      };
+    },
+    [view],
+  );
+
+  const save = useCallback(
+    (positions: Record<string, Pos | null>) => {
+      void anur.call("map:save", { path: docPath, text: textNow.current(), positions });
+    },
+    [docPath],
+  );
+
+  // Background: drag to pan.
+  const onBackgroundDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 || e.target !== e.currentTarget || !view) return;
+    host.current?.focus();
+    const start = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+    const el = e.currentTarget as HTMLElement;
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // A pointer that is already gone.
+    }
+    const move = (ev: PointerEvent) => {
+      setView((v) =>
+        v ? { ...v, x: start.vx + ev.clientX - start.x, y: start.vy + ev.clientY - start.y } : v,
+      );
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  };
+
+  // Scroll pans; pinch or ⌘-scroll zooms around the pointer.
+  useEffect(() => {
+    const el = host.current;
+    if (!el) return;
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setView((v) => {
+        if (!v) return v;
+        if (e.ctrlKey || e.metaKey) {
+          const r = el.getBoundingClientRect();
+          const px = e.clientX - r.left;
+          const py = e.clientY - r.top;
+          const z = Math.min(2.5, Math.max(0.2, v.z * Math.exp(-e.deltaY * 0.01)));
+          return { x: px - ((px - v.x) / v.z) * z, y: py - ((py - v.y) / v.z) * z, z };
+        }
+        return { ...v, x: v.x - e.deltaX, y: v.y - e.deltaY };
+      });
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", wheel);
+    };
+  }, []);
+
+  // A box: click selects it, drag moves it anywhere.
+  const onBoxDown = (e: React.PointerEvent, b: Box) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    host.current?.focus();
+    if (b.kind === "thread" && b.thread) {
+      onSelect(b.index);
+      window.dispatchEvent(
+        new CustomEvent("anur:open-thread", { detail: { thread: b.thread.id } }),
+      );
+      return;
+    }
+    onSelect(b.index);
+    const z = view?.z ?? 1;
+    const start = { x: e.clientX, y: e.clientY };
+    const el = e.currentTarget as HTMLElement;
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // A pointer that is already gone.
+    }
+    let moving = false;
+    const move = (ev: PointerEvent) => {
+      const dx = (ev.clientX - start.x) / z;
+      const dy = (ev.clientY - start.y) / z;
+      if (!moving && Math.hypot(dx, dy) < 3) return;
+      moving = true;
+      setDrag({ id: b.id, dx, dy });
+    };
+    const up = (ev: PointerEvent) => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      setDrag(null);
+      if (!moving) return;
+      const at = { x: b.x + (ev.clientX - start.x) / z, y: b.y + (ev.clientY - start.y) / z };
+      setMoved((m) => ({ ...m, [b.id]: at }));
+      save({ [b.id]: at });
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  };
+
+  // Arrow keys move between boxes; Shift+arrow nudges the selected one.
+  const onKey = (e: React.KeyboardEvent) => {
+    const dirs: Record<string, readonly [number, number]> = {
+      ArrowRight: [1, 0],
+      ArrowLeft: [-1, 0],
+      ArrowDown: [0, 1],
+      ArrowUp: [0, -1],
+    };
+    const dir = dirs[e.key];
+    if (!dir) return;
+    const [ux, uy] = dir;
+    e.preventDefault();
+    const now = byId.get(idOf(selected));
+    if (!now) return;
+    if (e.shiftKey) {
+      const at = { x: now.x + ux * 16, y: now.y + uy * 16 };
+      setMoved((m) => ({ ...m, [now.id]: at }));
+      save({ [now.id]: at });
+      return;
+    }
+    let best: Box | null = null;
+    let bestScore = Infinity;
+    for (const b of boxes) {
+      if (b.kind !== "section" || b.id === now.id) continue;
+      const dx = b.x - now.x;
+      const dy = b.y - now.y;
+      const along = dx * ux + dy * uy;
+      if (along <= 0) continue;
+      const across = Math.abs(dx * uy - dy * ux);
+      if (across > along * 1.5) continue;
+      const score = along + across * 2;
+      if (score < bestScore) {
+        bestScore = score;
+        best = b;
+      }
+    }
+    if (best) onSelect(best.index);
+  };
+
+  // Double-click empty space: name a new section, under the nearest box.
+  const onDoubleClick = (e: React.MouseEvent) => {
+    if (e.target !== e.currentTarget || !writable) return;
+    const r = host.current?.getBoundingClientRect();
+    setAdding({
+      at: toWorld(e.clientX, e.clientY),
+      screen: { x: e.clientX - (r?.left ?? 0), y: e.clientY - (r?.top ?? 0) },
+    });
+  };
+  const add = (name: string) => {
+    const at = adding?.at;
+    setAdding(null);
+    if (!at || !name.trim()) return;
+    let parent = 0;
+    let best = Infinity;
+    for (const b of boxes) {
+      if (b.kind !== "section") continue;
+      const d = Math.hypot(b.x - at.x, b.y - at.y);
+      if (d < best) {
+        best = d;
+        parent = b.index;
+      }
+    }
+    const path = onAddSection(parent, name.trim());
+    if (path) placeNew.current = { path, at };
+  };
+
+  const v = view ?? { x: 0, y: 0, z: 1 };
+  const edges = boxes.flatMap((b) => {
+    const p = b.parent ? byId.get(b.parent) : undefined;
+    if (!p) return [];
+    const side = b.x >= p.x ? 1 : -1;
+    const x1 = p.x + (side * p.w) / 2;
+    const x2 = b.x - (side * b.w) / 2;
+    const mid = (x1 + x2) / 2;
+    return [
+      <path
+        key={b.id}
+        className={b.kind === "thread" ? "map-edge thread" : "map-edge"}
+        d={`M ${String(x1)} ${String(p.y)} C ${String(mid)} ${String(p.y)}, ${String(mid)} ${String(b.y)}, ${String(x2)} ${String(b.y)}`}
+      />,
+    ];
+  });
+
+  return (
+    <div
+      ref={host}
+      className="map"
+      tabIndex={0}
+      role="application"
+      aria-label="Map of the doc's sections"
+      onPointerDown={onBackgroundDown}
+      onDoubleClick={onDoubleClick}
+      onKeyDown={onKey}
+    >
+      <div
+        className="map-world"
+        style={{ transform: `translate(${String(v.x)}px, ${String(v.y)}px) scale(${String(v.z)})` }}
+      >
+        <svg className="map-edges" aria-hidden="true">
+          {edges}
+        </svg>
+        {boxes.map((b) =>
+          b.kind === "thread" && b.thread ? (
+            <button
+              key={b.id}
+              type="button"
+              className={`map-thread${b.thread.busy ? " busy" : ""}`}
+              style={{ left: b.x - b.w / 2, top: b.y - b.h / 2, width: b.w, height: b.h }}
+              title={b.thread.title}
+              onPointerDown={(e) => {
+                onBoxDown(e, b);
+              }}
+            >
+              <span className="truncate">{b.thread.title}</span>
+              {previewed.has(b.thread.id) ? (
+                <span className="map-dot" aria-label="Has a preview" />
+              ) : null}
+            </button>
+          ) : (
+            <div
+              key={b.id}
+              role="button"
+              tabIndex={-1}
+              aria-pressed={b.index === selected}
+              className={`map-box${b.side === 0 ? " title" : ""}${b.index === selected ? " selected" : ""}${drag?.id === b.id ? " dragging" : ""}`}
+              style={{ left: b.x - b.w / 2, top: b.y - b.h / 2, width: b.w, minHeight: b.h }}
+              onPointerDown={(e) => {
+                onBoxDown(e, b);
+              }}
+            >
+              <div className="map-box-head">
+                <span className="map-box-name">{b.heading}</span>
+                {(() => {
+                  const n = threads.filter((t) =>
+                    samePath(t.path, tree.sections[b.index]?.path ?? []),
+                  ).length;
+                  return n > 0 ? (
+                    <span className="map-count">
+                      {n === 1 ? "1 thread" : `${String(n)} threads`}
+                    </span>
+                  ) : null;
+                })()}
+              </div>
+              {b.line ? (
+                <div className="map-box-line">{b.line}</div>
+              ) : (
+                <div className="map-box-line quiet">Empty</div>
+              )}
+            </div>
+          ),
+        )}
+      </div>
+      {adding ? (
+        <input
+          className="map-add"
+          style={{ left: adding.screen.x, top: adding.screen.y }}
+          autoFocus
+          placeholder="New section's name"
+          aria-label="New section's name"
+          onKeyDown={(e) => {
+            if (e.key === "Enter") add(e.currentTarget.value);
+            if (e.key === "Escape") setAdding(null);
+            e.stopPropagation();
+          }}
+          onBlur={(e) => {
+            add(e.currentTarget.value);
+          }}
+        />
+      ) : null}
+      <div className="map-legend" aria-hidden="true">
+        <span>
+          <i className="map-key section" /> Section
+        </span>
+        <span>
+          <i className="map-key thread" /> Thread
+        </span>
+        <span>
+          <i className="map-key preview" /> Thread with a preview
+        </span>
+      </div>
+      <div className="map-tools">
+        <button
+          type="button"
+          className="map-tool"
+          title="Fit the map in view"
+          onClick={() => {
+            setView(null);
+          }}
+        >
+          Fit
+        </button>
+        <button
+          type="button"
+          className="map-tool"
+          title="Put moved boxes back in the layout"
+          disabled={Object.keys(moved).length === 0}
+          onClick={() => {
+            save(Object.fromEntries(Object.keys(moved).map((id) => [id, null])));
+            setMoved({});
+          }}
+        >
+          Tidy
+        </button>
+        <span className="map-zoom quiet">{Math.round(v.z * 100)}%</span>
+      </div>
+    </div>
+  );
+}

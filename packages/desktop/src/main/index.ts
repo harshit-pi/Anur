@@ -31,6 +31,7 @@ import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
 import { readImage, saveImage } from "./folder/images.ts";
+import { MapLayouts } from "./folder/map-layout.ts";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
 import { createDoc, searchFolder } from "./folder/search.ts";
 import { createFolder, duplicateDoc, moveEntry, trashEntry } from "./folder/file-ops.ts";
@@ -506,6 +507,23 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     return planConflict(folder, copy);
+  },
+  "map:read": async ({ path: doc, text }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const ids = folder ? versionsFor(folder) : null;
+    if (!folder || !ids || !device || !folder.docs.includes(doc)) return { ids: [], positions: {} };
+    const at = await ids.locate(doc, text);
+    if (!at) return { ids: [], positions: {} };
+    return { ids: at.ids, positions: await new MapLayouts(folder.path, device).read(at.doc) };
+  },
+  "map:save": async ({ path: doc, text, positions }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const ids = folder ? versionsFor(folder) : null;
+    if (!folder || !ids || !device || !folder.docs.includes(doc)) return { ok: false };
+    const at = await ids.locate(doc, text);
+    if (!at) return { ok: false };
+    await new MapLayouts(folder.path, device).write(at.doc, positions);
+    return { ok: true };
   },
   "agent:status": async ({ connect, agent }) => {
     const id = agent ?? appSettings.get().defaultAgent;

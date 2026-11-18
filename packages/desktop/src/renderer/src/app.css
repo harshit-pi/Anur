@@ -1844,3 +1844,244 @@ body.resizing * {
   border-radius: 0 8px 8px 0;
   background: var(--amber-wash);
 }
+
+/* The map (task 7): the doc's sections as boxes on a whiteboard. */
+.page:has(~ .map) {
+  display: none;
+}
+
+.map {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  outline: none;
+  cursor: grab;
+  background-color: var(--paper);
+  background-image: radial-gradient(var(--rule) 1px, transparent 1px);
+  background-size: 20px 20px;
+  touch-action: none;
+  user-select: none;
+}
+
+.map:active {
+  cursor: grabbing;
+}
+
+.map-world {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 0;
+  height: 0;
+  transform-origin: 0 0;
+}
+
+.map-edges {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.map-edge {
+  fill: none;
+  stroke: var(--slate);
+  stroke-width: 1.5;
+}
+
+.map-edge.thread {
+  stroke: var(--rule);
+  stroke-dasharray: 4 4;
+}
+
+.map-box {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 10px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  cursor: pointer;
+  box-shadow: 0 1px 2px var(--shadow);
+}
+
+.map-box:hover {
+  border-color: var(--slate);
+}
+
+.map-box.title {
+  border-width: 2px;
+  border-color: var(--ink);
+}
+
+.map-box.title .map-box-name {
+  font-family: var(--font-doc);
+  font-size: 16px;
+}
+
+.map-box.selected {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+.map-box.dragging {
+  cursor: grabbing;
+  box-shadow: 0 6px 18px var(--shadow);
+  z-index: 2;
+}
+
+.map-box-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.map-box-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.map-count {
+  flex: none;
+  font-size: 11px;
+  color: var(--graphite);
+}
+
+.map-box-line {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--graphite);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.map-thread {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px dashed var(--slate);
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--graphite);
+  font: 12px var(--font-ui);
+  cursor: pointer;
+}
+
+.map-thread:hover {
+  color: var(--ink);
+  border-style: solid;
+}
+
+.map-thread.busy {
+  border-color: var(--blue);
+}
+
+.map-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--amber);
+}
+
+.map-add {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 200px;
+  padding: 8px 12px;
+  border: 1px solid var(--blue);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: 14px var(--font-ui);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+  outline: none;
+}
+
+.map-legend,
+.map-tools {
+  position: absolute;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  font: 12px var(--font-ui);
+  color: var(--graphite);
+  cursor: default;
+}
+
+.map-legend {
+  left: 12px;
+}
+
+.map-tools {
+  right: 12px;
+}
+
+.map-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-key {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.map-key.section {
+  border: 1px solid var(--slate);
+  background: var(--sheet);
+}
+
+.map-key.thread {
+  border: 1px dashed var(--slate);
+  border-radius: 6px;
+}
+
+.map-key.preview {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--amber);
+}
+
+.map-tool {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.map-tool:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.map-tool:disabled {
+  color: var(--graphite);
+  opacity: 0.5;
+  cursor: default;
+}
