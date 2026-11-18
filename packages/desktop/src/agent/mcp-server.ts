@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { createInterface } from "node:readline";
 
@@ -89,8 +90,147 @@ const TOOLS = [
   },
 ];
 
-const socket = process.env.ANUR_SOCKET ?? "";
-const token = process.env.ANUR_TOKEN ?? "";
+/**
+ * Two ways in. Started for one of Anur's threads, the socket and a token
+ * for that thread come in the environment. Started by the person's own
+ * Claude Code from the `/anur` skill (6.4), there is no thread: the socket
+ * and a terminal token are read, each call, from a file Anur writes on
+ * launch that only the person can read, so a restarted Anur is found again.
+ */
+const terminalFile = process.env.ANUR_TERMINAL ?? "";
+const inTerminal = !process.env.ANUR_TOKEN && terminalFile !== "";
+
+function reach(): { socket: string; token: string } | null {
+  if (!inTerminal)
+    return { socket: process.env.ANUR_SOCKET ?? "", token: process.env.ANUR_TOKEN ?? "" };
+  try {
+    const t = JSON.parse(readFileSync(terminalFile, "utf8")) as {
+      socket?: unknown;
+      token?: unknown;
+    };
+    return typeof t.socket === "string" && typeof t.token === "string"
+      ? { socket: t.socket, token: t.token }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+const docArg = {
+  type: "string",
+  description:
+    'The doc\'s path in the folder open in Anur, such as "plans/launch.md", or its full path, or its name.',
+};
+const sectionArg = {
+  type: "string",
+  description:
+    'The section\'s heading, such as "Retry timing", its path from the title, such as "Plan > Retry timing", or its ID from anur_outline.',
+};
+
+/** The tools an agent in the person's own terminal gets (6.5 to 6.9). */
+const TERMINAL_TOOLS = [
+  {
+    name: "anur_outline",
+    description:
+      "A doc's headings, as a tree, each with its section ID and how many threads it has in Anur.",
+    inputSchema: {
+      type: "object",
+      properties: { doc: docArg },
+      required: ["doc"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "anur_section_bundle",
+    description:
+      "What a new thread on one section of a doc starts with in Anur: the text above it, the section in full, the rest of the doc, and the inputs earlier threads picked up.",
+    inputSchema: {
+      type: "object",
+      properties: { doc: docArg, section: sectionArg },
+      required: ["doc", "section"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "anur_list_threads",
+    description:
+      "Which sections of a doc have threads in Anur, how many, and whether any is running. Never their messages.",
+    inputSchema: {
+      type: "object",
+      properties: { doc: docArg },
+      required: ["doc"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "anur_propose_preview",
+    description:
+      "Propose new text for one section of a doc. Anur shows it in place as a proposed edit, and the person decides; the file never changes from this call.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        doc: docArg,
+        section: sectionArg,
+        text: {
+          type: "string",
+          description: "The section's whole new text, in Markdown, without its heading.",
+        },
+        summary: { type: "string", description: "One line on what changed and why." },
+      },
+      required: ["doc", "section", "text"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "anur_create_doc",
+    description:
+      "Make a doc in the folder open in Anur and open it there. For /anur doc, give the drafted Markdown, a summary of this chat and the inputs you used: Anur keeps the chat on the doc's title. For /anur new, give the headings only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: {
+          type: "string",
+          description:
+            'The doc\'s file name or path in the folder, such as "Launch plan" or "plans/launch.md".',
+        },
+        markdown: {
+          type: "string",
+          description: "The whole doc: a title as an H1, then its sections.",
+        },
+        summary: { type: "string", description: "For /anur doc: the chat in five to ten lines." },
+        inputs: {
+          type: "array",
+          description: "For /anur doc: what you used in this chat.",
+          items: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: ["file", "url", "command", "tool"] },
+              ref: {
+                type: "string",
+                description:
+                  "The file's path, the page's address, the command, or the tool and what it returned.",
+              },
+            },
+            required: ["kind", "ref"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["name", "markdown"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "anur_open",
+    description: "Open a doc in Anur, at a section if one is given.",
+    inputSchema: {
+      type: "object",
+      properties: { doc: docArg, section: sectionArg },
+      required: ["doc"],
+      additionalProperties: false,
+    },
+  },
+];
 
 function write(message: object): void {
   process.stdout.write(`${JSON.stringify(message)}\n`);
@@ -98,8 +238,13 @@ function write(message: object): void {
 
 /** One tool call, answered by Anur over the socket. */
 function call(tool: string, args: unknown): Promise<{ text?: string; error?: string }> {
+  const to = reach();
+  if (!to)
+    return Promise.resolve({
+      error: "Anur isn't open. Ask the person to open Anur, then try again.",
+    });
   return new Promise((resolve) => {
-    const conn = createConnection(socket);
+    const conn = createConnection(to.socket);
     let buf = "";
     const done = (r: { text?: string; error?: string }) => {
       conn.destroy();
@@ -116,9 +261,11 @@ function call(tool: string, args: unknown): Promise<{ text?: string; error?: str
       }
     });
     conn.on("error", () => {
-      done({ error: "Anur isn't reachable. Is the app open?" });
+      done({ error: "Anur isn't open. Ask the person to open Anur, then try again." });
     });
-    conn.write(`${JSON.stringify({ token, tool, args })}\n`);
+    // From a terminal, where the agent runs: Anur finds its chat from there.
+    const sent = inTerminal ? { ...(args as object), _cwd: process.cwd() } : args;
+    conn.write(`${JSON.stringify({ token: to.token, tool, args: sent })}\n`);
   });
 }
 
@@ -141,12 +288,12 @@ async function handle(m: Rpc): Promise<void> {
       reply({});
       return;
     case "tools/list":
-      reply({ tools: TOOLS });
+      reply({ tools: inTerminal ? TERMINAL_TOOLS : TOOLS });
       return;
     case "tools/call": {
       const p = (m.params ?? {}) as { name?: unknown; arguments?: unknown };
       const name = typeof p.name === "string" ? p.name : "";
-      if (!TOOLS.some((t) => t.name === name)) {
+      if (!(inTerminal ? TERMINAL_TOOLS : TOOLS).some((t) => t.name === name)) {
         reply({ content: [{ type: "text", text: `Anur has no tool ${name}.` }], isError: true });
         return;
       }

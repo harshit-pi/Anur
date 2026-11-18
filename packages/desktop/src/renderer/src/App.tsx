@@ -57,6 +57,7 @@ import {
   StatusBar,
 } from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
+import { SkillCard } from "./regions/SkillCard.tsx";
 import { MapView } from "./regions/MapView.tsx";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
@@ -171,9 +172,11 @@ export function App() {
   useEffect(() => {
     if (folderPath) saveTabs(window.localStorage, folderPath, tabs);
   }, [tabs, folderPath]);
+  const openDocNow = useRef<(path: string, inNewTab: boolean) => void>(() => undefined);
   const openDoc = useCallback((path: string, inNewTab: boolean) => {
     setTabs((t) => openInTab(t, path, inNewTab));
   }, []);
+  openDocNow.current = openDoc;
   /** Where each tab left each doc it showed, kept while the app runs. */
   const savedViews = useRef(new Map<string, SavedView>());
   const viewKey = `${tabs.active ?? ""}|${doc?.path ?? ""}`;
@@ -688,6 +691,11 @@ export function App() {
     const offFolder = anur.on("folder:changed", (f) => {
       setFolder(f);
     });
+    // An agent in a terminal asked to show a doc (6.7, 6.9).
+    const offOpenDoc = anur.on("app:open-doc", ({ path, section }) => {
+      openDocNow.current(path, false);
+      if (section) setPendingHeading({ path, heading: section });
+    });
     const offCommand = anur.on("app:command", ({ command }) => {
       if (command === "tab-new") setTabs((t) => newTab(t));
       else if (command === "tab-close") setTabs((t) => (t.active ? close(t, t.active) : t));
@@ -698,6 +706,7 @@ export function App() {
     return () => {
       offInsert();
       offFolder();
+      offOpenDoc();
       offCommand();
     };
   }, []);
@@ -930,6 +939,7 @@ export function App() {
           }}
         />
       ) : null}
+      <SkillCard />
       <CommandPalette
         open={paletteOpen}
         onClose={() => {

@@ -25,7 +25,15 @@ export class AnurSocket {
     this.path = path.join(dir, "s");
   }
 
-  async start(): Promise<void> {
+  private starting: Promise<void> | null = null;
+
+  /** Start listening; called again, it waits for the same start. */
+  start(): Promise<void> {
+    this.starting ??= this.listen();
+    return this.starting;
+  }
+
+  private async listen(): Promise<void> {
     if (this.server) return;
     await mkdir(this.dir, { recursive: true });
     await chmod(this.dir, 0o700);

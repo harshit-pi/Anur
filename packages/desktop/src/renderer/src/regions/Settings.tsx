@@ -3,7 +3,6 @@ import type { FolderState } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import type { AgentStatus } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
-import { isCollapsed, setCollapsed } from "../editor/properties/properties-widget.ts";
 import { CloseIcon } from "./Icons.tsx";
 import { type ThemePref, applyTheme, loadTheme, saveTheme } from "./theme-pref.ts";
 
@@ -75,6 +74,85 @@ function Row({
   );
 }
 
+/** Anur in the person's Claude Code (6.2): added or not, with Add, Update and Remove. */
+function SkillRow() {
+  const [s, setS] = useState<{ added: boolean; claude: boolean; current: boolean } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = () => {
+    void anur.call("skill:status", {}).then(setS);
+  };
+  useEffect(load, []);
+  const act = (action: "add" | "update" | "remove") => {
+    setBusy(true);
+    setError(null);
+    void anur.call("skill:act", { action }).then((r) => {
+      setBusy(false);
+      if (r.kind === "failed") setError(r.reason);
+      load();
+    });
+  };
+  return (
+    <Row
+      title="Use Anur from Claude Code"
+      detail={
+        error ??
+        (!s
+          ? "Checking…"
+          : !s.claude
+            ? "Claude Code isn't on this computer."
+            : !s.added
+              ? "Adds /anur to Claude Code: /anur doc turns a chat into a doc here."
+              : s.current
+                ? "Added: /anur doc, /anur new and /anur open work in Claude Code. Anur keeps them up to date."
+                : "Added, but out of date: Anur updates it on its next launch, or now.")
+      }
+    >
+      {s?.claude ? (
+        <div className="settings-actions">
+          {!s.added ? (
+            <button
+              type="button"
+              className="think-button primary"
+              disabled={busy}
+              onClick={() => {
+                act("add");
+              }}
+            >
+              Add
+            </button>
+          ) : (
+            <>
+              {!s.current ? (
+                <button
+                  type="button"
+                  className="think-button primary"
+                  disabled={busy}
+                  onClick={() => {
+                    act("update");
+                  }}
+                >
+                  Update
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="think-button"
+                disabled={busy}
+                onClick={() => {
+                  act("remove");
+                }}
+              >
+                Remove
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+    </Row>
+  );
+}
+
 export function Settings({
   section,
   onSection,
@@ -90,7 +168,6 @@ export function Settings({
 }) {
   const [main, setMain] = useState<MainSettings | null>(null);
   const [theme, setTheme] = useState<ThemePref>(() => loadTheme(window.localStorage));
-  const [folded, setFolded] = useState(isCollapsed);
 
   useEffect(() => {
     void anur.call("settings:get", {}).then(setMain);
@@ -134,19 +211,6 @@ export function Settings({
               <button type="button" className="settings-button" onClick={onOpenFolder}>
                 {folder ? "Open another folder…" : "Open a folder…"}
               </button>
-            </Row>
-            <Row
-              title="Properties start folded"
-              detail="The Properties box at the top of a doc opens folded away, in every doc and folder."
-            >
-              <Switch
-                on={folded}
-                label="Properties start folded"
-                onChange={(on) => {
-                  setFolded(on);
-                  setCollapsed(on);
-                }}
-              />
             </Row>
             <Row
               title="Commit Anur's data with git"
@@ -246,6 +310,7 @@ export function Settings({
                 <span className="settings-status">Not yet</span>
               </Row>
             ))}
+            <SkillRow />
           </>
         );
       case "core":
