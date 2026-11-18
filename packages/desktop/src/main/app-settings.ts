@@ -14,9 +14,15 @@ export type AppSettings = {
   sectionHistory: boolean;
   /** The agent new threads run on. */
   defaultAgent: AgentId;
+  /** Use agents' edits as they land, instead of proposing them; off by default. */
+  autoApply: boolean;
 };
 
-const DEFAULTS: AppSettings = { sectionHistory: true, defaultAgent: DEFAULT_AGENT };
+const DEFAULTS: AppSettings = {
+  sectionHistory: true,
+  defaultAgent: DEFAULT_AGENT,
+  autoApply: false,
+};
 
 export class AppSettingsStore {
   private current: AppSettings = { ...DEFAULTS };
@@ -33,6 +39,7 @@ export class AppSettingsStore {
       this.current = {
         sectionHistory: typeof raw.sectionHistory === "boolean" ? raw.sectionHistory : true,
         defaultAgent: isAgentId(raw.defaultAgent) ? raw.defaultAgent : DEFAULT_AGENT,
+        autoApply: raw.autoApply === true,
       };
     } catch {
       this.current = { ...DEFAULTS };

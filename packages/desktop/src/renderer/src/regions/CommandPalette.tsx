@@ -111,7 +111,7 @@ export function CommandPalette({
     },
     { kind: "command" as const, name: "Switch Page and Map", hint: "⇧⌘M", run: onSwitchView },
     { kind: "command" as const, name: "Start a thread on this section", hint: "", run: onThread },
-    { kind: "command" as const, name: "Ask about this doc", hint: "whole-doc thread", run: onAsk },
+    { kind: "command" as const, name: "Thread on the whole doc", hint: "", run: onAsk },
   ].filter(
     (c) =>
       q === "" || c.name.startsWith("New doc") || c.name.toLowerCase().includes(q.toLowerCase()),

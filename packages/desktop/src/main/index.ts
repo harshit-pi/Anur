@@ -264,6 +264,24 @@ function threadsFor(folder: FolderState): Threads | null {
       defaultAgent: () => appSettings.get().defaultAgent,
       rememberOptions: rememberChoices,
       mcp: { socket: anurSocket, script: path.join(here, "mcp-server.js") },
+      autoApply: () => appSettings.get().autoApply,
+      isOpen: (rel) =>
+        [...shownDoc.entries()].some(
+          ([win, doc]) => doc === rel && folders.current(win)?.path === folder.path,
+        ),
+      applied: async (rel, text, section, applied, thread) => {
+        const at = await ids.locate(rel, text);
+        const i = at ? at.ids.indexOf(section) : -1;
+        if (!at || i < 0) return;
+        await ids.applied(
+          rel,
+          section,
+          applied,
+          at.tree.sections[i]?.path ?? [],
+          `p${thread}`,
+          thread,
+        );
+      },
       baseTables: async (rel, target) => {
         const r = await readEmbeddedBase(folder, target, rel);
         if (r.kind !== "base") return null;
@@ -518,12 +536,17 @@ const handlers: { [C in Channel]: Handler<C> } = {
       sectionHistory: appSettings.get().sectionHistory,
       commitAnur: folder ? await commitsAnur(folder.path) : null,
       defaultAgent: appSettings.get().defaultAgent,
+      autoApply: appSettings.get().autoApply,
     };
   },
-  "settings:set": async ({ sectionHistory, commitAnur, defaultAgent }, { webContentsId }) => {
+  "settings:set": async (
+    { sectionHistory, commitAnur, defaultAgent, autoApply },
+    { webContentsId },
+  ) => {
     const folder = folders.current(webContentsId);
     if (sectionHistory !== undefined) await appSettings.set({ sectionHistory });
     if (defaultAgent !== undefined) await appSettings.set({ defaultAgent });
+    if (autoApply !== undefined) await appSettings.set({ autoApply });
     if (commitAnur !== undefined && folder?.mode === "writable") {
       await setCommitsAnur(folder.path, commitAnur);
     }
@@ -531,7 +554,24 @@ const handlers: { [C in Channel]: Handler<C> } = {
       sectionHistory: appSettings.get().sectionHistory,
       commitAnur: folder ? await commitsAnur(folder.path) : null,
       defaultAgent: appSettings.get().defaultAgent,
+      autoApply: appSettings.get().autoApply,
     };
+  },
+  "thread:rename": async ({ thread, path: rel, text, title }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    return { ok: t ? await t.rename(rel, text, thread, title) : false };
+  },
+  "thread:auto-undo": async ({ thread, id }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    return t ? t.autoUndoFor(thread, id) : { kind: "refused", reason: "No folder is open." };
+  },
+  "thread:auto-used": async ({ thread, path: rel, text, section }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    await t?.noteAutoUsed(rel, text, thread, section);
+    return {};
   },
   "folder:search": async ({ query }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

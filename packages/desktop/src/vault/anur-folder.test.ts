@@ -17,11 +17,11 @@ afterEach(() => {
 });
 
 describe("opening .anur/", () => {
-  it("creates it with format.json and both ignore files", async () => {
+  it("creates it with format.json and .ignore, committed with git by default", async () => {
     const opened = await openAnurFolder(root);
     expect(opened).toMatchObject({ mode: "writable", format: 1, created: true });
     expect(JSON.parse(read("format.json"))).toEqual({ format: 1 });
-    expect(read(".gitignore")).toBe("*\n");
+    expect(existsSync(anur(".gitignore"))).toBe(false);
     expect(read(".ignore")).toBe("*\n");
     expect(readdirSync(anur()).filter((f) => f.endsWith(".tmp"))).toEqual([]);
   });
@@ -31,13 +31,13 @@ describe("opening .anur/", () => {
     expect(await openAnurFolder(root)).toMatchObject({ mode: "writable", created: false });
   });
 
-  it("puts back a missing .ignore, but leaves a removed .gitignore removed", async () => {
+  it("puts back a missing .ignore, and leaves the folder's .gitignore choice as it is", async () => {
     await openAnurFolder(root);
     rmSync(anur(".ignore"));
-    rmSync(anur(".gitignore"));
+    writeFileSync(anur(".gitignore"), "*\n");
     await openAnurFolder(root);
     expect(existsSync(anur(".ignore"))).toBe(true);
-    expect(existsSync(anur(".gitignore"))).toBe(false);
+    expect(read(".gitignore")).toBe("*\n");
   });
 
   it("opens a newer folder read-only and leaves format.json alone", async () => {
@@ -63,18 +63,16 @@ describe("git and .anur/", () => {
   const untracked = () =>
     git("status", "--porcelain", "--untracked-files=all").trim().split("\n").filter(Boolean);
 
-  it("skips .anur/ with no change at the folder root, until its .gitignore is removed", async () => {
+  it("is committed with the folder by default, and skipped once its .gitignore says so", async () => {
     git("init", "-q");
     writeFileSync(path.join(root, "doc.md"), "# Doc\n");
     await openAnurFolder(root);
-    writeFileSync(anur("open-dev1.json"), "{}");
-
-    expect(untracked()).toEqual(["?? doc.md"]);
+    expect(untracked()).toEqual(
+      expect.arrayContaining(["?? doc.md", "?? .anur/format.json", "?? .anur/.ignore"]),
+    );
     expect(existsSync(path.join(root, ".gitignore"))).toBe(false);
 
-    rmSync(anur(".gitignore"));
-    expect(untracked()).toEqual(
-      expect.arrayContaining(["?? .anur/format.json", "?? .anur/.ignore"]),
-    );
+    writeFileSync(anur(".gitignore"), "*\n");
+    expect(untracked()).toEqual(["?? doc.md"]);
   });
 });

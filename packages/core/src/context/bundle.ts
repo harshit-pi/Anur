@@ -255,6 +255,8 @@ export function buildBundle({
         ]
       : []),
     "",
+    'When this thread has no name yet, name it with Anur\'s anur_name_thread tool as you first reply: two to five words for what it is about, such as "Pricing per flat".',
+    "",
     "When you have alternatives for this section, two or more ways it could read, offer them with Anur's anur_offer_options tool instead of listing them in your reply: each option is a short title and the section's whole new text, without its heading. The person sees them as cards and on the map, and picks one; its text replaces the section's. Your reply then says in a line or two how they differ; don't repeat their text.",
     "",
   ];

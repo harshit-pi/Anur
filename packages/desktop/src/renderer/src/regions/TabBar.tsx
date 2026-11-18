@@ -31,6 +31,7 @@ import {
   PlusIcon,
   SidebarLeftIcon,
   SidebarRightIcon,
+  AnurIcon,
 } from "./Icons.tsx";
 
 const COLOR_NAMES: Record<Group["color"], string> = {
@@ -382,15 +383,16 @@ export function TabBar({
         ))}
       </div>
       <button
-        className="tab-ask"
+        className="icon-button tab-ask"
         type="button"
         disabled={!onAsk}
-        title="Ask about the whole doc"
+        aria-label="A thread on the whole doc"
+        title="A thread on the whole doc"
         onClick={() => {
           onAsk?.();
         }}
       >
-        Ask
+        <AnurIcon />
       </button>
       <button
         className="icon-button"

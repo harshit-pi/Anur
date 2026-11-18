@@ -72,6 +72,17 @@ const TOOLS = [
     },
   },
   {
+    name: "anur_name_thread",
+    description:
+      'Name this thread, once, as you first reply: two to five words for what it is about, such as "Pricing per flat". The person sees it in Anur\'s thread list and on the map. A name the person gave is kept.',
+    inputSchema: {
+      type: "object",
+      properties: { title: { type: "string", description: "Two to five words." } },
+      required: ["title"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "anur_list_inputs",
     description:
       "List the inputs earlier threads on this section, or the sections above it, picked up: files, other docs, command output, fetch answers, other servers' results. Each has an ID for anur_read_input.",

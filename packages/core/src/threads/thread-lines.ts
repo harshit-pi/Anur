@@ -141,6 +141,32 @@ export const InputRemovedLine = LineEnvelope.extend({
   input: z.string().min(1),
 });
 
+/**
+ * An agent's edit used as it landed, as the person's setting asks: in which
+ * doc and sections. `undo` names what restores it while the app that made
+ * it runs; null when the page applied it, where ⌘Z takes it back.
+ */
+export const AutoUsedLine = LineEnvelope.extend({
+  kind: z.literal("auto-used"),
+  doc: z.string(),
+  sections: z.array(z.array(z.string())),
+  undo: z.string().nullable(),
+});
+
+/** An auto-used edit taken back from its note. */
+export const AutoUndoneLine = LineEnvelope.extend({
+  kind: z.literal("auto-undone"),
+  used: z.string().min(1),
+});
+
+/** The person renamed the thread; the latest name wins. */
+export const RenamedLine = LineEnvelope.extend({
+  kind: z.literal("renamed"),
+  title: z.string().min(1).max(200),
+  /** The agent names a thread once, after its first reply; a person's name always wins. */
+  by: z.enum(["person", "agent"]).optional(),
+});
+
 /** The person chose to explore an option before picking: the thread digs into it. */
 export const OptionExploredLine = LineEnvelope.extend({
   kind: z.literal("option-explored"),
@@ -159,6 +185,9 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   OptionExploredLine,
   InputLine,
   InputRemovedLine,
+  AutoUsedLine,
+  AutoUndoneLine,
+  RenamedLine,
 ]);
 export type KnownThreadLine = z.infer<typeof KnownThreadLine>;
 
@@ -174,6 +203,9 @@ const KNOWN_KINDS = new Set([
   "option-explored",
   "input",
   "input-removed",
+  "auto-used",
+  "auto-undone",
+  "renamed",
 ]);
 
 /** A kind added by a later version of format 1; kept as written. */

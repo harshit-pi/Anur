@@ -123,6 +123,15 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     /** The explored option these are narrower choices within; null for a first set. */
     within: z.string().nullable(),
   }),
+  /** An edit used as it landed (the setting); `undoable` while its Undo can still restore it. */
+  z.object({
+    kind: z.literal("auto-used"),
+    id: z.string(),
+    doc: z.string(),
+    sections: z.array(z.array(z.string())),
+    undoable: z.boolean(),
+    undone: z.boolean(),
+  }),
   /** A doc written by something else while this thread's turn ran (3.11). */
   z.object({
     kind: z.literal("changed"),
@@ -318,6 +327,7 @@ export const ipcContract = {
       sectionHistory: z.boolean(),
       commitAnur: z.boolean().nullable(),
       defaultAgent: AgentIdSchema,
+      autoApply: z.boolean(),
     }),
   },
   "settings:set": {
@@ -326,13 +336,47 @@ export const ipcContract = {
         sectionHistory: z.boolean().optional(),
         commitAnur: z.boolean().optional(),
         defaultAgent: AgentIdSchema.optional(),
+        autoApply: z.boolean().optional(),
       })
       .strict(),
     response: z.object({
       sectionHistory: z.boolean(),
       commitAnur: z.boolean().nullable(),
       defaultAgent: AgentIdSchema,
+      autoApply: z.boolean(),
     }),
+  },
+  /** Rename a thread, so the person can tell it apart in Think and on the map. */
+  "thread:rename": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        path: z.string().max(4096),
+        text: z.string(),
+        title: z.string().max(400),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Take back an edit used as it landed, from its note in the thread. */
+  "thread:auto-undo": {
+    request: z.object({ thread: z.string().max(200), id: z.string().max(100) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("undone") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** The page used an agent's edit by itself, as Settings asks: the thread notes it. */
+  "thread:auto-used": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        path: z.string().max(4096),
+        text: z.string(),
+        section: z.array(z.string()).max(50),
+      })
+      .strict(),
+    response: z.object({}),
   },
   /** Search the folder's docs, case ignored: each matching line (2.26). */
   "folder:search": {

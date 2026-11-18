@@ -68,9 +68,10 @@ export function selfTest(
         ),
       },
       {
+        // Allowed, as in Obsidian: Anur turns it into the thread's proposal afterwards.
         name: "a shell write to a doc",
         call: tool("Bash", { command: "echo x >> plan.md" }),
-        refused: true,
+        refused: false,
       },
     ];
     for (const s of samples) {

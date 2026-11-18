@@ -26,6 +26,7 @@ type MainSettings = {
   sectionHistory: boolean;
   commitAnur: boolean | null;
   defaultAgent: AgentId;
+  autoApply: boolean;
 };
 
 function Switch({
@@ -310,6 +311,18 @@ export function Settings({
                 <span className="settings-status">Not yet</span>
               </Row>
             ))}
+            <Row
+              title="Use agents' edits as they land"
+              detail="An agent's edit changes the doc at once, instead of waiting as a proposal for you to use. Each is noted in its thread, with Undo; edits that clash with your typing stay proposals. Options are always yours to pick."
+            >
+              <Switch
+                on={main?.autoApply ?? false}
+                label="Use agents' edits as they land"
+                onChange={(on) => {
+                  change({ autoApply: on });
+                }}
+              />
+            </Row>
             <SkillRow />
           </>
         );
