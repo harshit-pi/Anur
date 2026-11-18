@@ -152,6 +152,27 @@ export const InputLine = LineEnvelope.extend({
   local: z.boolean().optional(),
 });
 
+/**
+ * Something a person added for threads to work from (group 10): a file or a
+ * mock attached, a file from the folder, or a link. On a section, it lives
+ * in the doc's inputs file and reaches every thread on that section and
+ * below; on a thread, in that thread's file, and from there new threads too.
+ */
+export const AddedInputLine = LineEnvelope.extend({
+  kind: z.literal("added-input"),
+  section: SectionId,
+  /** The thread it was added to; null when added to the section. */
+  thread: ThreadId.nullable(),
+  /** An attachment copied into the folder, a file already in it, or a link. */
+  source: z.enum(["attachment", "file", "link"]),
+  label: z.string(),
+  /** A path in the folder, or the link's address. */
+  ref: z.string(),
+  hash: SnapshotHash.nullable(),
+  /** A link is text from the web: untrusted. */
+  trust: z.enum(["trusted", "untrusted"]),
+});
+
 /** A person removed an input: it no longer reaches new threads (4.4). */
 export const InputRemovedLine = LineEnvelope.extend({
   kind: z.literal("input-removed"),
@@ -263,6 +284,7 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   OptionExploredLine,
   InputLine,
   InputRemovedLine,
+  AddedInputLine,
   AutoUsedLine,
   AutoUndoneLine,
   RenamedLine,
@@ -287,6 +309,7 @@ const KNOWN_KINDS = new Set([
   "option-explored",
   "input",
   "input-removed",
+  "added-input",
   "auto-used",
   "auto-undone",
   "renamed",

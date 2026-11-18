@@ -409,6 +409,12 @@ function EditCard({
   );
 }
 
+/** Rows dragged from the files panel carry their full paths under this type (see FileTree). */
+const PANEL_PATHS = "application/x-anur-files";
+
+/** A file or folder waiting in the composer, sent with the next message (10.4). */
+export type Attachment = { path: string; name: string };
+
 function Composer({
   placeholder,
   busy,
@@ -417,6 +423,10 @@ function Composer({
   onStop,
   sendLabel,
   pickers,
+  attached = [],
+  onAttach,
+  onUnattach,
+  inserted = null,
 }: {
   placeholder: string;
   busy: boolean;
@@ -426,8 +436,20 @@ function Composer({
   sendLabel: string;
   /** Agent, mode and model, on the send button's line, as in the Claude app. */
   pickers?: React.ReactNode;
+  attached?: readonly Attachment[];
+  /** Files or folders to attach, by full path; none opens the picker. */
+  onAttach?: (paths: string[] | null) => void;
+  onUnattach?: (path: string) => void;
+  /** Text to add where the cursor is, as a link dropped on the panel. */
+  inserted?: { text: string; n: number } | null;
 }) {
   const [text, setText] = useState("");
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (!inserted) return;
+    setText((t) => (t && !/\s$/.test(t) ? `${t} ${inserted.text}` : t + inserted.text));
+    box.current?.focus();
+  }, [inserted]);
   const send = () => {
     const t = text.trim();
     if (!t || busy || disabled) return;
@@ -437,7 +459,33 @@ function Composer({
   };
   return (
     <div className="think-composer">
+      {attached.length > 0 ? (
+        <ul className="think-attachments" aria-label="Attached">
+          {attached.map((a) => (
+            <li key={a.path} className="think-chip" title={a.path}>
+              <span className="truncate">{a.name}</span>
+              <button
+                type="button"
+                aria-label={`Remove ${a.name}`}
+                onClick={() => {
+                  onUnattach?.(a.path);
+                }}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <textarea
+        ref={box}
+        onPaste={(e) => {
+          // Files copied in Finder paste as attachments; text pastes as text.
+          const files = [...e.clipboardData.files].map((f) => anur.pathOf(f)).filter(Boolean);
+          if (files.length === 0 || !onAttach) return;
+          e.preventDefault();
+          onAttach(files);
+        }}
         className="think-input"
         placeholder={placeholder}
         aria-label={placeholder}
@@ -455,6 +503,29 @@ function Composer({
         }}
       />
       <div className="think-composer-foot">
+        {onAttach ? (
+          <button
+            type="button"
+            className="think-attach"
+            aria-label="Attach files or folders"
+            title="Attach files or folders (or drop them here)"
+            disabled={disabled}
+            onClick={() => {
+              onAttach(null);
+            }}
+          >
+            <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M13.5 7.5 8 13a3.5 3.5 0 0 1-5-5l6-6a2.3 2.3 0 0 1 3.3 3.3L6.4 11.2a1.2 1.2 0 0 1-1.7-1.7L10 4.2"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        ) : null}
         <div className="think-pickers">{pickers}</div>
         {busy && onStop ? (
           <button type="button" className="think-button" onClick={onStop}>
@@ -560,6 +631,42 @@ export function Think({
     };
   }, [newAgent]);
   const [error, setError] = useState<string | null>(null);
+  /** Branch (10.5): the next thread started here continues that thread up to that item. */
+  const [branch, setBranch] = useState<{
+    thread: string;
+    upTo: number;
+    title: string;
+    excerpt: string;
+  } | null>(null);
+  /** Files and folders waiting in the composer, sent with the next message (10.4). */
+  const [attached, setAttached] = useState<Attachment[]>([]);
+  /** A link dropped on the panel goes into the message, as text. */
+  const [inserted, setInserted] = useState<{ text: string; n: number } | null>(null);
+  const attach = useCallback((paths: string[] | null) => {
+    const add = (list: string[]) => {
+      setAttached((a) => [
+        ...a,
+        ...list
+          .filter((p) => !a.some((x) => x.path === p))
+          .map((p) => ({ path: p, name: p.split("/").pop() ?? p })),
+      ]);
+    };
+    if (paths) add(paths);
+    else
+      void anur.call("inputs:pick-files", {}).then(({ files }) => {
+        add(files);
+      });
+  }, []);
+  const composerAttach = {
+    attached,
+    inserted,
+    onAttach: attach,
+    onUnattach: (p: string) => {
+      setAttached((a) => a.filter((x) => x.path !== p));
+    },
+  };
+  /** Files or links held over the panel, to add as inputs. */
+  const [dropOver, setDropOver] = useState(false);
   const [showText, setShowText] = useState(false);
   /** The edits threads proposed on this doc: each a card, like an option. */
   const [previews, setPreviews] = useState<PreviewView[]>([]);
@@ -720,17 +827,66 @@ export function Think({
         agent: newAgent,
         options,
         ...(purpose ? { purpose } : {}),
+        ...(branch && !purpose ? { branch: { thread: branch.thread, upTo: branch.upTo } } : {}),
+        ...(attached.length && !purpose ? { files: attached.map((a) => a.path) } : {}),
       });
       if (r.kind === "refused") {
         setError(r.reason);
         return false;
       }
+      setBranch(null);
+      if (!purpose) setAttached([]);
       setThreads((ts) => [...ts.filter((t) => t.id !== r.thread.id), r.thread]);
       setOpen(r.thread.id);
       return true;
     },
-    [docPath, section, docText, setThreads, newAgent, newChoices],
+    [docPath, section, docText, setThreads, newAgent, newChoices, branch, attached],
   );
+
+  /** Dropping files, rows from the files panel, or links on Think adds them as inputs. */
+  const dropProps = () =>
+    writable
+      ? {
+          onDragOver: (e: React.DragEvent) => {
+            const t = e.dataTransfer.types;
+            if (!t.includes("Files") && !t.includes(PANEL_PATHS) && !t.includes("text/uri-list"))
+              return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setDropOver(true);
+          },
+          onDragLeave: (e: React.DragEvent) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropOver(false);
+          },
+          onDrop: (e: React.DragEvent) => {
+            setDropOver(false);
+            const dt = e.dataTransfer;
+            let files = [...dt.files].map((f) => anur.pathOf(f)).filter(Boolean);
+            if (files.length === 0 && dt.types.includes(PANEL_PATHS)) {
+              try {
+                const listed: unknown = JSON.parse(dt.getData(PANEL_PATHS));
+                if (Array.isArray(listed))
+                  files = listed.filter((p): p is string => typeof p === "string");
+              } catch {
+                // Not a list of paths.
+              }
+            }
+            const links =
+              files.length > 0
+                ? []
+                : dt
+                    .getData("text/uri-list")
+                    .split(/\r?\n/)
+                    .map((l) => l.trim())
+                    .filter((l) => /^https?:\/\//i.test(l));
+            if (files.length === 0 && links.length === 0) return;
+            e.preventDefault();
+            // Files and folders wait in the composer; a link goes into the message as text.
+            if (files.length) attach(files);
+            else setInserted((x) => ({ text: links.join(" "), n: (x?.n ?? 0) + 1 }));
+          },
+        }
+      : {};
 
   /** A picked option goes into the page, where ⌘Z takes it back; the thread remembers the pick. */
   const useOption = (
@@ -790,7 +946,7 @@ export function Think({
   if (thread) {
     const asks = prompts.filter((p) => p.thread === thread.id);
     return (
-      <div className="think">
+      <div className={`think${dropOver ? " think-drop" : ""}`} {...dropProps()}>
         <button
           type="button"
           className="think-back"
@@ -800,6 +956,20 @@ export function Think({
         >
           ← All threads
         </button>
+        {thread.branchedFrom ? (
+          <p className="quiet think-branched">
+            Branched from{" "}
+            <button
+              type="button"
+              className="think-link"
+              onClick={() => {
+                if (thread.branchedFrom) setOpen(thread.branchedFrom.thread);
+              }}
+            >
+              {thread.branchedFrom.title}
+            </button>
+          </p>
+        ) : null}
         {thread.path ? (
           <button
             type="button"
@@ -875,8 +1045,35 @@ export function Think({
                 running={thread.busy && i + steps.length === thread.items.length}
               />
             ) : item.kind === "message" ? (
-              <div key={i} className={`think-message ${item.role}`}>
-                {item.role === "agent" ? <Markdown text={item.text} /> : item.text}
+              <div key={i} className={`think-message-wrap ${item.role}`}>
+                <div className={`think-message ${item.role}`}>
+                  {item.role === "agent" ? <Markdown text={item.text} /> : item.text}
+                </div>
+                {writable && !thread.busy && item.role === "agent" ? (
+                  <button
+                    type="button"
+                    className="think-branch"
+                    title="A new thread that knows this chat up to this reply, and nothing after it"
+                    onClick={() => {
+                      setBranch({
+                        thread: thread.id,
+                        upTo: i,
+                        title: thread.title,
+                        excerpt: item.text.replace(/\s+/g, " ").slice(0, 60),
+                      });
+                      const at = tree.sections.findIndex(
+                        (x) => thread.path && samePath(thread.path, x.path),
+                      );
+                      if (at >= 0) onJump(at);
+                      setOpen(null);
+                      requestAnimationFrame(() => {
+                        document.querySelector<HTMLTextAreaElement>(".think .think-input")?.focus();
+                      });
+                    }}
+                  >
+                    Branch from here
+                  </button>
+                ) : null}
               </div>
             ) : item.kind === "tool" ? (
               <div key={i} className={`think-tool ${item.status}`} title={item.title}>
@@ -1110,6 +1307,10 @@ export function Think({
                   </button>
                 ) : null}
               </div>
+            ) : item.kind === "attached" ? (
+              <div key={i} className="think-sent-attachment" title={item.label}>
+                <span className="truncate">{item.label.split("/").pop()}</span>
+              </div>
             ) : (
               <div key={i} className="think-error" role="alert">
                 {item.text}
@@ -1198,6 +1399,7 @@ export function Think({
           <Composer
             placeholder="Reply in this thread"
             sendLabel="Send"
+            {...composerAttach}
             pickers={
               <>
                 <AgentPicker
@@ -1242,16 +1444,19 @@ export function Think({
             }}
             onSend={async (message) => {
               setError(null);
+              const sent = attached;
               const r = await anur.call("thread:send", {
                 thread: thread.id,
                 path: docPath,
                 text: docText(),
                 message,
+                ...(sent.length ? { files: sent.map((a) => a.path) } : {}),
               });
               if (r.kind === "refused") {
                 setError(r.reason);
                 return false;
               }
+              setAttached([]);
               setThreads((ts) =>
                 ts.map((t) =>
                   t.id === thread.id
@@ -1276,7 +1481,7 @@ export function Think({
 
   const body = bodyOf(docText(), section);
   return (
-    <div className="think">
+    <div className={`think${dropOver ? " think-drop" : ""}`} {...dropProps()}>
       <h2
         className="think-section"
         // The heading is the section's name: edit it here as on the page.
@@ -1453,11 +1658,12 @@ export function Think({
             </ul>
           </details>
         ) : null}
-        {inputs.length > 0 ? (
+        {inputs.length > 0 || writable ? (
           <details className="think-inputs">
             <summary className="think-subhead">Inputs ({String(inputs.length)})</summary>
             <p className="quiet think-inputs-note">
-              Earlier threads picked these up; new threads here and below can read them.
+              What threads here work from: what they picked up, the files you attached and the links
+              you wrote. New threads here and below read them too.
             </p>
             <ul>
               {inputs.map((i) => (
@@ -1507,6 +1713,24 @@ export function Think({
       )}
       {notConnected(newAgent)}
       {error ? <p className="think-error">{error}</p> : null}
+      {branch ? (
+        <div className="think-branching" role="status">
+          <span>
+            Branching from <strong>{branch.title}</strong> after “{branch.excerpt}
+            {branch.excerpt.length >= 60 ? "…" : ""}”. The new thread knows that chat up to there,
+            and nothing after.
+          </span>
+          <button
+            type="button"
+            className="think-more"
+            onClick={() => {
+              setBranch(null);
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
       {signedOut(newAgent) ?? (
         <Composer
           placeholder={
@@ -1516,7 +1740,8 @@ export function Think({
                 ? "What should we do with this doc?"
                 : "What should we do with this section?"
           }
-          sendLabel="Start thread"
+          sendLabel={branch ? "Start branch" : "Start thread"}
+          {...composerAttach}
           pickers={
             <>
               <AgentPicker value={newAgent} disabled={!writable} onChange={setNewAgent} />

@@ -379,7 +379,10 @@ function write(message: object): void {
 }
 
 /** One tool call, answered by Anur over the socket. */
-function call(tool: string, args: unknown): Promise<{ text?: string; error?: string }> {
+function call(
+  tool: string,
+  args: unknown,
+): Promise<{ text?: string; error?: string; image?: { data: string; mimeType: string } }> {
   const to = reach();
   if (!to)
     return Promise.resolve({
@@ -443,7 +446,14 @@ async function handle(m: Rpc): Promise<void> {
       reply(
         r.error
           ? { content: [{ type: "text", text: r.error }], isError: true }
-          : { content: [{ type: "text", text: r.text ?? "" }] },
+          : {
+              content: [
+                { type: "text", text: r.text ?? "" },
+                ...(r.image
+                  ? [{ type: "image", data: r.image.data, mimeType: r.image.mimeType }]
+                  : []),
+              ],
+            },
       );
       return;
     }

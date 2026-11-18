@@ -280,16 +280,27 @@ export function MapView({
         sub,
         parent: s.parent === null ? null : idOf(s.parent),
       });
-      for (const t of threads.filter((t) => samePath(t.path, s.path))) {
+      // A branch hangs off the thread it came from (10.5), so each comes after its source.
+      const here = threads.filter((t) => samePath(t.path, s.path));
+      const onSection = new Set(here.map((t) => t.id));
+      const depth = (t: ThreadView, seen = new Set<string>()): number => {
+        const from = t.branchedFrom?.thread;
+        if (!from || !onSection.has(from) || seen.has(t.id)) return 0;
+        const source = here.find((x) => x.id === from);
+        return source ? 1 + depth(source, new Set([...seen, t.id])) : 0;
+      };
+      for (const t of [...here].sort((a, b) => depth(a) - depth(b))) {
         const tid = `t:${t.id}`;
-        nodes.push({ id: tid, parent: id, ...pill(t.title) });
+        const from = t.branchedFrom?.thread;
+        const parent = from && onSection.has(from) ? `t:${from}` : id;
+        nodes.push({ id: tid, parent, ...pill(t.title) });
         info.set(tid, {
           id: tid,
           kind: "thread",
           index: s.index,
           thread: t,
           heading: t.title,
-          parent: id,
+          parent,
         });
       }
       // Links to other docs' sections (8.6): one badge on the section, with the list on a click.

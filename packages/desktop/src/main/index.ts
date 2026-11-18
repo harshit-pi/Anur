@@ -933,20 +933,21 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return { options: choices.get(agent) };
   },
   "thread:start": async (
-    { path: doc, text, section, message, agent, options, purpose },
+    { path: doc, text, section, message, agent, options, purpose, branch, files },
     { webContentsId },
   ) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!folder || !t || !folder.docs.includes(doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
-    return t.start(doc, text, section, message, agent, options, purpose);
+    return t.start(doc, text, section, message, agent, options, purpose, branch, files ?? []);
   },
-  "thread:send": async ({ thread, path: doc, text, message }, { webContentsId }) => {
+  "thread:send": async ({ thread, path: doc, text, message, files }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!folder || !t || !folder.docs.includes(doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
+    if (files?.length) await t.attach(doc, text, thread, files);
     return t.send(thread, doc, text, message);
   },
   "preview:list": async ({ path: doc, text }, { webContentsId }) => {
@@ -1067,6 +1068,30 @@ const handlers: { [C in Channel]: Handler<C> } = {
         local: c.local,
       })),
     };
+  },
+  "inputs:add": async ({ path: rel, text, section, thread, files, links }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder?.mode === "writable" ? threadsFor(folder) : null;
+    if (!t) return { error: "Inputs need a folder Anur can write to." };
+    const r = await t.addInputs(rel, text, section.index, section.path, thread, files, links);
+    const win = windows.get(webContentsId);
+    // An attachment copied into the folder shows in the files panel.
+    if ("added" in r && files.length && win) {
+      const now = await folders.refresh(webContentsId);
+      if (now) send(win, "folder:changed", now);
+    }
+    return r;
+  },
+  "inputs:pick-files": async (_req, { webContentsId }) => {
+    const win = windows.get(webContentsId);
+    if (!win) return { files: [] };
+    const picked = await dialog.showOpenDialog(win, {
+      title: "Attach files or folders",
+      buttonLabel: "Attach",
+      // Files and folders both, as in Claude: a folder goes as a whole.
+      properties: ["openFile", "openDirectory", "multiSelections"],
+    });
+    return { files: picked.canceled ? [] : picked.filePaths };
   },
   "inputs:remove": async ({ path: rel, text, thread, input }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

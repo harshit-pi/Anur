@@ -98,6 +98,8 @@ export type AgentSignIn = z.infer<typeof AgentSignIn>;
 
 /** One item in a thread, as the Think panel shows it. */
 export const ThreadItem = z.discriminatedUnion("kind", [
+  /** A file or folder the person attached to their next message (10.4). */
+  z.object({ kind: z.literal("attached"), source: z.string(), label: z.string() }),
   z.object({
     kind: z.literal("message"),
     turn: z.string(),
@@ -212,6 +214,8 @@ export const ThreadView = z.object({
   title: z.string(),
   closed: z.boolean(),
   busy: z.boolean(),
+  /** For a branch (10.5): the thread it came from, and that thread's name. */
+  branchedFrom: z.object({ thread: z.string(), title: z.string() }).nullable().optional(),
   /** Every edit this thread proposes now, by doc and section (9.3). */
   changeSet: z
     .array(z.object({ doc: z.string(), sections: z.array(z.array(z.string())) }))
@@ -826,6 +830,10 @@ export const ipcContract = {
         agent: AgentIdSchema.optional(),
         /** An action (group 15): Anur writes the first message, and the agent plans first. */
         purpose: z.enum(["build", "check"]).optional(),
+        /** Branch (10.5): a new thread whose agent knows that thread's chat up to that item. */
+        branch: z.object({ thread: z.string().max(200), upTo: z.int().nonnegative() }).optional(),
+        /** Files and folders attached in the composer (10.4). */
+        files: z.array(z.string().max(4096)).max(50).optional(),
         /** Mode and model picked before the first message, set when its session opens. */
         options: z
           .array(z.object({ id: z.string().max(100), value: z.string().max(200) }))
@@ -846,6 +854,8 @@ export const ipcContract = {
         path: z.string().max(4096),
         text: z.string(),
         message: z.string().min(1).max(100_000),
+        /** Files and folders attached in the composer (10.4). */
+        files: z.array(z.string().max(4096)).max(50).optional(),
       })
       .strict(),
     response: z.discriminatedUnion("kind", [
@@ -922,6 +932,25 @@ export const ipcContract = {
       z.object({ kind: z.literal("sent") }),
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
+  },
+  /** A person adds files or links as inputs, to a section or one of its threads (10.1). */
+  "inputs:add": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        section: SectionRef,
+        thread: z.string().max(200).nullable(),
+        files: z.array(z.string().max(4096)).max(100),
+        links: z.array(z.string().max(4096)).max(100),
+      })
+      .strict(),
+    response: z.union([z.object({ added: z.number() }), z.object({ error: z.string() })]),
+  },
+  /** Pick files to add as inputs, in the system's open sheet. */
+  "inputs:pick-files": {
+    request: z.object({}).strict(),
+    response: z.object({ files: z.array(z.string()) }),
   },
   /** The inputs new threads on a section receive: picked up by earlier threads on it or above (4.4). */
   "inputs:list": {
