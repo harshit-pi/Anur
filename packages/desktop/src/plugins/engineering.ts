@@ -1,4 +1,5 @@
-import { API_VERSION, type Plugin } from "@anur/core";
+import { API_VERSION, type Plugin, type SourcedSection } from "@anur/core";
+import { findRepoDirs, scanSystem } from "@anur/system";
 
 /**
  * The engineering plugin (Design - Engineering Plugin): a system across
@@ -24,7 +25,30 @@ export const engineering: Plugin = {
     folders: ["."],
     network: false,
   },
-  onload() {
-    // Groups 20 to 25 register its section source, detectors, context, map, surfaces and tools.
+  onload(api) {
+    // Repos and their parts as sections (group 20); the rest arrive with groups 21 to 25.
+    api.registerSectionSource({
+      id: "system",
+      applies: (folder) => Promise.resolve(findRepoDirs(folder).length > 0),
+      sections: (folder) => Promise.resolve(systemSections(folder)),
+    });
   },
 };
+
+/** A folder's repos, each a section, with its parts as sections beneath it. */
+export function systemSections(folder: string): SourcedSection[] {
+  const scan = scanSystem(folder);
+  const out: SourcedSection[] = [];
+  for (const r of scan.repos) {
+    const repoId = `repo:${r.id ?? r.dir}`;
+    out.push({ id: repoId, path: [r.dir], text: r.github ?? "", parent: null });
+    for (const p of scan.parts.filter((x) => x.repo === r.dir))
+      out.push({
+        id: `part:${p.id}`,
+        path: [r.dir, p.name],
+        text: `${p.kind} in ${p.file}`,
+        parent: repoId,
+      });
+  }
+  return out;
+}

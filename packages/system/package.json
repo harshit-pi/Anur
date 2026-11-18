@@ -1,0 +1,14 @@
+{
+  "name": "@anur/system",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A system across repos: repos, parts and IDs read from a folder. Headless Node, no Electron; shared by the app, the pre-commit hook and CI.",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "anur-system": "./src/cli.ts"
+  }
+}
