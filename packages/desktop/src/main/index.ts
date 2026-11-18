@@ -167,7 +167,10 @@ function versionsFor(folder: FolderState): SectionVersions | null {
   return v;
 }
 /** The index process, where plugins read folders; started when first asked (group 20). */
-const indexProcess = new IndexProcess(indexEntry(here));
+const indexProcess = new IndexProcess(indexEntry(here), (changed) => {
+  for (const win of windows.values())
+    if (folders.current(win.webContents.id)?.path === changed) send(win, "system:changed", {});
+});
 /** The agent host, shared by every window; started when a thread first needs it (3.1). */
 let choices: AgentChoices;
 const hub = new AgentHub(

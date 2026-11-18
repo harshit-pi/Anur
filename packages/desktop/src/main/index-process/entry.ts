@@ -8,7 +8,9 @@ import type { FromIndex, ToIndex } from "./protocol.ts";
 const port = process.parentPort;
 port.on("message", (e: { data: ToIndex }) => {
   const m = e.data;
-  sectionsFor(m.folder, m.plugins).then(
+  sectionsFor(m.folder, m.plugins, (folder) => {
+    port.postMessage({ type: "changed", folder } satisfies FromIndex);
+  }).then(
     (sources) => {
       port.postMessage({ type: "sections", id: m.id, sources } satisfies FromIndex);
     },

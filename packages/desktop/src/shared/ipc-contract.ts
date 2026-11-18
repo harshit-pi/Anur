@@ -1357,6 +1357,8 @@ export const ipcEvents = {
   }),
   /** Insert in the menu bar: put this block where the page's cursor is. */
   "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
+  /** The folder's repos changed on disk: the system tab reads them again (20.8). */
+  "system:changed": z.object({}),
   /** The agent connected, or couldn't, and why. */
   "agent:status": AgentStatus,
   /** An agent's sign-in changed, or a sign-in moved on. */

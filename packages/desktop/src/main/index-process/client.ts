@@ -4,6 +4,7 @@ import type { SourcedSection } from "@anur/core";
 import type { FromIndex, ToIndex } from "./protocol.ts";
 
 type Sources = { id: string; sections: SourcedSection[] }[];
+type Answer = Exclude<FromIndex, { type: "changed" }>;
 
 /** The index process's entry, built beside main's own. */
 export const indexEntry = (mainDir: string) => path.join(mainDir, "index-process.js");
@@ -15,9 +16,13 @@ export const indexEntry = (mainDir: string) => path.join(mainDir, "index-process
 export class IndexProcess {
   private proc: UtilityProcess | null = null;
   private next = 1;
-  private readonly waiting = new Map<number, (r: FromIndex) => void>();
+  private readonly waiting = new Map<number, (r: Answer) => void>();
 
-  constructor(private readonly entry: string) {}
+  constructor(
+    private readonly entry: string,
+    /** A folder's sections may have changed: a watcher saw a build file move. */
+    private readonly onChanged: (folder: string) => void = () => undefined,
+  ) {}
 
   sections(folder: string, plugins: string[], timeoutMs = 60_000): Promise<Sources> {
     const id = this.next++;
@@ -53,6 +58,10 @@ export class IndexProcess {
       process.stderr.write(`[index] ${d.toString()}`);
     });
     proc.on("message", (m: FromIndex) => {
+      if (m.type === "changed") {
+        this.onChanged(m.folder);
+        return;
+      }
       this.waiting.get(m.id)?.(m);
       this.waiting.delete(m.id);
     });

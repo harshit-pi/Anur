@@ -5,5 +5,6 @@ export type ToIndex = { type: "sections"; id: number; folder: string; plugins: s
 
 /** Each source that applies, with its sections; or why it failed. */
 export type FromIndex =
+  | { type: "changed"; folder: string }
   | { type: "sections"; id: number; sources: { id: string; sections: SourcedSection[] }[] }
   | { type: "failed"; id: number; reason: string };

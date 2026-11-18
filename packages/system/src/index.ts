@@ -20,3 +20,4 @@ export {
 } from "./parts.ts";
 export { scanSystem, type SystemScan } from "./system.ts";
 export { MAX, groupParts, wordsOf, type PartGroup } from "./groups.ts";
+export { mattersForParts, watchSystem } from "./watch.ts";

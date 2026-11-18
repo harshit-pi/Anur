@@ -266,3 +266,10 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - Repos, then groups, then parts, one level per click; a trail goes back. Repos sort by name, ignoring case, with those that have no build file last.
 - Section sources run in a new index process, a `utilityProcess` with its own plugin hosts, as Internals §2 says, so a scan never freezes main. A full scan of the team's 16 repos takes about 1.4 s.
 - Still to come: the model's proposed names and merges, with Accept and Rename (20.6, 20.6a), "unreviewed" on new parts (20.6b), and a rescan by watcher instead of the Rescan button (20.8).
+
+## Watching repos (20.8)
+
+- One recursive watcher per repo, in the index process, started the first time the system is read. A change matters when it is a build file or a `.ts` or `.py` file (a CDK app names stacks) outside `node_modules`, `cdk.out` and dot-folders; the rest of the tree is ignored.
+- After 300 ms of quiet the index process tells main, main tells the windows with that folder open, and the System tab reads the system again; a rename shows in under a second.
+- Section sources may now watch: `SectionSource.watch(folder, onChange)` returns a stop. A source whose plugin is switched off stops watching.
+- Symbols in the SQLite cache move to group 22, where edges first need them.
