@@ -1152,6 +1152,9 @@ function createWindow(): BrowserWindow {
     title: "Anur",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     trafficLightPosition: { x: 14, y: 14 },
+    // A click on a window that isn't in front also does what it lands on,
+    // so clicking a row in another Anur window then ⌘V pastes there.
+    acceptFirstMouse: true,
     webPreferences: {
       preload: path.join(here, "..", "preload", "index.cjs"),
       sandbox: true,
@@ -1347,6 +1350,11 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
         if (process.env.ANUR_SCREENSHOT_COPY) {
           win.webContents.copy();
           await new Promise((r) => setTimeout(r, 300));
+        }
+        // ANUR_SCREENSHOT_PASTE pastes where the page's focus is, as Edit → Paste does.
+        if (process.env.ANUR_SCREENSHOT_PASTE) {
+          win.webContents.paste();
+          await new Promise((r) => setTimeout(r, 1200));
         }
         if (process.env.ANUR_SCREENSHOT_PALETTE) {
           win.webContents.sendInputEvent({ type: "keyDown", keyCode: "K", modifiers: ["meta"] });
