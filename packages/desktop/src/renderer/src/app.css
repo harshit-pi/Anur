@@ -2206,3 +2206,78 @@ body.resizing * {
   background: var(--hover);
   font-weight: 600;
 }
+
+/* Options a thread offered: each a card, picked with Use this. */
+.think-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.think-option {
+  padding: 10px 12px;
+  border: 1px dashed var(--slate);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.think-option.used {
+  border: 1px solid var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+.think-option-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.think-option-text {
+  max-height: 9em;
+  overflow: hidden;
+  color: var(--slate);
+  font-family: var(--font-doc);
+  font-size: 14px;
+  line-height: 1.5;
+  mask-image: linear-gradient(to bottom, #000 75%, transparent);
+}
+
+.think-option:hover .think-option-text,
+.think-option.used .think-option-text {
+  max-height: none;
+  mask-image: none;
+}
+
+.think-option-text p {
+  margin: 0 0 6px;
+}
+
+.think-option-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* An option a thread offered: dashed, not in the file until picked. */
+.map-option {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1.5px dashed var(--blue);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 13px/20px var(--font-ui);
+  cursor: pointer;
+}
+
+.map-option:hover {
+  background: var(--blue-wash);
+}
+
+.map-key.option {
+  border: 1.5px dashed var(--blue);
+}

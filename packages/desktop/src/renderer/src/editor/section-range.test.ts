@@ -1,6 +1,6 @@
 import { EditorState, type TransactionSpec } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
-import { bodyRange, renameSection, sectionNow } from "./section-range.ts";
+import { bodyRange, putOption, renameSection, sectionNow } from "./section-range.ts";
 import { markdownSupport, sectionsOf } from "./sections.ts";
 
 const state = (doc: string) => EditorState.create({ doc, extensions: [markdownSupport()] });
@@ -50,5 +50,50 @@ describe("renaming a section", () => {
     expect(
       sectionNow(view.state, "doc.md", section(view.state.doc.toString(), "Retry timing")),
     ).not.toBeNull();
+  });
+});
+
+describe("a picked option", () => {
+  const page = (doc: string) => {
+    let now = state(doc);
+    return {
+      get state() {
+        return now;
+      },
+      dispatch: (spec: TransactionSpec) => {
+        now = now.update(spec).state;
+      },
+    };
+  };
+  const doc =
+    "# Plan\n\n## Retry\n\nThree tries.\n\n### Payday\n\nOn the 1st.\n\n## Next\n\nLater.\n";
+  const option = { title: "Smart retry", text: "Retry when the card is likely to pass." };
+
+  it("replaces the section's own text, keeping its subsections", () => {
+    const p = page(doc);
+    expect(putOption(p, "doc.md", section(doc, "Retry"), option, "replace")).toBe(true);
+    expect(p.state.doc.toString()).toBe(
+      doc.replace("Three tries.", "Retry when the card is likely to pass."),
+    );
+  });
+
+  it("fills an empty section as a paragraph under its heading", () => {
+    const empty = "# Plan\n\n## Retry\n\n## Next\n";
+    const p = page(empty);
+    putOption(p, "doc.md", section(empty, "Retry"), option, "replace");
+    expect(p.state.doc.toString()).toBe(
+      "# Plan\n\n## Retry\n\nRetry when the card is likely to pass.\n\n## Next\n",
+    );
+  });
+
+  it("can go in as a subsection, after everything under the section", () => {
+    const p = page(doc);
+    putOption(p, "doc.md", section(doc, "Retry"), option, "subsection");
+    expect(p.state.doc.toString()).toBe(
+      doc.replace(
+        "On the 1st.\n\n## Next",
+        "On the 1st.\n\n### Smart retry\n\nRetry when the card is likely to pass.\n\n## Next",
+      ),
+    );
   });
 });

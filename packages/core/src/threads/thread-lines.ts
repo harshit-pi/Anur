@@ -88,6 +88,24 @@ export const StateLine = LineEnvelope.extend({
   state: z.enum(["open", "closed"]),
 });
 
+/**
+ * Options the agent offered for its section, through Anur's
+ * anur_offer_options tool: each is a whole new text for the section. They
+ * live in the thread, never in the file, until the person picks one.
+ */
+export const OptionsLine = LineEnvelope.extend({
+  kind: z.literal("options"),
+  turn: z.string().min(1),
+  options: z.array(z.object({ id: z.string().min(1), title: z.string(), text: z.string() })).min(1),
+});
+
+/** The person picked an option: its text replaced the section's, or became a subsection. */
+export const OptionUsedLine = LineEnvelope.extend({
+  kind: z.literal("option-used"),
+  option: z.string().min(1),
+  how: z.enum(["replace", "subsection"]),
+});
+
 export const KnownThreadLine = z.discriminatedUnion("kind", [
   ThreadStartLine,
   SessionLine,
@@ -95,10 +113,21 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   MessageLine,
   ToolLine,
   StateLine,
+  OptionsLine,
+  OptionUsedLine,
 ]);
 export type KnownThreadLine = z.infer<typeof KnownThreadLine>;
 
-const KNOWN_KINDS = new Set(["thread", "session", "turn", "message", "tool", "state"]);
+const KNOWN_KINDS = new Set([
+  "thread",
+  "session",
+  "turn",
+  "message",
+  "tool",
+  "state",
+  "options",
+  "option-used",
+]);
 
 /** A kind added by a later version of format 1; kept as written. */
 export const OtherThreadLine = LineEnvelope.extend({ kind: z.string() })

@@ -623,6 +623,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (folder) threadsFor(folder)?.setOption(thread, id, value);
     return {};
   },
+  "thread:use-option": async ({ thread, path: rel, text, option, how }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { ok: false };
+    return { ok: await t.useOption(rel, text, thread, option, how) };
+  },
   "thread:revert": async ({ thread, id }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;

@@ -112,6 +112,13 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     status: z.string(),
   }),
   z.object({ kind: z.literal("error"), turn: z.string(), text: z.string() }),
+  /** Options the agent offered for the section; `used` is the one picked, if any. */
+  z.object({
+    kind: z.literal("options"),
+    turn: z.string(),
+    options: z.array(z.object({ id: z.string(), title: z.string(), text: z.string() })),
+    used: z.string().nullable(),
+  }),
   /** A doc written by something else while this thread's turn ran (3.11). */
   z.object({
     kind: z.literal("changed"),
@@ -607,6 +614,19 @@ export const ipcContract = {
       z.object({ kind: z.literal("reverted") }),
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
+  },
+  /** The person picked one of a thread's options; the page has already written its text. */
+  "thread:use-option": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        path: z.string().max(4096),
+        text: z.string(),
+        option: z.string().max(100),
+        how: z.enum(["replace", "subsection"]),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
   },
   /** Stop the thread's running turn. */
   "thread:stop": {

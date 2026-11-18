@@ -270,6 +270,8 @@ export class Threads {
     const index = at.ids.indexOf(start.section);
     const items: ThreadItem[] = [];
     let closed = false;
+    const used = new Map<string, string>();
+    for (const l of lines) if (l.kind === "option-used") used.set(l.option, l.how);
     for (const l of lines) {
       if (l.kind === "message")
         items.push({ kind: "message", turn: l.turn, role: l.role, text: l.text });
@@ -284,6 +286,13 @@ export class Threads {
       else if (l.kind === "turn" && l.event === "end" && l.stopReason?.startsWith("error:"))
         items.push({ kind: "error", turn: l.turn, text: l.stopReason.slice(6).trim() });
       else if (l.kind === "state") closed = l.state === "closed";
+      else if (l.kind === "options")
+        items.push({
+          kind: "options",
+          turn: l.turn,
+          options: l.options,
+          used: l.options.find((o) => used.has(o.id))?.id ?? null,
+        });
     }
     for (const f of this.flags.get(thread) ?? [])
       items.push({
@@ -885,8 +894,50 @@ export class Threads {
     return rules.flat();
   }
 
+  /** The agent offers options for its section: they show as cards in the thread and on the map. */
+  private async offerOptions(thread: string, args: unknown): Promise<ToolAnswer> {
+    const live = this.live.get(thread);
+    if (!live?.turn) return { error: "Options can only be offered during a turn." };
+    const raw = (args ?? {}) as { options?: unknown };
+    const list = Array.isArray(raw.options) ? (raw.options as unknown[]) : [];
+    const options = list
+      .map((o) => (o ?? {}) as { title?: unknown; text?: unknown })
+      .filter((o) => typeof o.text === "string" && o.text.trim() !== "")
+      .slice(0, 6)
+      .map((o, i) => ({
+        id: `o${randomBytes(5).toString("hex")}`,
+        title:
+          typeof o.title === "string" && o.title.trim()
+            ? o.title.trim().slice(0, 80)
+            : `Option ${String(i + 1)}`,
+        text: (o.text as string).trim(),
+      }));
+    if (options.length < 2) return { error: "Offer at least two options, each with its text." };
+    await this.append(live.doc, thread, { kind: "options", turn: live.turn, options });
+    await this.refresh(live.rel, live.docText, thread);
+    return {
+      text: `Shown to the person as ${String(options.length)} options. They pick one, and its text replaces the section's. Don't also edit the doc for these.`,
+    };
+  }
+
+  /** The person picked an option; the page wrote its text, and the thread remembers which. */
+  async useOption(
+    rel: string,
+    text: string,
+    thread: string,
+    option: string,
+    how: "replace" | "subsection",
+  ): Promise<boolean> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return false;
+    await this.append(at.doc, thread, { kind: "option-used", option, how });
+    await this.refresh(rel, text, thread);
+    return true;
+  }
+
   /** One of Anur's MCP tools, called by this thread's agent. */
   private async tool(thread: string, tool: string, args: unknown): Promise<ToolAnswer> {
+    if (tool === "anur_offer_options") return this.offerOptions(thread, args);
     if (tool !== "anur_read_section") return { error: `Anur has no tool ${tool}.` };
     const a = (args ?? {}) as { section?: unknown; doc?: unknown };
     if (typeof a.section !== "string" || !a.section.trim())
@@ -924,7 +975,16 @@ export class Threads {
   }
 }
 
-const KNOWN = new Set(["thread", "session", "turn", "message", "tool", "state"]);
+const KNOWN = new Set([
+  "thread",
+  "session",
+  "turn",
+  "message",
+  "tool",
+  "state",
+  "options",
+  "option-used",
+]);
 
 /** Every file under `dir`, relative to it, with forward slashes. */
 async function listFiles(dir: string, prefix = ""): Promise<string[]> {

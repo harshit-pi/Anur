@@ -56,3 +56,41 @@ export function renameSection(
   main.dispatch({ changes: { from, to, insert: name }, userEvent: "input.rename" });
   return true;
 }
+
+/**
+ * A picked option's text goes into the page: in place of the section's own
+ * text, or as a new subsection at the end of it. Returns false when the
+ * section is gone.
+ */
+export function putOption(
+  main: { state: EditorState; dispatch: (spec: TransactionSpec) => void },
+  fileName: string,
+  section: SectionNode,
+  option: { title: string; text: string },
+  how: "replace" | "subsection",
+): boolean {
+  const s = sectionNow(main.state, fileName, section);
+  if (!s) return false;
+  const text = option.text.trim();
+  if (how === "replace") {
+    const r = bodyRange(main.state, fileName, section);
+    if (!r) return false;
+    const onHeading =
+      r.from === r.to && r.from > 0 && main.state.doc.sliceString(r.from - 1, r.from) !== "\n";
+    main.dispatch({
+      changes: { from: r.from, to: r.to, insert: onHeading ? `\n\n${text}` : text },
+      userEvent: "input.option",
+    });
+    return true;
+  }
+  const level = Math.min(6, Math.max(2, s.level + 1));
+  const at = s.subtreeRange.to;
+  const before = main.state.doc.sliceString(Math.max(0, at - 2), at);
+  const lead = at === 0 ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+  const tail = at < main.state.doc.length ? "\n\n" : "\n";
+  main.dispatch({
+    changes: { from: at, insert: `${lead}${"#".repeat(level)} ${option.title}\n\n${text}${tail}` },
+    userEvent: "input.option",
+  });
+  return true;
+}

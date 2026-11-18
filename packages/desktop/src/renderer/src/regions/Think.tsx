@@ -11,7 +11,7 @@ import type {
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { SectionEditor } from "../editor/section-editor.tsx";
-import { renameSection } from "../editor/section-range.ts";
+import { putOption, renameSection } from "../editor/section-range.ts";
 import type { EditorView } from "@codemirror/view";
 import { inlineRuns } from "../layout/inline-markdown.ts";
 
@@ -439,6 +439,31 @@ export function Think({
     [docPath, section, docText, setThreads, newAgent, newChoices],
   );
 
+  /** A picked option goes into the page, where ⌘Z takes it back; the thread remembers the pick. */
+  const useOption = (
+    t: ThreadView,
+    option: { id: string; title: string; text: string },
+    how: "replace" | "subsection",
+  ) => {
+    const main = page();
+    const node = tree?.sections.find((x) => t.path && samePath(t.path, x.path));
+    if (!main || !docPath || !node) {
+      setError("This thread's section is gone, so the option has nowhere to go.");
+      return;
+    }
+    if (!putOption(main, docPath.split("/").pop() ?? docPath, node, option, how)) {
+      setError("This thread's section is gone, so the option has nowhere to go.");
+      return;
+    }
+    void anur.call("thread:use-option", {
+      thread: t.id,
+      path: docPath,
+      text: main.state.doc.toString(),
+      option: option.id,
+      how,
+    });
+  };
+
   if (!docPath || !tree)
     return <p className="quiet">Threads on the section you're in show here.</p>;
   if (!section) return <p className="quiet">Put the cursor in a section to think about it.</p>;
@@ -507,6 +532,42 @@ export function Think({
             ) : item.kind === "tool" ? (
               <div key={i} className={`think-tool ${item.status}`} title={item.status}>
                 {item.title}
+              </div>
+            ) : item.kind === "options" ? (
+              <div key={i} className="think-options" role="group" aria-label="Options">
+                {item.options.map((o) => (
+                  <div key={o.id} className={`think-option${item.used === o.id ? " used" : ""}`}>
+                    <div className="think-option-head">
+                      <strong>{o.title}</strong>
+                      {item.used === o.id ? <span className="quiet">In the doc</span> : null}
+                    </div>
+                    <div className="think-option-text">
+                      <Markdown text={o.text} />
+                    </div>
+                    {writable && item.used !== o.id ? (
+                      <div className="think-option-actions">
+                        <button
+                          type="button"
+                          className="think-button primary"
+                          onClick={() => {
+                            useOption(thread, o, "replace");
+                          }}
+                        >
+                          Use this
+                        </button>
+                        <button
+                          type="button"
+                          className="think-more"
+                          onClick={() => {
+                            useOption(thread, o, "subsection");
+                          }}
+                        >
+                          Add as subsection
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
               </div>
             ) : item.kind === "changed" ? (
               <div key={i} className="think-changed" role="status">

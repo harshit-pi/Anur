@@ -219,10 +219,12 @@ export function buildBundle({
         ]
       : []),
     "",
+    "When you have alternatives for this section, two or more ways it could read, offer them with Anur's anur_offer_options tool instead of listing them in your reply: each option is a short title and the section's whole new text, without its heading. The person sees them as cards and on the map, and picks one; its text replaces the section's. Your reply then says in a line or two how they differ; don't repeat their text.",
+    "",
   ];
   if (workingCopy) {
     lines.push(
-      `Your working copy of \`${docPath}\` is at \`${workingCopy}\`. When the person asks you to change the doc, edit that file with your own tools; Anur shows your edits to them in place, section by section, and they apply what they want. The doc in the folder is the decided text and changes only when they apply. Shell commands such as \`git diff\` see the decided text, not your edits.`,
+      `Your working copy of \`${docPath}\` is at \`${workingCopy}\`. Only when the person asks you to change the doc, edit that file with your own tools; Anur shows your edits to them in place, section by section, and they apply what they want. Don't edit it otherwise. The doc in the folder is the decided text and changes only when they apply. Shell commands such as \`git diff\` see the decided text, not your edits.`,
       "",
     );
   }
