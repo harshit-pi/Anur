@@ -2,10 +2,9 @@ import { z } from "zod";
 import { DeviceId } from "../ids.ts";
 
 /**
- * The map's layout (task 7; Data Model, "The map"), as in Mock 3: the title
- * in the middle, its sections split to its right and left so both sides
- * weigh about the same, and each section's subsections further out on its
- * side, every subtree centred on its parent.
+ * The map's layout (task 7; Data Model, "The map"): a tree read top down,
+ * the title at the top, each box's sections, threads and options in a row
+ * beneath it, every subtree centred under its parent.
  *
  * Box sizes come from the text, never from the screen, so fonts and zoom
  * can't move a box, and the same tree always gives the same picture. A box
@@ -29,24 +28,29 @@ export type Placed = {
   y: number;
   w: number;
   h: number;
-  /** Which side of the title it grows to: 1 right, -1 left, 0 the title itself. */
+  /** 0 for the title; 1 for every box below it. */
   side: -1 | 0 | 1;
 };
 
-const GAP_X = 72;
-const GAP_Y = 18;
-
-/** A box's size from its heading and first line, as the map draws them. */
+/** A box's size from its heading and second line, as the map draws them. */
 export function boxSize(heading: string, firstLine: string): { w: number; h: number } {
-  const longest = Math.max(heading.length, Math.min(firstLine.length, 40));
-  const w = Math.max(140, Math.min(260, Math.round(longest * 7.2 + 32)));
-  const perLine = Math.floor((w - 32) / 7.2);
+  const longest = Math.max(heading.length, Math.min(firstLine.length, 24));
+  const w = Math.max(160, Math.min(280, Math.round(longest * 8.4 + 40)));
+  const perLine = Math.floor((w - 40) / 8.4);
   const headingLines = Math.max(1, Math.ceil(heading.length / perLine));
   const bodyLines = firstLine ? Math.min(2, Math.ceil(firstLine.length / (perLine * 1.1))) : 0;
-  return { w, h: 20 + headingLines * 20 + bodyLines * 16 };
+  return { w, h: 28 + headingLines * 22 + bodyLines * 20 + (bodyLines ? 4 : 0) };
 }
 
-/** Every node placed; nodes are given parents first, in reading order. */
+const GAP_COLUMN = 28;
+const GAP_ROW = 64;
+
+/**
+ * Every node placed, top down: the title at the top, its sections in a row
+ * beneath it, and each box's children in a row beneath it, every parent
+ * centred over its children. Rows are by depth, so a row's boxes line up.
+ * Nodes are given parents first, in reading order.
+ */
 export function mapLayout(nodes: readonly MapNode[]): Map<string, Placed> {
   const children = new Map<string, MapNode[]>();
   for (const n of nodes) {
@@ -59,64 +63,50 @@ export function mapLayout(nodes: readonly MapNode[]): Map<string, Placed> {
   const placed = new Map<string, Placed>();
   if (!root) return placed;
 
-  // How tall a subtree stands: its own box, or its children's stacked, whichever is taller.
-  const span = new Map<string, number>();
-  const measure = (n: MapNode): number => {
+  // How wide a subtree is: its own box, or its children side by side, whichever is wider.
+  const width = new Map<string, number>();
+  const rowHeight: number[] = [];
+  const measure = (n: MapNode, depth: number): number => {
+    rowHeight[depth] = Math.max(rowHeight[depth] ?? 0, n.h);
     const kids = children.get(n.id) ?? [];
-    const stacked = kids.reduce((sum, k, i) => sum + measure(k) + (i > 0 ? GAP_Y : 0), 0);
-    const s = Math.max(n.h, stacked);
-    span.set(n.id, s);
-    return s;
-  };
-  measure(root);
-
-  // Split the title's sections into right and left, in reading order, the right side first.
-  const top = children.get(root.id) ?? [];
-  const total = top.reduce((sum, k) => sum + (span.get(k.id) ?? 0), 0);
-  const right: MapNode[] = [];
-  const left: MapNode[] = [];
-  let acc = 0;
-  for (const k of top) {
-    const s = span.get(k.id) ?? 0;
-    if (right.length === 0 || acc + s / 2 <= total / 2) {
-      right.push(k);
-      acc += s;
-    } else left.push(k);
-  }
-
-  placed.set(root.id, { id: root.id, x: 0, y: 0, w: root.w, h: root.h, side: 0 });
-
-  /** Place `n` with its subtree's top edge at `top`, `side` of a parent at `parentX` and width `parentW`. */
-  const place = (n: MapNode, top: number, side: 1 | -1, parentX: number, parentW: number) => {
-    const s = span.get(n.id) ?? n.h;
-    const x = parentX + side * (parentW / 2 + GAP_X + n.w / 2);
-    const y = top + s / 2;
-    placed.set(n.id, { id: n.id, x, y, w: n.w, h: n.h, side });
-    const kids = children.get(n.id) ?? [];
-    const stacked = kids.reduce(
-      (sum, k, i) => sum + (span.get(k.id) ?? 0) + (i > 0 ? GAP_Y : 0),
+    const row = kids.reduce(
+      (sum, k, i) => sum + measure(k, depth + 1) + (i > 0 ? GAP_COLUMN : 0),
       0,
     );
-    let cursor = y - stacked / 2;
+    const w = Math.max(n.w, row);
+    width.set(n.id, w);
+    return w;
+  };
+  measure(root, 0);
+  // Each row's centre line, from the title's down.
+  const rowY: number[] = [0];
+  for (let d = 1; d < rowHeight.length; d++)
+    rowY[d] = (rowY[d - 1] ?? 0) + (rowHeight[d - 1] ?? 0) / 2 + GAP_ROW + (rowHeight[d] ?? 0) / 2;
+
+  /** Place `n` with its subtree's left edge at `left`. */
+  const place = (n: MapNode, left: number, depth: number) => {
+    const w = width.get(n.id) ?? n.w;
+    const x = left + w / 2;
+    placed.set(n.id, {
+      id: n.id,
+      x,
+      y: rowY[depth] ?? 0,
+      w: n.w,
+      h: n.h,
+      side: depth === 0 ? 0 : 1,
+    });
+    const kids = children.get(n.id) ?? [];
+    const row = kids.reduce(
+      (sum, k, i) => sum + (width.get(k.id) ?? 0) + (i > 0 ? GAP_COLUMN : 0),
+      0,
+    );
+    let cursor = x - row / 2;
     for (const k of kids) {
-      place(k, cursor, side, x, n.w);
-      cursor += (span.get(k.id) ?? 0) + GAP_Y;
+      place(k, cursor, depth + 1);
+      cursor += (width.get(k.id) ?? 0) + GAP_COLUMN;
     }
   };
-  for (const [group, side] of [
-    [right, 1],
-    [left, -1],
-  ] as const) {
-    const stacked = group.reduce(
-      (sum, k, i) => sum + (span.get(k.id) ?? 0) + (i > 0 ? GAP_Y : 0),
-      0,
-    );
-    let cursor = -stacked / 2;
-    for (const k of group) {
-      place(k, cursor, side, 0, root.w);
-      cursor += (span.get(k.id) ?? 0) + GAP_Y;
-    }
-  }
+  place(root, -(width.get(root.id) ?? root.w) / 2, 0);
   return placed;
 }
 

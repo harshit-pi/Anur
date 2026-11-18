@@ -1956,19 +1956,21 @@ body.resizing * {
   fill: none;
   stroke: var(--slate);
   stroke-width: 1.5;
+  stroke-linecap: round;
 }
 
 .map-edge.thread {
-  stroke: var(--rule);
-  stroke-dasharray: 4 4;
+  stroke: var(--slate);
+  stroke-opacity: 0.7;
+  stroke-dasharray: 5 5;
 }
 
 .map-box {
   position: absolute;
   box-sizing: border-box;
-  padding: 10px 14px;
+  padding: 14px 20px;
   border: 1px solid var(--rule);
-  border-radius: 8px;
+  border-radius: 12px;
   background: var(--sheet);
   color: var(--ink);
   font-family: var(--font-ui);
@@ -2009,10 +2011,20 @@ body.resizing * {
 
 .map-box-name {
   flex: 1;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 20px;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 22px;
   overflow-wrap: anywhere;
+}
+
+.map-box-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--graphite);
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .map-count {
@@ -2027,13 +2039,18 @@ body.resizing * {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 10px;
+  padding: 0 16px;
   border: 1px dashed var(--slate);
-  border-radius: 14px;
+  border-radius: 18px;
   background: var(--paper);
-  color: var(--graphite);
-  font: 12px var(--font-ui);
+  color: var(--ink);
+  font: italic 14px var(--font-doc);
   cursor: pointer;
+}
+
+.map-thread .thread-tag {
+  font-style: normal;
+  font-family: var(--font-ui);
 }
 
 .map-thread:hover {
@@ -2318,13 +2335,32 @@ body.resizing * {
 .map-option {
   position: absolute;
   box-sizing: border-box;
-  padding: 8px 12px;
-  border: 1.5px dashed var(--blue);
-  border-radius: 8px;
-  background: var(--paper);
+  padding: 14px 20px;
+  border: 1.5px solid var(--blue);
+  border-radius: 12px;
+  background: var(--sheet);
   color: var(--ink);
   font: 13px/20px var(--font-ui);
   cursor: pointer;
+}
+
+.map-option.exploring .map-box-sub {
+  color: var(--blue);
+}
+
+.map-use {
+  flex: none;
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--amber);
+  color: var(--sheet);
+  font: 600 12px/18px var(--font-ui);
+  cursor: pointer;
+}
+
+.map-use:hover {
+  filter: brightness(1.1);
 }
 
 .map-option:hover {
@@ -2332,7 +2368,7 @@ body.resizing * {
 }
 
 .map-key.option {
-  border: 1.5px dashed var(--blue);
+  border: 1.5px solid var(--blue);
 }
 
 .map-option.explored {
@@ -2368,8 +2404,8 @@ body.resizing * {
 }
 
 .map-option.edit {
-  border-color: var(--amber);
-  background: var(--amber-wash);
+  border: 1.5px dashed var(--amber);
+  background: var(--sheet);
 }
 
 .map-key.edit {

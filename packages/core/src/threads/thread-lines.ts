@@ -106,7 +106,17 @@ export const StateLine = LineEnvelope.extend({
 export const OptionsLine = LineEnvelope.extend({
   kind: z.literal("options"),
   turn: z.string().min(1),
-  options: z.array(z.object({ id: z.string().min(1), title: z.string(), text: z.string() })).min(1),
+  options: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        title: z.string(),
+        text: z.string(),
+        /** One line: what sets this option apart, shown on its map box. */
+        why: z.string().optional(),
+      }),
+    )
+    .min(1),
   /** The option being explored when these were offered: they are narrower choices within it. */
   within: z.string().min(1).nullable().optional(),
 });

@@ -124,3 +124,10 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - Check reads only and reports with `anur_report_check`: each claim holds, is wrong, is unsupported or is missing, with its source and a note, shown as a table. Corrected text becomes a proposed edit.
 - An edit a thread proposes to another doc shows on that doc's page, and the thread says so ("Proposed an edit to Plans in Pricing.md", with Open). Text the agent writes after a tool call starts a new paragraph.
 - Anur's own tools never ask the person for permission, in any mode, and show by what they do ("Named the thread"), not their ids.
+
+## The map, read top down
+
+- The map is a tree read top down: the title at the top, each box's sections in a row beneath it, a thread under its section, and the thread's options and edits under the thread. Rows line up by depth.
+- Every box has a second line saying what's under it ("4 sections", "1 thread") or what sets it apart: an option's one-line why (`anur_offer_options` now asks for it), "Exploring…" while the agent works on it, an edit's first line.
+- A thread is a pill that reads as its name, in the doc's italic. A proposed edit has Use on its box, which puts it in the doc as Use in Think does.
+- A wide map opens at 75% on its title, so names stay readable; Fit shows the whole of it.

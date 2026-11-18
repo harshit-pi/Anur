@@ -116,7 +116,9 @@ export const ThreadItem = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("options"),
     turn: z.string(),
-    options: z.array(z.object({ id: z.string(), title: z.string(), text: z.string() })),
+    options: z.array(
+      z.object({ id: z.string(), title: z.string(), text: z.string(), why: z.string().optional() }),
+    ),
     used: z.string().nullable(),
     /** The options the person chose to explore before picking. */
     explored: z.array(z.string()),
