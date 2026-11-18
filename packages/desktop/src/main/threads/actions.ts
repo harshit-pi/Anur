@@ -29,7 +29,7 @@ export function actionPrompt(purpose: Purpose, section: string, note: string): s
     [
       `Check the section "${section}": test each claim it makes against what it links to or names, such as files, docs, code, data or pages. Read only; change nothing.`,
       "",
-      "Then report with Anur's anur_report_check tool: every claim, whether it holds, is wrong, is unsupported (nothing to test it against) or is missing (something the sources say that the section should), with the source you checked and a one-line note. If anything is wrong or missing, include the section's corrected text. The report shows as a table; your reply after it is two or three sentences on what matters most, not the claims again.",
+      "Then report with Anur's anur_report_check tool: every claim, whether it holds, is wrong, is unsupported (nothing to test it against) or is missing (something the sources say that the section should), with the source you checked, a one-line note, and whether it is about a fact or about wording (a spelling, grammar or format slip). If anything is wrong or missing, include the section's corrected text. The report shows as a table; your reply after it is two or three sentences on what matters most, not the claims again.",
     ].join("\n") + extra
   );
 }

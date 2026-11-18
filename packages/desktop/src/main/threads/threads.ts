@@ -2389,6 +2389,7 @@ export class Threads {
         verdict: String(c.verdict) as "holds" | "wrong" | "unsupported" | "missing",
         source: typeof c.source === "string" ? c.source.slice(0, 300) : "",
         note: typeof c.note === "string" ? c.note.slice(0, 500) : "",
+        about: c.about === "wording" ? ("wording" as const) : ("fact" as const),
       }));
     if (claims.length === 0) return { error: "Report at least one claim, each with its verdict." };
     const corrected =

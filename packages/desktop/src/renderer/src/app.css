@@ -2174,6 +2174,10 @@ body.resizing * {
   left: 12px;
 }
 
+.map-legend.map-hint {
+  color: var(--slate);
+}
+
 .map-tools {
   right: 12px;
 }
