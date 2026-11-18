@@ -10,6 +10,8 @@ import type {
 } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
+import { renameSection, SectionEditor } from "../editor/section-editor.tsx";
+import type { EditorView } from "@codemirror/view";
 import { inlineRuns } from "../layout/inline-markdown.ts";
 
 /**
@@ -282,7 +284,10 @@ export function Think({
   writable,
   request,
   onJump,
+  page,
 }: {
+  /** The page's own view: the section's text is edited here through it. */
+  page: () => EditorView | null;
   docPath: string | null;
   docText: () => string;
   tree: SectionTree | null;
@@ -680,9 +685,48 @@ export function Think({
   const body = bodyOf(docText(), section);
   return (
     <div className="think">
-      <h2 className="think-section">{section.path.at(-1)}</h2>
+      <h2
+        className="think-section"
+        // The heading is the section's name: edit it here as on the page.
+        contentEditable={writable && section.headingRange ? "plaintext-only" : false}
+        suppressContentEditableWarning
+        spellCheck={false}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            e.currentTarget.blur();
+          }
+          if (e.key === "Escape") {
+            e.currentTarget.textContent = section.path.at(-1) ?? "";
+            e.currentTarget.blur();
+          }
+        }}
+        onBlur={(e) => {
+          const name = e.currentTarget.textContent.replace(/\s+/g, " ").trim();
+          const main = page();
+          if (!name || !main || !docPath) {
+            e.currentTarget.textContent = section.path.at(-1) ?? "";
+            return;
+          }
+          renameSection(main, docPath.split("/").pop() ?? docPath, section, name);
+        }}
+      >
+        {section.path.at(-1)}
+      </h2>
       <div className={`think-text${showText ? " open" : ""}`}>
-        {body ? <Markdown text={body} /> : <p className="quiet">No text yet.</p>}
+        {docPath && page() ? (
+          <SectionEditor
+            key={`${section.path.join("\u0000")}#${String(section.ordinal)}`}
+            page={page}
+            docPath={docPath}
+            section={section}
+            editable={writable}
+          />
+        ) : body ? (
+          <Markdown text={body} />
+        ) : (
+          <p className="quiet">No text yet.</p>
+        )}
       </div>
       {body.split("\n").length > 6 || body.length > 400 ? (
         <button
