@@ -85,7 +85,9 @@ export type ToMain =
       stopReason: string;
       usage: { input: number; output: number; cacheRead: number; cacheWrite: number } | null;
     }
-  | { type: "error"; thread: string; turn: string | null; message: string };
+  | { type: "error"; thread: string; turn: string | null; message: string }
+  /** The session's context in use and its model's window, as the agent reports them (4.9). */
+  | { type: "context"; thread: string; turn: string; used: number; size: number };
 
 export type ToHost =
   | { type: "connect"; agent: AgentId }

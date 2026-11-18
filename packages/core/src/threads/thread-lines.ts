@@ -61,6 +61,14 @@ export const TurnLine = LineEnvelope.extend({
       cacheWrite: z.int().nonnegative(),
     })
     .nullable(),
+  /**
+   * The session's context at the turn's end, and the model's window, as the
+   * agent last reported them (4.9); absent when it reported neither.
+   */
+  context: z
+    .object({ used: z.int().nonnegative(), size: z.int().positive() })
+    .nullable()
+    .optional(),
 });
 
 export const MessageLine = LineEnvelope.extend({

@@ -92,6 +92,8 @@ type Live = {
   watching: { stop: () => void } | null;
   /** Each copy's text when last merged, so an unchanged one isn't merged again. */
   merged: Map<string, string>;
+  /** The session's context and the model's window, as the agent last reported them (4.9). */
+  context?: { used: number; size: number } | null;
 };
 
 /** How long after a turn its working copies are watched for background edits. */
@@ -604,6 +606,7 @@ export class Threads {
       model: null,
       stopReason,
       usage,
+      context: live.context ?? null,
     });
     // The reply is on disk; the thread stays busy until its edits are a preview,
     // so nothing reads it finished with its preview still missing.
@@ -790,6 +793,9 @@ export class Threads {
         return;
       case "turn-end":
         await this.endTurn(thread, live, m.stopReason, m.usage);
+        return;
+      case "context":
+        live.context = { used: m.used, size: m.size };
         return;
       case "error": {
         if (m.message === "resume-failed" && live.pending) {
@@ -1044,15 +1050,20 @@ const KNOWN = new Set([
 export function tokensOf(lines: readonly KnownThreadLine[]) {
   let used = 0;
   let context = 0;
+  let first: number | null = null;
+  let window: number | null = null;
   let any = false;
   for (const l of lines) {
     if (l.kind !== "turn" || l.event !== "end" || !l.usage) continue;
     const u = l.usage;
     any = true;
     used += u.input + u.output + u.cacheRead + u.cacheWrite;
-    context = u.input + u.cacheRead + u.cacheWrite + u.output;
+    // The agent's own measure of its context when it gave one; else the usage report's.
+    context = l.context?.used ?? u.input + u.cacheRead + u.cacheWrite + u.output;
+    first ??= context;
+    if (l.context) window = l.context.size;
   }
-  return any ? { used, context } : null;
+  return any ? { used, context, first: first ?? context, window } : null;
 }
 
 /** Every file under `dir`, relative to it, with forward slashes. */

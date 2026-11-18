@@ -219,6 +219,54 @@ export function Markdown({ text }: { text: string }) {
   );
 }
 
+/** Past this share of the window grown since the first turn, a thread offers Start fresh (4.9). */
+const START_FRESH_AT = 0.4;
+
+/**
+ * How big the thread has grown (4.9), from the agent's own usage reports:
+ * the tokens it has used, and how full its context is. Past 40% of the
+ * window above the first turn, it offers to start fresh.
+ */
+function SizeMeter({
+  tokens,
+  onStartFresh,
+}: {
+  tokens: { used: number; context: number; first: number; window: number | null };
+  onStartFresh: () => void;
+}) {
+  const share = tokens.window ? Math.min(1, tokens.context / tokens.window) : null;
+  const grown = tokens.window ? (tokens.context - tokens.first) / tokens.window : 0;
+  return (
+    <div className="think-meter" title="From the agent's usage reports">
+      <div className="think-meter-line quiet">
+        <span>{formatTokens(tokens.used)} tokens used</span>
+        {share !== null && tokens.window ? (
+          <span>
+            context {String(Math.round(share * 100))}% of {formatTokens(tokens.window)}
+          </span>
+        ) : null}
+      </div>
+      {share !== null ? (
+        <div className="think-meter-bar" aria-hidden="true">
+          <i
+            style={{ width: `${String(Math.round(share * 100))}%` }}
+            className={grown > START_FRESH_AT ? "full" : ""}
+          />
+        </div>
+      ) : null}
+      {grown > START_FRESH_AT ? (
+        <p className="think-meter-note">
+          This thread has grown long, and an agent reasons less well late in a long context.{" "}
+          <button type="button" className="think-more" onClick={onStartFresh}>
+            Start fresh
+          </button>{" "}
+          from the section's text.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /** The text of a proposed edit, without its section's own heading line. */
 function proposedBody(part: { proposed: string }): string {
   return part.proposed.replace(/^#{1,6}[ \t].*\n?/, "").trim();
@@ -587,9 +635,20 @@ export function Think({
         )}
         <h2 className="think-title">{thread.title}</h2>
         {thread.tokens ? (
-          <p className="think-tokens quiet" title="From the agent's usage reports">
-            {formatTokens(thread.tokens.used)} tokens used
-          </p>
+          <SizeMeter
+            tokens={thread.tokens}
+            onStartFresh={() => {
+              // A new thread on the thread's own section, from its text and inputs only.
+              const i = tree.sections.findIndex(
+                (x) => thread.path && samePath(thread.path, x.path),
+              );
+              if (i >= 0) onJump(i);
+              setOpen(null);
+              requestAnimationFrame(() => {
+                document.querySelector<HTMLTextAreaElement>(".think .think-input")?.focus();
+              });
+            }}
+          />
         ) : null}
         <div className="think-chat" aria-live="polite">
           {thread.items.map((item, i) =>
