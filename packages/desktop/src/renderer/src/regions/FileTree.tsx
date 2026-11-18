@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { MenuEntry } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
+import { offerTip } from "../layout/tips.ts";
 import {
   buildTree,
   docCount,
@@ -105,6 +106,7 @@ export function FileTree({
   const anchor = useRef<string | null>(null);
   const [clip, setClip] = useState<Clip | null>(null);
   const dragging = useRef<string[] | null>(null);
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const hold = useRef<{ path: string; timer: ReturnType<typeof setTimeout> } | null>(null);
   const isFolder = (p: string) => folderSet.has(p);
 
@@ -651,6 +653,19 @@ export function FileTree({
       ref={list}
       tabIndex={-1}
       onKeyDown={onKey}
+      onMouseEnter={() => {
+        // Resting on the panel for a moment: say files can come in from Finder.
+        clearTimeout(tipTimer.current);
+        tipTimer.current = setTimeout(() => {
+          offerTip(
+            "files-in",
+            list.current?.closest(".left-sidebar")?.querySelector(".sidebar-head"),
+          );
+        }, 800);
+      }}
+      onMouseLeave={() => {
+        clearTimeout(tipTimer.current);
+      }}
       onContextMenu={(e) => {
         e.preventDefault();
         blankMenu();

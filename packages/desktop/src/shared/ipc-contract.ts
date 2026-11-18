@@ -524,6 +524,16 @@ export const ipcContract = {
     request: z.object({ paths: z.array(z.string().max(1024)).max(1000) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
+  /** Which one-time tips have been shown, and whether tips show at all (not in checks). */
+  "tips:seen": {
+    request: z.object({}).strict(),
+    response: z.object({ seen: z.array(z.string()), enabled: z.boolean() }),
+  },
+  /** A tip was shown and dismissed: never show it again. */
+  "tips:done": {
+    request: z.object({ id: z.string().max(64) }).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Whether to show the first-run tour: not yet seen on this Mac. */
   "tour:status": {
     request: z.object({}).strict(),

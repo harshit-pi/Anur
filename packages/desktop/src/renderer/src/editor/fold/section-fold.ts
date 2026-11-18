@@ -17,6 +17,7 @@ import {
   type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
+import { offerTip } from "../../layout/tips.ts";
 
 /**
  * Folding a section, as Quip does: pointing anywhere in a section shows an
@@ -169,7 +170,13 @@ const arrows = ViewPlugin.fromClass(
       mousemove(e, view) {
         const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
         const at = sectionAt(view.state, pos);
-        if (at !== view.state.field(hovered)) view.dispatch({ effects: setHovered.of(at) });
+        if (at === view.state.field(hovered)) return;
+        view.dispatch({ effects: setHovered.of(at) });
+        // The first arrow someone sees: say what it does.
+        if (at !== null)
+          requestAnimationFrame(() => {
+            offerTip("fold", view.dom.querySelector(".cm-fold-arrow.shown:not(.folded)"));
+          });
       },
       mouseleave(_e, view) {
         if (view.state.field(hovered) !== null) view.dispatch({ effects: setHovered.of(null) });
