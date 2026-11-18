@@ -215,3 +215,13 @@ Engineering decisions made while building Anur, newest first, each with why. The
 
 - A thread someone else started shows their name: beside the time in the list, "started by Duy on 18 Nov" under its title, and over each message they wrote. Your own threads and messages show no name, so the screen is unchanged until someone else's work arrives.
 - Each device writes its person's name into `.anur/open/<device>.json`: the name set in Settings → General, else git's `user.name` for the folder, else the Mac account's full name. A thread is yours when its device is this one or its device's name is yours, so your other Mac's threads count as yours too. A device with no name yet shows as "Another device".
+
+## Before sharing: the answer first, plain steps, and why on the first screen
+
+From a first-run walkthrough on real Claude (Ask, Check and Build on a launch plan):
+
+- A finished turn's reply leads it. The agent writes its answer last, after the findings and options it made, so Think moves the reply above the turn's first card and the cards follow under "From this answer". A running turn stays in the order it arrives. This is display only; no prompt asks the agent to answer first, which it couldn't do reliably before reading.
+- Steps read as what they did ("Read competitors.txt, beta.csv and 1 more", "Searched the folder"), never the raw command with the folder's full path. The summary doesn't say "failed": the agent usually recovers, and a failed step still shows × when the steps are opened. A turn that failed shows its own error.
+- Steps a card stands for (proposing a finding, offering options, reporting a check) are hidden; the card is the record.
+- The start page and the tour's second step say why in one line: a thread starts from its section, the rules it links to and what earlier threads settled, not a blank chat.
+- The "Use Anur from Claude Code" card waits until a thread has answered on this device, so it never greets someone who hasn't seen Anur yet.

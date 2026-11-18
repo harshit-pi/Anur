@@ -505,8 +505,12 @@ export function Center({
         <div className="page-empty">
           <h1>Start with a folder</h1>
           <p>
-            Make a new folder for your docs, or open one you already have. Your docs stay plain
-            Markdown files that open in any editor.
+            Think beside your docs with your own agent. Each section gets its own threads, which
+            start from that section, the rules it links to and what earlier threads settled.
+          </p>
+          <p>
+            Make a new folder, or open one you already have. Your docs stay plain Markdown files
+            that open in any editor.
           </p>
           <div className="page-empty-buttons">
             <button className="primary-button" type="button" onClick={onNewFolder}>
