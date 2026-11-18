@@ -780,7 +780,11 @@ export function MapView({
     >
       <div
         className="map-world"
-        style={{ transform: `translate(${String(v.x)}px, ${String(v.y)}px) scale(${String(v.z)})` }}
+        style={{
+          transform: `translate(${String(v.x)}px, ${String(v.y)}px) scale(${String(v.z)})`,
+          // Unseen until framed, so boxes never jump from the corner as a map opens.
+          visibility: view ? "visible" : "hidden",
+        }}
       >
         <svg className="map-edges" aria-hidden="true">
           <defs>

@@ -864,6 +864,9 @@ export function App() {
               onRedo={redoOnPage}
               writable={folder?.mode === "writable" && doc.mode === "editable"}
             />
+          ) : centerView === "map" ? (
+            // While a doc's sections are read, an empty map, so the page never shows through.
+            <div className="map" aria-hidden="true" />
           ) : null
         }
         opening={opening}
