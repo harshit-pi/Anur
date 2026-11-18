@@ -78,6 +78,8 @@ export function App() {
   const [outlineAt, setOutlineAt] = useState(0);
   /** Page or Map in the centre (task 7). */
   const [centerView, setCenterView] = useState<"page" | "map">("page");
+  const centerNow = useRef(centerView);
+  centerNow.current = centerView;
   /** Bumped when a map box is picked, so the section panel brings Think forward. */
   const [mapPicks, setMapPicks] = useState(0);
   const sectionsNow = useRef(sections);
@@ -591,8 +593,19 @@ export function App() {
       });
     };
     window.addEventListener("anur:open-thread", onThread);
+    // From the map: show the page, then show the edit there once the page can scroll.
+    const toPage = (e: Event) => {
+      if (centerNow.current !== "map") return;
+      setCenterView("page");
+      const { thread } = (e as CustomEvent<{ thread: string }>).detail;
+      window.setTimeout(() => {
+        window.dispatchEvent(new CustomEvent("anur:show-preview", { detail: { thread } }));
+      }, 120);
+    };
+    window.addEventListener("anur:show-preview", toPage);
     return () => {
       window.removeEventListener("anur:open-thread", onThread);
+      window.removeEventListener("anur:show-preview", toPage);
     };
   }, []);
   const setWidth = (side: Side) => (width: number) => {

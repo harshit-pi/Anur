@@ -69,3 +69,12 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - Edits made on the page, by Apply or by undo show in Think as they land; the section's place is mapped through each page change and taken again from the parse when the outline refreshes.
 - The heading is edited in place too; only its words change, never its level or marks.
 - It looks as the read-only text did: no box, no white field.
+
+## Options, not edits (trial, not merged)
+
+- A thread brainstorms; it doesn't edit by default. When the agent has alternatives for its section it offers them with Anur's `anur_offer_options` tool, each a title and the section's whole new text. It edits the working copy only when the person asks.
+- Options live in the thread's record (`options`, `option-used` lines), never in the file: cards in Think, dashed boxes off the section on the map.
+- "Use this" replaces the section's own text through the page (one ⌘Z takes it back); "Add as subsection" puts it under the section with its title as the heading. The thread remembers the pick, and the map drops that set of options.
+- Claude uses its judgment: it answers questions, offers options when there's a real choice (even unasked, as for "make this sharper"), and edits when asked or when the change is clear. It says an edit is ready to use, never that the doc is updated.
+- An edit is shown as one more option: a card in Think ("Edit to Pricing", Use this, Show on page, Set aside) and a dashed amber box off its section on the map; the page shows it in place, and its button says Use this too.
+- Explore this works an option through before picking; options found while exploring nest under it, on the map and in Think ("Within …").

@@ -2206,3 +2206,191 @@ body.resizing * {
   background: var(--hover);
   font-weight: 600;
 }
+
+/* Options a thread offered: each a card, picked with Use this. */
+.think-offers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.think-offer {
+  padding: 10px 12px;
+  border: 1px dashed var(--slate);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.think-offer.used {
+  border: 1px solid var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-wash);
+}
+
+.think-offer-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.think-offer-text {
+  max-height: 9em;
+  overflow: hidden;
+  color: var(--slate);
+  font-family: var(--font-doc);
+  font-size: 14px;
+  line-height: 1.5;
+  mask-image: linear-gradient(to bottom, #000 75%, transparent);
+}
+
+.think-offer:hover .think-offer-text,
+.think-offer.used .think-offer-text {
+  max-height: none;
+  mask-image: none;
+}
+
+.think-offer-text p {
+  margin: 0 0 6px;
+}
+
+.think-offer-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+/* An option a thread offered: dashed, not in the file until picked. */
+.map-option {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border: 1.5px dashed var(--blue);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 13px/20px var(--font-ui);
+  cursor: pointer;
+}
+
+.map-option:hover {
+  background: var(--blue-wash);
+}
+
+.map-key.option {
+  border: 1.5px dashed var(--blue);
+}
+
+.map-option.explored {
+  border-style: solid;
+  background: var(--blue-wash);
+}
+
+.think-offer.explored {
+  border-color: var(--blue);
+}
+
+/* The links beside Use this sit on its middle, not at the top as elsewhere in Think. */
+.think-offer-actions .think-more {
+  align-self: center;
+}
+
+.think-offers-within {
+  margin: 0;
+  font-size: 12px;
+}
+
+/* A proposed edit sits among the options, in the same card. */
+.think-offer.edit {
+  border-color: var(--amber);
+}
+
+.think-offer-actions {
+  flex-wrap: wrap;
+}
+
+.think-offer-actions button {
+  white-space: nowrap;
+}
+
+.map-option.edit {
+  border-color: var(--amber);
+  background: var(--amber-wash);
+}
+
+.map-key.edit {
+  border: 1.5px dashed var(--amber);
+}
+
+/*
+ * Agent, mode and model: on the send button's line, as in the Claude app.
+ * Each shows its current value as text; its menu lies over it, unseen.
+ */
+.think-composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.think-composer-foot > .think-button {
+  flex: none;
+  margin-left: auto;
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
+.think-pickers {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin-left: -4px;
+}
+
+/* One line, always: in a narrow panel the agent's name shortens with "…" first. */
+.think-pickers .think-option {
+  position: relative;
+  flex: 0 0 auto;
+  display: block;
+  min-width: 0;
+}
+
+.think-pickers .think-option:first-child {
+  flex: 0 1 auto;
+  min-width: 34px;
+}
+
+.think-pick {
+  display: block;
+  padding: 3px 13px 3px 4px;
+  border-radius: 5px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    no-repeat right 3px center;
+  color: var(--slate);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.think-pickers .think-option:hover .think-pick {
+  background-color: var(--hover);
+  color: var(--ink);
+}
+
+.think-pickers .think-option select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.think-pickers .think-option select:disabled {
+  cursor: default;
+}
+
+.think-pickers .think-option:has(select:disabled) .think-pick {
+  opacity: 0.6;
+}

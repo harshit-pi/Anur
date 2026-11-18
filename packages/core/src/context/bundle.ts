@@ -219,10 +219,12 @@ export function buildBundle({
         ]
       : []),
     "",
+    "When you have alternatives for this section, two or more ways it could read, offer them with Anur's anur_offer_options tool instead of listing them in your reply: each option is a short title and the section's whole new text, without its heading. The person sees them as cards and on the map, and picks one; its text replaces the section's. Your reply then says in a line or two how they differ; don't repeat their text.",
+    "",
   ];
   if (workingCopy) {
     lines.push(
-      `Your working copy of \`${docPath}\` is at \`${workingCopy}\`. When the person asks you to change the doc, edit that file with your own tools; Anur shows your edits to them in place, section by section, and they apply what they want. The doc in the folder is the decided text and changes only when they apply. Shell commands such as \`git diff\` see the decided text, not your edits.`,
+      `Your working copy of \`${docPath}\` is at \`${workingCopy}\`. Use your judgment: answer a question; offer options when there is a real choice; when the person asks for a change, or the change is clear, edit that file with your own tools. Anur shows each edit to them as a proposal on its section, and the doc changes only when they use it, so say your edit is ready for them to use, never that you've updated the doc. The doc in the folder is the decided text. Shell commands such as \`git diff\` see the decided text, not your edits.`,
       "",
     );
   }

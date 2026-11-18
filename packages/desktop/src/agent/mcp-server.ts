@@ -37,6 +37,39 @@ const TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: "anur_offer_options",
+    description:
+      "Offer the person two or more alternatives for this thread's section, instead of listing them in your reply. Each option is a short title and the section's whole new text, without its heading. Anur shows them as cards in the thread and as boxes on the doc's map; the person picks one, and its text replaces the section's text in the doc. Don't also edit the doc for options you offer.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        options: {
+          type: "array",
+          minItems: 2,
+          maxItems: 6,
+          items: {
+            type: "object",
+            properties: {
+              title: {
+                type: "string",
+                description: 'A few words that tell this option apart, such as "Payday aligned".',
+              },
+              text: {
+                type: "string",
+                description:
+                  "The section's whole text if this option is picked, in Markdown, without the section's heading.",
+              },
+            },
+            required: ["title", "text"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["options"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 const socket = process.env.ANUR_SOCKET ?? "";

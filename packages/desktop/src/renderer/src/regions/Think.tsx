@@ -7,11 +7,12 @@ import type {
   EventPayload,
   ThreadItem,
   ThreadView,
+  PreviewView,
 } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { SectionEditor } from "../editor/section-editor.tsx";
-import { renameSection } from "../editor/section-range.ts";
+import { putOption, renameSection } from "../editor/section-range.ts";
 import type { EditorView } from "@codemirror/view";
 import { inlineRuns } from "../layout/inline-markdown.ts";
 
@@ -217,6 +218,61 @@ export function Markdown({ text }: { text: string }) {
   );
 }
 
+/** The text of a proposed edit, without its section's own heading line. */
+function proposedBody(part: { proposed: string }): string {
+  return part.proposed.replace(/^#{1,6}[ \t].*\n?/, "").trim();
+}
+
+/**
+ * An edit a thread made to a section, shown like an option: what the section
+ * would say, and Use this. The page shows the same edit in place.
+ */
+function EditCard({
+  part,
+  writable,
+  onUse,
+  onShow,
+  onDrop,
+}: {
+  part: { path: string[]; proposed: string };
+  writable: boolean;
+  onUse: () => void;
+  onShow: () => void;
+  onDrop: () => void;
+}) {
+  const body = proposedBody(part);
+  return (
+    <div
+      className="think-offer edit"
+      role="group"
+      aria-label={`Proposed edit to ${part.path.at(-1) ?? ""}`}
+    >
+      <div className="think-offer-head">
+        <strong>Edit to {part.path.at(-1)}</strong>
+        <span className="quiet">Not in the doc yet</span>
+      </div>
+      <div className="think-offer-text">
+        {body ? <Markdown text={body} /> : <p className="quiet">Removes the section's text.</p>}
+      </div>
+      <div className="think-offer-actions">
+        {writable ? (
+          <button type="button" className="think-button primary" onClick={onUse}>
+            Use this
+          </button>
+        ) : null}
+        <button type="button" className="think-more" onClick={onShow}>
+          Show on page
+        </button>
+        {writable ? (
+          <button type="button" className="think-more" onClick={onDrop}>
+            Set aside
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function Composer({
   placeholder,
   busy,
@@ -224,6 +280,7 @@ function Composer({
   onSend,
   onStop,
   sendLabel,
+  pickers,
 }: {
   placeholder: string;
   busy: boolean;
@@ -231,6 +288,8 @@ function Composer({
   onSend: (text: string) => Promise<boolean>;
   onStop?: () => void;
   sendLabel: string;
+  /** Agent, mode and model, on the send button's line, as in the Claude app. */
+  pickers?: React.ReactNode;
 }) {
   const [text, setText] = useState("");
   const send = () => {
@@ -259,20 +318,23 @@ function Composer({
           }
         }}
       />
-      {busy && onStop ? (
-        <button type="button" className="think-button" onClick={onStop}>
-          Stop
-        </button>
-      ) : (
-        <button
-          type="button"
-          className="think-button primary"
-          disabled={disabled || text.trim() === ""}
-          onClick={send}
-        >
-          {sendLabel}
-        </button>
-      )}
+      <div className="think-composer-foot">
+        <div className="think-pickers">{pickers}</div>
+        {busy && onStop ? (
+          <button type="button" className="think-button" onClick={onStop}>
+            Stop
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="think-button primary"
+            disabled={disabled || text.trim() === ""}
+            onClick={send}
+          >
+            {sendLabel}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -351,18 +413,18 @@ export function Think({
   }, [newAgent]);
   const [error, setError] = useState<string | null>(null);
   const [showText, setShowText] = useState(false);
-  /** Threads with a preview of this doc, for "Preview in doc". */
-  const [previewed, setPreviewed] = useState<Set<string>>(new Set());
+  /** The edits threads proposed on this doc: each a card, like an option. */
+  const [previews, setPreviews] = useState<PreviewView[]>([]);
   const textNow = useRef(docText);
   textNow.current = docText;
 
   useEffect(() => {
-    setPreviewed(new Set());
+    setPreviews([]);
     if (!docPath) return;
     let current = true;
     const load = () => {
       void anur.call("preview:list", { path: docPath, text: textNow.current() }).then((r) => {
-        if (current) setPreviewed(new Set(r.previews.map((p) => p.thread)));
+        if (current) setPreviews(r.previews);
       });
     };
     load();
@@ -439,6 +501,31 @@ export function Think({
     [docPath, section, docText, setThreads, newAgent, newChoices],
   );
 
+  /** A picked option goes into the page, where ⌘Z takes it back; the thread remembers the pick. */
+  const useOption = (
+    t: ThreadView,
+    option: { id: string; title: string; text: string },
+    how: "replace" | "subsection",
+  ) => {
+    const main = page();
+    const node = tree?.sections.find((x) => t.path && samePath(t.path, x.path));
+    if (!main || !docPath || !node) {
+      setError("This thread's section is gone, so the option has nowhere to go.");
+      return;
+    }
+    if (!putOption(main, docPath.split("/").pop() ?? docPath, node, option, how)) {
+      setError("This thread's section is gone, so the option has nowhere to go.");
+      return;
+    }
+    void anur.call("thread:use-option", {
+      thread: t.id,
+      path: docPath,
+      text: main.state.doc.toString(),
+      option: option.id,
+      how,
+    });
+  };
+
   if (!docPath || !tree)
     return <p className="quiet">Threads on the section you're in show here.</p>;
   if (!section) return <p className="quiet">Put the cursor in a section to think about it.</p>;
@@ -508,6 +595,79 @@ export function Think({
               <div key={i} className={`think-tool ${item.status}`} title={item.status}>
                 {item.title}
               </div>
+            ) : item.kind === "options" ? (
+              <div key={i} className="think-offers" role="group" aria-label="Options">
+                {item.within ? (
+                  <p className="think-offers-within quiet">
+                    Within{" "}
+                    {thread.items
+                      .flatMap((x) => (x.kind === "options" ? x.options : []))
+                      .find((o) => o.id === item.within)?.title ?? "an earlier option"}
+                  </p>
+                ) : null}
+                {item.options.map((o) => (
+                  <div
+                    key={o.id}
+                    className={`think-offer${item.used === o.id ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
+                  >
+                    <div className="think-offer-head">
+                      <strong>{o.title}</strong>
+                      {item.used === o.id ? (
+                        <span className="quiet">In the doc</span>
+                      ) : item.explored.includes(o.id) ? (
+                        <span className="quiet">Explored</span>
+                      ) : null}
+                    </div>
+                    <div className="think-offer-text">
+                      <Markdown text={o.text} />
+                    </div>
+                    {writable && item.used !== o.id ? (
+                      <div className="think-offer-actions">
+                        <button
+                          type="button"
+                          className="think-button primary"
+                          onClick={() => {
+                            useOption(thread, o, "replace");
+                          }}
+                        >
+                          Use this
+                        </button>
+                        <button
+                          type="button"
+                          className="think-more"
+                          onClick={() => {
+                            useOption(thread, o, "subsection");
+                          }}
+                        >
+                          Add as subsection
+                        </button>
+                        {item.explored.includes(o.id) ? null : (
+                          <button
+                            type="button"
+                            className="think-more"
+                            disabled={thread.busy}
+                            onClick={() => {
+                              setError(null);
+                              void anur
+                                .call("thread:explore-option", {
+                                  thread: thread.id,
+                                  path: docPath,
+                                  text: docText(),
+                                  option: o.id,
+                                })
+                                .then((r) => {
+                                  if (r.kind === "refused") setError(r.reason);
+                                });
+                            }}
+                          >
+                            Explore this
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             ) : item.kind === "changed" ? (
               <div key={i} className="think-changed" role="status">
                 <span>
@@ -564,63 +724,34 @@ export function Think({
         </div>
         {notConnected(thread.agent)}
         {error ? <p className="think-error">{error}</p> : null}
-        {previewed.has(thread.id) && !thread.busy ? (
-          <button
-            type="button"
-            className="think-button primary think-preview"
-            onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent("anur:show-preview", { detail: { thread: thread.id } }),
-              );
-            }}
-          >
-            Preview in doc
-          </button>
-        ) : null}
-        <div className="think-options">
-          <AgentPicker
-            value={thread.agent}
-            disabled={thread.busy}
-            onChange={(next) => {
-              setThreads((ts) =>
-                ts.map((t) => (t.id === thread.id ? { ...t, agent: next, options: [] } : t)),
-              );
-              void anur.call("thread:agent", { thread: thread.id, agent: next });
-            }}
-          />
-          {thread.options.map((o) => (
-            <label key={o.id} className="think-option">
-              <span className="quiet">{o.name}</span>
-              <select
-                value={o.current}
-                disabled={thread.busy}
-                title={o.choices.find((c) => c.value === o.current)?.description ?? undefined}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setThreads((ts) =>
-                    ts.map((t) =>
-                      t.id === thread.id
-                        ? {
-                            ...t,
-                            options: t.options.map((x) =>
-                              x.id === o.id ? { ...x, current: value } : x,
-                            ),
-                          }
-                        : t,
-                    ),
+        {!thread.busy
+          ? (previews.find((p) => p.thread === thread.id)?.parts ?? []).map((part) => (
+              <EditCard
+                key={part.path.join("\u0000")}
+                part={part}
+                writable={writable}
+                onUse={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("anur:use-preview", {
+                      detail: { thread: thread.id, path: part.path },
+                    }),
                   );
-                  void anur.call("thread:option", { thread: thread.id, id: o.id, value });
                 }}
-              >
-                {o.choices.map((c) => (
-                  <option key={c.value} value={c.value}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ))}
-        </div>
+                onShow={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("anur:show-preview", { detail: { thread: thread.id } }),
+                  );
+                }}
+                onDrop={() => {
+                  window.dispatchEvent(
+                    new CustomEvent("anur:drop-preview", {
+                      detail: { thread: thread.id, path: part.path },
+                    }),
+                  );
+                }}
+              />
+            ))
+          : null}
         {thread.items.length > 0 && thread.options.length === 0 && !thread.busy ? (
           <p className="quiet think-agent-note">
             The next message starts on {AGENTS[thread.agent].name}, from this section's text and the
@@ -631,6 +762,53 @@ export function Think({
           <Composer
             placeholder="Reply in this thread"
             sendLabel="Send"
+            pickers={
+              <>
+                <AgentPicker
+                  value={thread.agent}
+                  disabled={thread.busy}
+                  onChange={(next) => {
+                    setThreads((ts) =>
+                      ts.map((t) => (t.id === thread.id ? { ...t, agent: next, options: [] } : t)),
+                    );
+                    void anur.call("thread:agent", { thread: thread.id, agent: next });
+                  }}
+                />
+                {thread.options.map((o) => (
+                  <label key={o.id} className="think-option">
+                    <span className="quiet">{o.name}</span>
+                    <select
+                      aria-label={o.name}
+                      value={o.current}
+                      disabled={thread.busy}
+                      title={o.choices.find((c) => c.value === o.current)?.description ?? undefined}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setThreads((ts) =>
+                          ts.map((t) =>
+                            t.id === thread.id
+                              ? {
+                                  ...t,
+                                  options: t.options.map((x) =>
+                                    x.id === o.id ? { ...x, current: value } : x,
+                                  ),
+                                }
+                              : t,
+                          ),
+                        );
+                        void anur.call("thread:option", { thread: thread.id, id: o.id, value });
+                      }}
+                    >
+                      {o.choices.map((c) => (
+                        <option key={c.value} value={c.value}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </>
+            }
             busy={thread.busy}
             disabled={!writable || thread.path === null}
             onStop={() => {
@@ -733,27 +911,29 @@ export function Think({
       <ThreadList threads={here} onOpen={setOpen} />
       {notConnected(newAgent)}
       {error ? <p className="think-error">{error}</p> : null}
-      <div className="think-options">
-        <AgentPicker value={newAgent} disabled={!writable} onChange={setNewAgent} />
-        {newChoices.map((o) => (
-          <OptionPicker
-            key={o.id}
-            option={o}
-            disabled={!writable}
-            onChange={(value) => {
-              setNewChoices((all) =>
-                all.map((x) => (x.id === o.id ? { ...x, current: value } : x)),
-              );
-            }}
-          />
-        ))}
-      </div>
       {signedOut(newAgent) ?? (
         <Composer
           placeholder={
             writable ? "Ask about this section" : "Threads need a folder Anur can write to"
           }
           sendLabel="Start thread"
+          pickers={
+            <>
+              <AgentPicker value={newAgent} disabled={!writable} onChange={setNewAgent} />
+              {newChoices.map((o) => (
+                <OptionPicker
+                  key={o.id}
+                  option={o}
+                  disabled={!writable}
+                  onChange={(value) => {
+                    setNewChoices((all) =>
+                      all.map((x) => (x.id === o.id ? { ...x, current: value } : x)),
+                    );
+                  }}
+                />
+              ))}
+            </>
+          }
           busy={false}
           disabled={!writable || !AGENTS[newAgent].runsThreads}
           onSend={start}
@@ -781,8 +961,9 @@ function AgentPicker({
 }) {
   return (
     <label className="think-option">
-      <span className="quiet">Agent</span>
+      <span className="think-pick">{AGENTS[value].name}</span>
       <select
+        aria-label="Agent"
         value={value}
         disabled={disabled}
         title={AGENTS[value].why ?? undefined}
@@ -861,8 +1042,11 @@ function OptionPicker({
 }) {
   return (
     <label className="think-option">
-      <span className="quiet">{option.name}</span>
+      <span className="think-pick">
+        {option.choices.find((c) => c.value === option.current)?.name ?? option.current}
+      </span>
       <select
+        aria-label={option.name}
         value={option.current}
         disabled={disabled}
         title={option.choices.find((c) => c.value === option.current)?.description ?? undefined}
