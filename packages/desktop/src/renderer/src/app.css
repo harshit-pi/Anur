@@ -2796,7 +2796,12 @@ body.resizing * {
   font-size: 12px;
 }
 
-.think-orphan .think-elsewhere-where {
+.think-orphan-head {
+  margin: 0 0 4px;
+  font-size: 12px;
+}
+
+.think-orphan-gone {
   color: var(--graphite);
   text-decoration: line-through;
 }
@@ -2810,8 +2815,13 @@ body.resizing * {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  margin-top: 6px;
+  gap: 4px 14px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.think-orphan-actions .quiet-action {
+  color: var(--graphite);
 }
 
 .think-orphan-actions select {
@@ -4119,4 +4129,8 @@ button.file-card-name:hover {
 
 .think-thread-by {
   color: var(--ink);
+}
+
+.think-orphan-actions .think-more {
+  align-self: center;
 }

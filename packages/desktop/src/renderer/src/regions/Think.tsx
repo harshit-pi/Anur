@@ -2032,7 +2032,8 @@ function Orphans({
   onChanged: () => void;
 }) {
   const [orphans, setOrphans] = useState<Orphan[]>([]);
-  const [picked, setPicked] = useState<Record<string, number>>({});
+  /** The section picker, open on an orphan: its pick so far, -1 for none yet. */
+  const [picking, setPicking] = useState<Record<string, number | undefined>>({});
   const [error, setError] = useState<string | null>(null);
   const [n, setN] = useState(0);
   // Read again when the doc's threads or headings change.
@@ -2058,36 +2059,100 @@ function Orphans({
     setN((x) => x + 1);
     onChanged();
   };
+  const reattach = (o: Orphan, index: number) => {
+    const target = sections[index];
+    if (!target) return;
+    setError(null);
+    void anur
+      .call("orphans:reattach", {
+        path: docPath,
+        text: text.current(),
+        orphan: o.id,
+        section: { index, path: target.path },
+      })
+      .then((r) => {
+        if (r.kind === "refused") setError(r.reason);
+        setPicking((p) => ({ ...p, [o.id]: undefined }));
+        done();
+      });
+  };
+  const remove = (o: Orphan) => {
+    const what =
+      o.threads.length > 0
+        ? `its ${o.threads.length === 1 ? "thread" : `${String(o.threads.length)} threads`}, their proposed edits, its inputs and its history`
+        : "its history";
+    if (
+      !window.confirm(
+        `Delete what was behind “${o.path.at(-1) ?? "Untitled"}”: ${what}? This can't be undone.`,
+      )
+    )
+      return;
+    setError(null);
+    void anur
+      .call("orphans:delete", { path: docPath, text: text.current(), orphan: o.id })
+      .then(done);
+  };
   return (
     <details className="think-elsewhere think-orphans">
       <summary className="think-subhead">Orphaned ({String(orphans.length)})</summary>
-      <p className="quiet think-orphans-why">
-        Sections whose heading is gone. Reattach their threads and history to a section, or delete
-        them.
-      </p>
+      <p className="quiet think-orphans-why">Headings that are gone, with what was behind them.</p>
       {error ? <p className="think-error">{error}</p> : null}
       {orphans.map((o) => {
         const views = o.threads.flatMap((x) => threads.filter((t) => t.id === x.id));
-        const at = picked[o.id] ?? o.suggestion?.index ?? -1;
-        const target = sections[at];
+        const choice = picking[o.id];
+        const suggested = o.suggestion ? sections[o.suggestion.index] : undefined;
         return (
           <div key={o.id} className="think-elsewhere-group think-orphan">
-            <div className="think-elsewhere-where">{o.path.at(-1) ?? "Untitled"}</div>
+            <div className="think-orphan-head">
+              <span className="think-orphan-gone">{o.path.at(-1) ?? "Untitled"}</span>
+              {suggested && choice === undefined ? (
+                <span className="quiet"> → {suggested.path.at(-1) ?? "Untitled"}?</span>
+              ) : null}
+            </div>
             {views.length > 0 ? (
               <ThreadList threads={views} onOpen={onOpen} />
             ) : (
               <p className="quiet">{o.history ? "Its history only" : "Nothing behind it"}</p>
             )}
-            {o.suggestion && picked[o.id] === undefined ? (
-              <p className="quiet">Looks like it became “{o.suggestion.path.at(-1)}”.</p>
-            ) : null}
-            {writable ? (
+            {!writable ? null : choice === undefined ? (
+              <div className="think-orphan-actions">
+                {suggested && o.suggestion ? (
+                  <button
+                    type="button"
+                    className="think-more"
+                    onClick={() => {
+                      if (o.suggestion) reattach(o, o.suggestion.index);
+                    }}
+                  >
+                    Reattach to {suggested.path.at(-1) ?? "Untitled"}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="think-more"
+                  onClick={() => {
+                    setPicking((p) => ({ ...p, [o.id]: -1 }));
+                  }}
+                >
+                  {suggested ? "Other section…" : "Reattach to…"}
+                </button>
+                <button
+                  type="button"
+                  className="think-more danger"
+                  onClick={() => {
+                    remove(o);
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
+            ) : (
               <div className="think-orphan-actions">
                 <select
                   aria-label="Section to reattach to"
-                  value={at}
+                  value={choice}
                   onChange={(e) => {
-                    setPicked((p) => ({ ...p, [o.id]: Number(e.target.value) }));
+                    setPicking((p) => ({ ...p, [o.id]: Number(e.target.value) }));
                   }}
                 >
                   <option value={-1}>Pick a section…</option>
@@ -2100,50 +2165,25 @@ function Orphans({
                 </select>
                 <button
                   type="button"
-                  className="think-button primary"
-                  disabled={!target}
+                  className="think-more"
+                  disabled={choice < 0}
                   onClick={() => {
-                    if (!target) return;
-                    setError(null);
-                    void anur
-                      .call("orphans:reattach", {
-                        path: docPath,
-                        text: text.current(),
-                        orphan: o.id,
-                        section: { index: at, path: target.path },
-                      })
-                      .then((r) => {
-                        if (r.kind === "refused") setError(r.reason);
-                        done();
-                      });
+                    reattach(o, choice);
                   }}
                 >
                   Reattach
                 </button>
                 <button
                   type="button"
-                  className="think-button danger"
+                  className="think-more quiet-action"
                   onClick={() => {
-                    const what =
-                      o.threads.length > 0
-                        ? `its ${o.threads.length === 1 ? "thread" : `${String(o.threads.length)} threads`}, their proposed edits, its inputs and its history`
-                        : "its history";
-                    if (
-                      !window.confirm(
-                        `Delete what was behind “${o.path.at(-1) ?? "Untitled"}”: ${what}? This can't be undone.`,
-                      )
-                    )
-                      return;
-                    setError(null);
-                    void anur
-                      .call("orphans:delete", { path: docPath, text: text.current(), orphan: o.id })
-                      .then(done);
+                    setPicking((p) => ({ ...p, [o.id]: undefined }));
                   }}
                 >
-                  Delete
+                  Cancel
                 </button>
               </div>
-            ) : null}
+            )}
           </div>
         );
       })}
