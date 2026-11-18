@@ -351,31 +351,6 @@ export function Settings({
                 ))}
               </select>
             </Row>
-            {main ? (
-              <Row
-                title={AGENTS[main.defaultAgent].name}
-                detail={
-                  status?.connected === true
-                    ? `Connected: version ${status.agent?.agent ?? "unknown"}, through its ACP adapter ${status.agent?.adapter ?? ""}.`
-                    : status?.connected === false
-                      ? (status.reason ?? "Not connected.")
-                      : "Connects when a thread first needs it."
-                }
-              >
-                <span className="settings-status">
-                  {status?.connected === true
-                    ? "Connected"
-                    : status?.connected === false
-                      ? "Not connected"
-                      : "Not started"}
-                </span>
-              </Row>
-            ) : null}
-            {AGENT_IDS.filter((id) => !AGENTS[id].runsThreads).map((id) => (
-              <Row key={id} title={AGENTS[id].name} detail={AGENTS[id].why ?? ""}>
-                <span className="settings-status">Not yet</span>
-              </Row>
-            ))}
             <Row
               title="Use agents' edits as they land"
               detail="An agent's edit changes the doc at once, instead of waiting as a proposal for you to use. Each is noted in its thread, with Undo; edits that clash with your typing stay proposals. Options are always yours to pick."
@@ -388,7 +363,41 @@ export function Settings({
                 }}
               />
             </Row>
-            <SkillRow />
+            {/* Then each agent on its own: how it's connected, and what Anur adds to it. */}
+            {AGENT_IDS.map((id) => (
+              <section key={id} className="settings-group" aria-label={AGENTS[id].name}>
+                <h3>{AGENTS[id].name}</h3>
+                {!AGENTS[id].runsThreads ? (
+                  <Row title="Connection" detail={AGENTS[id].why ?? ""}>
+                    <span className="settings-status">Not yet</span>
+                  </Row>
+                ) : (
+                  <Row
+                    title="Connection"
+                    detail={
+                      id !== main?.defaultAgent
+                        ? "Connects when a thread on it first needs it."
+                        : status?.connected === true
+                          ? `Connected: version ${status.agent?.agent ?? "unknown"}, through its ACP adapter ${status.agent?.adapter ?? ""}.`
+                          : status?.connected === false
+                            ? (status.reason ?? "Not connected.")
+                            : "Connects when a thread first needs it."
+                    }
+                  >
+                    <span className="settings-status">
+                      {id !== main?.defaultAgent
+                        ? "Not started"
+                        : status?.connected === true
+                          ? "Connected"
+                          : status?.connected === false
+                            ? "Not connected"
+                            : "Not started"}
+                    </span>
+                  </Row>
+                )}
+                {id === "claude-code" ? <SkillRow /> : null}
+              </section>
+            ))}
           </>
         );
       case "core":

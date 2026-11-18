@@ -3057,3 +3057,14 @@ body.resizing * {
     transform: translateY(4px);
   }
 }
+
+/* One agent's own settings, under its name. */
+.settings-group {
+  margin-top: 22px;
+}
+
+.settings-group h3 {
+  margin: 0 0 2px;
+  font-size: 15px;
+  color: var(--ink);
+}
