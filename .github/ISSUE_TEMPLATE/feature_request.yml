@@ -1,0 +1,22 @@
+name: Suggest a feature
+description: Something Anur could do, or do better.
+title: "Feature: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you're trying to do
+      description: The task or moment where Anur gets in the way or falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: How you'd like it to work. Rough is fine.
+  - type: textarea
+    id: now
+    attributes:
+      label: What you do today instead
+      description: Another app, a workaround, or nothing.

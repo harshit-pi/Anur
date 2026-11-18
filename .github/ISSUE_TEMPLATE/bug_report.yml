@@ -1,0 +1,39 @@
+name: Something's wrong
+description: Anur did something it shouldn't, or didn't do something it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: The steps, from opening Anur. A small example doc helps.
+      placeholder: |
+        1. Open a folder with …
+        2. Type …
+        3. See …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Anur version
+      description: At the bottom right of the window, such as "Anur 0.1.6".
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Apple menu → About This Mac.
+  - type: textarea
+    id: more
+    attributes:
+      label: Screenshots or anything else
+      description: Drag images in. Leave out anything private from your notes.
