@@ -258,56 +258,50 @@ const START_FRESH_AT = 0.4;
  */
 function SizeMeter({
   tokens,
-  steps,
   onStartFresh,
 }: {
-  tokens: {
-    used: number;
-    cached?: number | undefined;
-    context: number;
-    first: number;
-    window: number | null;
-  };
-  /** Tool calls so far, for the total's wording. */
-  steps: number;
+  tokens: { context: number; first: number; window: number | null };
   onStartFresh: () => void;
 }) {
-  const share = tokens.window ? Math.min(1, tokens.context / tokens.window) : null;
+  // Shown only when the thread has grown long; its size otherwise is the ring by the pickers.
   const grown = tokens.window ? (tokens.context - tokens.first) / tokens.window : 0;
+  if (grown <= START_FRESH_AT) return null;
   return (
-    <div className="think-meter" title="From the agent's usage reports">
-      <div className="think-meter-line">
-        <span>
-          Context {formatTokens(tokens.context)}
-          {tokens.window ? ` of ${formatTokens(tokens.window)}` : ""}
-        </span>
-        <span
-          className="quiet"
-          title="Every step sends the conversation again; most of it is read back from the cache, at a fraction of the price"
-        >
-          {formatTokens(tokens.used)} processed
-          {steps > 0 ? ` over ${countOf(steps, "step")}` : ""}
-          {tokens.cached && tokens.cached / tokens.used > 0.5 ? ", mostly from cache" : ""}
-        </span>
-      </div>
-      {share !== null ? (
-        <div className="think-meter-bar" aria-hidden="true">
-          <i
-            style={{ width: `${String(Math.round(share * 100))}%` }}
-            className={grown > START_FRESH_AT ? "full" : ""}
-          />
-        </div>
-      ) : null}
-      {grown > START_FRESH_AT ? (
-        <p className="think-meter-note">
-          This thread has grown long, and an agent reasons less well late in a long context.{" "}
-          <button type="button" className="think-more" onClick={onStartFresh}>
-            Start fresh
-          </button>{" "}
-          from the section's text.
-        </p>
-      ) : null}
-    </div>
+    <p className="think-meter-note">
+      This thread has grown long, and an agent reasons less well late in a long context.{" "}
+      <button type="button" className="think-more" onClick={onStartFresh}>
+        Start fresh
+      </button>{" "}
+      from the section's text.
+    </p>
+  );
+}
+
+/** How full the thread's context is, as a ring beside the pickers, as in Claude's apps. */
+function ContextRing({ tokens }: { tokens: { context: number; window: number | null } }) {
+  if (!tokens.window) return null;
+  const share = Math.min(1, tokens.context / tokens.window);
+  const r = 6;
+  const around = 2 * Math.PI * r;
+  return (
+    <span
+      className="think-ring"
+      role="img"
+      aria-label={`Context ${formatTokens(tokens.context)} of ${formatTokens(tokens.window)}`}
+      title={`Context ${formatTokens(tokens.context)} of ${formatTokens(tokens.window)} (${String(Math.round(share * 100))}%)`}
+    >
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="8" r={r} className="think-ring-track" />
+        <circle
+          cx="8"
+          cy="8"
+          r={r}
+          className="think-ring-fill"
+          strokeDasharray={`${String(around * share)} ${String(around)}`}
+          transform="rotate(-90 8 8)"
+        />
+      </svg>
+    </span>
   );
 }
 
@@ -795,7 +789,6 @@ export function Think({
         {thread.tokens ? (
           <SizeMeter
             tokens={thread.tokens}
-            steps={thread.items.filter((i) => i.kind === "tool").length}
             onStartFresh={() => {
               // A new thread on the thread's own section, from its text and inputs only.
               const i = tree.sections.findIndex(
@@ -1008,7 +1001,7 @@ export function Think({
             ) : item.kind === "created" ? (
               <div key={i} className="think-changed auto" role="status">
                 <span>
-                  {item.undoable ? "Made " : "Made, then taken back: "}
+                  {item.undone ? "Made, then taken back: " : "Made "}
                   <button
                     type="button"
                     className="think-link"
@@ -1159,6 +1152,7 @@ export function Think({
                     }}
                   />
                 ))}
+                {thread.tokens ? <ContextRing tokens={thread.tokens} /> : null}
               </>
             }
             busy={thread.busy}
@@ -1231,31 +1225,35 @@ export function Think({
       >
         {section.path.at(-1)}
       </h2>
-      <div className={`think-text${showText ? " open" : ""}`}>
-        {docPath && page() ? (
-          <SectionEditor
-            key={`${section.path.join("\u0000")}#${String(section.ordinal)}`}
-            page={page}
-            docPath={docPath}
-            section={section}
-            editable={writable}
-          />
-        ) : body ? (
-          <Markdown text={body} />
-        ) : (
-          <p className="quiet">No text yet.</p>
-        )}
-      </div>
-      {body.split("\n").length > 6 || body.length > 400 ? (
-        <button
-          type="button"
-          className="think-more"
-          onClick={() => {
-            setShowText((s) => !s);
-          }}
-        >
-          {showText ? "Show less" : "Show all its text"}
-        </button>
+      {SHOW_SECTION_TEXT ? (
+        <>
+          <div className={`think-text${showText ? " open" : ""}`}>
+            {docPath && page() ? (
+              <SectionEditor
+                key={`${section.path.join("\u0000")}#${String(section.ordinal)}`}
+                page={page}
+                docPath={docPath}
+                section={section}
+                editable={writable}
+              />
+            ) : body ? (
+              <Markdown text={body} />
+            ) : (
+              <p className="quiet">No text yet.</p>
+            )}
+          </div>
+          {body.split("\n").length > 6 || body.length > 400 ? (
+            <button
+              type="button"
+              className="think-more"
+              onClick={() => {
+                setShowText((s) => !s);
+              }}
+            >
+              {showText ? "Show less" : "Show all its text"}
+            </button>
+          ) : null}
+        </>
       ) : null}
       <SectionFooter>
         {features.links && (links.out.length > 0 || links.into.length > 0) ? (
@@ -2070,6 +2068,13 @@ const linkLabel = (doc: string, heading: string | null) =>
   [doc.replace(/\.md$/i, "").split("/").pop() ?? doc, ...(heading ? heading.split("#") : [])].join(
     " › ",
   );
+
+/**
+ * Think's copy of the section's text, under its heading. Off for now: the
+ * page shows the text, and hovering a map box shows it too. Kept, to turn
+ * back on if it's missed.
+ */
+const SHOW_SECTION_TEXT: boolean = false;
 
 const PURPOSE = { build: "Build", check: "Check" } as const;
 

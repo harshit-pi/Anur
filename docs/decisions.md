@@ -176,3 +176,9 @@ Engineering decisions made while building Anur, newest first, each with why. The
 ## The check card, problems first
 
 - A check's card leads with what needs a look: "Of 13 claims, 2 are wrong, 1 is missing", then those claims, wrong first, then missing, then unsupported. Claims that hold fold into one line. Each claim is its verdict and the claim on one line, with a short note under it; the source shows on hover. A link points to the corrected text when there is one.
+
+## A wide map wraps; links are a badge
+
+- A parent's children sit in rows of at most four, wrapping in reading order, so a doc with many sections grows down rather than endlessly sideways and opens readable. Lines run as a trunk from the parent, a rail along each row and a short drop to each box, with a spine down the left joining the rows; a dragged box goes back to a curve.
+- A section's links to other docs are one badge on its box ("→ 6"); a click lists them, each opening where it is. The list opens upward from a box low in the view.
+- Think no longer repeats the section's text under its heading: the page shows it, and so does hovering a map box. It sits behind `SHOW_SECTION_TEXT`, off, to turn back on if missed.
