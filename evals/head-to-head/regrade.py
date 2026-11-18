@@ -9,7 +9,7 @@ import grade  # noqa: E402
 f = sys.argv[1]
 rows = json.load(open(f))
 for r in rows:
-    if r["task"] == "pricing":
+    if r.get("task") == "pricing":
         g = grade.pricing(r["reply"])
         r.update(g)
 json.dump(rows, open(f, "w"), indent=1)
