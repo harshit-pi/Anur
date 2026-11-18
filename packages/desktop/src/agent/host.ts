@@ -1,3 +1,4 @@
+import { latestModels } from "./latest-models.ts";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { Readable, Writable } from "node:stream";
@@ -616,7 +617,8 @@ function optionsOf(raw: unknown): SessionOption[] {
             id: o.id,
             name: typeof o.name === "string" ? o.name : o.id,
             current: o.currentValue,
-            choices,
+            // Only the newest model of each family; the current one always stays.
+            choices: o.category === "model" ? latestModels(choices, o.currentValue) : choices,
           },
         ]
       : [];
