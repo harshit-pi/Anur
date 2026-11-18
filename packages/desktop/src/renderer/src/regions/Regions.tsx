@@ -237,6 +237,7 @@ export function LeftSidebar({
         </button>
       </div>
       <FileTree
+        root={folder.path}
         docs={folder.docs}
         folders={folder.folders}
         files={folder.files}
