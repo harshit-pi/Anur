@@ -72,6 +72,7 @@ import { Tour } from "./regions/Tour.tsx";
 import { tourSteps } from "./layout/tour.ts";
 import { useFeatures } from "./features.ts";
 import { MapView } from "./regions/MapView.tsx";
+import { keepSame } from "./layout/keep-same.ts";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
 export function App() {
@@ -147,8 +148,15 @@ export function App() {
     }
   }, []);
 
+  // Read in the open effect, not a dependency: a changed listing (an iCloud
+  // download, a file added) mustn't close and reopen the doc being read.
+  const folderNow = useRef(folder);
+  folderNow.current = folder;
+  const openedIn = folder?.path ?? null;
+
   // Open the picked doc; an offloaded one downloads from iCloud first.
   useEffect(() => {
+    const folder = folderNow.current;
     setDoc(null);
     setSections(null);
     setDocError(null);
@@ -176,7 +184,7 @@ export function App() {
     return () => {
       current = false;
     };
-  }, [selected, folder]);
+  }, [selected, openedIn]);
 
   // Each folder has its own tabs, remembered on this device.
   const folderPath = folder?.path ?? null;
@@ -877,7 +885,7 @@ export function App() {
       insertById(v, id);
     });
     const offFolder = anur.on("folder:changed", (f) => {
-      setFolder(f);
+      setFolder((was) => keepSame(was, f));
     });
     // An agent in a terminal asked to show a doc (6.7, 6.9).
     const offOpenDoc = anur.on("app:open-doc", ({ path, section }) => {
