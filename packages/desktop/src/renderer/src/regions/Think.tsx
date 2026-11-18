@@ -11,6 +11,7 @@ import type {
 } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
+import { listOf, stepOf } from "./step-label.ts";
 import { AGENT_SHORT, AgentMark } from "./AgentMark.tsx";
 import { useFeatures } from "../features.ts";
 import { formatTokens } from "../layout/tokens.ts";
@@ -1003,7 +1004,7 @@ export function Think({
   if (thread) {
     const asks = prompts.filter((p) => p.thread === thread.id);
     // Who answered heads each reply: above its first step or its text, once per turn.
-    const folded = foldSteps(thread.items);
+    const folded = foldSteps(thread.items, thread.busy);
     const whoBefore = new Set<number>();
     let afterPerson = true;
     for (const { item, i } of folded) {
@@ -1170,7 +1171,7 @@ export function Think({
           />
         ) : null}
         <div className="think-chat" aria-live="polite">
-          {folded.map(({ item, i, steps }) => (
+          {folded.map(({ item, i, steps, leads }) => (
             <Fragment key={`e${String(i)}`}>
               {whoBefore.has(i) ? (
                 <div className="think-who" title={whoLabel(thread.agent, thread.options)}>
@@ -1217,6 +1218,9 @@ export function Think({
                             addToSection(thread, item.text);
                           }
                         : null
+                    }
+                    after={
+                      leads ? <p className="think-from-answer quiet">From this answer</p> : null
                     }
                   />
                 ) : (
@@ -2310,11 +2314,14 @@ function AgentReply({
   who,
   onBranch,
   onUse,
+  after = null,
 }: {
   text: string;
   who: { agent: AgentId; label: string } | null;
   onBranch: (() => void) | null;
   onUse: (() => void) | null;
+  /** Under the reply's actions: what this answer made, when its cards follow (answer first). */
+  after?: React.ReactNode;
 }) {
   const long = text.length > LONG_REPLY;
   const [all, setAll] = useState(false);
@@ -2374,17 +2381,20 @@ function AgentReply({
           </button>
         ) : null}
       </div>
+      {after}
     </div>
   );
 }
 
 /** Anur's own bookkeeping, never shown as the agent's work. */
-const HOUSEKEEPING = /^(mcp__anur__anur_(name_thread|list_inputs)|ToolSearch)\b/;
+// Steps a person never needs, and steps a card in the chat already stands for.
+const HOUSEKEEPING =
+  /^(mcp__anur__anur_(name_thread|list_inputs|propose_finding|offer_options|report_check)|ToolSearch)\b/;
 
-function foldSteps(
-  items: ThreadItem[],
-): { item: ThreadItem; i: number; steps: ToolItem[] | null }[] {
-  const out: { item: ThreadItem; i: number; steps: ToolItem[] | null }[] = [];
+type Folded = { item: ThreadItem; i: number; steps: ToolItem[] | null; leads?: boolean };
+
+function foldSteps(items: ThreadItem[], busy?: boolean): Folded[] {
+  const out: Folded[] = [];
   let run: ToolItem[] = [];
   let start = 0;
   const flush = () => {
@@ -2404,6 +2414,37 @@ function foldSteps(
     out.push({ item, i, steps: null });
   });
   flush();
+  return busy === undefined ? out : answerFirst(out, busy);
+}
+
+const CARD_KINDS = new Set(["finding", "options"]);
+
+/**
+ * A finished turn's reply leads it: the agent writes its answer last, after
+ * the findings and options it made on the way, but a person reads the
+ * answer first. The reply moves above the turn's first card, and the cards
+ * follow under "From this answer". A running turn stays in the order it
+ * arrives.
+ */
+function answerFirst(entries: Folded[], busy: boolean): Folded[] {
+  const out: Folded[] = [];
+  let turn: Folded[] = [];
+  const flushTurn = (last: boolean) => {
+    const reply = turn.findLastIndex((e) => e.item.kind === "message" && e.item.role === "agent");
+    const card = turn.findIndex((e) => CARD_KINDS.has(e.item.kind));
+    const at = reply >= 0 ? turn[reply] : undefined;
+    if (at && card >= 0 && card < reply && !(last && busy)) {
+      turn.splice(reply, 1);
+      turn.splice(card, 0, { ...at, leads: true });
+    }
+    out.push(...turn);
+    turn = [];
+  };
+  for (const e of entries) {
+    if (e.item.kind === "message" && e.item.role === "person") flushTurn(false);
+    turn.push(e);
+  }
+  flushTurn(true);
   return out;
 }
 
@@ -2416,14 +2457,16 @@ function StepsFold({ steps, running }: { steps: ToolItem[]; running: boolean }) 
       const m = /^(\w+) (.+)$/.exec(t.title);
       return m !== null && x.title === `${m[1] ?? ""} working copy of ${m[2] ?? ""}`;
     });
-  const failed = steps.filter((s) => s.status === "failed" && !redirected(s)).length;
-  const last = toolLabel(steps.at(-1)?.title ?? "");
+  // While running, the step under way; after, what the run did. A step that
+  // failed shows ×, opened: the agent usually recovers, so the summary doesn't say so.
+  const last = running
+    ? toolLabel(steps.at(-1)?.title ?? "")
+    : stepsSummary(steps.filter((t) => !redirected(t)));
   return (
     <details className="think-steps">
       <summary>
         <span className="think-steps-count">
           {String(steps.filter((t) => !redirected(t)).length)} steps{running ? " so far" : ""}
-          {failed > 0 ? `, ${String(failed)} failed` : ""}
         </span>
         <span className="think-steps-last truncate">{last}</span>
       </summary>
@@ -2431,6 +2474,7 @@ function StepsFold({ steps, running }: { steps: ToolItem[]; running: boolean }) 
         {steps.map((t) =>
           redirected(t) ? null : (
             <div key={t.toolUse} className={`think-tool ${t.status}`} title={t.title}>
+              {t.status === "failed" ? "× " : ""}
               {toolLabel(t.title)}
             </div>
           ),
@@ -2782,7 +2826,17 @@ function toolLabel(title: string): string {
   if (title === "Approve Plan") return "Asked you to approve the plan";
   if (/^Write \S*\/\.claude\/plans\//.test(title)) return "Wrote the plan";
   const own = /^mcp__anur__(\w+)/.exec(title)?.[1];
-  return own ? (OWN_TOOLS[own] ?? own.replace(/^anur_/, "").replace(/_/g, " ")) : title;
+  if (own) return OWN_TOOLS[own] ?? own.replace(/^anur_/, "").replace(/_/g, " ");
+  return stepOf(title).label;
+}
+
+/** A finished run in one line: the files it read, then anything else it did. */
+function stepsSummary(steps: { title: string }[]): string {
+  const all = steps.map((t) => (t.title.startsWith("mcp__anur__") ? null : stepOf(t.title)));
+  const read = all.flatMap((x) => x?.read ?? []);
+  const other = [...new Set(all.flatMap((x) => (x && x.read.length === 0 ? [x.label] : [])))];
+  const parts = [...(read.length ? [`Read ${listOf(read)}`] : []), ...other];
+  return parts.length ? parts.slice(0, 3).join(", ") : toolLabel(steps.at(-1)?.title ?? "");
 }
 
 type HistoryList = {
