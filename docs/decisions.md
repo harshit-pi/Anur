@@ -210,3 +210,8 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - Each device writes `.anur/open/<device>.json`: when it opened the folder and when it last quit cleanly.
 - Settings, Storage lists what `.anur/` holds by kind. Clean up removes only snapshots older than 30 days that no record names, searching every record for the hash so a kind this app doesn't know still keeps its snapshot. It is off while another device has the folder open or didn't quit cleanly; a device gone over 30 days no longer counts.
 - Unused attachments: images, and files attached as inputs whose input was removed, that no doc names. Listed for review; each goes to the system Trash only on a click.
+
+## Who started a thread, only when it isn't you
+
+- A thread someone else started shows their name: beside the time in the list, "started by Duy on 18 Nov" under its title, and over each message they wrote. Your own threads and messages show no name, so the screen is unchanged until someone else's work arrives.
+- Each device writes its person's name into `.anur/open/<device>.json`: the name set in Settings → General, else git's `user.name` for the folder, else the Mac account's full name. A thread is yours when its device is this one or its device's name is yours, so your other Mac's threads count as yours too. A device with no name yet shows as "Another device".

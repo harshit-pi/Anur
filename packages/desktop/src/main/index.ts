@@ -59,8 +59,11 @@ import { Journal } from "./folder/journal.ts";
 import { SectionVersions, lastSavedIn } from "./folder/versions.ts";
 import { sectionCommits } from "./folder/git-history.ts";
 import { suggestMatch } from "./folder/orphans.ts";
+import { personName } from "./folder/people.ts";
 import {
   devicesStillOpen,
+  namesOf,
+  noteName,
   noteOpened,
   noteQuit,
   removeSnapshots,
@@ -334,6 +337,10 @@ function threadsFor(folder: FolderState): Threads | null {
       mcp: { socket: anurSocket, script: path.join(here, "mcp-server.js") },
       autoApply: () => appSettings.get().autoApply,
       features: () => appSettings.get().features,
+      people: async () => ({
+        me: await personName(folder.path, appSettings.get().name),
+        byDevice: await namesOf(folder.path),
+      }),
       folderState: () =>
         [...windows.keys()].map((id) => folders.current(id)).find((f) => f?.path === folder.path) ??
         null,
@@ -428,8 +435,12 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
   const outcome = await folders.open(target.webContents.id, folder);
   if (outcome.kind === "opened") {
     // 11.4: other devices hold off Clean up while this one has the folder open.
-    if (device && outcome.folder.mode === "writable")
-      void noteOpened(outcome.folder.path, device).catch(() => undefined);
+    if (device && outcome.folder.mode === "writable") {
+      const at = outcome.folder.path;
+      void personName(at, appSettings.get().name)
+        .then((name) => noteOpened(at, device as string, new Date(), name))
+        .catch(() => undefined);
+    }
     folderWatch.start(target.webContents.id, outcome.folder.path);
     target.setTitle(outcome.folder.name);
     target.setRepresentedFilename(outcome.folder.path);
@@ -632,10 +643,20 @@ const handlers: { [C in Channel]: Handler<C> } = {
       commitAnur: folder ? await commitsAnur(folder.path) : null,
       defaultAgent: appSettings.get().defaultAgent,
       autoApply: appSettings.get().autoApply,
+      name: await personName(folder?.path ?? homedir(), appSettings.get().name),
     };
   },
-  "settings:set": async ({ commitAnur, defaultAgent, autoApply }, { webContentsId }) => {
+  "settings:set": async ({ commitAnur, defaultAgent, autoApply, name }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
+    if (name !== undefined) {
+      await appSettings.set({ name: name.trim().slice(0, 80) || null });
+      // Every open folder's note follows, so others see the new name on their next look.
+      for (const id of windows.keys()) {
+        const f = folders.current(id);
+        if (f && device && f.mode === "writable")
+          await noteName(f.path, device, await personName(f.path, appSettings.get().name));
+      }
+    }
     if (defaultAgent !== undefined) await appSettings.set({ defaultAgent });
     if (autoApply !== undefined) await appSettings.set({ autoApply });
     if (commitAnur !== undefined && folder?.mode === "writable") {
@@ -645,6 +666,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
       commitAnur: folder ? await commitsAnur(folder.path) : null,
       defaultAgent: appSettings.get().defaultAgent,
       autoApply: appSettings.get().autoApply,
+      name: await personName(folder?.path ?? homedir(), appSettings.get().name),
     };
   },
   "thread:rename": async ({ thread, path: rel, text, title }, { webContentsId }) => {

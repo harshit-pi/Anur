@@ -1043,6 +1043,14 @@ export function Think({
             ) : (
               <span className="think-where quiet">its section is gone</span>
             )}
+            {thread.by ? (
+              <span className="think-where quiet think-started-by">
+                started by {thread.by}
+                {thread.startedAt
+                  ? ` on ${new Date(thread.startedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}`
+                  : ""}
+              </span>
+            ) : null}
           </div>
           {writable && docPath ? (
             <span className="think-top-actions">
@@ -1178,8 +1186,9 @@ export function Think({
                     }
                   />
                 ) : (
-                  <div key={i} className="think-message person">
-                    {item.text}
+                  <div key={i} className="think-message-wrap person">
+                    {item.by ? <div className="think-by">{item.by}</div> : null}
+                    <div className="think-message person">{item.text}</div>
                   </div>
                 )
               ) : item.kind === "tool" ? (
@@ -3023,7 +3032,13 @@ function ThreadList({
               <span className="think-thread-title">
                 <ThreadName thread={t} />
               </span>
-              {t.lastAt ? <span className="think-thread-when">{ago(t.lastAt)}</span> : null}
+              {t.by || t.lastAt ? (
+                <span className="think-thread-when">
+                  {t.by ? <span className="think-thread-by">{t.by}</span> : null}
+                  {t.by && t.lastAt ? ", " : ""}
+                  {t.lastAt ? ago(t.lastAt) : ""}
+                </span>
+              ) : null}
             </span>
             <span className="think-thread-last">
               {t.busy ? (

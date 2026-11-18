@@ -29,6 +29,7 @@ type MainSettings = {
   commitAnur: boolean | null;
   defaultAgent: AgentId;
   autoApply: boolean;
+  name: string;
 };
 
 function Switch({
@@ -482,6 +483,25 @@ export function Settings({
               <button type="button" className="settings-button" onClick={onOpenFolder}>
                 {folder ? "Open another folder…" : "Open a folder…"}
               </button>
+            </Row>
+            <Row
+              title="Your name"
+              detail="Shown on threads you start, to others who open a shared folder. Empty uses git's name, else your Mac account's."
+            >
+              <input
+                key={main?.name ?? ""}
+                className="settings-input"
+                aria-label="Your name"
+                defaultValue={main?.name ?? ""}
+                maxLength={80}
+                onBlur={(e) => {
+                  if (e.currentTarget.value.trim() !== (main?.name ?? ""))
+                    void anur.call("settings:set", { name: e.currentTarget.value }).then(setMain);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+              />
             </Row>
             <UpdateRows />
             <OpenerRow />
