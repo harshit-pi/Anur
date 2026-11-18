@@ -69,6 +69,8 @@ import { SkillCard } from "./regions/SkillCard.tsx";
 import { OpenerCard } from "./regions/OpenerCard.tsx";
 import { Tour } from "./regions/Tour.tsx";
 import { TOUR } from "./layout/tour.ts";
+import { TipBubble } from "./regions/TipBubble.tsx";
+import { TIP_EVENT, isTipId, offerTip, type TipOffer } from "./layout/tips.ts";
 import { MapView } from "./regions/MapView.tsx";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
@@ -103,6 +105,47 @@ export function App() {
   const [tourStep, setTourStep] = useState<number | null>(null);
   const [tourAsked, setTourAsked] = useState(0);
   const tourChecked = useRef(false);
+  /** The one-time tip on screen, which ones were shown, and whether the tour has had its turn. */
+  const [tip, setTip] = useState<TipOffer | null>(null);
+  const tips = useRef<{ seen: Set<string>; enabled: boolean } | null>(null);
+  const tourSeen = useRef(false);
+  const tipBusy = useRef(false);
+  tipBusy.current = tip !== null || tourStep !== null;
+  useEffect(() => {
+    void anur.call("tips:seen", {}).then((r) => {
+      tips.current = { seen: new Set(r.seen), enabled: r.enabled };
+    });
+    void anur.call("tour:status", {}).then((t) => {
+      if (!t.show) tourSeen.current = true;
+    });
+    const onTip = (e: Event) => {
+      const offer = (e as CustomEvent<TipOffer>).detail;
+      const t = tips.current;
+      if (!t?.enabled || !isTipId(offer.id) || t.seen.has(offer.id)) return;
+      // Tips wait for the tour, and show one at a time.
+      if (tipBusy.current || !tourSeen.current) return;
+      tipBusy.current = true;
+      setTip(offer);
+    };
+    window.addEventListener(TIP_EVENT, onTip);
+    return () => {
+      window.removeEventListener(TIP_EVENT, onTip);
+    };
+  }, []);
+  const tipDone = useCallback(() => {
+    setTip((t) => {
+      if (t) {
+        tips.current?.seen.add(t.id);
+        void anur.call("tips:done", { id: t.id });
+      }
+      return null;
+    });
+  }, []);
+  // A third tab open: say what tabs can do.
+  const tabCount = tabs.tabs.length;
+  useEffect(() => {
+    if (tabCount >= 3) offerTip("tabs", document.querySelector(".tab-bar .tabs"));
+  }, [tabCount]);
   const centerNow = useRef(centerView);
   centerNow.current = centerView;
   const sectionsNow = useRef(sections);
@@ -313,6 +356,10 @@ export function App() {
     const record = (step: FileStep) => {
       history.current.record(step);
       setHistoryTick((n) => n + 1);
+      // The first change in the files panel: say it can be undone.
+      setTimeout(() => {
+        offerTip("files-undo", document.querySelector(".left-sidebar .sidebar-head"));
+      }, 400);
     };
     /** Move, stopping at the first that fails; returns those done. */
     const doMoves = (moves: Move[]) =>
@@ -789,6 +836,7 @@ export function App() {
       });
   }, [tourStep]);
   const endTour = useCallback(() => {
+    tourSeen.current = true;
     setTourStep(null);
     setCenterView("page");
     void anur.call("tour:done", {});
@@ -1118,6 +1166,7 @@ export function App() {
           onEnd={endTour}
         />
       ) : null}
+      {tip ? <TipBubble tip={tip} onDone={tipDone} /> : null}
       {/* The offer cards wait until the tour is over. */}
       {tourStep === null ? (
         <>
