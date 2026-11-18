@@ -240,3 +240,14 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - A manifest declares `apiVersion`, the points, the MCP prefix, the surfaces and the folders. Every registration is checked against it, and an undeclared one fails the load and leaves nothing behind. Network and file access aren't enforced until a sandbox exists (Design - Extensions).
 - Plugins Anur ships are switched on per folder, remembered on this Mac, in Settings → Plugins. Context providers add labelled lines to a thread's bundle; MCP tools reach the agent through the session's MCP server.
 - Engineering is the first plugin, declared but empty until group 20. Core's own features move behind the API after the first week (group 27). Section sources and map layers are wired into the page and map when the engineering plugin first draws something.
+
+## Repos and parts (group 20, first part)
+
+- The scanner lives in a new package, `@anur/system`: headless Node, with no Electron, shared by the app, the pre-commit hook and CI. `@anur/core` stays free of the file system, as it says it is.
+- A repo is any folder with `.git`, at any depth. Its ID is the oldest root commit's hash, read from a committed `anur/repo.json` when present, so shallow clones and CI agree; otherwise from git, and written there with `--pin`. A shallow clone without the file says so and has no IDs.
+- Parts come from build files by rule: `package.json` (except a monorepo's root that only lists workspaces), `pyproject.toml`, `go.mod`, `Cargo.toml`, `serverless.yml`, and CDK stacks from the `cdk.json` app, in TypeScript or Python, across lines. A stack name built at run time is left out.
+- A part's ID is the repo's ID plus the declared name, never a path. A move keeps it; the same build file with a new name keeps it as a rename; two parts with one name add their folder. A known part not found again is orphaned, with the same name elsewhere suggested.
+- Failures are shown, never fatal: conflict markers, bad JSON, a nameless package. Two clones of one repo are shown once: the one named as on GitHub, else the shallowest path.
+- On the team's own `~/workspace`, 17 repos and 150 parts; the repos without parts are Amplify backends, scripts and docs, with no build file.
+- `anur-system scan <folder>` prints the system; `--json`, `--pin` and `--known <file>` are for the hook and CI.
+- The engineering plugin registers the system as a section source: repos as sections, parts beneath. Still to come in group 20: the system tab, where the model's proposed names are accepted and new parts show "unreviewed", and one watcher per repo.
