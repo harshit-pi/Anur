@@ -2208,25 +2208,25 @@ body.resizing * {
 }
 
 /* Options a thread offered: each a card, picked with Use this. */
-.think-options {
+.think-offers {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.think-option {
+.think-offer {
   padding: 10px 12px;
   border: 1px dashed var(--slate);
   border-radius: 8px;
   background: var(--paper);
 }
 
-.think-option.used {
+.think-offer.used {
   border: 1px solid var(--blue);
   box-shadow: 0 0 0 3px var(--blue-wash);
 }
 
-.think-option-head {
+.think-offer-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -2234,7 +2234,7 @@ body.resizing * {
   margin-bottom: 4px;
 }
 
-.think-option-text {
+.think-offer-text {
   max-height: 9em;
   overflow: hidden;
   color: var(--slate);
@@ -2244,19 +2244,19 @@ body.resizing * {
   mask-image: linear-gradient(to bottom, #000 75%, transparent);
 }
 
-.think-option:hover .think-option-text,
-.think-option.used .think-option-text {
+.think-offer:hover .think-offer-text,
+.think-offer.used .think-offer-text {
   max-height: none;
   mask-image: none;
 }
 
-.think-option-text p {
+.think-offer-text p {
   margin: 0 0 6px;
 }
 
-.think-option-actions {
+.think-offer-actions {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 12px;
   margin-top: 8px;
 }

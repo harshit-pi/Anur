@@ -534,18 +534,18 @@ export function Think({
                 {item.title}
               </div>
             ) : item.kind === "options" ? (
-              <div key={i} className="think-options" role="group" aria-label="Options">
+              <div key={i} className="think-offers" role="group" aria-label="Options">
                 {item.options.map((o) => (
-                  <div key={o.id} className={`think-option${item.used === o.id ? " used" : ""}`}>
-                    <div className="think-option-head">
+                  <div key={o.id} className={`think-offer${item.used === o.id ? " used" : ""}`}>
+                    <div className="think-offer-head">
                       <strong>{o.title}</strong>
                       {item.used === o.id ? <span className="quiet">In the doc</span> : null}
                     </div>
-                    <div className="think-option-text">
+                    <div className="think-offer-text">
                       <Markdown text={o.text} />
                     </div>
                     {writable && item.used !== o.id ? (
-                      <div className="think-option-actions">
+                      <div className="think-offer-actions">
                         <button
                           type="button"
                           className="think-button primary"
