@@ -3,7 +3,7 @@ import type { SectionTree } from "@anur/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { settled } from "./editor/pending-saves.ts";
-import { freeName } from "./layout/file-tree.ts";
+import { freeName, renamed } from "./layout/file-tree.ts";
 import type { FileActions } from "./regions/FileTree.tsx";
 import type { FileNotice } from "./regions/Regions.tsx";
 import { isViewable } from "./layout/file-tree.ts";
@@ -709,7 +709,10 @@ export function App() {
     };
   }, [sections, centerView, doc]);
   /** A section deleted on the map: its heading, text and subsections, as one undoable edit. */
-  /** A section renamed on the map: its heading line changes, or a title is written. */
+  /**
+   * A section renamed on the map: its heading line changes, or a title is
+   * written. The title's new name is the file's too, as in the files panel.
+   */
   const renameSection = useCallback(
     (index: number, name: string) => {
       const v = view.current;
@@ -719,18 +722,31 @@ export function App() {
       if (!s.headingRange) {
         // A doc with no title yet: the name becomes its first line.
         v.dispatch({ changes: { from: 0, insert: `# ${clean}\n\n` }, userEvent: "input.map" });
+      } else {
+        const line = v.state.doc.sliceString(s.headingRange.from, s.headingRange.to);
+        const m = /^(\s{0,3}#{1,6}[ \t]+)(.*?)([ \t]+#+[ \t]*)?$/.exec(line.replace(/\n$/, ""));
+        if (!m) return;
+        const from = s.headingRange.from + (m[1]?.length ?? 0);
+        v.dispatch({
+          changes: { from, to: from + (m[2]?.length ?? 0), insert: clean },
+          userEvent: "input.map",
+        });
+      }
+      if (index !== 0 || !selected || !fileActions || !folder) return;
+      const to = renamed(selected, clean.replace(/[*?"<>|#^[\]]/g, " "), false);
+      if (!to || to === selected) return;
+      const taken = folder.docs.some(
+        (d) => d.toLowerCase() === to.toLowerCase() && d.toLowerCase() !== selected.toLowerCase(),
+      );
+      if (taken) {
+        tell(
+          `A doc called “${to.split("/").pop() ?? to}” is already here, so the file keeps its name.`,
+        );
         return;
       }
-      const line = v.state.doc.sliceString(s.headingRange.from, s.headingRange.to);
-      const m = /^(\s{0,3}#{1,6}[ \t]+)(.*?)([ \t]+#+[ \t]*)?$/.exec(line.replace(/\n$/, ""));
-      if (!m) return;
-      const from = s.headingRange.from + (m[1]?.length ?? 0);
-      v.dispatch({
-        changes: { from, to: from + (m[2]?.length ?? 0), insert: clean },
-        userEvent: "input.map",
-      });
+      void fileActions.move([{ from: selected, to }]);
     },
-    [sections],
+    [sections, selected, fileActions, folder, tell],
   );
   const deleteSection = useCallback(
     (index: number) => {
