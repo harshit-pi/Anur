@@ -339,7 +339,7 @@
       "says_not_cheaper": true,
       "flats_27": false
     },
-    "wrong": 1,
+    "wrong": 0,
     "usage": {
       "input": 6,
       "cacheRead": 288950,

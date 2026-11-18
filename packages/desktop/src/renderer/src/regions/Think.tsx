@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { diffLines, type SectionNode, type SectionTree } from "@anur/core";
 import type {
   AgentSignIn,
@@ -11,6 +11,7 @@ import type {
 } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
+import { AGENT_SHORT, AgentMark } from "./AgentMark.tsx";
 import { useFeatures } from "../features.ts";
 import { formatTokens } from "../layout/tokens.ts";
 import { SectionEditor } from "../editor/section-editor.tsx";
@@ -339,26 +340,13 @@ function SizeMeter({
 function ContextRing({ tokens }: { tokens: { context: number; window: number | null } }) {
   if (!tokens.window) return null;
   const share = Math.min(1, tokens.context / tokens.window);
-  const r = 6;
-  const around = 2 * Math.PI * r;
+  // Words, not a ring: a ring beside the pickers read as something still loading.
   return (
     <span
-      className="think-ring"
-      role="img"
-      aria-label={`Context ${formatTokens(tokens.context)} of ${formatTokens(tokens.window)}`}
-      title={`Context ${formatTokens(tokens.context)} of ${formatTokens(tokens.window)} (${String(Math.round(share * 100))}%)`}
+      className="think-context"
+      title={`Context ${formatTokens(tokens.context)} of ${formatTokens(tokens.window)}`}
     >
-      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r={r} className="think-ring-track" />
-        <circle
-          cx="8"
-          cy="8"
-          r={r}
-          className="think-ring-fill"
-          strokeDasharray={`${String(around * share)} ${String(around)}`}
-          transform="rotate(-90 8 8)"
-        />
-      </svg>
+      {`${String(Math.round(share * 100))}% context`}
     </span>
   );
 }
@@ -471,17 +459,13 @@ function Composer({
       {attached.length > 0 ? (
         <ul className="think-attachments" aria-label="Attached">
           {attached.map((a) => (
-            <li key={a.path} className="think-chip" title={a.path}>
-              <span className="truncate">{a.name}</span>
-              <button
-                type="button"
-                aria-label={`Remove ${a.name}`}
-                onClick={() => {
+            <li key={a.path}>
+              <FileCard
+                path={a.path}
+                onRemove={() => {
                   onUnattach?.(a.path);
                 }}
-              >
-                ×
-              </button>
+              />
             </li>
           ))}
         </ul>
@@ -503,6 +487,10 @@ function Composer({
         disabled={disabled}
         onChange={(e) => {
           setText(e.target.value);
+          // Grows with what's typed, up to a point, instead of a resize handle.
+          const el = e.currentTarget;
+          el.style.height = "auto";
+          el.style.height = `${String(Math.min(el.scrollHeight, 220))}px`;
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -543,7 +531,7 @@ function Composer({
         ) : (
           <button
             type="button"
-            className="think-send"
+            className={`think-send${text.trim() && !disabled ? " ready" : ""}`}
             aria-label={sendLabel}
             title={`${sendLabel} (Enter)`}
             disabled={disabled || text.trim() === ""}
@@ -929,6 +917,24 @@ export function Think({
     });
   };
 
+  /** "Use in doc": a reply's text added at the end of its thread's section, ⌘Z to undo. */
+  const addToSection = (t: ThreadView, text: string) => {
+    const main = page();
+    const node = tree?.sections.find((x) => t.path && samePath(t.path, x.path));
+    if (!main || !node) {
+      setError("This thread's section is gone, so the reply has nowhere to go.");
+      return;
+    }
+    const at = node.ownRange.to;
+    const before = main.state.doc.sliceString(Math.max(0, at - 2), at);
+    const lead = before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+    main.dispatch({
+      changes: { from: at, insert: `${lead}${text.trim()}\n` },
+      userEvent: "input.use-reply",
+    });
+    main.focus();
+  };
+
   if (!docPath || !tree)
     return <p className="quiet">Threads on the section you're in show here.</p>;
   if (!section) return <p className="quiet">Put the cursor in a section to think about it.</p>;
@@ -961,18 +967,83 @@ export function Think({
 
   if (thread) {
     const asks = prompts.filter((p) => p.thread === thread.id);
+    // Who answered heads each reply: above its first step or its text, once per turn.
+    const folded = foldSteps(thread.items);
+    const whoBefore = new Set<number>();
+    let afterPerson = true;
+    for (const { item, i } of folded) {
+      const mine = item.kind === "message" && item.role === "person";
+      const theirs = item.kind === "tool" || (item.kind === "message" && item.role === "agent");
+      if (theirs && afterPerson) whoBefore.add(i);
+      if (mine) afterPerson = true;
+      else if (theirs) afterPerson = false;
+    }
     return (
       <div className={`think${dropOver ? " think-drop" : ""}`} {...dropProps()}>
-        <div className="think-top">
+        <div className="think-head">
           <button
             type="button"
             className="think-back"
+            aria-label="All threads"
+            title="All threads"
             onClick={() => {
               setOpen(null);
             }}
           >
-            ← All threads
+            ←
           </button>
+          <div className="think-head-main">
+            <h2
+              className="think-title"
+              // Click to rename: the name shows here, in the list and on the map.
+              contentEditable={writable ? "plaintext-only" : false}
+              suppressContentEditableWarning
+              spellCheck={false}
+              title={writable ? "Click to rename" : undefined}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+                if (e.key === "Escape") {
+                  e.currentTarget.textContent = thread.title;
+                  e.currentTarget.blur();
+                }
+              }}
+              onBlur={(e) => {
+                const name = e.currentTarget.textContent.replace(/\s+/g, " ").trim();
+                if (!name || !docPath) {
+                  e.currentTarget.textContent = thread.title;
+                  return;
+                }
+                if (name === thread.title) return;
+                setThreads((ts) => ts.map((t) => (t.id === thread.id ? { ...t, title: name } : t)));
+                void anur.call("thread:rename", {
+                  thread: thread.id,
+                  path: docPath,
+                  text: docText(),
+                  title: name,
+                });
+              }}
+            >
+              {thread.title}
+            </h2>
+            {thread.path ? (
+              <button
+                type="button"
+                className="think-where"
+                title="Show this section on the page"
+                onClick={() => {
+                  const i = tree.sections.findIndex((x) => samePath(thread.path, x.path));
+                  if (i >= 0) onJump(i);
+                }}
+              >
+                on {thread.path.at(-1)}
+              </button>
+            ) : (
+              <span className="think-where quiet">its section is gone</span>
+            )}
+          </div>
           {writable && docPath ? (
             <span className="think-top-actions">
               <button
@@ -1039,56 +1110,6 @@ export function Think({
             </button>
           </p>
         ) : null}
-        {thread.path ? (
-          <button
-            type="button"
-            className="think-where"
-            title="Show this section on the page"
-            onClick={() => {
-              const i = tree.sections.findIndex((x) => samePath(thread.path, x.path));
-              if (i >= 0) onJump(i);
-            }}
-          >
-            On {thread.path.at(-1)}
-          </button>
-        ) : (
-          <span className="think-where quiet">Its section is gone</span>
-        )}
-        <h2
-          className="think-title"
-          // Click to rename: the name shows here, in the list and on the map.
-          contentEditable={writable ? "plaintext-only" : false}
-          suppressContentEditableWarning
-          spellCheck={false}
-          title={writable ? "Click to rename" : undefined}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              e.currentTarget.blur();
-            }
-            if (e.key === "Escape") {
-              e.currentTarget.textContent = thread.title;
-              e.currentTarget.blur();
-            }
-          }}
-          onBlur={(e) => {
-            const name = e.currentTarget.textContent.replace(/\s+/g, " ").trim();
-            if (!name || !docPath) {
-              e.currentTarget.textContent = thread.title;
-              return;
-            }
-            if (name === thread.title) return;
-            setThreads((ts) => ts.map((t) => (t.id === thread.id ? { ...t, title: name } : t)));
-            void anur.call("thread:rename", {
-              thread: thread.id,
-              path: docPath,
-              text: docText(),
-              title: name,
-            });
-          }}
-        >
-          {thread.title}
-        </h2>
         {thread.tokens ? (
           <SizeMeter
             tokens={thread.tokens}
@@ -1106,286 +1127,314 @@ export function Think({
           />
         ) : null}
         <div className="think-chat" aria-live="polite">
-          {foldSteps(thread.items).map(({ item, i, steps }) =>
-            steps ? (
-              <StepsFold
-                key={`steps-${String(i)}`}
-                steps={steps}
-                running={thread.busy && i + steps.length === thread.items.length}
-              />
-            ) : item.kind === "message" ? (
-              <div key={i} className={`think-message-wrap ${item.role}`}>
-                <div className={`think-message ${item.role}`}>
-                  {item.role === "agent" ? <Markdown text={item.text} /> : item.text}
+          {folded.map(({ item, i, steps }) => (
+            <Fragment key={`e${String(i)}`}>
+              {whoBefore.has(i) ? (
+                <div className="think-who">
+                  <AgentMark agent={thread.agent} />
+                  {whoLabel(thread.agent, thread.options)}
                 </div>
-                {writable && !thread.busy && item.role === "agent" ? (
-                  <button
-                    type="button"
-                    className="think-branch"
-                    title="A new thread that knows this chat up to this reply, and nothing after it"
-                    onClick={() => {
-                      setBranch({
-                        thread: thread.id,
-                        upTo: i,
-                        title: thread.title,
-                        excerpt: item.text.replace(/\s+/g, " ").slice(0, 60),
-                      });
-                      const at = tree.sections.findIndex(
-                        (x) => thread.path && samePath(thread.path, x.path),
-                      );
-                      if (at >= 0) onJump(at);
-                      setOpen(null);
-                      requestAnimationFrame(() => {
-                        document.querySelector<HTMLTextAreaElement>(".think .think-input")?.focus();
-                      });
-                    }}
-                  >
-                    Branch from here
-                  </button>
-                ) : null}
-              </div>
-            ) : item.kind === "tool" ? (
-              <div key={i} className={`think-tool ${item.status}`} title={item.title}>
-                {toolLabel(item.title)}
-              </div>
-            ) : item.kind === "options" ? (
-              <div key={i} className="think-offers" role="group" aria-label="Options">
-                {item.within ? (
-                  <p className="think-offers-within quiet">
-                    Within{" "}
-                    {thread.items
-                      .flatMap((x) => (x.kind === "options" ? x.options : []))
-                      .find((o) => o.id === item.within)?.title ?? "an earlier option"}
-                  </p>
-                ) : null}
-                {item.options.map((o) => (
-                  <div
-                    key={o.id}
-                    className={`think-offer${item.used === o.id ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
-                  >
-                    <div className="think-offer-head">
-                      <strong>{o.title}</strong>
-                      {item.used === o.id ? (
-                        <span className="quiet">In the doc</span>
-                      ) : item.explored.includes(o.id) ? (
-                        <span className="quiet">Explored</span>
-                      ) : null}
-                    </div>
-                    <div className="think-offer-text">
-                      <Markdown text={o.text} />
-                    </div>
-                    {writable && item.used !== o.id ? (
-                      <div className="think-offer-actions">
-                        <button
-                          type="button"
-                          className="think-button primary"
-                          onClick={() => {
-                            useOption(thread, o, "replace");
-                          }}
-                        >
-                          Use this
-                        </button>
-                        <button
-                          type="button"
-                          className="think-more"
-                          onClick={() => {
-                            useOption(thread, o, "subsection");
-                          }}
-                        >
-                          Add as subsection
-                        </button>
-                        {item.explored.includes(o.id) ? null : (
+              ) : null}
+              {steps ? (
+                <StepsFold
+                  key={`steps-${String(i)}`}
+                  steps={steps}
+                  running={thread.busy && i + steps.length === thread.items.length}
+                />
+              ) : item.kind === "message" ? (
+                item.role === "agent" ? (
+                  <AgentReply
+                    key={i}
+                    text={item.text}
+                    who={null}
+                    onBranch={
+                      writable && !thread.busy
+                        ? () => {
+                            setBranch({
+                              thread: thread.id,
+                              upTo: i,
+                              title: thread.title,
+                              excerpt: item.text.replace(/\s+/g, " ").slice(0, 60),
+                            });
+                            const at = tree.sections.findIndex(
+                              (x) => thread.path && samePath(thread.path, x.path),
+                            );
+                            if (at >= 0) onJump(at);
+                            setOpen(null);
+                            requestAnimationFrame(() => {
+                              document
+                                .querySelector<HTMLTextAreaElement>(".think .think-input")
+                                ?.focus();
+                            });
+                          }
+                        : null
+                    }
+                    onUse={
+                      writable && !thread.busy && thread.path
+                        ? () => {
+                            addToSection(thread, item.text);
+                          }
+                        : null
+                    }
+                  />
+                ) : (
+                  <div key={i} className="think-message person">
+                    {item.text}
+                  </div>
+                )
+              ) : item.kind === "tool" ? (
+                <div key={i} className={`think-step ${item.status}`} title={item.title}>
+                  <span className="think-step-mark" aria-hidden="true">
+                    {item.status === "failed" ? "×" : item.status === "completed" ? "✓" : "●"}
+                  </span>
+                  {toolLabel(item.title)}
+                  {item.status === "completed" || item.status === "failed" ? "" : "…"}
+                </div>
+              ) : item.kind === "options" ? (
+                <div key={i} className="think-offers" role="group" aria-label="Options">
+                  {item.within ? (
+                    <p className="think-offers-within quiet">
+                      Within{" "}
+                      {thread.items
+                        .flatMap((x) => (x.kind === "options" ? x.options : []))
+                        .find((o) => o.id === item.within)?.title ?? "an earlier option"}
+                    </p>
+                  ) : null}
+                  {item.options.map((o) => (
+                    <div
+                      key={o.id}
+                      className={`think-offer${item.used === o.id ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
+                    >
+                      <div className="think-offer-head">
+                        <strong>{o.title}</strong>
+                        {item.used === o.id ? (
+                          <span className="quiet">In the doc</span>
+                        ) : item.explored.includes(o.id) ? (
+                          <span className="quiet">Explored</span>
+                        ) : null}
+                      </div>
+                      <div className="think-offer-text">
+                        <Markdown text={o.text} />
+                      </div>
+                      {writable && item.used !== o.id ? (
+                        <div className="think-offer-actions">
+                          <button
+                            type="button"
+                            className="think-button primary"
+                            onClick={() => {
+                              useOption(thread, o, "replace");
+                            }}
+                          >
+                            Use this
+                          </button>
                           <button
                             type="button"
                             className="think-more"
-                            disabled={thread.busy}
                             onClick={() => {
-                              setError(null);
-                              void anur
-                                .call("thread:explore-option", {
-                                  thread: thread.id,
-                                  path: docPath,
-                                  text: docText(),
-                                  option: o.id,
-                                })
-                                .then((r) => {
-                                  if (r.kind === "refused") setError(r.reason);
-                                });
+                              useOption(thread, o, "subsection");
                             }}
                           >
-                            Explore this
+                            Add as subsection
                           </button>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : item.kind === "auto-used" ? (
-              <div key={i} className="think-changed auto" role="status">
-                <span>
-                  {item.undone ? "Taken back: " : "Used as it landed: "}
-                  the edit to <strong>{item.sections.map((p) => p.at(-1) ?? "").join(", ")}</strong>
-                  {item.doc !== docPath ? ` in ${item.doc}` : ""}.
-                  {!item.undone && !item.undoable && item.doc === docPath
-                    ? " ⌘Z on the page takes it back."
-                    : ""}
-                </span>
-                {item.undoable ? (
+                          {item.explored.includes(o.id) ? null : (
+                            <button
+                              type="button"
+                              className="think-more"
+                              disabled={thread.busy}
+                              onClick={() => {
+                                setError(null);
+                                void anur
+                                  .call("thread:explore-option", {
+                                    thread: thread.id,
+                                    path: docPath,
+                                    text: docText(),
+                                    option: o.id,
+                                  })
+                                  .then((r) => {
+                                    if (r.kind === "refused") setError(r.reason);
+                                  });
+                              }}
+                            >
+                              Explore this
+                            </button>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : item.kind === "auto-used" ? (
+                <div key={i} className="think-changed auto" role="status">
+                  <span>
+                    {item.undone ? "Taken back: " : "Used as it landed: "}
+                    the edit to{" "}
+                    <strong>{item.sections.map((p) => p.at(-1) ?? "").join(", ")}</strong>
+                    {item.doc !== docPath ? ` in ${item.doc}` : ""}.
+                    {!item.undone && !item.undoable && item.doc === docPath
+                      ? " ⌘Z on the page takes it back."
+                      : ""}
+                  </span>
+                  {item.undoable ? (
+                    <button
+                      type="button"
+                      className="think-button"
+                      onClick={() => {
+                        void anur
+                          .call("thread:auto-undo", { thread: thread.id, id: item.id })
+                          .then((r) => {
+                            if (r.kind === "refused") setError(r.reason);
+                          });
+                      }}
+                    >
+                      Undo
+                    </button>
+                  ) : null}
+                </div>
+              ) : item.kind === "changed" ? (
+                <div key={i} className="think-changed" role="status">
+                  <span>
+                    <strong>{item.path}</strong>{" "}
+                    {item.reverted
+                      ? "changed while this thread was running, and was reverted."
+                      : "changed while this thread was running, by something other than Anur."}
+                  </span>
+                  {item.canRevert ? (
+                    <button
+                      type="button"
+                      className="think-button"
+                      onClick={() => {
+                        void anur
+                          .call("thread:revert", { thread: thread.id, id: item.id })
+                          .then((r) => {
+                            if (r.kind === "refused") setError(r.reason);
+                          });
+                      }}
+                    >
+                      Revert
+                    </button>
+                  ) : null}
+                </div>
+              ) : item.kind === "check" ? (
+                <CheckCard
+                  key={i}
+                  claims={item.claims}
+                  corrected={item.corrected}
+                  onKeep={
+                    writable
+                      ? (claim, source) => {
+                          void anur.call("finding:decide", {
+                            thread: thread.id,
+                            add: { claim, source },
+                          });
+                        }
+                      : null
+                  }
+                />
+              ) : item.kind === "finding" ? (
+                <FindingCard key={i} item={item} thread={thread.id} writable={writable} />
+              ) : item.kind === "used-all" ? (
+                <div key={i} className="think-changed auto" role="status">
+                  <span>
+                    {item.undone ? "Taken back: " : "Used all: "}
+                    {item.docs
+                      .map(
+                        (d) =>
+                          `${d.doc.replace(/\.md$/i, "")} (${d.sections.map((p) => p.at(-1) ?? "").join(", ")})`,
+                      )
+                      .join("; ")}
+                    .{item.kept.length > 0 ? ` Kept as proposals: ${item.kept.join(", ")}.` : ""}
+                  </span>
+                  {item.undoable ? (
+                    <button
+                      type="button"
+                      className="think-button"
+                      onClick={() => {
+                        void anur
+                          .call("thread:undo-all", {
+                            thread: thread.id,
+                            id: item.id,
+                            open: docPath ? { path: docPath, text: docText() } : null,
+                          })
+                          .then((r) => {
+                            if (r.kind === "refused") setError(r.reason);
+                            else if (r.left.length > 0)
+                              setError(
+                                `Couldn't take back ${r.left.join(", ")}: it changed where the edits did. Use its History.`,
+                              );
+                          });
+                      }}
+                    >
+                      Undo
+                    </button>
+                  ) : null}
+                </div>
+              ) : item.kind === "proposed" ? (
+                <div key={i} className="think-changed auto" role="status">
+                  <span>
+                    Proposed an edit to{" "}
+                    <strong>{item.sections.map((p) => p.at(-1) ?? "").join(", ")}</strong> in{" "}
+                    {item.doc}, shown on its page.
+                  </span>
                   <button
                     type="button"
                     className="think-button"
-                    onClick={() => {
-                      void anur
-                        .call("thread:auto-undo", { thread: thread.id, id: item.id })
-                        .then((r) => {
-                          if (r.kind === "refused") setError(r.reason);
-                        });
-                    }}
-                  >
-                    Undo
-                  </button>
-                ) : null}
-              </div>
-            ) : item.kind === "changed" ? (
-              <div key={i} className="think-changed" role="status">
-                <span>
-                  <strong>{item.path}</strong>{" "}
-                  {item.reverted
-                    ? "changed while this thread was running, and was reverted."
-                    : "changed while this thread was running, by something other than Anur."}
-                </span>
-                {item.canRevert ? (
-                  <button
-                    type="button"
-                    className="think-button"
-                    onClick={() => {
-                      void anur
-                        .call("thread:revert", { thread: thread.id, id: item.id })
-                        .then((r) => {
-                          if (r.kind === "refused") setError(r.reason);
-                        });
-                    }}
-                  >
-                    Revert
-                  </button>
-                ) : null}
-              </div>
-            ) : item.kind === "check" ? (
-              <CheckCard
-                key={i}
-                claims={item.claims}
-                corrected={item.corrected}
-                onKeep={
-                  writable
-                    ? (claim, source) => {
-                        void anur.call("finding:decide", {
-                          thread: thread.id,
-                          add: { claim, source },
-                        });
-                      }
-                    : null
-                }
-              />
-            ) : item.kind === "finding" ? (
-              <FindingCard key={i} item={item} thread={thread.id} writable={writable} />
-            ) : item.kind === "used-all" ? (
-              <div key={i} className="think-changed auto" role="status">
-                <span>
-                  {item.undone ? "Taken back: " : "Used all: "}
-                  {item.docs
-                    .map(
-                      (d) =>
-                        `${d.doc.replace(/\.md$/i, "")} (${d.sections.map((p) => p.at(-1) ?? "").join(", ")})`,
-                    )
-                    .join("; ")}
-                  .{item.kept.length > 0 ? ` Kept as proposals: ${item.kept.join(", ")}.` : ""}
-                </span>
-                {item.undoable ? (
-                  <button
-                    type="button"
-                    className="think-button"
-                    onClick={() => {
-                      void anur
-                        .call("thread:undo-all", {
-                          thread: thread.id,
-                          id: item.id,
-                          open: docPath ? { path: docPath, text: docText() } : null,
-                        })
-                        .then((r) => {
-                          if (r.kind === "refused") setError(r.reason);
-                          else if (r.left.length > 0)
-                            setError(
-                              `Couldn't take back ${r.left.join(", ")}: it changed where the edits did. Use its History.`,
-                            );
-                        });
-                    }}
-                  >
-                    Undo
-                  </button>
-                ) : null}
-              </div>
-            ) : item.kind === "proposed" ? (
-              <div key={i} className="think-changed auto" role="status">
-                <span>
-                  Proposed an edit to{" "}
-                  <strong>{item.sections.map((p) => p.at(-1) ?? "").join(", ")}</strong> in{" "}
-                  {item.doc}, shown on its page.
-                </span>
-                <button
-                  type="button"
-                  className="think-button"
-                  onClick={() => {
-                    window.dispatchEvent(
-                      new CustomEvent("anur:open-path", { detail: { path: item.doc } }),
-                    );
-                  }}
-                >
-                  Open
-                </button>
-              </div>
-            ) : item.kind === "created" ? (
-              <div key={i} className="think-changed auto" role="status">
-                <span>
-                  {item.undone ? "Made, then taken back: " : "Made "}
-                  <button
-                    type="button"
-                    className="think-link"
                     onClick={() => {
                       window.dispatchEvent(
                         new CustomEvent("anur:open-path", { detail: { path: item.doc } }),
                       );
                     }}
                   >
-                    {item.doc}
+                    Open
                   </button>
-                </span>
-                {item.undoable ? (
-                  <button
-                    type="button"
-                    className="think-button"
-                    onClick={() => {
-                      void anur
-                        .call("thread:undo-created", { thread: thread.id, id: item.id })
-                        .then((r) => {
-                          if (r.kind === "refused") setError(r.reason);
-                        });
+                </div>
+              ) : item.kind === "created" ? (
+                <div key={i} className="think-changed auto" role="status">
+                  <span>
+                    {item.undone ? "Made, then taken back: " : "Made "}
+                    <button
+                      type="button"
+                      className="think-link"
+                      onClick={() => {
+                        window.dispatchEvent(
+                          new CustomEvent("anur:open-path", { detail: { path: item.doc } }),
+                        );
+                      }}
+                    >
+                      {item.doc}
+                    </button>
+                  </span>
+                  {item.undoable ? (
+                    <button
+                      type="button"
+                      className="think-button"
+                      onClick={() => {
+                        void anur
+                          .call("thread:undo-created", { thread: thread.id, id: item.id })
+                          .then((r) => {
+                            if (r.kind === "refused") setError(r.reason);
+                          });
+                      }}
+                    >
+                      Undo
+                    </button>
+                  ) : null}
+                </div>
+              ) : item.kind === "attached" ? (
+                <div key={i} className="think-sent-attachment">
+                  <FileCard
+                    path={item.label}
+                    onOpen={() => {
+                      openFile(item.label);
                     }}
-                  >
-                    Undo
-                  </button>
-                ) : null}
-              </div>
-            ) : item.kind === "attached" ? (
-              <div key={i} className="think-sent-attachment" title={item.label}>
-                <span className="truncate">{item.label.split("/").pop()}</span>
-              </div>
-            ) : (
-              <div key={i} className="think-error" role="alert">
-                {item.text}
-              </div>
-            ),
-          )}
+                  />
+                </div>
+              ) : (
+                <div key={i} className="think-error" role="alert">
+                  {item.text}
+                </div>
+              )}
+            </Fragment>
+          ))}
           {thread.busy && thread.items.at(-1)?.kind !== "message" && asks.length === 0 ? (
             <Working since={thread.busySince ?? null} />
           ) : null}
@@ -1458,12 +1507,6 @@ export function Think({
               />
             ))
           : null}
-        {thread.items.length > 0 && thread.options.length === 0 && !thread.busy ? (
-          <p className="quiet think-agent-note">
-            The next message starts on {AGENTS[thread.agent].name}, from this section's text and the
-            chat so far.
-          </p>
-        ) : null}
         {signedOut(thread.agent) ?? (
           <Composer
             placeholder="Reply in this thread"
@@ -2087,6 +2130,147 @@ type ToolItem = Extract<ThreadItem, { kind: "tool" }>;
  * The thread's items, with each run of two or more tool calls gathered into
  * one fold, as Claude's apps show them: the steps are there, a click away.
  */
+/** "Claude · Opus 5.5": the agent, and its model when the session has said. */
+function whoLabel(agent: AgentId, options: SessionOption[]): string {
+  const model = options.find((o) => o.id === "model");
+  const name = model?.choices.find((c) => c.value === model.current)?.name;
+  return name ? `${AGENT_SHORT[agent]} · ${name}` : AGENT_SHORT[agent];
+}
+
+/** Open a file a thread used: a doc or an image in Anur, anything else in its own app. */
+function openFile(rel: string) {
+  if (/\.(md|markdown)$/i.test(rel) || /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/i.test(rel))
+    window.dispatchEvent(new CustomEvent("anur:open-path", { detail: { path: rel } }));
+  else void anur.call("doc:reveal", { path: rel, how: "default-app" });
+}
+
+/** A file as a card: its type, its name; a folder says so (10.4). */
+function FileCard({
+  path,
+  onOpen,
+  onRemove,
+}: {
+  path: string;
+  onOpen?: () => void;
+  onRemove?: () => void;
+}) {
+  const name = path.split("/").pop() ?? path;
+  const ext = /\.([a-z0-9]{1,5})$/i.exec(name)?.[1]?.toUpperCase() ?? "";
+  return (
+    <span className="file-card" title={path}>
+      <span className={`file-card-type${ext ? "" : " folder"}`} aria-hidden="true">
+        {ext || (
+          <svg width="14" height="14" viewBox="0 0 16 16">
+            <path
+              d="M1.75 4.25a1 1 0 0 1 1-1h3.1l1.4 1.5h5.99a1 1 0 0 1 1 1v6.5a1 1 0 0 1-1 1H2.75a1 1 0 0 1-1-1z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+            />
+          </svg>
+        )}
+      </span>
+      {onOpen ? (
+        <button type="button" className="file-card-name truncate" onClick={onOpen}>
+          {name}
+        </button>
+      ) : (
+        <span className="file-card-name truncate">{name}</span>
+      )}
+      {onRemove ? (
+        <button
+          type="button"
+          className="file-card-x"
+          aria-label={`Remove ${name}`}
+          onClick={onRemove}
+        >
+          ×
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
+/** Past this, a reply folds, with Show all. */
+const LONG_REPLY = 1400;
+
+/** An agent's reply: who answered (on the first of a turn), the text, and its actions on hover. */
+function AgentReply({
+  text,
+  who,
+  onBranch,
+  onUse,
+}: {
+  text: string;
+  who: { agent: AgentId; label: string } | null;
+  onBranch: (() => void) | null;
+  onUse: (() => void) | null;
+}) {
+  const long = text.length > LONG_REPLY;
+  const [all, setAll] = useState(false);
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="think-reply">
+      {who ? (
+        <div className="think-who">
+          <AgentMark agent={who.agent} />
+          {who.label}
+        </div>
+      ) : null}
+      <div className={`think-message agent${long && !all ? " folded" : ""}`}>
+        <Markdown text={text} />
+      </div>
+      {long ? (
+        <button
+          type="button"
+          className="think-showall"
+          onClick={() => {
+            setAll((x) => !x);
+          }}
+        >
+          {all ? "Show less" : "Show all"}
+        </button>
+      ) : null}
+      <div className="think-reply-actions">
+        <button
+          type="button"
+          onClick={() => {
+            void anur.call("clipboard:write", { text }).then(() => {
+              setCopied(true);
+              setTimeout(() => {
+                setCopied(false);
+              }, 1500);
+            });
+          }}
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+        {onBranch ? (
+          <button
+            type="button"
+            title="A new thread that knows this chat up to this reply, and nothing after it"
+            onClick={onBranch}
+          >
+            Branch from here
+          </button>
+        ) : null}
+        {onUse ? (
+          <button
+            type="button"
+            title="Add this reply at the end of the thread's section; ⌘Z takes it back"
+            onClick={onUse}
+          >
+            Use in doc
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Anur's own bookkeeping, never shown as the agent's work. */
+const HOUSEKEEPING = /^(mcp__anur__anur_(name_thread|list_inputs)|ToolSearch)\b/;
+
 function foldSteps(
   items: ThreadItem[],
 ): { item: ThreadItem; i: number; steps: ToolItem[] | null }[] {
@@ -2100,6 +2284,7 @@ function foldSteps(
     run = [];
   };
   items.forEach((item, i) => {
+    if (item.kind === "tool" && HOUSEKEEPING.test(item.title)) return;
     if (item.kind === "tool") {
       if (run.length === 0) start = i;
       run.push(item);
@@ -2399,7 +2584,9 @@ function AgentPicker({
 }) {
   return (
     <label className="think-option">
-      <span className="think-pick">{AGENTS[value].name}</span>
+      <span className="think-pick" title={AGENTS[value].name}>
+        {AGENT_SHORT[value]}
+      </span>
       <select
         aria-label="Agent"
         value={value}
@@ -2435,10 +2622,8 @@ function GroupedThreads({
   stateOf: (t: ThreadView) => ThreadState;
   onOpen: (id: string) => void;
 }) {
-  const of = (s: ThreadState) => threads.filter((t) => stateOf(t) === s);
-  const needs = of("needs-you");
-  const running = of("running");
-  const done = of("done");
+  const needs = threads.filter((t) => stateOf(t) === "needs-you");
+  const rest = threads.filter((t) => stateOf(t) !== "needs-you");
   return (
     <div className="think-groups">
       {needs.length > 0 ? (
@@ -2450,20 +2635,25 @@ function GroupedThreads({
           <ThreadList threads={needs} onOpen={onOpen} />
         </>
       ) : null}
-      {running.length > 0 ? (
-        <>
-          <h3 className="think-subhead">Running ({String(running.length)})</h3>
-          <ThreadList threads={running} onOpen={onOpen} />
-        </>
-      ) : null}
-      {done.length > 0 ? (
-        <details className="think-done" open={needs.length === 0 && running.length === 0}>
-          <summary className="think-subhead">Done ({String(done.length)})</summary>
-          <ThreadList threads={done} onOpen={onOpen} />
-        </details>
-      ) : null}
+      <ThreadList threads={withBranches(rest)} onOpen={onOpen} />
     </div>
   );
+}
+
+/** Newest first, each branch right under the thread it came from (10.5). */
+function withBranches(threads: ThreadView[]): ThreadView[] {
+  const newest = [...threads].sort((a, b) => (b.lastAt ?? "").localeCompare(a.lastAt ?? ""));
+  const ids = new Set(newest.map((t) => t.id));
+  const out: ThreadView[] = [];
+  const place = (t: ThreadView) => {
+    out.push(t);
+    for (const b of newest) if (b.branchedFrom?.thread === t.id) place(b);
+  };
+  for (const t of newest) {
+    const from = t.branchedFrom?.thread;
+    if (!from || !ids.has(from)) place(t);
+  }
+  return out;
 }
 
 /** Threads as buttons: their question, where they are, and how far they've got. */
@@ -2521,6 +2711,16 @@ function versusNow(
   }
   while (bi < b.length) out.push({ kind: "same", text: b[bi++] ?? "" });
   return out;
+}
+
+/** "4m", "2h", "Yesterday", "14 Nov": short, for a thread card. */
+function ago(at: string): string {
+  const ms = Date.now() - new Date(at).getTime();
+  if (ms < 60_000) return "now";
+  if (ms < 3_600_000) return `${String(Math.round(ms / 60_000))}m`;
+  if (ms < 86_400_000) return `${String(Math.round(ms / 3_600_000))}h`;
+  if (ms < 2 * 86_400_000) return "Yesterday";
+  return new Date(at).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
 /** "3 min ago", "2 h ago", "14 Nov". */
@@ -2809,7 +3009,7 @@ function ThreadList({
         <li key={t.id}>
           <button
             type="button"
-            className="think-thread"
+            className={`think-thread${t.branchedFrom && threads.some((x) => x.id === t.branchedFrom?.thread) ? " branch" : ""}`}
             onClick={() => {
               onOpen(t.id);
             }}
@@ -2819,15 +3019,26 @@ function ThreadList({
                 {t.path ? t.path.at(-1) : "A section that's gone"}
               </span>
             ) : null}
-            <span className="think-thread-title">
-              <ThreadName thread={t} />
+            <span className="think-thread-top">
+              <span className="think-thread-title">
+                <ThreadName thread={t} />
+              </span>
+              {t.lastAt ? <span className="think-thread-when">{ago(t.lastAt)}</span> : null}
             </span>
-            <span className="quiet">
-              {t.busy
-                ? "Replying…"
-                : `${countOf(t.items.filter((i) => i.kind === "message").length, "message")}${
-                    t.tokens ? `, ${formatTokens(t.tokens.used)} tokens` : ""
-                  }`}
+            <span className="think-thread-last">
+              {t.busy ? (
+                <>
+                  <span className="think-running-dot" aria-hidden="true" />
+                  Running…
+                </>
+              ) : (
+                (t.lastReply ?? "No reply yet")
+              )}
+            </span>
+            <span className="think-thread-meta">
+              {`${countOf(t.items.filter((i) => i.kind === "message").length, "message")}${
+                t.tokens ? ` · ${formatTokens(t.tokens.used)} tokens` : ""
+              }`}
             </span>
           </button>
         </li>

@@ -196,6 +196,12 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - Cost told them apart: Anur sent the whole doc in every bundle, about 153k weighted tokens a task against Claude Code's 65k. With the rest of a doc sent in full only up to about 15k tokens (`DOC_FULL_MAX`), and as an outline past that, Anur scored 1.00 at 62k, with the fewest steps.
 - 16.3 (inputs given in full) is dropped: the eval shows the agent reads what it needs, and more in the bundle costs more for nothing.
 
+## The long-chat eval
+
+- One Claude Code chat worked through 40 tasks across the decoy docs (about 790k tokens of context by the end), then each target task ran three times in a fork of it.
+- Quality held: 0.96, no stale facts, one miss (a correction left out). Cost did not: 156k weighted tokens a task against Anur's 62k, as every step re-reads the afternoon's context. Anur's measured edge is cost and speed in long sessions, not fewer mistakes.
+- The grader no longer counts quoting a doc's old figure, to correct it, as using a stale fact.
+
 ## Orphans, closing and Clean up (group 11)
 
 - A section whose heading is gone keeps its threads and history under Orphaned in Think, with the live section most like it suggested by its last text and heading. Reattach moves its threads and history there; Delete removes its threads, their previews, its inputs and its history at once, after a confirm. Only orphans with something behind them are listed.
