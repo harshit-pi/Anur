@@ -3002,62 +3002,6 @@ body.resizing * {
   outline-offset: 2px;
 }
 
-/* A one-time tip: a small dark note beside what it's about. */
-.tip-bubble {
-  position: fixed;
-  z-index: 150;
-  width: 260px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--ink);
-  color: var(--sheet);
-  box-shadow: 0 8px 24px var(--shadow);
-  font: 13px/1.45 var(--font-ui);
-  animation: tip-in 0.18s ease-out;
-}
-
-.tip-bubble::before {
-  content: "";
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  background: var(--ink);
-  transform: rotate(45deg);
-}
-
-.tip-bubble.right::before {
-  left: -5px;
-  top: 17px;
-}
-
-.tip-bubble.below::before {
-  left: 16px;
-  top: -5px;
-}
-
-.tip-bubble strong {
-  display: block;
-  margin-bottom: 2px;
-}
-
-.tip-got {
-  display: block;
-  margin-top: 6px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--blue-wash);
-  font: 600 13px var(--font-ui);
-  cursor: pointer;
-}
-
-@keyframes tip-in {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-}
-
 /* One agent's own settings, under its name. */
 .settings-group {
   margin-top: 22px;

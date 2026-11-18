@@ -152,13 +152,6 @@ void anurSocket.start().catch((e: unknown) => {
 });
 /** Anur in the person's Claude Code (group 6); set up once the app is ready. */
 let claudeSkill: ClaudeSkill | null = null;
-/** The one-time tips already shown on this Mac, kept in app support. */
-const tipsFile = () => path.join(app.getPath("userData"), "tips.json");
-const readTipsSeen = () =>
-  readFile(tipsFile(), "utf8").then(
-    (t) => (JSON.parse(t) as { seen?: string[] }).seen ?? [],
-    () => [],
-  );
 /** Whether the person turned down making Anur the opener for Markdown files. */
 const openerOffer = () => new OpenerOffer(app.getPath("userData"));
 
@@ -933,17 +926,6 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.removeInput(rel, text, thread, input) : false };
-  },
-  "tips:seen": async () => ({
-    seen: await readTipsSeen(),
-    // Checks don't see tips unless they ask, so other checks' screenshots stay clean.
-    enabled: !isCheck || !!process.env.ANUR_CHECK_TIPS,
-  }),
-  "tips:done": async ({ id }) => {
-    const seen = new Set(await readTipsSeen());
-    seen.add(id);
-    await writeFile(tipsFile(), JSON.stringify({ seen: [...seen] }));
-    return { ok: true };
   },
   "tour:status": async () => {
     // Checks don't see it unless they ask, so other checks' screenshots stay clean.
