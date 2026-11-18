@@ -150,3 +150,10 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - A run of two or more tool calls shows as one line ("▸ 7 steps · Edit working copy of Launch.md") that opens to list them. Failures are counted on that line; a doc edit Anur sent to the working copy isn't one.
 - While a turn runs, the line under the steps says what it's doing now: "Working for 1 min 12 s · Write pitch.md".
 - What the agent writes before a step is saved as its own message, where it was written, so a reloaded thread reads as it ran: a note, its steps, the next note, the report.
+
+## Links as context (group 8)
+
+- A link index in main parses every doc's wiki links, by modified time, so a doc is parsed again only when it changes; the open doc's links come from its page. Docs still in iCloud are never read. (The design put this in an index process; main is enough at today's folder sizes.)
+- A thread's bundle carries the sections its section links to in other docs, one link deep: a heading link brings that section with its subsections, a doc link brings the doc. What doesn't fit the budget left after the doc is named with its path; links that go nowhere are named as broken. Links within the doc aren't repeated: the bundle has the doc.
+- Think lists a section's links ("A new thread here reads these too") and the sections that link to it, each opening where it is. `anur_links` gives threads and terminal agents the same, as paths.
+- A link to a missing doc is faded on the page and in Think, as in Obsidian. On the map, a link to another doc's section is a small box under its section that opens it.

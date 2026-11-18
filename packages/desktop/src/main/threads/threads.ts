@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { SnapshotStore } from "../../vault/snapshot-store.ts";
 import { classify } from "./inputs.ts";
+import { LinkIndex } from "../folder/link-index.ts";
 import { actionPrompt, actionTitle, type Purpose } from "./actions.ts";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { watch, type FSWatcher } from "node:fs";
@@ -8,6 +9,8 @@ import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
+  resolveHeading,
+  buildSectionTree,
   ANUR_DIR,
   ThreadLine,
   anurPaths,
@@ -125,6 +128,11 @@ type Live = {
   merged: Map<string, string>;
   /** Docs this thread made (15.6): each one's undo id, revised in place while it's as made. */
   created?: Map<string, string>;
+  /** The sections this thread's section links to in other docs, for its bundle (group 8). */
+  linked?: {
+    linked: { label: string; path: string; text: string }[];
+    broken: string[];
+  };
   /** Files this thread wrote, as absolute paths: reading them back isn't an input. */
   made?: Set<string>;
   /** Other docs this thread proposed edits to, with the sections last said. */
@@ -688,6 +696,7 @@ export class Threads {
     const gone = (live.proposed ?? []).filter((p) => !still.includes(p));
     live.waiting = live.proposed?.length ? { still, gone } : null;
     live.carried = await this.carriedFor(at, start.section, thread);
+    live.linked = await this.linkedFor(at, start.section, rel, text);
     // An embedded base reaches the agent as its table, not as the embed line (4.11).
     live.embeds = new Map();
     for (const target of new Set(embedTargets(text).filter((t) => /\.base(#|$)/i.test(t)))) {
@@ -747,6 +756,8 @@ export class Threads {
       budget: budgetFor(live.context?.size ?? live.window ?? null),
       inputs: live.carried ?? [],
       embeds: live.embeds ?? new Map(),
+      linked: live.linked?.linked ?? [],
+      broken: live.linked?.broken ?? [],
     }).markdown;
     const parts: string[] = [];
     if (rebuildFrom) {
@@ -1330,6 +1341,71 @@ export class Threads {
     return [...latest.values()];
   }
 
+  /** The folder's links, parsed once per file change (group 8). */
+  private get links(): LinkIndex {
+    this.linkIndex ??= new LinkIndex(this.d.folder);
+    return this.linkIndex;
+  }
+  private linkIndex: LinkIndex | null = null;
+
+  /**
+   * What a thread's section links to in other docs, one link deep (8.2):
+   * each linked section's text, or a whole doc's, labelled with its file;
+   * and the links that go nowhere. Links within the doc aren't here: the
+   * bundle carries the doc itself.
+   */
+  async linkedFor(
+    at: Located,
+    section: SectionId,
+    rel: string,
+    text: string,
+  ): Promise<{ linked: { label: string; path: string; text: string }[]; broken: string[] }> {
+    const index = at.ids.indexOf(section);
+    const node = at.tree.sections[index];
+    if (!node) return { linked: [], broken: [] };
+    const out = await this.links.linksOut(rel, node.path, text);
+    const linked: { label: string; path: string; text: string }[] = [];
+    const broken: string[] = [];
+    const seen = new Set<string>();
+    for (const l of out) {
+      if (l.doc === rel) continue;
+      const key = `${l.doc ?? ""}#${l.heading ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (l.doc === null) {
+        broken.push(l.written);
+        continue;
+      }
+      const body = await readFile(path.join(this.d.folder, l.doc), "utf8").catch(() => null);
+      if (body === null) continue;
+      const tree = buildSectionTree(body, { fileName: path.basename(l.doc) });
+      if (l.heading === null) {
+        const from = tree.frontmatter ? tree.frontmatter.to : 0;
+        linked.push({ label: l.doc, path: l.doc, text: body.slice(from).trim() });
+        continue;
+      }
+      const hit = resolveHeading(tree.sections, l.heading);
+      const target = hit === null ? undefined : tree.sections[hit];
+      if (!target) {
+        broken.push(l.written);
+        continue;
+      }
+      linked.push({
+        label: `${l.doc} › ${target.path.slice(1).join(" › ") || target.path.join(" › ")}`,
+        path: l.doc,
+        text: body.slice(target.subtreeRange.from, target.subtreeRange.to).trim(),
+      });
+    }
+    return { linked, broken };
+  }
+
+  /** A section's links out and in, for Think and `anur_links` (8.3, 8.4). */
+  async linksAround(rel: string, text: string, sectionPath: string[]) {
+    const out = await this.links.linksOut(rel, sectionPath, text);
+    const into = await this.links.linksIn(rel, sectionPath);
+    return { out, into };
+  }
+
   /** The inputs new threads on a section receive, for Think's list (4.4). */
   async listInputs(rel: string, text: string, sectionIndex: number, sectionPath: string[]) {
     const at = await this.d.locate(rel, text);
@@ -1905,6 +1981,66 @@ export class Threads {
     return { kind: "undone" };
   }
 
+  /**
+   * anur_links (8.4): where a section's links go, and which sections link to
+   * it, across the folder; paths only, never text. Broken links are marked.
+   */
+  private async linksTool(thread: string, args: unknown): Promise<ToolAnswer> {
+    const live = this.live.get(thread);
+    if (!live) return { error: "This thread isn't open in Anur right now." };
+    const a = (args ?? {}) as { section?: unknown; doc?: unknown };
+    const rel =
+      typeof a.doc === "string" && a.doc.trim() ? a.doc.trim().replace(/^\.?\//, "") : live.rel;
+    const text =
+      rel === live.rel
+        ? live.docText
+        : await readFile(path.join(this.d.folder, rel), "utf8").catch(() => null);
+    if (text === null || !/\.md$/i.test(rel))
+      return { error: `There's no doc ${rel} in this folder.` };
+    let own = 0;
+    if (!(typeof a.section === "string" && a.section.trim())) {
+      // This thread's own section.
+      const at = await this.d.locate(live.rel, live.docText);
+      const start = (await this.linesOf(live.doc, thread)).find((l) => l.kind === "thread");
+      own = Math.max(0, at && start?.kind === "thread" ? at.ids.indexOf(start.section) : 0);
+    }
+    return this.linksReport(rel, text, typeof a.section === "string" ? a.section : null, own);
+  }
+
+  /** A section's links in and out as text, for `anur_links` in a thread or a terminal. */
+  async linksReport(
+    rel: string,
+    text: string,
+    section: string | null,
+    fallback = 0,
+  ): Promise<ToolAnswer> {
+    const tree = buildSectionTree(text, { fileName: path.basename(rel) });
+    let index: number | null = fallback;
+    if (section?.trim()) {
+      index = resolveHeading(tree.sections, section.split(/\s*>\s*/).join("#"));
+      if (index === null) return { error: `No section "${section}" in ${rel}.` };
+    }
+    const node = tree.sections[index];
+    if (!node) return { error: "That section is gone." };
+    const { out, into } = await this.linksAround(rel, text, node.path);
+    const where = (doc: string, p: readonly string[]) =>
+      p.length > 1 ? `${doc} › ${p.slice(1).join(" › ")}` : doc;
+    const lines = [
+      `Links from ${where(rel, node.path)} and its subsections:`,
+      ...(out.length === 0
+        ? ["- none"]
+        : out.map((l) =>
+            l.doc === null
+              ? `- [[${l.written}]]: broken, no such doc`
+              : `- ${l.doc}${l.heading ? ` › ${l.heading.split("#").join(" › ")}` : ""}${l.embed ? " (embedded)" : ""}`,
+          )),
+      "",
+      `Links to it from elsewhere:`,
+      ...(into.length === 0 ? ["- none"] : into.map((l) => `- ${where(l.from.doc, l.from.path)}`)),
+    ];
+    return { text: lines.join("\n") };
+  }
+
   /** One of Anur's MCP tools, called by this thread's agent. */
   private async tool(thread: string, tool: string, args: unknown): Promise<ToolAnswer> {
     if (tool === "anur_offer_options") return this.offerOptions(thread, args);
@@ -1912,6 +2048,7 @@ export class Threads {
     if (tool === "anur_name_thread") return this.nameThreadTool(thread, args);
     if (tool === "anur_report_check") return this.reportCheckTool(thread, args);
     if (tool === "anur_read_input") return this.readInputTool(thread, args);
+    if (tool === "anur_links") return this.linksTool(thread, args);
     if (tool !== "anur_read_section") return { error: `Anur has no tool ${tool}.` };
     const a = (args ?? {}) as { section?: unknown; doc?: unknown };
     if (typeof a.section !== "string" || !a.section.trim())

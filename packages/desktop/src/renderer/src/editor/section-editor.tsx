@@ -6,7 +6,7 @@ import type { SectionNode } from "@anur/core";
 import { useEffect, useRef } from "react";
 import { pagePath } from "./bases/base-widget.ts";
 import { formattingKeymap } from "./commands.ts";
-import { livePreview } from "./live-preview/live-preview.ts";
+import { knownDocs, livePreview } from "./live-preview/live-preview.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { pageUpdates } from "./page-updates.ts";
 import { markdownSupport } from "./sections.ts";
@@ -85,6 +85,8 @@ export function SectionEditor({
     if (!host.current || !main) return;
     range.current = bodyRange(main.state, fileName, sectionNow.current);
     const r = range.current;
+    // The page's view of the folder's docs, so a broken link is faded here too (8.5).
+    const known = main.state.facet(knownDocs);
     const v = new EditorView({
       parent: host.current,
       state: EditorState.create({
@@ -105,6 +107,7 @@ export function SectionEditor({
           pageHighlight,
           livePreview,
           livePreviewTheme,
+          ...(known ? [knownDocs.of(known)] : []),
           pagePath.of(docPath),
           sectionTheme,
           placeholder("No text yet."),

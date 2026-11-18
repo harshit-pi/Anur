@@ -837,6 +837,27 @@ export const ipcContract = {
       ),
     }),
   },
+  /**
+   * A section's links (8.3): where its links go, which a new thread there
+   * reads too, and which sections link to it, across the folder.
+   */
+  "links:of": {
+    request: z
+      .object({ path: z.string().max(4096), text: z.string(), section: SectionRef })
+      .strict(),
+    response: z.object({
+      out: z.array(
+        z.object({
+          /** The doc it points to; null when broken. */
+          doc: z.string().nullable(),
+          heading: z.string().nullable(),
+          /** As written, for a broken one. */
+          written: z.string(),
+        }),
+      ),
+      into: z.array(z.object({ doc: z.string(), path: z.array(z.string()) })),
+    }),
+  },
   /** A person removes an input: it no longer reaches new threads (4.4). */
   "inputs:remove": {
     request: z

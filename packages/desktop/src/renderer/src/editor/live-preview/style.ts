@@ -30,6 +30,8 @@ export const livePreviewTheme = EditorView.theme({
     textDecorationColor: "var(--blue-wash)",
     textUnderlineOffset: "3px",
   },
+  /* A link to a doc that isn't in the folder (8.5), faded as Obsidian shows it. */
+  ".cm-lp-link.cm-lp-missing": { opacity: "0.55" },
   ".cm-lp-code": {
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
     fontSize: "14.5px",
