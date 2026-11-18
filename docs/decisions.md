@@ -89,3 +89,7 @@ Engineering decisions made while building Anur, newest first, each with why. The
 
 - Ask is a thread on the doc's title, whose subtree is the whole doc; it opens from the tab bar or the palette.
 - An embedded base reaches the agent as its table(s), in place of the embed line, counted in the budget.
+
+## Panels
+
+- The outline sits under the file tree in the left panel, folding away, and marks the section in focus. The right panel is Think alone, with no tabs; History returns inside Think when section history is built.

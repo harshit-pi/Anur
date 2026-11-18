@@ -48,7 +48,14 @@ import { Think } from "./regions/Think.tsx";
 import { Settings, type SettingsSection } from "./regions/Settings.tsx";
 import { newDocPath } from "./layout/new-doc.ts";
 import { MergeDialog } from "./regions/MergeDialog.tsx";
-import { Center, LeftSidebar, Ribbon, RightSidebar, StatusBar } from "./regions/Regions.tsx";
+import {
+  Center,
+  LeftSidebar,
+  OutlinePanel,
+  Ribbon,
+  RightSidebar,
+  StatusBar,
+} from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
 import { MapView } from "./regions/MapView.tsx";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
@@ -76,12 +83,12 @@ export function App() {
   const [cursorSection, setCursorSection] = useState(0);
   /** The section the outline marks: the cursor's, the map's pick, or the one scrolled to. */
   const [outlineAt, setOutlineAt] = useState(0);
+  /** When the cursor or a pick last set the mark: the scroll a jump causes doesn't move it. */
+  const markedAt = useRef(0);
   /** Page or Map in the centre (task 7). */
   const [centerView, setCenterView] = useState<"page" | "map">("page");
   const centerNow = useRef(centerView);
   centerNow.current = centerView;
-  /** Bumped when a map box is picked, so the section panel brings Think forward. */
-  const [mapPicks, setMapPicks] = useState(0);
   const sectionsNow = useRef(sections);
   sectionsNow.current = sections;
   const onCursor = useCallback((pos: number) => {
@@ -89,6 +96,7 @@ export function App() {
     const at = tree ? (sectionAt(tree, pos)?.index ?? 0) : 0;
     setCursorSection((i) => (i === at ? i : at));
     setOutlineAt(at);
+    markedAt.current = Date.now();
   }, []);
   const [source, setSource] = useState(false);
   const [save, setSave] = useState<{ status: SaveStatus | null; detail: string | null }>({
@@ -444,7 +452,6 @@ export function App() {
     (index: number) => {
       setCursorSection(index);
       setOutlineAt(index);
-      setMapPicks((n) => n + 1);
       setOpen((o) => {
         if (o.right) return o;
         const next = { ...o, right: true };
@@ -463,7 +470,6 @@ export function App() {
       setCursorSection(index);
       setOutlineAt(index);
     }
-    setMapPicks((n) => n + 1);
     setOpen((o) => {
       if (o.right) return o;
       const next = { ...o, right: true };
@@ -523,6 +529,7 @@ export function App() {
     const onScroll = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        if (Date.now() - markedAt.current < 600) return;
         const top = v.lineBlockAtHeight(v.scrollDOM.scrollTop + 40).from;
         const at = sectionAt(sections, top)?.index;
         if (at !== undefined) setOutlineAt(at);
@@ -789,6 +796,7 @@ export function App() {
         reveal={reveal}
         actions={fileActions}
         notice={fileNotice}
+        outline={<OutlinePanel sections={sections} current={outlineAt} onJump={jumpTo} />}
       />
       <Center
         folder={shown}
@@ -854,11 +862,7 @@ export function App() {
         }
       />
       <RightSidebar
-        sections={sections}
-        current={outlineAt}
-        onJump={jumpTo}
         hidden={!open.right}
-        showThink={(threadRequest?.n ?? 0) + mapPicks}
         think={
           <Think
             docPath={doc && sections ? doc.path : null}
