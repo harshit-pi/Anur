@@ -926,6 +926,22 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.removeInput(rel, text, thread, input) : false };
   },
+  "tour:status": async () => {
+    // Checks don't see it unless they ask, so other checks' screenshots stay clean.
+    if (isCheck && !process.env.ANUR_CHECK_TOUR) return { show: false };
+    const seen = await readFile(path.join(app.getPath("userData"), "tour.json"), "utf8").then(
+      () => true,
+      () => false,
+    );
+    return { show: !seen };
+  },
+  "tour:done": async () => {
+    await writeFile(
+      path.join(app.getPath("userData"), "tour.json"),
+      JSON.stringify({ seen: true }),
+    );
+    return { ok: true };
+  },
   "opener:status": async () => {
     const current = await markdownOpener();
     return {

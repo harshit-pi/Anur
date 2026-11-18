@@ -39,6 +39,8 @@
 
   /* Behind and under things that float, such as the command palette */
   --scrim: light-dark(rgb(23 34 59 / 0.12), rgb(0 0 0 / 0.5));
+  /* Behind a tour step: dimmer, so the lit part stands out */
+  --scrim-strong: light-dark(rgb(23 34 59 / 0.38), rgb(0 0 0 / 0.62));
   --shadow: light-dark(rgb(23 34 59 / 0.22), rgb(0 0 0 / 0.6));
 
   /* Type: the UI, the decided doc, and thinking (threads, in italic) */

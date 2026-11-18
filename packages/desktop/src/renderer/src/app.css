@@ -2791,3 +2791,177 @@ body.resizing * {
   font-size: 11px;
   font-weight: 600;
 }
+
+/* The first-run tour: everything dims but the part a step is about. */
+.tour {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+
+.tour-block {
+  position: absolute;
+  inset: 0;
+}
+
+.tour-hole {
+  position: absolute;
+  border-radius: 10px;
+  box-shadow: 0 0 0 9999px var(--scrim-strong);
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  pointer-events: none;
+  transition:
+    left 0.28s cubic-bezier(0.2, 0.7, 0.2, 1),
+    top 0.28s cubic-bezier(0.2, 0.7, 0.2, 1),
+    width 0.28s cubic-bezier(0.2, 0.7, 0.2, 1),
+    height 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.tour-bubble {
+  position: absolute;
+  width: 300px;
+  padding: 16px 18px 14px;
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: 0 12px 36px var(--shadow);
+  font-family: var(--font-ui);
+  transition:
+    left 0.28s cubic-bezier(0.2, 0.7, 0.2, 1),
+    top 0.28s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.tour-bubble h4 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.tour-bubble p {
+  margin: 0 0 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+
+.tour-bubble code {
+  padding: 0 4px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--hover);
+  font-size: 12.5px;
+}
+
+.tour-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tour-count {
+  font-size: 12px;
+  color: var(--graphite);
+  white-space: nowrap;
+}
+
+.tour-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.tour-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--rule);
+}
+
+.tour-dots i.on {
+  background: var(--blue);
+}
+
+.tour-grow {
+  flex: 1;
+}
+
+.tour-skip {
+  padding: 5px 6px;
+  border: 0;
+  background: none;
+  color: var(--slate);
+  font: 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.tour-back {
+  padding: 5px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.tour-next {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--blue);
+  color: var(--sheet);
+  font: 600 13px var(--font-ui);
+  cursor: pointer;
+}
+
+/* The tour's ghost pointer on the map, and where it clicks. */
+.tour-pointer {
+  position: fixed;
+  z-index: 2;
+  margin: -2px 0 0 -3px;
+  pointer-events: none;
+  transition:
+    left 0.7s cubic-bezier(0.3, 0.6, 0.2, 1),
+    top 0.7s cubic-bezier(0.3, 0.6, 0.2, 1),
+    opacity 0.25s,
+    transform 0.12s;
+  filter: drop-shadow(0 2px 3px var(--shadow));
+}
+
+.tour-pointer path {
+  fill: var(--ink);
+  stroke: var(--sheet);
+  stroke-width: 1.4;
+  stroke-linejoin: round;
+}
+
+.tour-pointer.down {
+  transform: scale(0.86);
+}
+
+.tour-ripple {
+  position: fixed;
+  z-index: 1;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  border: 2px solid var(--blue);
+  border-radius: 50%;
+  pointer-events: none;
+  animation: tour-ripple 0.7s ease-out forwards;
+}
+
+@keyframes tour-ripple {
+  from {
+    opacity: 0.9;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+}
+
+.map-box.tour-picked {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}

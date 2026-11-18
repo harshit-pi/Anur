@@ -522,6 +522,16 @@ export const ipcContract = {
     request: z.object({ paths: z.array(z.string().max(1024)).max(1000) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
+  /** Whether to show the first-run tour: not yet seen on this Mac. */
+  "tour:status": {
+    request: z.object({}).strict(),
+    response: z.object({ show: z.boolean() }),
+  },
+  /** The tour ended, by Done or Skip: don't start it again by itself. */
+  "tour:done": {
+    request: z.object({}).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Which app opens .md files from Finder, and whether Anur can be it (an installed Mac app). */
   "opener:status": {
     request: z.object({}).strict(),
@@ -920,7 +930,7 @@ export const ipcEvents = {
   ]),
   /** A menu-bar command for the window's page and tabs. */
   "app:command": z.object({
-    command: z.enum(["tab-new", "tab-close", "back", "forward", "tab-next", "tab-prev"]),
+    command: z.enum(["tab-new", "tab-close", "back", "forward", "tab-next", "tab-prev", "tour"]),
   }),
   /** Insert in the menu bar: put this block where the page's cursor is. */
   "editor:insert": z.object({ id: z.enum(INSERT_IDS) }),
