@@ -1578,34 +1578,6 @@ body.resizing * {
   font-style: italic;
 }
 
-.think-reads {
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: var(--paper);
-}
-
-.think-reads h3 {
-  margin: 0 0 6px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.think-read {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 2px 0;
-}
-
-.think-read > .quiet {
-  flex-shrink: 0;
-}
-
-.think-read.left-out {
-  color: var(--graphite);
-  text-decoration: line-through;
-}
-
 .think-chat {
   display: flex;
   flex-direction: column;
