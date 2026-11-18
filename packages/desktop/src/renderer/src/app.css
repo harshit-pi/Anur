@@ -2548,25 +2548,9 @@ body.resizing * {
   color: var(--red);
 }
 
-/* Ask, the whole-doc thread (4.8), beside Page and Map. */
+/* The whole-doc thread (4.8), Anur's mark beside Page and Map. */
 .tab-ask {
-  margin-left: 8px;
-  padding: 4px 12px;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--sheet);
-  color: var(--ink);
-  font: 13px var(--font-ui);
-  cursor: pointer;
-}
-
-.tab-ask:hover:not(:disabled) {
-  background: var(--hover);
-}
-
-.tab-ask:disabled {
-  opacity: 0.5;
-  cursor: default;
+  margin-left: 6px;
 }
 
 /* The outline, folded under the files: it stays in view as the tree scrolls. */
@@ -2654,4 +2638,40 @@ body.resizing * {
 
 .think-title[contenteditable="plaintext-only"]:hover {
   background: var(--hover);
+}
+
+/* Threads grouped by what they need (Needs you, Running, Done folded); other sections' folded. */
+.think-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.think-done summary,
+.think-elsewhere summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.think-needs-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin: 0 6px 1px 0;
+  border-radius: 50%;
+  background: var(--amber);
+}
+
+.think-elsewhere summary .think-needs-dot {
+  margin: 0 0 1px 8px;
+}
+
+.think-elsewhere-group {
+  margin-top: 8px;
+}
+
+.think-elsewhere-where {
+  margin: 0 0 4px;
+  color: var(--blue);
+  font-size: 12px;
 }

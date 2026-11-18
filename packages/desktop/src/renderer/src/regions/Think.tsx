@@ -515,6 +515,21 @@ export function Think({
     const at = (t: ThreadView) => (t.path ? (order.get(t.path.join("\u0000")) ?? 1e9) : 1e9);
     return threads.filter((t) => !here.includes(t)).sort((a, b) => at(a) - at(b));
   }, [threads, here, tree]);
+  /**
+   * What a thread needs from the person: an answer to its agent, options to
+   * pick, or an edit to use; else running, or done.
+   */
+  const stateOf = useCallback(
+    (t: ThreadView): ThreadState => {
+      if (t.busy) return "running";
+      const offers = t.items.flatMap((x) => (x.kind === "options" ? [x] : []));
+      const unpicked = offers.length > 0 && !offers.some((x) => x.used);
+      const proposed = previews.some((p) => p.thread === t.id && p.parts.length > 0);
+      const asking = prompts.some((p) => p.thread === t.id);
+      return unpicked || proposed || asking ? "needs-you" : "done";
+    },
+    [previews, prompts],
+  );
   const thread = threads.find((t) => t.id === open) ?? null;
   const shownAgent = thread?.agent ?? newAgent;
   useEffect(() => {
@@ -1102,10 +1117,11 @@ export function Think({
           </ul>
         </details>
       ) : null}
-      <h3 className="think-subhead">
-        {here.length === 0 ? "No threads on this section yet" : `Threads (${String(here.length)})`}
-      </h3>
-      <ThreadList threads={here} onOpen={setOpen} />
+      {here.length === 0 ? (
+        <h3 className="think-subhead">No threads on this section yet</h3>
+      ) : (
+        <GroupedThreads threads={here} stateOf={stateOf} onOpen={setOpen} />
+      )}
       {notConnected(newAgent)}
       {error ? <p className="think-error">{error}</p> : null}
       {signedOut(newAgent) ?? (
@@ -1114,8 +1130,8 @@ export function Think({
             !writable
               ? "Threads need a folder Anur can write to"
               : section.index === 0
-                ? "Ask about the whole doc"
-                : "Ask about this section"
+                ? "What should we do with this doc?"
+                : "What should we do with this section?"
           }
           sendLabel="Start thread"
           pickers={
@@ -1141,10 +1157,27 @@ export function Think({
         />
       )}
       {elsewhere.length > 0 ? (
-        <>
-          <h3 className="think-subhead">Other threads in this doc ({String(elsewhere.length)})</h3>
-          <ThreadList threads={elsewhere} onOpen={setOpen} showSection />
-        </>
+        <details className="think-elsewhere">
+          <summary className="think-subhead">
+            Other threads in this doc ({String(elsewhere.length)})
+            {elsewhere.some((t) => stateOf(t) === "needs-you") ? (
+              <span className="think-needs-dot" aria-label="Some need you" />
+            ) : null}
+          </summary>
+          {[...new Set(elsewhere.map((t) => t.path?.join(" > ") ?? "A section that's gone"))].map(
+            (where) => (
+              <div key={where} className="think-elsewhere-group">
+                <div className="think-elsewhere-where">{where.split(" > ").at(-1)}</div>
+                <ThreadList
+                  threads={elsewhere.filter(
+                    (t) => (t.path?.join(" > ") ?? "A section that's gone") === where,
+                  )}
+                  onOpen={setOpen}
+                />
+              </div>
+            ),
+          )}
+        </details>
       ) : null}
     </div>
   );
@@ -1180,6 +1213,52 @@ function AgentPicker({
         ))}
       </select>
     </label>
+  );
+}
+
+type ThreadState = "needs-you" | "running" | "done";
+
+/**
+ * A section's threads by what they need from the person: those that need
+ * them first, then those running, then those done, folded away.
+ */
+function GroupedThreads({
+  threads,
+  stateOf,
+  onOpen,
+}: {
+  threads: ThreadView[];
+  stateOf: (t: ThreadView) => ThreadState;
+  onOpen: (id: string) => void;
+}) {
+  const of = (s: ThreadState) => threads.filter((t) => stateOf(t) === s);
+  const needs = of("needs-you");
+  const running = of("running");
+  const done = of("done");
+  return (
+    <div className="think-groups">
+      {needs.length > 0 ? (
+        <>
+          <h3 className="think-subhead">
+            <span className="think-needs-dot" aria-hidden="true" />
+            Needs you ({String(needs.length)})
+          </h3>
+          <ThreadList threads={needs} onOpen={onOpen} />
+        </>
+      ) : null}
+      {running.length > 0 ? (
+        <>
+          <h3 className="think-subhead">Running ({String(running.length)})</h3>
+          <ThreadList threads={running} onOpen={onOpen} />
+        </>
+      ) : null}
+      {done.length > 0 ? (
+        <details className="think-done" open={needs.length === 0 && running.length === 0}>
+          <summary className="think-subhead">Done ({String(done.length)})</summary>
+          <ThreadList threads={done} onOpen={onOpen} />
+        </details>
+      ) : null}
+    </div>
   );
 }
 

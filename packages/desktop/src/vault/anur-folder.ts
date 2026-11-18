@@ -36,11 +36,13 @@ export async function writeFileAtomic(file: string, text: string | Uint8Array): 
 /**
  * Open, or create, the `.anur/` folder at the root of an opened folder.
  *
- * - A new `.anur/` gets `format.json` and its own `.gitignore` and `.ignore`,
- *   so git and searches skip it without any change at the folder root.
+ * - A new `.anur/` gets `format.json` and its own `.ignore`, so searches skip
+ *   it. It is committed with git by default (2026-11-18), so threads and
+ *   history travel with the folder: a `.gitignore` of "*" is how a folder
+ *   chooses not to, set from Settings.
  * - On later opens a missing `.ignore` is put back, since it keeps agents'
- *   searches out of other threads. A missing `.gitignore` is left missing:
- *   removing it is how a folder chooses to commit `.anur/`.
+ *   searches out of other threads. A folder's `.gitignore`, or its absence,
+ *   is left as it is: that is the folder's choice.
  * - A `format.json` that is newer, unreadable or has no number makes the
  *   folder read-only, and Anur never overwrites it.
  */
@@ -49,10 +51,7 @@ export async function openAnurFolder(root: string): Promise<OpenedAnurFolder> {
   const formatFile = path.join(dir, anurPaths.format());
   const created = !(await exists(dir));
 
-  if (created) {
-    await mkdir(dir, { recursive: true });
-    await writeFileAtomic(path.join(dir, anurPaths.gitignore()), IGNORE_ALL);
-  }
+  if (created) await mkdir(dir, { recursive: true });
 
   if (!(await exists(formatFile))) {
     await writeFileAtomic(formatFile, formatFileText());

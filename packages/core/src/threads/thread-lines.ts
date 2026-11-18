@@ -163,6 +163,8 @@ export const AutoUndoneLine = LineEnvelope.extend({
 export const RenamedLine = LineEnvelope.extend({
   kind: z.literal("renamed"),
   title: z.string().min(1).max(200),
+  /** The agent names a thread once, after its first reply; a person's name always wins. */
+  by: z.enum(["person", "agent"]).optional(),
 });
 
 /** The person chose to explore an option before picking: the thread digs into it. */

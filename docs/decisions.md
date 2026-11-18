@@ -107,3 +107,10 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - **Rule:** an agent in Anur can do anything an agent in Obsidian's plugins can. Anur changes how an edit lands, never refuses it. Only Anur's own data (`.anur/`, other threads' copies) is off limits.
 - A doc written from the shell or a script during a turn isn't refused. When the running thread's own tool call named that file, Anur adopts the write: put back and made the thread's proposal, or kept and noted with Undo when the setting is on. Anything else (a person editing in Obsidian meanwhile) stays a "changed while running" note with Revert.
 - Settings, Agent, "Use agents' edits as they land", off by default: an open doc's page uses each new edit through Apply; a closed doc's file is changed by main, History first. Each is noted in its thread ("Used as it landed"), with Undo while the app runs; clashes with typing stay proposals; options are never picked for you. Terminal agents' proposals follow it too.
+
+## Threads, organised
+
+- The whole-doc thread is Anur's mark (the app icon's diamond), not "Ask", and boxes ask "What should we do with this section?": an agent does things, not only answers.
+- A thread names itself after its first reply (`anur_name_thread`, two to five words); a name the person gives always wins.
+- A section's threads group by what they need: Needs you (options to pick, an edit to use, a question waiting), Running, then Done, folded. Other sections' threads fold under "Other threads in this doc", by section. Map boxes and that fold show an amber dot when something needs you.
+- A new `.anur/` is committed with git by default; a `.gitignore` of "*" is how a folder opts out.

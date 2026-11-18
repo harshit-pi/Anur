@@ -1486,12 +1486,27 @@ export class Threads {
     return thread;
   }
 
+  /** anur_name_thread: the agent names a thread once; a name already given is kept. */
+  private async nameThreadTool(thread: string, args: unknown): Promise<ToolAnswer> {
+    const live = this.live.get(thread);
+    if (!live) return { error: "This thread isn't open in Anur right now." };
+    const raw = (args as { title?: unknown } | null)?.title;
+    const title = typeof raw === "string" ? raw.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+    if (!title) return { error: "Give the thread a name of two to five words." };
+    const lines = await this.linesOf(live.doc, thread);
+    if (lines.some((l) => l.kind === "renamed"))
+      return { text: "This thread already has a name; it's kept." };
+    await this.append(live.doc, thread, { kind: "renamed", title, by: "agent" });
+    await this.refresh(live.rel, live.docText, thread);
+    return { text: `Named "${title}".` };
+  }
+
   /** The person renamed a thread: in Think, its list and on the map. */
   async rename(rel: string, text: string, thread: string, title: string): Promise<boolean> {
     const own = await this.docOfThread(thread);
     const name = title.replace(/\s+/g, " ").trim().slice(0, 200);
     if (!own || !name) return false;
-    await this.append(own, thread, { kind: "renamed", title: name });
+    await this.append(own, thread, { kind: "renamed", title: name, by: "person" });
     const live = this.live.get(thread);
     await this.refresh(live?.rel ?? rel, live?.docText ?? text, thread);
     return true;
@@ -1615,6 +1630,7 @@ export class Threads {
   private async tool(thread: string, tool: string, args: unknown): Promise<ToolAnswer> {
     if (tool === "anur_offer_options") return this.offerOptions(thread, args);
     if (tool === "anur_list_inputs") return this.listInputsTool(thread);
+    if (tool === "anur_name_thread") return this.nameThreadTool(thread, args);
     if (tool === "anur_read_input") return this.readInputTool(thread, args);
     if (tool !== "anur_read_section") return { error: `Anur has no tool ${tool}.` };
     const a = (args ?? {}) as { section?: unknown; doc?: unknown };

@@ -846,11 +846,23 @@ export function MapView({
               <div className="map-box-head">
                 <span className="map-box-name">{b.heading}</span>
                 {(() => {
-                  const n = threads.filter((t) =>
+                  const here = threads.filter((t) =>
                     samePath(t.path, tree.sections[b.index]?.path ?? []),
-                  ).length;
+                  );
+                  const n = here.length;
+                  // A thread here needs you: options to pick, or an edit to use.
+                  const needs = here.some((t) => {
+                    const offers = t.items.flatMap((x) => (x.kind === "options" ? [x] : []));
+                    return (
+                      (offers.length > 0 && !offers.some((x) => x.used)) || previewed.has(t.id)
+                    );
+                  });
                   return n > 0 ? (
-                    <span className="map-count">
+                    <span
+                      className="map-count"
+                      title={needs ? "A thread here needs you" : undefined}
+                    >
+                      {needs ? <span className="think-needs-dot" aria-label="Needs you" /> : null}
                       {n === 1 ? "1 thread" : `${String(n)} threads`}
                     </span>
                   ) : null;
