@@ -177,6 +177,17 @@ export function App() {
     setTabs((t) => openInTab(t, path, inNewTab));
   }, []);
   openDocNow.current = openDoc;
+  useEffect(() => {
+    // A doc named in a thread, such as one an agent made (15.6), opens in this tab.
+    const onOpen = (e: Event) => {
+      const { path } = (e as CustomEvent<{ path: string }>).detail;
+      openDocNow.current(path, false);
+    };
+    window.addEventListener("anur:open-path", onOpen);
+    return () => {
+      window.removeEventListener("anur:open-path", onOpen);
+    };
+  }, []);
   /** Where each tab left each doc it showed, kept while the app runs. */
   const savedViews = useRef(new Map<string, SavedView>());
   const viewKey = `${tabs.active ?? ""}|${doc?.path ?? ""}`;

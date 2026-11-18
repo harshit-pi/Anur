@@ -117,6 +117,7 @@ describe("Anur's tool socket", () => {
       "anur_read_section",
       "anur_offer_options",
       "anur_name_thread",
+      "anur_report_check",
       "anur_list_inputs",
       "anur_read_input",
     ]);

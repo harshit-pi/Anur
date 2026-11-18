@@ -265,6 +265,14 @@ function threadsFor(folder: FolderState): Threads | null {
       rememberOptions: rememberChoices,
       mcp: { socket: anurSocket, script: path.join(here, "mcp-server.js") },
       autoApply: () => appSettings.get().autoApply,
+      filesChanged: () => {
+        for (const [id, win] of windows) {
+          if (folders.current(id)?.path !== folder.path) continue;
+          void folders.refresh(id).then((now) => {
+            if (now) send(win, "folder:changed", now);
+          });
+        }
+      },
       isOpen: (rel) =>
         [...shownDoc.entries()].some(
           ([win, doc]) => doc === rel && folders.current(win)?.path === folder.path,
@@ -562,6 +570,18 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.rename(rel, text, thread, title) : false };
   },
+  "thread:undo-created": async ({ thread, id }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { kind: "refused", reason: "No folder is open." };
+    const r = await t.undoCreated(thread, id);
+    if (r.kind === "undone")
+      await folders.refresh(webContentsId).then((now) => {
+        const win = windows.get(webContentsId);
+        if (win && now) send(win, "folder:changed", now);
+      });
+    return r;
+  },
   "thread:auto-undo": async ({ thread, id }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
@@ -753,14 +773,14 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return { options: choices.get(agent) };
   },
   "thread:start": async (
-    { path: doc, text, section, message, agent, options },
+    { path: doc, text, section, message, agent, options, purpose },
     { webContentsId },
   ) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!folder || !t || !folder.docs.includes(doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
-    return t.start(doc, text, section, message, agent, options);
+    return t.start(doc, text, section, message, agent, options, purpose);
   },
   "thread:send": async ({ thread, path: doc, text, message }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

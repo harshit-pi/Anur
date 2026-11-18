@@ -78,7 +78,9 @@ function main(): void {
   });
   if (decision?.copy && !existsSync(decision.copy.to)) {
     mkdirSync(path.dirname(decision.copy.to), { recursive: true });
-    copyFileSync(decision.copy.from, decision.copy.to);
+    // A doc that doesn't exist yet is a new one: there's nothing to copy, and
+    // what the agent writes there is added to the folder (15.6).
+    if (existsSync(decision.copy.from)) copyFileSync(decision.copy.from, decision.copy.to);
   }
   if (decision) {
     process.stdout.write(

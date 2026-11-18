@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { boxSize, mapLayout, type MapNode, type SectionTree } from "@anur/core";
 import type { PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
-import { Markdown, bodyOf } from "./Think.tsx";
+import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
 
 /**
  * The map (task 7; Mock 3): the doc's sections as boxes, the title in the
@@ -837,7 +837,9 @@ export function MapView({
                 onBoxDown(e, b);
               }}
             >
-              <span className="truncate">{b.thread.title}</span>
+              <span className="truncate">
+                <ThreadName thread={b.thread} />
+              </span>
               {previewed.has(b.thread.id) ? (
                 <span className="map-dot" aria-label="Has a preview" />
               ) : null}

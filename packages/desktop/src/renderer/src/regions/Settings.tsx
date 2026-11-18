@@ -331,20 +331,20 @@ export function Settings({
           <>
             <h2>Core plugins</h2>
             <p className="settings-lede">
-              What every doc needs to keep the page clean and the brainstorm beside it. Each one can
-              be turned off.
+              What every doc needs: the page and its map, and threads beside them. These two are
+              always on; the rest can be turned off.
             </p>
             <Row
               title="Page and map"
-              detail="Draws a map from each file's headings. The page opens first. The map arrives with group 7."
+              detail="Every doc as a page and as a map drawn from its headings: boxes to move, add, link and open."
             >
-              <Switch on label="Page and map" disabled />
+              <span className="settings-status">Always on</span>
             </Row>
             <Row
-              title="Think on map"
-              detail="Threads per section, each its own chat, with a preview to apply. Arrives with group 3."
+              title="Think"
+              detail="Threads on each section, each its own chat with your agent: options to pick, edits to use, its inputs kept."
             >
-              <Switch on={false} label="Think on map" disabled />
+              <span className="settings-status">Always on</span>
             </Row>
             <Row
               title="Links as context"

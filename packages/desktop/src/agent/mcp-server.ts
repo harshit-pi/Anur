@@ -83,6 +83,39 @@ const TOOLS = [
     },
   },
   {
+    name: "anur_report_check",
+    description:
+      "Report a check of this thread's section: every claim it makes, whether it holds, is wrong, is unsupported (nothing to test it against) or is missing (something the sources say that the section should), with the source checked and a one-line note. Give the corrected section text, without its heading, when anything is wrong or missing: it becomes a proposed edit the person decides on.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        claims: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              claim: { type: "string", description: "The claim, as the section makes it." },
+              verdict: { type: "string", enum: ["holds", "wrong", "unsupported", "missing"] },
+              source: {
+                type: "string",
+                description: "The file, doc, page or data checked against.",
+              },
+              note: { type: "string", description: "One line: what the source says." },
+            },
+            required: ["claim", "verdict", "source", "note"],
+            additionalProperties: false,
+          },
+        },
+        corrected: {
+          type: "string",
+          description: "The section's corrected text, if anything is wrong or missing.",
+        },
+      },
+      required: ["claims"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "anur_list_inputs",
     description:
       "List the inputs earlier threads on this section, or the sections above it, picked up: files, other docs, command output, fetch answers, other servers' results. Each has an ID for anur_read_input.",

@@ -2678,3 +2678,105 @@ body.resizing * {
   color: var(--blue);
   font-size: 12px;
 }
+
+/* Actions (group 15): Build and Check on a section. */
+.think-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: -2px;
+}
+
+.think-plan {
+  padding: 10px 12px;
+  border: 1px solid var(--blue);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.think-plan-head,
+.think-check-head {
+  margin: 0 0 6px;
+}
+
+.think-plan-text {
+  max-height: 320px;
+  overflow: auto;
+  margin-bottom: 8px;
+}
+
+.think-check {
+  padding: 10px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.think-check ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.think-claim {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.think-verdict {
+  justify-self: start;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.think-claim.holds .think-verdict {
+  background: var(--green-wash, var(--blue-wash));
+  color: var(--green);
+}
+
+.think-claim.wrong .think-verdict {
+  background: var(--red-wash);
+  color: var(--red);
+}
+
+.think-claim.unsupported .think-verdict,
+.think-claim.missing .think-verdict {
+  background: var(--amber-wash);
+  color: var(--amber);
+}
+
+.think-source {
+  font-style: normal;
+  opacity: 0.8;
+}
+
+.think-source::before {
+  content: "— ";
+}
+
+.think-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.thread-tag {
+  margin-right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--blue-wash);
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 600;
+}
