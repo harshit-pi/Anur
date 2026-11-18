@@ -1491,6 +1491,11 @@ function createWindow(): BrowserWindow {
   const id = win.webContents.id;
   windows.set(id, win);
   senders.add(id);
+  // A two-finger swipe goes back and forward, as in Chrome (when the Mac's trackpad allows it).
+  win.on("swipe", (_e, direction) => {
+    if (direction === "right") send(win, "app:command", { command: "back" });
+    else if (direction === "left") send(win, "app:command", { command: "forward" });
+  });
   win.on("closed", () => {
     const folder = folders.current(id);
     const shown = shownDoc.get(id);

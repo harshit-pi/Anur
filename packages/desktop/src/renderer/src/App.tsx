@@ -943,6 +943,16 @@ export function App() {
       openDocNow.current(path, false);
       if (section) setPendingHeading({ path, heading: section });
     });
+    // ⌘← and ⌘→ go back and forward when nothing is being typed in, as in Chrome.
+    const onNavKey = (e: KeyboardEvent) => {
+      if (!e.metaKey || e.altKey || e.shiftKey || e.ctrlKey) return;
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const el = e.target instanceof Element ? e.target : null;
+      if (el?.closest("input, textarea, select, [contenteditable]")) return;
+      e.preventDefault();
+      setTabs(e.key === "ArrowLeft" ? back : forward);
+    };
+    window.addEventListener("keydown", onNavKey);
     const offCommand = anur.on("app:command", ({ command }) => {
       if (command === "tab-new") setTabs((t) => newTab(t));
       else if (command === "tab-close") setTabs((t) => (t.active ? close(t, t.active) : t));
@@ -953,6 +963,7 @@ export function App() {
       else setTabs((t) => cycle(t, command === "tab-next" ? 1 : -1));
     });
     return () => {
+      window.removeEventListener("keydown", onNavKey);
       offInsert();
       offFolder();
       offOpenDoc();
