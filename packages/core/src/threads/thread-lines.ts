@@ -218,6 +218,19 @@ export const FindingLine = LineEnvelope.extend({
   claim: z.string().min(1),
   /** Where it came from: a file, a doc, a page; null when the agent gave none. */
   source: z.string().nullable(),
+  /**
+   * Who stands behind it: a source (a finding), or a person (a decision).
+   * Left out on findings written before decisions existed: a source.
+   */
+  by: z.enum(["source", "person"]).optional(),
+  /** A decision's exact words, as the person typed them in this thread. */
+  quote: z.string().optional(),
+  /** The person message the quote is from, so the card links to it. */
+  from: z.string().nullable().optional(),
+  /** What it was decided instead of, when the person said or turned one down. */
+  instead: z.string().nullable().optional(),
+  /** When it stops holding, in the person's words ("until 4.8 ships"). */
+  until: z.string().nullable().optional(),
 });
 
 /** A person's decision on a finding: kept (perhaps reworded), or dropped. */
@@ -227,6 +240,8 @@ export const FindingDecidedLine = LineEnvelope.extend({
   status: z.enum(["kept", "dropped"]),
   /** The claim as the person kept it, when they reworded it. */
   claim: z.string().nullable(),
+  /** "auto" when a decision settled by itself, shown with Undo; a person's Keep otherwise. */
+  how: z.enum(["person", "auto"]).optional(),
 });
 
 /** An auto-used edit taken back from its note. */

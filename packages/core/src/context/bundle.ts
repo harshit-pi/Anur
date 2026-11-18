@@ -97,7 +97,21 @@ export type BundleInput = {
    * Findings people kept on this section or the sections above it (16.1):
    * claims earlier threads established, each with its source.
    */
-  findings?: readonly { claim: string; source: string | null; section: string }[];
+  /**
+   * Findings and decisions kept on this section and above (16.1): a finding
+   * stands on a source; a decision on a person, by name, with what it
+   * replaced and when it stops holding.
+   */
+  findings?: readonly {
+    claim: string;
+    source: string | null;
+    section: string;
+    by?: "source" | "person";
+    who?: string | null;
+    when?: string | null;
+    instead?: string | null;
+    until?: string | null;
+  }[];
 };
 
 /** An embed line on its own: `![[target]]`, the target without its alias. */
@@ -301,6 +315,8 @@ export function buildBundle({
     "",
     "When you establish a fact later threads on this section should know, such as a corrected price or a confirmed date, propose it with Anur's anur_propose_finding tool, with the file, doc or page it came from. The person decides whether to keep it; kept findings reach every new thread here.",
     "",
+    'When the person makes a decision that should outlast this task, such as a choice about the work or a correction of what you did or proposed ("no, three retries, not infinite"), record it with Anur\'s anur_note_decision tool: their exact words as the quote, the decision in under 15 words, what it replaces if they said or turned something down, any "until" or "for now", and how sure you are it is lasting rather than a one-off instruction for this task. Don\'t record one-off instructions, questions you answered, or your own choices.',
+    "",
     "When you have alternatives for this section, two or more ways it could read, offer them with Anur's anur_offer_options tool instead of listing them in your reply: each option is a short title and the section's whole new text, without its heading. The person sees them as cards and on the map, and picks one; its text replaces the section's. Your reply then says in a line or two how they differ; don't repeat their text.",
     "",
   ];
@@ -325,13 +341,27 @@ export function buildBundle({
       lines.push("## Sections beside it, as an outline", "", part.text, "");
     }
   }
-  if (findings.length > 0)
+  const decided = findings.filter((f) => f.by === "person");
+  const found = findings.filter((f) => f.by !== "person");
+  if (decided.length > 0)
+    lines.push(
+      "## Decided on this section",
+      "",
+      "People decided these. Follow them. When your work relies on one, say so in one line, such as \"Kept Sam's decision: three retries.\" If the task can't be done without going against one, don't: say which, and ask.",
+      "",
+      ...decided.map(
+        (f) =>
+          `- Decided by ${f.who ?? "a teammate"}${f.when ? ` (${f.when})` : ""}: ${f.claim}${f.instead ? ` Instead of: ${f.instead}.` : ""}${f.until ? ` Until: ${f.until}.` : ""}${f.section ? ` [on ${f.section}]` : ""}`,
+      ),
+      "",
+    );
+  if (found.length > 0)
     lines.push(
       "## Findings kept on this section",
       "",
       "Earlier threads established these, and a person kept them. Treat them as settled unless a source you read now contradicts one; then say so.",
       "",
-      ...findings.map(
+      ...found.map(
         (f) =>
           `- ${f.claim}${f.source ? ` (source: ${f.source})` : ""}${f.section ? ` [on ${f.section}]` : ""}`,
       ),

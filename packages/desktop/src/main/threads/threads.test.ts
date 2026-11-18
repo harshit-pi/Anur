@@ -371,6 +371,58 @@ describe("Threads", () => {
     expect(await t.listFindings("plan.md", DOC, risks.index, risks.path)).toEqual([]);
   });
 
+  it("settles a confident decision in the person's own words, and carries it with their name", async () => {
+    const { threads: t, sent, reply } = await setup();
+    const a = await t.start(
+      "plan.md",
+      DOC,
+      risks,
+      "No, three retries, not infinite. Stripe rate-limits us. Shouldn't we log each one too?",
+    );
+    if (a.kind !== "started") throw new Error(a.reason);
+    const tool = (
+      t as unknown as {
+        tool: (th: string, n: string, args: unknown) => Promise<{ error?: string }>;
+      }
+    ).tool.bind(t);
+    // Theirs, and sure: settles with Undo.
+    await tool(a.thread.id, "anur_note_decision", {
+      quote: "three retries, not infinite",
+      decision: "Three retries, not infinite.",
+      instead: "retry until it succeeds",
+      confidence: 0.9,
+    });
+    // A question: waits for a Keep, however sure.
+    await tool(a.thread.id, "anur_note_decision", {
+      quote: "Shouldn't we log each one too",
+      decision: "Log each retry.",
+      confidence: 0.95,
+    });
+    // Never typed: refused, nothing recorded.
+    const refused = await tool(a.thread.id, "anur_note_decision", {
+      quote: "five retries",
+      decision: "Five retries.",
+      confidence: 0.99,
+    });
+    expect(refused.error).toMatch(/isn't in anything the person typed/);
+    await reply(a.thread.id, "Done.");
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === a.thread.id);
+    const decisions = (view?.items ?? []).flatMap((i) => (i.kind === "finding" ? [i] : []));
+    expect(decisions.map((d) => [d.claim, d.status, d.auto])).toEqual([
+      ["Three retries, not infinite.", "kept", true],
+      ["Log each retry.", "proposed", false],
+    ]);
+    const b = await t.start("plan.md", DOC, risks, "Add the payment job.");
+    if (b.kind !== "started") throw new Error(b.reason);
+    const asked = sent.filter((m) => m.type === "prompt").at(-1);
+    const text = asked?.type === "prompt" ? asked.text : "";
+    expect(text).toContain("## Decided on this section");
+    expect(text).toMatch(
+      /- Decided by \S+ \(\d+ \w+\): Three retries, not infinite\. Instead of: retry until it succeeds\./,
+    );
+    expect(text).not.toContain("Log each retry");
+  });
+
   it("uses a thread's edits across docs at once, and one Undo takes them back, keeping typing since", async () => {
     const { folder, support, threads: t, reply } = await setup();
     const other = "# Pricing\n\n## Plans\n\nPaid: £4.\n\n## Notes\n\nNone.\n";

@@ -768,7 +768,19 @@ export function Think({
   /** What new threads on this section receive from earlier ones (4.4). */
   /** Findings kept on this section and above it (16.1). */
   const [findings, setFindings] = useState<
-    { id: string; thread: string; claim: string; source: string | null; section: string }[]
+    {
+      id: string;
+      thread: string;
+      claim: string;
+      source: string | null;
+      section: string;
+      by?: "source" | "person" | undefined;
+      quote?: string | null | undefined;
+      who?: string | null | undefined;
+      instead?: string | null | undefined;
+      until?: string | null | undefined;
+      at?: string | undefined;
+    }[]
   >([]);
   const [inputs, setInputs] = useState<
     { id: string; thread: string; source: string; label: string; trust: string; local: boolean }[]
@@ -1848,39 +1860,56 @@ export function Think({
         ) : null}
         {findings.length > 0 ? (
           <details className="think-inputs" open>
-            <summary className="think-subhead">Findings ({String(findings.length)})</summary>
+            <summary className="think-subhead">
+              {findings.some((f) => f.by === "person") ? "Decided and found" : "Findings"} (
+              {String(findings.length)})
+            </summary>
             <p className="quiet think-inputs-note">
-              Kept from earlier threads; new threads here know them.
+              Kept from earlier threads; new threads here follow them.
             </p>
             <ul>
-              {findings.map((f) => (
-                <li key={f.id}>
-                  <span
-                    className="truncate"
-                    title={f.source ? `${f.claim} (${f.source})` : f.claim}
-                  >
-                    {f.claim}
-                  </span>
-                  {writable ? (
-                    <button
-                      type="button"
-                      className="think-input-remove"
-                      aria-label="Drop this finding"
-                      title="Drop: new threads won't receive it"
-                      onClick={() => {
-                        setFindings((all) => all.filter((x) => x.id !== f.id));
-                        void anur.call("finding:decide", {
-                          thread: f.thread,
-                          id: f.id,
-                          status: "dropped",
-                        });
-                      }}
+              {[...findings]
+                .sort((a, b) => Number(b.by === "person") - Number(a.by === "person"))
+                .map((f) => (
+                  <li key={f.id}>
+                    <span
+                      className="truncate"
+                      title={
+                        f.by === "person"
+                          ? `${f.who ?? "Someone"}${f.at ? `, ${new Date(f.at).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : ""}: “${f.quote ?? f.claim}”${f.instead ? `\nInstead of: ${f.instead}` : ""}${f.until ? `\nUntil: ${f.until}` : ""}`
+                          : f.source
+                            ? `${f.claim} (${f.source})`
+                            : f.claim
+                      }
                     >
-                      ×
-                    </button>
-                  ) : null}
-                </li>
-              ))}
+                      {f.by === "person" ? (
+                        <span className="think-decided-tag">Decided</span>
+                      ) : null}
+                      {f.claim}
+                      {f.by === "person" && f.who ? (
+                        <span className="quiet"> · {f.who}</span>
+                      ) : null}
+                    </span>
+                    {writable ? (
+                      <button
+                        type="button"
+                        className="think-input-remove"
+                        aria-label="Drop this finding"
+                        title="Drop: new threads won't receive it"
+                        onClick={() => {
+                          setFindings((all) => all.filter((x) => x.id !== f.id));
+                          void anur.call("finding:decide", {
+                            thread: f.thread,
+                            id: f.id,
+                            status: "dropped",
+                          });
+                        }}
+                      >
+                        ×
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
             </ul>
           </details>
         ) : null}
@@ -2662,6 +2691,12 @@ function FindingCard({
     claim: string;
     source: string | null;
     status: "proposed" | "kept" | "dropped";
+    by?: "person" | undefined;
+    quote?: string | null | undefined;
+    instead?: string | null | undefined;
+    until?: string | null | undefined;
+    who?: string | null | undefined;
+    auto?: boolean | undefined;
   };
   thread: string;
   writable: boolean;
@@ -2672,6 +2707,7 @@ function FindingCard({
     setEditing(false);
     void anur.call("finding:decide", { thread, id: item.id, status, claim });
   };
+  if (item.by === "person") return <DecisionCard item={item} writable={writable} decide={decide} />;
   if (item.status !== "proposed")
     return (
       <div className={`think-finding ${item.status}`} role="status">
@@ -2729,6 +2765,100 @@ function FindingCard({
             }}
           >
             Drop
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A decision a person made, in their words. Settled by itself, it's one
+ * quiet line with Undo; when the agent was unsure, or the words were a
+ * question, it asks once: keep it for later work, or just this once.
+ */
+function DecisionCard({
+  item,
+  writable,
+  decide,
+}: {
+  item: {
+    claim: string;
+    status: "proposed" | "kept" | "dropped";
+    quote?: string | null | undefined;
+    instead?: string | null | undefined;
+    until?: string | null | undefined;
+    who?: string | null | undefined;
+    auto?: boolean | undefined;
+  };
+  writable: boolean;
+  decide: (status: "kept" | "dropped") => void;
+}) {
+  const said = item.who ? `${item.who}: ` : "";
+  const extra = [
+    item.instead ? `instead of ${item.instead}` : null,
+    item.until ? `until ${item.until}` : null,
+  ].filter(Boolean);
+  if (item.status !== "proposed")
+    return (
+      <div
+        className={`think-decided${item.status === "dropped" ? " undone" : ""}`}
+        role="status"
+        title={item.quote ? `${said}“${item.quote}”` : undefined}
+      >
+        <span className="think-decided-mark" aria-hidden="true">
+          {item.status === "dropped" ? "·" : "✓"}
+        </span>
+        <span>
+          {item.status === "dropped" ? "Not kept: " : "Decided: "}
+          {item.claim}
+          {extra.length ? <span className="quiet"> ({extra.join(", ")})</span> : null}
+          {item.who ? <span className="quiet"> · {item.who}</span> : null}
+        </span>
+        {writable && item.status === "kept" && item.auto ? (
+          <button
+            type="button"
+            className="think-more"
+            title="It won't reach new threads"
+            onClick={() => {
+              decide("dropped");
+            }}
+          >
+            Undo
+          </button>
+        ) : null}
+      </div>
+    );
+  return (
+    <div className="think-finding proposed" role="group" aria-label="Decision">
+      <div className="think-finding-label">Keep this for later work?</div>
+      {item.quote ? (
+        <div className="think-decided-quote">
+          {said}“{item.quote}”
+        </div>
+      ) : null}
+      <div>{item.claim}</div>
+      {extra.length ? <div className="quiet think-claim-note">{extra.join(" · ")}</div> : null}
+      {writable ? (
+        <div className="think-offer-actions">
+          <button
+            type="button"
+            className="think-button primary"
+            title="New threads on this section will follow it"
+            onClick={() => {
+              decide("kept");
+            }}
+          >
+            Keep
+          </button>
+          <button
+            type="button"
+            className="think-more"
+            onClick={() => {
+              decide("dropped");
+            }}
+          >
+            Just this once
           </button>
         </div>
       ) : null}

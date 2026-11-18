@@ -168,6 +168,14 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     claim: z.string(),
     source: z.string().nullable(),
     status: z.enum(["proposed", "kept", "dropped"]),
+    /** A person's decision, not a source's finding: their words, who (null for you), and so on. */
+    by: z.literal("person").optional(),
+    quote: z.string().nullable().optional(),
+    instead: z.string().nullable().optional(),
+    until: z.string().nullable().optional(),
+    who: z.string().nullable().optional(),
+    /** It settled by itself; the card offers Undo. */
+    auto: z.boolean().optional(),
   }),
   /** An edit this thread proposed to another doc: shown on that doc's page. */
   z.object({
@@ -1203,6 +1211,12 @@ export const ipcContract = {
           claim: z.string(),
           source: z.string().nullable(),
           section: z.string(),
+          by: z.enum(["source", "person"]).optional(),
+          quote: z.string().nullable().optional(),
+          who: z.string().nullable().optional(),
+          instead: z.string().nullable().optional(),
+          until: z.string().nullable().optional(),
+          at: z.string().optional(),
         }),
       ),
     }),

@@ -97,6 +97,43 @@ const TOOLS = [
     },
   },
   {
+    name: "anur_note_decision",
+    description:
+      "Record a decision the person made that should outlast this task: a choice about the work, or a correction of what you did or proposed. Give their exact words from this thread as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it settles with an Undo for the person; otherwise they're asked to keep it. Kept decisions reach every new thread on this section. Don't record one-off instructions for this task, or your own choices.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        quote: {
+          type: "string",
+          description:
+            "The person's exact words from this thread that state the decision, as short as still makes sense.",
+        },
+        decision: {
+          type: "string",
+          description:
+            'The decision in one short plain sentence, under 15 words, standing on its own, such as "Three retries, not infinite."',
+        },
+        instead: {
+          type: "string",
+          description:
+            'What it replaces or turns down, if the person said or rejected something, such as "retry until it succeeds".',
+        },
+        until: {
+          type: "string",
+          description:
+            'When it stops holding, in their words, if they said so, such as "until 4.8 ships" or "for now".',
+        },
+        confidence: {
+          type: "number",
+          description:
+            "0 to 1: how sure you are this is a lasting decision, not a one-off instruction for this task.",
+        },
+      },
+      required: ["quote", "decision", "confidence"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "anur_offer_options",
     description:
       "Offer the person two or more alternatives for this thread's section, instead of listing them in your reply. Each option is a short title and the section's whole new text, without its heading. Anur shows them as cards in the thread and as boxes on the doc's map; the person picks one, and its text replaces the section's text in the doc. Don't also edit the doc for options you offer.",
