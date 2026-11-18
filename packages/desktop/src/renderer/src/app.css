@@ -1,5 +1,19 @@
 @import "../../../../../brand/tokens.css";
 
+/* The page's font (Settings → Appearance): a serif close to Claude's by default. */
+:root,
+:root[data-page-font="serif"] {
+  --font-doc: "Source Serif 4 Variable", "Charter", serif;
+}
+
+:root[data-page-font="sans"] {
+  --font-doc: var(--font-ui);
+}
+
+:root[data-page-font="system"] {
+  --font-doc: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif;
+}
+
 *,
 *::before,
 *::after {
@@ -3781,8 +3795,9 @@ body.resizing * {
   max-width: 100%;
   padding: 0;
   background: none;
-  font-family: var(--font-ui);
-  font-size: 14.5px;
+  /* Replies read in the page's font, as Claude's do in its own. */
+  font-family: var(--font-doc);
+  font-size: 15px;
   line-height: 1.6;
 }
 
@@ -4154,4 +4169,13 @@ button.file-card-name:hover {
 .think-from-answer {
   margin: 10px 0 -2px;
   font-size: 12px;
+}
+
+/* Each page font's option is shown in that font. */
+.font-option-serif {
+  font-family: "Source Serif 4 Variable", "Charter", serif;
+}
+
+.font-option-system {
+  font-family: -apple-system, "SF Pro Text", sans-serif;
 }

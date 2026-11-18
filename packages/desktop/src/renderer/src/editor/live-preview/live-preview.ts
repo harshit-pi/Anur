@@ -57,6 +57,15 @@ export const knownDocs = Facet.define<
   { docs: readonly string[]; path: string } | null
 >({ combine: (v) => v.at(-1) ?? null });
 const line = (cls: string) => Decoration.line({ class: cls });
+/** Blocks whose blank lines are part of their content, kept full height. */
+const KEEPS_BLANKS = new Set([
+  "FencedCode",
+  "CodeBlock",
+  "HTMLBlock",
+  "Frontmatter",
+  "Table",
+  "CommentBlock",
+]);
 
 /** The lines a cursor or selection touches; their Markdown shows as source. */
 function activeLines(state: EditorState): Set<number> {
@@ -452,6 +461,19 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
       }
     },
   });
+
+  // The blank line between paragraphs is half a line, as gaps are in a doc,
+  // except the one being typed on, one before a heading, and those inside code.
+  for (let n = 1; n <= doc.lines; n++) {
+    const ln = doc.line(n);
+    if (ln.length > 0 || active.has(n)) continue;
+    // A heading keeps its full line above: more room before a section than within it.
+    if (n < doc.lines && /^#{1,6}[ \t]/.test(doc.line(n + 1).text)) continue;
+    let inside = false;
+    for (let node: SyntaxNode | null = tree.resolveInner(ln.from, 1); node; node = node.parent)
+      if (KEEPS_BLANKS.has(node.name)) inside = true;
+    if (!inside) out.push(line("cm-lp-gap").range(ln.from));
+  }
 
   // An empty pair such as "****", left by ⌘B with nothing selected, hides
   // while the cursor waits between its marks for the text to make bold.

@@ -61,6 +61,10 @@ export const livePreviewTheme = EditorView.theme({
     color: "var(--pencil)",
     pointerEvents: "none",
   },
+  // A blank line between blocks: half a line, so paragraphs sit as a doc's do.
+  ".cm-line.cm-lp-gap": {
+    lineHeight: "0.8",
+  },
   ".cm-lp-quote": {
     borderLeft: "3px solid var(--rule)",
     paddingLeft: "14px !important",
