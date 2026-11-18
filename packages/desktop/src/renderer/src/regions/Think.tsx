@@ -713,7 +713,10 @@ export function Think({
     },
     [previews, prompts],
   );
-  const thread = threads.find((t) => t.id === open) ?? null;
+  /** A new thread, shown the moment it's sent, while Anur gets it ready. */
+  const [starting, setStarting] = useState<ThreadView | null>(null);
+  const thread =
+    threads.find((t) => t.id === open) ?? (starting && starting.id === open ? starting : null);
   const shownAgent = thread?.agent ?? newAgent;
   useEffect(() => {
     checkSignIn(shownAgent);
@@ -807,6 +810,36 @@ export function Think({
       // An action runs in the mode the person picked, as any thread does:
       // Anur adds no approval Claude Code wouldn't ask for.
       const options = newChoices.map((o) => ({ id: o.id, value: o.current }));
+      const shown =
+        purpose === "build"
+          ? "Build this section"
+          : purpose === "check"
+            ? "Check this section"
+            : message;
+      const placeholder: ThreadView = {
+        id: `starting:${String(Date.now())}`,
+        section: "",
+        path: section.path,
+        title: shown.split("\n")[0]?.slice(0, 80) ?? "",
+        closed: false,
+        busy: true,
+        busySince: Date.now(),
+        reads: [],
+        items: [
+          ...(purpose ? [] : attached).map((a) => ({
+            kind: "attached" as const,
+            source: "attachment",
+            label: a.name,
+          })),
+          { kind: "message" as const, turn: "", role: "person" as const, text: shown },
+        ],
+        options: newChoices,
+        tokens: null,
+        purpose: purpose ?? null,
+        agent: newAgent,
+      };
+      setStarting(placeholder);
+      setOpen(placeholder.id);
       const r = await anur.call("thread:start", {
         path: docPath,
         text: docText(),
@@ -818,7 +851,9 @@ export function Think({
         ...(branch && !purpose ? { branch: { thread: branch.thread, upTo: branch.upTo } } : {}),
         ...(attached.length && !purpose ? { files: attached.map((a) => a.path) } : {}),
       });
+      setStarting(null);
       if (r.kind === "refused") {
+        setOpen((o) => (o === placeholder.id ? null : o));
         setError(r.reason);
         return false;
       }
@@ -1063,9 +1098,8 @@ export function Think({
           {folded.map(({ item, i, steps }) => (
             <Fragment key={`e${String(i)}`}>
               {whoBefore.has(i) ? (
-                <div className="think-who">
+                <div className="think-who" title={whoLabel(thread.agent, thread.options)}>
                   <AgentMark agent={thread.agent} />
-                  {whoLabel(thread.agent, thread.options)}
                 </div>
               ) : null}
               {steps ? (
@@ -1368,8 +1402,12 @@ export function Think({
               )}
             </Fragment>
           ))}
-          {thread.busy && thread.items.at(-1)?.kind !== "message" && asks.length === 0 ? (
-            <Working since={thread.busySince ?? null} />
+          {thread.busy && asks.length === 0 ? (
+            <Working
+              agent={thread.agent}
+              since={thread.busySince ?? null}
+              doing={runningStep(thread.items)}
+            />
           ) : null}
           {asks.map((p) =>
             p.plan ? (
@@ -1485,7 +1523,8 @@ export function Think({
             busy={thread.busy}
             disabled={!writable || thread.path === null}
             onStop={() => {
-              void anur.call("thread:stop", { thread: thread.id });
+              if (!thread.id.startsWith("starting:"))
+                void anur.call("thread:stop", { thread: thread.id });
             }}
             onSend={async (message) => {
               setError(null);
@@ -1860,8 +1899,16 @@ export function Think({
   );
 }
 
-/** While a turn runs: "Thinking…" at first, then how long it has been working. */
-function Working({ since }: { since: number | null }) {
+/** While a turn runs: the agent's mark, what it's doing, and for how long, as Claude shows it. */
+function Working({
+  agent,
+  since,
+  doing,
+}: {
+  agent: AgentId;
+  since: number | null;
+  doing: string | null;
+}) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = window.setInterval(() => {
@@ -1872,13 +1919,27 @@ function Working({ since }: { since: number | null }) {
     };
   }, []);
   const secs = since ? Math.max(0, Math.round((now - since) / 1000)) : 0;
-  const label =
-    secs < 10
-      ? "Thinking…"
-      : secs < 60
-        ? `Working for ${String(secs)} s…`
-        : `Working for ${String(Math.floor(secs / 60))} min ${String(secs % 60).padStart(2, "0")} s…`;
-  return <div className="think-working quiet">{label}</div>;
+  const took =
+    secs < 60 ? `${String(secs)}s` : `${String(Math.floor(secs / 60))}m ${String(secs % 60)}s`;
+  return (
+    <div className="think-working" role="status">
+      <span className="think-working-mark">
+        <AgentMark agent={agent} />
+      </span>
+      <span className="think-working-what">{doing ?? "Thinking…"}</span>
+      <span className="think-working-time">{took}</span>
+    </div>
+  );
+}
+
+/** The step the agent is on now: its last tool call this turn, if that's still running. */
+function runningStep(items: ThreadItem[]): string | null {
+  const last = items.at(-1);
+  return last?.kind === "tool" &&
+    !/^(completed|failed)$/.test(last.status) &&
+    !HOUSEKEEPING.test(last.title)
+    ? last.title
+    : null;
 }
 
 type ToolItem = Extract<ThreadItem, { kind: "tool" }>;
