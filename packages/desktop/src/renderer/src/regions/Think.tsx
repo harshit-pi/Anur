@@ -138,18 +138,66 @@ const BULLET = /^\s*(?:[-*+]|\d+[.)])\s/;
  */
 function byKind(block: string): string[] {
   const out: string[][] = [];
-  let kind: "heading" | "list" | "text" | null = null;
+  let kind: "heading" | "list" | "text" | "quote" | null = null;
   for (const line of block.split("\n")) {
-    const next: "heading" | "list" | "text" = /^#{1,6}\s/.test(line)
-      ? "heading"
-      : BULLET.test(line) || (kind === "list" && /^\s+\S/.test(line))
-        ? "list"
-        : "text";
+    const next: "heading" | "list" | "text" | "quote" = /^\s*>/.test(line)
+      ? "quote"
+      : /^#{1,6}\s/.test(line)
+        ? "heading"
+        : BULLET.test(line) || (kind === "list" && /^\s+\S/.test(line))
+          ? "list"
+          : "text";
     if (next !== kind || next === "heading") out.push([]);
     out.at(-1)?.push(line);
     kind = next;
   }
   return out.map((l) => l.join("\n"));
+}
+
+/** A callout's colour, as Obsidian groups its types. */
+function calloutTone(type: string): string {
+  const t = type.toLowerCase();
+  if (["tip", "hint", "important", "success", "check", "done"].includes(t)) return "green";
+  if (["warning", "caution", "attention", "question", "help", "faq"].includes(t)) return "amber";
+  if (["failure", "fail", "missing", "danger", "error", "bug"].includes(t)) return "red";
+  if (["quote", "cite", "example"].includes(t)) return "grey";
+  return "blue";
+}
+
+/**
+ * A quote block: Obsidian's callout when its first line is "[!type] Title",
+ * drawn with its title as on the page; otherwise a plain quote.
+ */
+function Quote({ block }: { block: string }) {
+  const lines = block.split("\n").map((l) => l.replace(/^\s*>\s?/, ""));
+  const head = /^\[!([\w-]+)\][+-]?\s*(.*)$/.exec(lines[0] ?? "");
+  if (!head) {
+    return (
+      <blockquote className="md-quote">
+        <Markdown text={lines.join("\n")} />
+      </blockquote>
+    );
+  }
+  const type = head[1] ?? "note";
+  const label = type.charAt(0).toUpperCase() + type.slice(1);
+  const title = head[2]?.trim() ?? "";
+  const rest = lines.slice(1).join("\n").trim();
+  // As the page draws it: the type, then the title, formatted.
+  return (
+    <div className={`md-callout ${calloutTone(type)}`}>
+      <div className="md-callout-title">
+        <span className="md-callout-type">{label}</span>
+        {title
+          ? inlineRuns(title).map((r, j) => (
+              <span key={j} className={r.marks.map((m) => `md-${m}`).join(" ") || undefined}>
+                {r.text}
+              </span>
+            ))
+          : null}
+      </div>
+      {rest ? <Markdown text={rest} /> : null}
+    </div>
+  );
 }
 
 export function Markdown({ text }: { text: string }) {
@@ -169,6 +217,7 @@ export function Markdown({ text }: { text: string }) {
     <>
       {blocks.map((block, b) => {
         const lines = block.split("\n");
+        if (/^\s*>/.test(lines[0] ?? "")) return <Quote key={b} block={block} />;
         const bullets = BULLET.test(lines[0] ?? "");
         const render = (line: string, i: number) => (
           <span key={i}>

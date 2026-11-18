@@ -3285,6 +3285,74 @@ body.resizing * {
   font-size: 13px;
 }
 
+/* Quotes and Obsidian callouts in Think and the map's hover, drawn as on the page. */
+.md-quote {
+  margin: 4px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--rule);
+  color: var(--graphite);
+}
+
+.md-callout {
+  margin: 4px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--blue);
+  border-radius: 4px;
+  background: var(--blue-wash);
+}
+
+.md-callout-title {
+  margin-bottom: 2px;
+  color: var(--ink);
+}
+
+.md-callout-type {
+  margin-right: 8px;
+  color: var(--blue);
+  font-weight: 650;
+}
+
+.md-callout.green {
+  border-left-color: var(--green);
+  background: var(--green-wash, var(--blue-wash));
+}
+
+.md-callout.green .md-callout-type {
+  color: var(--green);
+}
+
+.md-callout.amber {
+  border-left-color: var(--amber);
+  background: var(--amber-wash);
+}
+
+.md-callout.amber .md-callout-type {
+  color: var(--amber);
+}
+
+.md-callout.red {
+  border-left-color: var(--red);
+  background: var(--red-wash);
+}
+
+.md-callout.red .md-callout-type {
+  color: var(--red);
+}
+
+.md-callout.grey {
+  border-left-color: var(--slate);
+  background: var(--hover);
+}
+
+.md-callout.grey .md-callout-type {
+  color: var(--graphite);
+}
+
+.md-callout p:last-child,
+.md-quote p:last-child {
+  margin-bottom: 0;
+}
+
 /* A section's links to other docs (8.6): one badge, a list on a click. */
 .map-linkcount {
   flex: none;
