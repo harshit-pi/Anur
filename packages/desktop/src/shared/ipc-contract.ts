@@ -214,6 +214,9 @@ export const ThreadView = z.object({
   title: z.string(),
   closed: z.boolean(),
   busy: z.boolean(),
+  /** When anything last happened in it, and the start of its last reply, for the list. */
+  lastAt: z.string().nullable().optional(),
+  lastReply: z.string().nullable().optional(),
   /** For a branch (10.5): the thread it came from, and that thread's name. */
   branchedFrom: z.object({ thread: z.string(), title: z.string() }).nullable().optional(),
   /** Every edit this thread proposes now, by doc and section (9.3). */

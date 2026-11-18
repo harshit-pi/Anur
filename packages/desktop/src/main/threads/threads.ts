@@ -625,6 +625,19 @@ export class Threads {
       path: index >= 0 ? (at.tree.sections[index]?.path ?? null) : null,
       // The person's own name for it, if they gave one; else its first message.
       title: lines.findLast((l) => l.kind === "renamed")?.title ?? start.title,
+      lastAt: lines.at(-1)?.at ?? null,
+      lastReply:
+        items.findLast((i) => i.kind === "message" && i.role === "agent")?.kind === "message"
+          ? (
+              items.findLast((i) => i.kind === "message" && i.role === "agent") as {
+                text: string;
+              }
+            ).text
+              .replace(/[#*_`>]/g, "")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 160)
+          : null,
       branchedFrom: start.branchedFrom
         ? {
             thread: start.branchedFrom.thread,
