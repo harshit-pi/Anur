@@ -260,16 +260,27 @@ export function App() {
   }, []);
   openDocNow.current = openDoc;
   useEffect(() => {
+    // ⌘ held on the click that asked for a doc: it opens in a new tab, wherever
+    // the link was (the map, Think, a thread's notes), as in a browser.
+    let modAt = 0;
+    const onPress = (e: MouseEvent) => {
+      if (e.metaKey || e.ctrlKey) modAt = Date.now();
+    };
+    window.addEventListener("pointerdown", onPress, true);
+    window.addEventListener("click", onPress, true);
     // A doc named in a thread, such as one an agent made (15.6), opens in this tab.
     const onOpen = (e: Event) => {
-      const { path, heading } = (e as CustomEvent<{ path: string; heading?: string | null }>)
-        .detail;
+      const { path, heading, newTab } = (
+        e as CustomEvent<{ path: string; heading?: string | null; newTab?: boolean }>
+      ).detail;
       // A linked section (8.3) opens where it is.
       if (heading) setPendingHeading({ path, heading });
-      openDocNow.current(path, false);
+      openDocNow.current(path, newTab ?? Date.now() - modAt < 600);
     };
     window.addEventListener("anur:open-path", onOpen);
     return () => {
+      window.removeEventListener("pointerdown", onPress, true);
+      window.removeEventListener("click", onPress, true);
       window.removeEventListener("anur:open-path", onOpen);
     };
   }, []);
