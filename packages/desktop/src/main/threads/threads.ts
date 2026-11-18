@@ -97,6 +97,10 @@ type Live = {
   context?: { used: number; size: number } | null;
   /** The window known when the turn started: this thread's last, or its agent's (4.2). */
   window?: number | null;
+  /** The sections this thread's preview proposed edits to after its last turn (4.6). */
+  proposed?: string[];
+  /** The edits still waiting when this turn started, and those gone since: for the change note (4.6). */
+  waiting?: { still: string[]; gone: string[] } | null;
 };
 
 /** How long after a turn its working copies are watched for background edits. */
@@ -467,6 +471,12 @@ export class Threads {
     const session = lines.filter((l) => l.kind === "session" && l.dev === this.d.device).at(-1);
     const resume =
       session?.kind === "session" && agentOfLine(session) === agent ? session.session : null;
+    // What became of the edits it proposed last turn (4.6).
+    const still = ((await this.previews.read(doc, thread))?.parts ?? []).map(
+      (p) => p.path.at(-1) ?? "the doc",
+    );
+    const gone = (live.proposed ?? []).filter((p) => !still.includes(p));
+    live.waiting = live.proposed?.length ? { still, gone } : null;
     await this.makeWorkingCopy(thread, live, at);
     const prompt = this.promptFor(
       at,
@@ -536,6 +546,23 @@ export class Threads {
       );
     }
     live.lastBundle = bundle;
+    // What became of its proposed edits since its last turn (4.6).
+    const w = live.waiting;
+    if (w && (w.gone.length > 0 || w.still.length > 0)) {
+      const names = (xs: string[]) => xs.map((x) => `"${x}"`).join(", ");
+      parts.push(
+        [
+          w.gone.length > 0
+            ? `Since your last turn the person used or set aside your edit to ${names(w.gone)}; the doc as it is now is what counts.`
+            : "",
+          w.still.length > 0
+            ? `Your edit to ${names(w.still)} is still waiting for them to use; your working copy starts with it.`
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+    }
     parts.push(parts.length > 0 ? `---\n\n${message}` : message);
     return parts.join("\n\n");
   }
@@ -627,6 +654,9 @@ export class Threads {
     await this.mergeCopies(thread, live).catch((e: unknown) => {
       console.error("Anur couldn't turn the thread's edits into a preview:", e);
     });
+    live.proposed = ((await this.previews.read(live.doc, thread))?.parts ?? []).map(
+      (p) => p.path.at(-1) ?? "the doc",
+    );
     live.turn = null;
     live.pending = null;
     this.watchCopies(thread, live);
@@ -806,6 +836,9 @@ export class Threads {
         await this.endTurn(thread, live, m.stopReason, m.usage);
         return;
       case "context": {
+        // The context shrank by half or more: the agent compacted it, and the
+        // bundle may be summarised away, so the next turn sends it again (4.7).
+        if (live.context && m.used < live.context.used / 2) live.lastBundle = null;
         live.context = { used: m.used, size: m.size };
         const lines = await this.linesOf(live.doc, thread);
         this.windows.set(this.agentOf(thread, lines), m.size);
