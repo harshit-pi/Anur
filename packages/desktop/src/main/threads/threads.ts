@@ -1324,7 +1324,7 @@ export class Threads {
     const raw = (args ?? {}) as { options?: unknown };
     const list = Array.isArray(raw.options) ? (raw.options as unknown[]) : [];
     const options = list
-      .map((o) => (o ?? {}) as { title?: unknown; text?: unknown })
+      .map((o) => (o ?? {}) as { title?: unknown; text?: unknown; why?: unknown })
       .filter((o) => typeof o.text === "string" && o.text.trim() !== "")
       .slice(0, 6)
       .map((o, i) => ({
@@ -1334,6 +1334,9 @@ export class Threads {
             ? o.title.trim().slice(0, 80)
             : `Option ${String(i + 1)}`,
         text: (o.text as string).trim(),
+        ...(typeof o.why === "string" && o.why.trim()
+          ? { why: o.why.trim().replace(/\s+/g, " ").slice(0, 90) }
+          : {}),
       }));
     if (options.length < 2) return { error: "Offer at least two options, each with its text." };
     await this.append(live.doc, thread, {

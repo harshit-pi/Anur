@@ -16,20 +16,24 @@ describe("mapLayout", () => {
   ];
   const at = mapLayout(nodes);
 
-  it("puts the title in the middle and splits its sections right and left", () => {
+  it("puts the title at the top and its sections in a row beneath it", () => {
     expect(at.get("title")).toMatchObject({ x: 0, y: 0, side: 0 });
-    expect(["problem", "who", "retry"].map((id) => at.get(id)?.side)).toEqual([1, 1, 1]);
-    expect(["channel", "metric"].map((id) => at.get(id)?.side)).toEqual([-1, -1]);
+    const y = (id: string) => at.get(id)?.y ?? NaN;
+    for (const id of ["problem", "who", "retry", "channel", "metric"])
+      expect(y(id), id).toBeGreaterThan(0);
+    expect(new Set(["problem", "who", "retry", "channel", "metric"].map(y)).size).toBe(1);
   });
 
-  it("keeps reading order top to bottom on each side, and children further out", () => {
+  it("keeps reading order left to right, children a row further down, centred under their parent", () => {
+    const x = (id: string) => at.get(id)?.x ?? NaN;
     const y = (id: string) => at.get(id)?.y ?? NaN;
-    expect(y("problem")).toBeLessThan(y("who"));
-    expect(y("who")).toBeLessThan(y("retry"));
-    expect(at.get("payday")?.x ?? 0).toBeGreaterThan(at.get("retry")?.x ?? 0);
-    expect(at.get("metric")?.x ?? 0).toBeLessThan(0);
-    // A parent sits level with the middle of its children.
-    expect(y("retry")).toBeCloseTo((y("payday") + y("declines")) / 2);
+    expect(x("problem")).toBeLessThan(x("who"));
+    expect(x("who")).toBeLessThan(x("retry"));
+    expect(x("retry")).toBeLessThan(x("channel"));
+    expect(y("payday")).toBeGreaterThan(y("retry"));
+    expect(x("retry")).toBeCloseTo((x("payday") + x("declines")) / 2);
+    // The title sits over the middle of its row.
+    expect(x("title")).toBeCloseTo((x("problem") + x("metric")) / 2);
   });
 
   it("never overlaps two boxes", () => {
@@ -50,8 +54,8 @@ describe("mapLayout", () => {
 
 describe("boxSize", () => {
   it("grows with the text, within bounds, and never from the screen", () => {
-    expect(boxSize("Problem", "").w).toBe(140);
-    expect(boxSize("A very long heading that goes on and on and on", "").w).toBe(260);
+    expect(boxSize("Problem", "").w).toBe(160);
+    expect(boxSize("A very long heading that goes on and on and on", "").w).toBe(280);
     expect(boxSize("Retry timing", "Retry after 1, 3 and 7 days.").h).toBeGreaterThan(
       boxSize("Retry timing", "").h,
     );

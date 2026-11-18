@@ -28,6 +28,10 @@ type Box = {
   option?: { id: string; title: string; text: string };
   /** The person is exploring this option before picking. */
   explored?: boolean;
+  /** The agent is working on this option now. */
+  exploring?: boolean;
+  /** The box's second line: what's under it, or what sets it apart. */
+  sub?: string;
   heading: string;
   x: number;
   y: number;
@@ -37,7 +41,23 @@ type Box = {
   parent: string | null;
 };
 
-const CHIP = { w: 176, h: 28 };
+/** The smallest zoom a map opens at, where a box's name still reads. */
+const READABLE = 0.75;
+
+/** A thread's pill: as wide as its name needs, within bounds. */
+const pill = (title: string) => ({
+  w: Math.max(150, Math.min(280, Math.round(title.length * 7.8 + 44))),
+  h: 36,
+});
+
+/** A line of Markdown as plain words, for a box's second line. */
+const plainLine = (text: string) =>
+  (text.split("\n").find((l) => l.trim() && !/^\s*(#|\||```)/.test(l)) ?? "")
+    .replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "")
+    .replace(/[*_`[\]]/g, "")
+    .trim();
+const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
+const plural = (n: number, noun: string) => `${String(n)} ${noun}${n === 1 ? "" : "s"}`;
 const samePath = (a: readonly string[] | null, b: readonly string[]) =>
   a !== null && a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -219,20 +239,31 @@ export function MapView({
     for (const s of tree.sections) {
       const id = idOf(s.index);
       const heading = s.path.at(-1) ?? "";
-      // Room for the thread count beside the name, so the name never breaks mid-word.
+      // The second line: what's under the box, its sections and threads.
       const count = threads.filter((t) => samePath(t.path, s.path)).length;
-      const size = boxSize(count > 0 ? `${heading}  ${String(count)} threads` : heading, "");
-      nodes.push({ id, parent: s.parent === null ? null : idOf(s.parent), ...size });
+      const kids = tree.sections.filter((x) => x.parent === s.index).length;
+      const sub = [
+        kids > 0 ? plural(kids, "section") : "",
+        count > 0 ? plural(count, "thread") : "",
+      ]
+        .filter(Boolean)
+        .join(", ");
+      nodes.push({
+        id,
+        parent: s.parent === null ? null : idOf(s.parent),
+        ...boxSize(heading, sub),
+      });
       info.set(id, {
         id,
         kind: "section",
         index: s.index,
         heading,
+        sub,
         parent: s.parent === null ? null : idOf(s.parent),
       });
       for (const t of threads.filter((t) => samePath(t.path, s.path))) {
         const tid = `t:${t.id}`;
-        nodes.push({ id: tid, parent: id, ...CHIP });
+        nodes.push({ id: tid, parent: id, ...pill(t.title) });
         info.set(tid, {
           id: tid,
           kind: "thread",
@@ -262,14 +293,20 @@ export function MapView({
         const shownIds = new Set(shown.map((x) => x.o.id));
         for (const { o, under } of shown) {
           const oid = `o:${o.id}`;
-          const parentId = under && shownIds.has(under) ? `o:${under}` : id;
-          nodes.push({ id: oid, parent: parentId, ...boxSize(o.title, "") });
+          // Under the thread that offered it, or the option it narrows.
+          const parentId = under && shownIds.has(under) ? `o:${under}` : `t:${t.id}`;
+          const exploring =
+            t.busy && exploredIds.has(o.id) && !offers.some((x) => x.within === o.id);
+          const sub = exploring ? "Exploring…" : clip(o.why ?? plainLine(o.text), 46);
+          nodes.push({ id: oid, parent: parentId, ...boxSize(o.title, sub) });
           info.set(oid, {
             id: oid,
             kind: "option",
             index: s.index,
             thread: t,
             option: o,
+            sub,
+            exploring,
             explored: exploredIds.has(o.id),
             heading: o.title,
             parent: parentId,
@@ -282,7 +319,14 @@ export function MapView({
         const t = threads.find((x) => x.id === p.thread);
         if (!part || !t) continue;
         const eid = `p:${p.thread}`;
-        nodes.push({ id: `${eid}:${id}`, parent: id, ...boxSize("Proposed edit", "") });
+        const firstLine = clip(plainLine(part.proposed.replace(/^#{1,6}[ \t].*\n?/, "")), 46);
+        // Under its thread when the thread is on this section; else under the section it edits.
+        const under = samePath(t.path, s.path) ? `t:${t.id}` : id;
+        nodes.push({
+          id: `${eid}:${id}`,
+          parent: under,
+          ...boxSize("Proposed edit   Use", firstLine),
+        });
         info.set(`${eid}:${id}`, {
           id: `${eid}:${id}`,
           kind: "edit",
@@ -294,7 +338,8 @@ export function MapView({
             text: part.proposed.replace(/^#{1,6}[ \t].*\n?/, "").trim(),
           },
           heading: "Proposed edit",
-          parent: id,
+          sub: firstLine,
+          parent: under,
         });
       }
     }
@@ -315,15 +360,21 @@ export function MapView({
     }
     // A moved box sits where it was put; its threads move with it.
     const byId = new Map(out.map((b) => [b.id, b]));
+    // The section a box hangs from: threads, their options and edits move with it.
+    const sectionOf = (b: Box): string | null => {
+      let at: Box | undefined = b;
+      while (at && at.kind !== "section") at = at.parent ? byId.get(at.parent) : undefined;
+      return at?.id ?? null;
+    };
     for (const b of out) {
-      const own = b.kind === "section" ? b.id : b.parent;
+      const own = sectionOf(b);
       const anchor = own ? byId.get(own) : undefined;
       const put = own ? (drag?.id === own ? null : moved[own]) : undefined;
       const dragging = drag && own === drag.id ? drag : null;
       if (!anchor) continue;
       const dx = (put ? put.x - anchor.x : 0) + (dragging ? dragging.dx : 0);
       const dy = (put ? put.y - anchor.y : 0) + (dragging ? dragging.dy : 0);
-      if (b.kind === "thread") {
+      if (b.kind !== "section") {
         b.x += dx;
         b.y += dy;
       }
@@ -371,10 +422,15 @@ export function MapView({
     const ys = boxes.flatMap((b) => [b.y - b.h / 2, b.y + b.h / 2]);
     const w = Math.max(...xs) - Math.min(...xs) + 120;
     const h = Math.max(...ys) - Math.min(...ys) + 120;
-    const z = Math.min(1, r.width / w, r.height / h);
+    const all = Math.min(1, r.width / w, r.height / h);
+    // Never so small the names can't be read: a wide map opens on its title,
+    // at the top, and Fit shows the whole of it.
+    const z = Math.max(READABLE, all);
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
     const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
-    setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
+    const title = boxes.find((b) => b.side === 0);
+    if (z > all && title) setView({ x: r.width / 2 - title.x * z, y: 60 - Math.min(...ys) * z, z });
+    else setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
   }, [boxes, view, loaded, waited]);
 
   // New boxes, such as a thread's options, come into view: the map fits
@@ -698,16 +754,25 @@ export function MapView({
   const edges = boxes.flatMap((b) => {
     const p = b.parent ? byId.get(b.parent) : undefined;
     if (!p) return [];
-    const side = b.x >= p.x ? 1 : -1;
-    const x1 = p.x + (side * p.w) / 2;
-    const x2 = b.x - (side * b.w) / 2;
-    const mid = (x1 + x2) / 2;
+    // From the parent's bottom to the child's top, a soft S; sideways when a moved box sits beside.
+    const below = b.y - b.h / 2 >= p.y + p.h / 2;
+    const above = b.y + b.h / 2 <= p.y - p.h / 2;
+    let d: string;
+    if (below || above) {
+      const dir = below ? 1 : -1;
+      const y1 = p.y + (dir * p.h) / 2;
+      const y2 = b.y - (dir * b.h) / 2;
+      const mid = (y1 + y2) / 2;
+      d = `M ${String(p.x)} ${String(y1)} C ${String(p.x)} ${String(mid)}, ${String(b.x)} ${String(mid)}, ${String(b.x)} ${String(y2)}`;
+    } else {
+      const side = b.x >= p.x ? 1 : -1;
+      const x1 = p.x + (side * p.w) / 2;
+      const x2 = b.x - (side * b.w) / 2;
+      const mid = (x1 + x2) / 2;
+      d = `M ${String(x1)} ${String(p.y)} C ${String(mid)} ${String(p.y)}, ${String(mid)} ${String(b.y)}, ${String(x2)} ${String(b.y)}`;
+    }
     return [
-      <path
-        key={b.id}
-        className={b.kind === "section" ? "map-edge" : "map-edge thread"}
-        d={`M ${String(x1)} ${String(p.y)} C ${String(mid)} ${String(p.y)}, ${String(mid)} ${String(b.y)}, ${String(x2)} ${String(b.y)}`}
-      />,
+      <path key={b.id} className={b.kind === "section" ? "map-edge" : "map-edge thread"} d={d} />,
     ];
   });
 
@@ -813,18 +878,48 @@ export function MapView({
               className={
                 b.kind === "edit"
                   ? "map-option edit"
-                  : b.explored
-                    ? "map-option explored"
-                    : "map-option"
+                  : b.exploring
+                    ? "map-option explored exploring"
+                    : b.explored
+                      ? "map-option explored"
+                      : "map-option"
               }
               data-peek={b.id}
-              title="An option from a thread: open it to pick"
+              title={
+                b.kind === "edit"
+                  ? "An edit a thread proposed: Use puts it in the doc"
+                  : "An option from a thread: open it to pick"
+              }
               style={{ left: b.x - b.w / 2, top: b.y, width: b.w, transform: "translateY(-50%)" }}
               onPointerDown={(e) => {
                 onBoxDown(e, b);
               }}
             >
-              {b.option.title}
+              <div className="map-box-head">
+                <span className="map-box-name">{b.option.title}</span>
+                {b.kind === "edit" && writable && b.thread ? (
+                  <button
+                    type="button"
+                    className="map-use"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const path = tree.sections[b.index]?.path;
+                      if (!path || !b.thread) return;
+                      window.dispatchEvent(
+                        new CustomEvent("anur:use-preview", {
+                          detail: { thread: b.thread.id, path },
+                        }),
+                      );
+                    }}
+                  >
+                    Use
+                  </button>
+                ) : null}
+              </div>
+              {b.sub ? <div className="map-box-sub">{b.sub}</div> : null}
             </div>
           ) : b.kind === "thread" && b.thread ? (
             <button
@@ -861,29 +956,26 @@ export function MapView({
             >
               <div className="map-box-head">
                 <span className="map-box-name">{b.heading}</span>
-                {(() => {
-                  const here = threads.filter((t) =>
-                    samePath(t.path, tree.sections[b.index]?.path ?? []),
-                  );
-                  const n = here.length;
-                  // A thread here needs you: options to pick, or an edit to use.
-                  const needs = here.some((t) => {
-                    const offers = t.items.flatMap((x) => (x.kind === "options" ? [x] : []));
-                    return (
-                      (offers.length > 0 && !offers.some((x) => x.used)) || previewed.has(t.id)
-                    );
-                  });
-                  return n > 0 ? (
-                    <span
-                      className="map-count"
-                      title={needs ? "A thread here needs you" : undefined}
-                    >
-                      {needs ? <span className="think-needs-dot" aria-label="Needs you" /> : null}
-                      {n === 1 ? "1 thread" : `${String(n)} threads`}
-                    </span>
-                  ) : null;
-                })()}
               </div>
+              {(() => {
+                const here = threads.filter((t) =>
+                  samePath(t.path, tree.sections[b.index]?.path ?? []),
+                );
+                // A thread here needs you: options to pick, or an edit to use.
+                const needs = here.some((t) => {
+                  const offers = t.items.flatMap((x) => (x.kind === "options" ? [x] : []));
+                  return (offers.length > 0 && !offers.some((x) => x.used)) || previewed.has(t.id);
+                });
+                return b.sub || needs ? (
+                  <div
+                    className="map-box-sub"
+                    title={needs ? "A thread here needs you" : undefined}
+                  >
+                    {needs ? <span className="think-needs-dot" aria-label="Needs you" /> : null}
+                    {b.sub}
+                  </div>
+                ) : null;
+              })()}
               {writable
                 ? (["left", "right", "top", "bottom"] as const).map((h) => (
                     <span

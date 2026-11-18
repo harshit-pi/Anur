@@ -61,8 +61,13 @@ const TOOLS = [
                 description:
                   "The section's whole text if this option is picked, in Markdown, without the section's heading.",
               },
+              why: {
+                type: "string",
+                description:
+                  'One short line, under eight words, on what sets this option apart, such as "Specific; people see themselves".',
+              },
             },
-            required: ["title", "text"],
+            required: ["title", "text", "why"],
             additionalProperties: false,
           },
         },
