@@ -577,6 +577,32 @@ export function Think({
   const [inputs, setInputs] = useState<
     { id: string; thread: string; source: string; label: string; trust: string; local: boolean }[]
   >([]);
+  /** Where this section's links go, and what links to it (8.3). */
+  const [links, setLinks] = useState<{
+    out: { doc: string | null; heading: string | null; written: string }[];
+    into: { doc: string; path: string[] }[];
+  }>({ out: [], into: [] });
+  useEffect(() => {
+    setLinks({ out: [], into: [] });
+    if (!docPath || !section) return;
+    let current = true;
+    const t = window.setTimeout(() => {
+      void anur
+        .call("links:of", {
+          path: docPath,
+          text: docText(),
+          section: { index: section.index, path: section.path },
+        })
+        .then((r) => {
+          if (current) setLinks(r);
+        });
+    }, 150);
+    return () => {
+      current = false;
+      window.clearTimeout(t);
+    };
+    // Again as the section's text changes, so a link just typed shows.
+  }, [docPath, sectionKey, section?.ownRange.to, section?.ownRange.from]);
   const threadsSeen = threads.map((t) => `${t.id}:${String(t.items.length)}`).join(",");
   useEffect(() => {
     setInputs([]);
@@ -1185,6 +1211,68 @@ export function Think({
           {showText ? "Show less" : "Show all its text"}
         </button>
       ) : null}
+      {links.out.length > 0 || links.into.length > 0 ? (
+        <div className="think-links">
+          {links.out.length > 0 ? (
+            <>
+              <div className="think-subhead">Links</div>
+              <p className="quiet think-inputs-note">A new thread here reads these too.</p>
+              <ul>
+                {links.out.map((l) => (
+                  <li key={`${l.doc ?? l.written}#${l.heading ?? ""}`}>
+                    {l.doc ? (
+                      <button
+                        type="button"
+                        className="think-link"
+                        onClick={() => {
+                          window.dispatchEvent(
+                            new CustomEvent("anur:open-path", {
+                              detail: { path: l.doc, heading: l.heading },
+                            }),
+                          );
+                        }}
+                      >
+                        {linkLabel(l.doc, l.heading)}
+                      </button>
+                    ) : (
+                      <span className="think-link-broken" title="No doc by that name in the folder">
+                        {l.written} · no such doc
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+          {links.into.length > 0 ? (
+            <>
+              <div className="think-subhead">Linked from</div>
+              <ul>
+                {links.into.map((l) => (
+                  <li key={`${l.doc}#${l.path.join(">")}`}>
+                    <button
+                      type="button"
+                      className="think-link"
+                      onClick={() => {
+                        window.dispatchEvent(
+                          new CustomEvent("anur:open-path", {
+                            detail: {
+                              path: l.doc,
+                              heading: l.path.length > 1 ? l.path.slice(1).join("#") : null,
+                            },
+                          }),
+                        );
+                      }}
+                    >
+                      {linkLabel(l.doc, l.path.length > 1 ? l.path.slice(1).join("#") : null)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </div>
+      ) : null}
       {inputs.length > 0 ? (
         <details className="think-inputs">
           <summary className="think-subhead">Inputs ({String(inputs.length)})</summary>
@@ -1602,6 +1690,7 @@ const OWN_TOOLS: Record<string, string> = {
   anur_report_check: "Reported the check",
   anur_offer_options: "Offered options",
   anur_read_section: "Read a section",
+  anur_links: "Looked up the section's links",
 };
 
 function toolLabel(title: string): string {
@@ -1610,6 +1699,12 @@ function toolLabel(title: string): string {
   const own = /^mcp__anur__(\w+)/.exec(title)?.[1];
   return own ? (OWN_TOOLS[own] ?? own.replace(/^anur_/, "").replace(/_/g, " ")) : title;
 }
+
+/** A linked section as a person reads it: "Pricing › Plans". */
+const linkLabel = (doc: string, heading: string | null) =>
+  [doc.replace(/\.md$/i, "").split("/").pop() ?? doc, ...(heading ? heading.split("#") : [])].join(
+    " › ",
+  );
 
 const PURPOSE = { build: "Build", check: "Check" } as const;
 

@@ -15,6 +15,8 @@ export type TerminalDeps = {
   outline: (folder: string, rel: string, text: string) => Promise<string | null>;
   bundle: (folder: string, rel: string, text: string, section: string) => Promise<string | null>;
   threads: (folder: string, rel: string, text: string) => Promise<string | null>;
+  /** A section's links in and out (8.4); the title's when no section is named. */
+  links: (folder: string, rel: string, text: string, section: string | null) => Promise<ToolAnswer>;
   propose: (
     folder: string,
     rel: string,
@@ -157,6 +159,7 @@ export function terminalHandler(d: TerminalDeps) {
       const out = await d.threads(folder, rel, text);
       return out ? { text: out } : { error: `${rel} couldn't be read as sections.` };
     }
+    if (tool === "anur_links") return d.links(folder, rel, text, section);
     if (tool === "anur_section_bundle") {
       if (!section) return { error: "Say which section." };
       const out = await d.bundle(folder, rel, text, section);

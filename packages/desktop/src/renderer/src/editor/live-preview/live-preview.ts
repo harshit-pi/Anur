@@ -1,5 +1,13 @@
 import { ensureSyntaxTree, syntaxTree } from "@codemirror/language";
-import { EditorState, RangeSet, StateEffect, StateField, type Range } from "@codemirror/state";
+import {
+  EditorState,
+  Facet,
+  RangeSet,
+  StateEffect,
+  StateField,
+  type Range,
+} from "@codemirror/state";
+import { resolveWiki } from "@anur/core";
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 import type { SyntaxNode } from "@lezer/common";
 import {
@@ -39,6 +47,15 @@ import { TableWidget } from "../table/table-widget.ts";
 
 const hide = Decoration.replace({});
 const mark = (cls: string) => Decoration.mark({ class: cls });
+
+/**
+ * The folder's docs and this doc's path (8.5), so a wiki link to a doc that
+ * isn't there shows faded, as Obsidian shows it. Unset, every link looks found.
+ */
+export const knownDocs = Facet.define<
+  { docs: readonly string[]; path: string },
+  { docs: readonly string[]; path: string } | null
+>({ combine: (v) => v.at(-1) ?? null });
 const line = (cls: string) => Decoration.line({ class: cls });
 
 /** The lines a cursor or selection touches; their Markdown shows as source. */
@@ -337,9 +354,15 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           const heading = children(node, "WikiLinkHeading")[0];
           const alias = children(node, "WikiLinkAlias")[0];
           if (alias) {
+            const known = state.facet(knownDocs);
+            const gone =
+              known !== null &&
+              target !== undefined &&
+              resolveWiki(known.docs, known.path, text(target.from, target.to), null).kind ===
+                "missing";
             out.push(
               hide.range(from, alias.from),
-              mark("cm-lp-link").range(alias.from, alias.to),
+              mark(gone ? "cm-lp-link cm-lp-missing" : "cm-lp-link").range(alias.from, alias.to),
               hide.range(alias.to, to),
             );
             return false;
@@ -347,7 +370,14 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           const shown = [target, heading].filter((n): n is SyntaxNode => Boolean(n));
           const [first, second] = shown;
           if (!first) return false;
-          out.push(hide.range(from, first.from), mark("cm-lp-link").range(first.from, first.to));
+          const known = state.facet(knownDocs);
+          const missing =
+            known !== null &&
+            target !== undefined &&
+            resolveWiki(known.docs, known.path, text(target.from, target.to), null).kind ===
+              "missing";
+          const cls = missing ? "cm-lp-link cm-lp-missing" : "cm-lp-link";
+          out.push(hide.range(from, first.from), mark(cls).range(first.from, first.to));
           if (second) {
             out.push(
               Decoration.replace({ widget: new TextWidget(" › ", "cm-lp-link") }).range(
@@ -447,6 +477,7 @@ const previewField = StateField.define<Preview>({
       focused !== value.focused ||
       tr.docChanged ||
       tr.selection ||
+      tr.startState.facet(knownDocs) !== tr.state.facet(knownDocs) ||
       syntaxTree(tr.startState) !== syntaxTree(tr.state);
     return stale ? preview(tr.state, focused) : value;
   },

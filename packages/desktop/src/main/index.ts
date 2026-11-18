@@ -217,6 +217,13 @@ async function startClaudeSkill(): Promise<void> {
         const at = front();
         return at ? ((await t(at.win.webContents.id)?.threadsOf(rel, text)) ?? null) : null;
       },
+      links: async (_f, rel, text, section) => {
+        const at = front();
+        const threads = at ? t(at.win.webContents.id) : null;
+        return threads
+          ? threads.linksReport(rel, text, section)
+          : { error: "Anur has no folder open." };
+      },
       propose: async (_f, rel, text, section, body, summary) => {
         const at = front();
         return at
@@ -917,6 +924,25 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (folder) threadsFor(folder)?.setOption(thread, id, value);
     return {};
+  },
+  "links:of": async ({ path: rel, text, section }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { out: [], into: [] };
+    const { out, into } = await t.linksAround(rel, text, section.path);
+    const seen = new Set<string>();
+    return {
+      out: out
+        .filter((l) => l.doc !== rel)
+        .filter((l) => {
+          const key = `${l.doc ?? l.written}#${l.heading ?? ""}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .map((l) => ({ doc: l.doc, heading: l.heading, written: l.written })),
+      into: into.map((l) => ({ doc: l.from.doc, path: l.from.path })),
+    };
   },
   "inputs:list": async ({ path: rel, text, section }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

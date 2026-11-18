@@ -196,7 +196,10 @@ export function App() {
   useEffect(() => {
     // A doc named in a thread, such as one an agent made (15.6), opens in this tab.
     const onOpen = (e: Event) => {
-      const { path } = (e as CustomEvent<{ path: string }>).detail;
+      const { path, heading } = (e as CustomEvent<{ path: string; heading?: string | null }>)
+        .detail;
+      // A linked section (8.3) opens where it is.
+      if (heading) setPendingHeading({ path, heading });
       openDocNow.current(path, false);
     };
     window.addEventListener("anur:open-path", onOpen);
@@ -1028,6 +1031,7 @@ export function App() {
               onUndo={undoOnPage}
               onRedo={redoOnPage}
               writable={folder?.mode === "writable" && doc.mode === "editable"}
+              docs={folder?.docs ?? []}
             />
           ) : centerView === "map" ? (
             // While a doc's sections are read, an empty map, so the page never shows through.

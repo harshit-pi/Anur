@@ -3070,3 +3070,52 @@ body.resizing * {
 .think-working-step {
   font-style: normal;
 }
+
+/* A section's links (8.3): where they go, and what links here. */
+.think-links ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.think-links .think-link {
+  text-align: left;
+  text-decoration: none;
+}
+
+.think-links .think-link:hover {
+  text-decoration: underline;
+}
+
+.think-link-broken {
+  color: var(--graphite);
+  opacity: 0.7;
+}
+
+/* A link to another doc's section (8.6): opens where it goes. */
+.map-linkbox {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--blue-wash);
+  border-radius: 18px;
+  background: var(--paper);
+  color: var(--blue);
+  font: 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.map-linkbox:hover {
+  border-color: var(--blue);
+}
+
+.map-linkbox.broken {
+  color: var(--graphite);
+  opacity: 0.7;
+  cursor: default;
+}

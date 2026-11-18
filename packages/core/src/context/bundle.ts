@@ -12,7 +12,7 @@ import type { SectionTree } from "../sections/tree.ts";
 
 /** One part of the bundle, as the reads line lists it. */
 export type BundlePart = {
-  kind: "ancestor" | "section" | "siblings" | "outline" | "full";
+  kind: "ancestor" | "section" | "siblings" | "outline" | "full" | "linked";
   /** What the reads line says it is: the section's heading, "Sibling sections" or "The rest of the doc". */
   label: string;
   /** How much of it: "its text", "its outline". */
@@ -84,6 +84,15 @@ export type BundleInput = {
    * for `![[Ideas.base]]` (4.11), by the embed's target. Counted in the budget.
    */
   embeds?: ReadonlyMap<string, string>;
+  /**
+   * The sections this section links to in other docs, one link deep, in
+   * reading order (group 8): each with its label ("Pricing.md › Plans"),
+   * its path in the folder and its text. What fits the budget left after
+   * the doc goes in; the rest are named as left out, farthest first.
+   */
+  linked?: readonly { label: string; path: string; text: string }[];
+  /** Links in this section that go nowhere, as written: "Spec#Plans". */
+  broken?: readonly string[];
 };
 
 /** An embed line on its own: `![[target]]`, the target without its alias. */
@@ -144,6 +153,8 @@ export function buildBundle({
   budget = FULL_TEXT_BUDGET,
   inputs = [],
   embeds = new Map<string, string>(),
+  linked = [],
+  broken = [],
 }: BundleInput): Bundle {
   const section = tree.sections[index];
   if (!section) throw new Error(`no section at index ${String(index)}`);
@@ -241,6 +252,16 @@ export function buildBundle({
     }
   }
 
+  // Linked sections, in reading order, while the budget the doc left allows.
+  let used = parts.reduce((n, p) => n + p.text.length, 0);
+  const leftOut: { label: string; path: string }[] = [];
+  for (const l of linked) {
+    if (used + l.text.length <= budget) {
+      parts.push({ kind: "linked", label: l.label, detail: "linked, its text", text: l.text });
+      used += l.text.length;
+    } else leftOut.push(l);
+  }
+
   const where = formatPath(section.path);
   const lines = [
     `# Anur: a thread on one section`,
@@ -249,6 +270,11 @@ export function buildBundle({
     parts.some((p) => p.kind === "full")
       ? "Below is what this thread works from: the text of the sections above it, this section in full, and the rest of the doc in full. Other threads' discussions are never included, on purpose, so this one stays about this section."
       : "Below is what this thread works from: the text of the sections above it, this section in full, and the rest of the doc as an outline, each section's heading and first line. Any section's full text is one call away with Anur's anur_read_section tool. Other threads' discussions are never included, on purpose, so this one stays about this section.",
+    ...(parts.some((p) => p.kind === "linked")
+      ? [
+          "It also has the text of the sections this section links to in other docs, one link deep, each labelled with its file: what the section points at is part of what it says.",
+        ]
+      : []),
     ...(rules.includes("fetch-hint") && !parts.some((p) => p.kind === "full")
       ? [
           "Before you answer, read with anur_read_section any section in the outline whose text could set a rule for your answer, such as a rule on wording, format or channels; the outline shows first lines only.",
@@ -275,10 +301,30 @@ export function buildBundle({
       lines.push("## The whole doc, as an outline", "", part.text, "");
     } else if (part.kind === "full") {
       lines.push("## The rest of the doc, in full", "", part.text, "");
+    } else if (part.kind === "linked") {
+      lines.push(`## Linked from this section: ${part.label}`, "", part.text || "(empty)", "");
     } else {
       lines.push("## Sections beside it, as an outline", "", part.text, "");
     }
   }
+  if (leftOut.length > 0)
+    lines.push(
+      "## Linked, but left out for size",
+      "",
+      "This section links to these too; they didn't fit. Read any you need with your own Read tool.",
+      "",
+      ...leftOut.map((l) => `- ${l.label}: \`${l.path}\``),
+      "",
+    );
+  if (broken.length > 0)
+    lines.push(
+      "## Links that go nowhere",
+      "",
+      "This section links to these, but no doc or heading by that name is in the folder. Don't guess what they held; say so if it matters.",
+      "",
+      ...broken.map((b) => `- [[${b}]]`),
+      "",
+    );
   if (inputs.length > 0) {
     lines.push(
       "## Inputs from earlier threads on this section or above it",

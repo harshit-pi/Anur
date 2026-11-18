@@ -24,7 +24,7 @@ import { formattingKeymap } from "./commands.ts";
 import { insertMenu } from "./insert-menu.ts";
 import { type ClickedLink, linkClicks } from "./link-click.ts";
 import { editLink, linkEditor } from "./link-editor.ts";
-import { livePreview } from "./live-preview/live-preview.ts";
+import { knownDocs, livePreview } from "./live-preview/live-preview.ts";
 import { restoreFolds, sectionFolding } from "./fold/section-fold.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { editorFilter } from "./editor-filter.ts";
@@ -116,6 +116,8 @@ export function Page({
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const preview = useRef(new Compartment());
+  /** The folder's docs, so links to missing docs show faded (8.5). */
+  const known = useRef(new Compartment());
   const sourceNow = useRef(source);
   sourceNow.current = source;
   // Read when a doc opens; a folder's list changing doesn't reopen the doc.
@@ -422,6 +424,7 @@ export function Page({
                 pageHighlight,
                 sectionFolding(doc.path),
                 preview.current.of(previewFor(sourceNow.current)),
+                known.current.of(knownDocs.of({ docs: docsNow.current, path: doc.path })),
                 ...(editable ? [insertMenu(docsNow.current), linkEditor] : []),
                 linkClicks((link, inNewTab) => {
                   const problem = openLinkNow.current(link, inNewTab);
@@ -715,6 +718,12 @@ export function Page({
   useEffect(() => {
     view.current?.dispatch({ effects: preview.current.reconfigure(previewFor(source)) });
   }, [source]);
+  useEffect(() => {
+    // A doc added, renamed or deleted can mend or break a link: refade them.
+    view.current?.dispatch({
+      effects: known.current.reconfigure(knownDocs.of({ docs, path: doc.path })),
+    });
+  }, [docs, doc.path]);
 
   /** Put the cursor on the next conflict after it, or the first. */
   const nextConflict = () => {

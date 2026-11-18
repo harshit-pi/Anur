@@ -39,6 +39,27 @@ const TOOLS = [
     },
   },
   {
+    name: "anur_links",
+    description:
+      "Where a section's links go and which sections link to it, across the opened folder: doc and heading paths only, never their text (read one with anur_read_section). Broken links are marked. Leave both arguments out for this thread's own section.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        section: {
+          type: "string",
+          description:
+            "The section's heading, or its path from the doc's title, such as \"Notifications > Retry timing\".",
+        },
+        doc: {
+          type: "string",
+          description:
+            "The doc's path in the folder, such as \"notes/plan.md\". Leave it out for this thread's own doc.",
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "anur_offer_options",
     description:
       "Offer the person two or more alternatives for this thread's section, instead of listing them in your reply. Each option is a short title and the section's whole new text, without its heading. Anur shows them as cards in the thread and as boxes on the doc's map; the person picks one, and its text replaces the section's text in the doc. Don't also edit the doc for options you offer.",
@@ -197,6 +218,24 @@ const TERMINAL_TOOLS = [
       type: "object",
       properties: { doc: docArg, section: sectionArg },
       required: ["doc", "section"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "anur_links",
+    description:
+      "Where a section's links go and which sections link to it, across the folder open in Anur: doc and heading paths only. Broken links are marked. Leave out the section for the doc's title.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        doc: docArg,
+        section: {
+          type: "string",
+          description:
+            'The section\'s heading or its path, such as "Notifications > Retry timing".',
+        },
+      },
+      required: ["doc"],
       additionalProperties: false,
     },
   },

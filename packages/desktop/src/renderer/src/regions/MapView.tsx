@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { boxSize, mapLayout, type MapNode, type SectionTree } from "@anur/core";
+import { boxSize, mapLayout, resolveWiki, type MapNode, type SectionTree } from "@anur/core";
 import type { PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
@@ -21,7 +21,9 @@ type Pos = { x: number; y: number };
 type View = { x: number; y: number; z: number };
 type Box = {
   id: string;
-  kind: "section" | "thread" | "option" | "edit";
+  kind: "section" | "thread" | "option" | "edit" | "link";
+  /** A link from this section to another doc's section (8.6). */
+  link?: { doc: string | null; heading: string | null; written: string };
   index: number;
   thread?: ThreadView;
   /** An option a thread offered for this section, not picked yet. */
@@ -84,6 +86,7 @@ export function MapView({
   onUndo,
   onRedo,
   writable,
+  docs,
 }: {
   docPath: string;
   tree: SectionTree;
@@ -102,6 +105,8 @@ export function MapView({
   onRedo: () => void;
   /** False when the doc can't be edited: boxes still move, but none can be added. */
   writable: boolean;
+  /** The folder's docs, to place links to other docs (8.6). */
+  docs: readonly string[];
 }) {
   const host = useRef<HTMLDivElement>(null);
   /** Section IDs by heading path, so a heading added above can't hand a box another's ID. */
@@ -273,6 +278,32 @@ export function MapView({
           parent: id,
         });
       }
+      // Links to other docs' sections (8.6): small boxes under the section, opening where they go.
+      const seen = new Set<string>();
+      for (const l of s.linksOut) {
+        if (l.sameDoc || l.embed) continue;
+        const to = resolveWiki(docs, docPath, l.target, l.heading);
+        const doc = to.kind === "doc" ? to.path : null;
+        const key = `${doc ?? l.target}#${l.heading ?? ""}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const lid = `l:${id}:${key}`;
+        const label = doc
+          ? [
+              doc.replace(/\.md$/i, "").split("/").pop() ?? doc,
+              ...(l.heading ? l.heading.split("#") : []),
+            ].join(" › ")
+          : `${l.target} (no such doc)`;
+        nodes.push({ id: lid, parent: id, ...pill(`→ ${label}`) });
+        info.set(lid, {
+          id: lid,
+          kind: "link",
+          index: s.index,
+          heading: label,
+          link: { doc, heading: l.heading, written: l.target },
+          parent: id,
+        });
+      }
       // Each thread's latest options, until one is picked: what the section could say.
       for (const t of threads.filter((t) => samePath(t.path, s.path))) {
         // Until one is picked: the latest first set, any explored from earlier
@@ -345,7 +376,12 @@ export function MapView({
     }
     // Threads before subsections, so they sit nearest their section.
     const near = (n: MapNode) =>
-      Number(n.id.startsWith("t:") || n.id.startsWith("o:") || n.id.startsWith("p:"));
+      Number(
+        n.id.startsWith("t:") ||
+          n.id.startsWith("o:") ||
+          n.id.startsWith("p:") ||
+          n.id.startsWith("l:"),
+      );
     nodes.sort((a, b) => near(b) - near(a));
     const placed = mapLayout(
       [nodes.find((n) => n.parent === null), ...nodes.filter((n) => n.parent !== null)].filter(
@@ -392,7 +428,7 @@ export function MapView({
       }
     }
     return out;
-  }, [tree, threads, previews, idOf, moved, drag]);
+  }, [tree, threads, previews, idOf, moved, drag, docs, docPath]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
 
@@ -579,6 +615,15 @@ export function MapView({
     if (e.button !== 0) return;
     e.stopPropagation();
     host.current?.focus();
+    if (b.kind === "link") {
+      if (b.link?.doc)
+        window.dispatchEvent(
+          new CustomEvent("anur:open-path", {
+            detail: { path: b.link.doc, heading: b.link.heading },
+          }),
+        );
+      return;
+    }
     if ((b.kind === "thread" || b.kind === "option" || b.kind === "edit") && b.thread) {
       onSelect(b.index);
       window.dispatchEvent(
@@ -921,6 +966,23 @@ export function MapView({
               </div>
               {b.sub ? <div className="map-box-sub">{b.sub}</div> : null}
             </div>
+          ) : b.kind === "link" && b.link ? (
+            <button
+              key={b.id}
+              type="button"
+              className={`map-linkbox${b.link.doc ? "" : " broken"}`}
+              style={{ left: b.x - b.w / 2, top: b.y - b.h / 2, width: b.w, height: b.h }}
+              title={
+                b.link.doc
+                  ? `Opens ${b.link.doc}${b.link.heading ? ` at ${b.link.heading.split("#").join(" › ")}` : ""}`
+                  : "No doc by that name in the folder"
+              }
+              onPointerDown={(e) => {
+                onBoxDown(e, b);
+              }}
+            >
+              <span className="truncate">→ {b.heading}</span>
+            </button>
           ) : b.kind === "thread" && b.thread ? (
             <button
               key={b.id}
