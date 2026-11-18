@@ -22,6 +22,8 @@ export type AppSettings = {
   autoUpdate: boolean;
   /** Live agent sessions before idle ones close (13.3); eight by default. */
   sessionLimit: number;
+  /** The name others see on this person's threads; null takes git's, else the Mac's. */
+  name: string | null;
 };
 
 const DEFAULTS: AppSettings = {
@@ -30,6 +32,7 @@ const DEFAULTS: AppSettings = {
   autoApply: false,
   autoUpdate: true,
   sessionLimit: 8,
+  name: null,
 };
 
 /** The limits Settings offers; anything else saved reads as the default. */
@@ -57,6 +60,7 @@ export class AppSettingsStore {
         autoApply: raw.autoApply === true,
         autoUpdate: raw.autoUpdate !== false,
         sessionLimit: sessionLimitOf(raw.sessionLimit),
+        name: typeof raw.name === "string" && raw.name.trim() ? raw.name.trim().slice(0, 80) : null,
       };
     } catch {
       this.current = { ...DEFAULTS };

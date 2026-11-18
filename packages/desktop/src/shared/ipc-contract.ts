@@ -105,6 +105,8 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     turn: z.string(),
     role: z.enum(["person", "agent"]),
     text: z.string(),
+    /** Who wrote a person's message, when it isn't the one reading. */
+    by: z.string().nullable().optional(),
   }),
   z.object({
     kind: z.literal("tool"),
@@ -249,6 +251,10 @@ export const ThreadView = z.object({
     .nullable(),
   /** An action thread (group 15), or null for thinking. */
   purpose: z.enum(["build", "check"]).nullable(),
+  /** Who started it, when it isn't the one reading; null for their own. */
+  by: z.string().nullable().optional(),
+  /** When it started (ISO). */
+  startedAt: z.string().optional(),
   agent: AgentIdSchema,
 });
 export type ThreadView = z.infer<typeof ThreadView>;
@@ -410,6 +416,8 @@ export const ipcContract = {
       commitAnur: z.boolean().nullable(),
       defaultAgent: AgentIdSchema,
       autoApply: z.boolean(),
+      /** The name others see on this person's threads. */
+      name: z.string(),
     }),
   },
   "settings:set": {
@@ -418,12 +426,16 @@ export const ipcContract = {
         commitAnur: z.boolean().optional(),
         defaultAgent: AgentIdSchema.optional(),
         autoApply: z.boolean().optional(),
+        /** Empty goes back to git's name, else the Mac's. */
+        name: z.string().max(80).optional(),
       })
       .strict(),
     response: z.object({
       commitAnur: z.boolean().nullable(),
       defaultAgent: AgentIdSchema,
       autoApply: z.boolean(),
+      /** The name others see on this person's threads. */
+      name: z.string(),
     }),
   },
   /** Rename a thread, so the person can tell it apart in Think and on the map. */
@@ -435,6 +447,94 @@ export const ipcContract = {
         text: z.string(),
         title: z.string().max(400),
       })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /**
+   * Settings, Storage (11.5, 11.6): what `.anur/` holds by kind, what Clean
+   * up would remove, which other devices hold it off, and attachments
+   * nothing uses.
+   */
+  "storage:read": {
+    request: z.object({}).strict(),
+    response: z.object({
+      kinds: z.array(z.object({ kind: z.string(), bytes: z.number(), files: z.number() })),
+      cleanable: z.object({ count: z.number(), bytes: z.number() }),
+      /** Other devices open now or that didn't quit cleanly: when each last opened the folder. */
+      blockedBy: z.array(z.object({ openedAt: z.string().nullable() })),
+      attachments: z.array(z.object({ path: z.string(), bytes: z.number() })),
+    }),
+  },
+  /** Clean up (11.5): remove snapshots unused for 30 days that nothing points to. */
+  "storage:clean": {
+    request: z.object({}).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok"), removed: z.number() }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** Move one unused attachment to the system trash (11.6). */
+  "attachment:trash": {
+    request: z.object({ path: z.string().max(4096) }).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Close or reopen a thread (11.3): closed ones are hidden until a person shows them. */
+  "thread:close": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        path: z.string().max(4096),
+        text: z.string(),
+        closed: z.boolean(),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Delete a thread and its previews, at once (11.3). */
+  "thread:delete": {
+    request: z.object({ thread: z.string().max(200) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /**
+   * The open doc's orphans (11.1): sections whose heading is gone, with the
+   * threads and history behind them, and the live section most like each.
+   */
+  "orphans:list": {
+    request: z.object({ path: z.string().max(4096), text: z.string() }).strict(),
+    response: z.object({
+      orphans: z.array(
+        z.object({
+          id: z.string(),
+          path: z.array(z.string()),
+          threads: z.array(z.object({ id: z.string(), title: z.string() })),
+          history: z.boolean(),
+          suggestion: SectionRef.nullable(),
+        }),
+      ),
+    }),
+  },
+  /** Reattach an orphan to a live section (11.1): its threads and history move there. */
+  "orphans:reattach": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        orphan: z.string().max(200),
+        section: SectionRef,
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** Delete an orphan's threads, previews, inputs and history, at once (11.2). */
+  "orphans:delete": {
+    request: z
+      .object({ path: z.string().max(4096), text: z.string(), orphan: z.string().max(200) })
       .strict(),
     response: z.object({ ok: z.boolean() }),
   },

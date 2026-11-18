@@ -28,6 +28,21 @@ describe("FolderWatch", () => {
     expect(told).toEqual([1]);
   });
 
+  it("tells about a long trickle every so often, not once per file or only at the end", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "anur-watch-"));
+    const told: number[] = [];
+    watch = new FolderWatch((id) => told.push(id), 100, 400);
+    watch.start(1, root);
+    await wait(150);
+    for (let i = 0; i < 12; i++) {
+      writeFileSync(path.join(root, `${String(i)}.md`), "# A\n");
+      await wait(60);
+    }
+    await wait(300);
+    expect(told.length).toBeGreaterThanOrEqual(2);
+    expect(told.length).toBeLessThanOrEqual(4);
+  });
+
   it("stops telling once stopped", async () => {
     const root = mkdtempSync(path.join(tmpdir(), "anur-watch-"));
     const told: number[] = [];

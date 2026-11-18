@@ -3,7 +3,7 @@ import { readFile, realpath, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { FORMAT_VERSION, PreviewPart, docsBefore } from "@anur/core";
+import { FORMAT_VERSION, PreviewPart, docsBefore, subtreeText } from "@anur/core";
 import { AGENTS, type AgentId } from "../shared/agents.ts";
 import type { SessionOption } from "../agent/protocol.ts";
 import {
@@ -58,6 +58,20 @@ import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
 import { SectionVersions, lastSavedIn } from "./folder/versions.ts";
 import { sectionCommits } from "./folder/git-history.ts";
+import { suggestMatch } from "./folder/orphans.ts";
+import { personName } from "./folder/people.ts";
+import {
+  devicesStillOpen,
+  namesOf,
+  noteName,
+  noteOpened,
+  noteQuit,
+  removeSnapshots,
+  storageOf,
+  unusedAttachments,
+  unusedSnapshots,
+} from "./folder/storage.ts";
+import { SnapshotStore } from "../vault/snapshot-store.ts";
 import { loadDeviceId } from "../device/device-id.ts";
 import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
@@ -323,6 +337,10 @@ function threadsFor(folder: FolderState): Threads | null {
       mcp: { socket: anurSocket, script: path.join(here, "mcp-server.js") },
       autoApply: () => appSettings.get().autoApply,
       features: () => appSettings.get().features,
+      people: async () => ({
+        me: await personName(folder.path, appSettings.get().name),
+        byDevice: await namesOf(folder.path),
+      }),
       folderState: () =>
         [...windows.keys()].map((id) => folders.current(id)).find((f) => f?.path === folder.path) ??
         null,
@@ -416,6 +434,13 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
   if (folders.current(win.webContents.id)) target = createWindow();
   const outcome = await folders.open(target.webContents.id, folder);
   if (outcome.kind === "opened") {
+    // 11.4: other devices hold off Clean up while this one has the folder open.
+    if (device && outcome.folder.mode === "writable") {
+      const at = outcome.folder.path;
+      void personName(at, appSettings.get().name)
+        .then((name) => noteOpened(at, device as string, new Date(), name))
+        .catch(() => undefined);
+    }
     folderWatch.start(target.webContents.id, outcome.folder.path);
     target.setTitle(outcome.folder.name);
     target.setRepresentedFilename(outcome.folder.path);
@@ -618,10 +643,20 @@ const handlers: { [C in Channel]: Handler<C> } = {
       commitAnur: folder ? await commitsAnur(folder.path) : null,
       defaultAgent: appSettings.get().defaultAgent,
       autoApply: appSettings.get().autoApply,
+      name: await personName(folder?.path ?? homedir(), appSettings.get().name),
     };
   },
-  "settings:set": async ({ commitAnur, defaultAgent, autoApply }, { webContentsId }) => {
+  "settings:set": async ({ commitAnur, defaultAgent, autoApply, name }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
+    if (name !== undefined) {
+      await appSettings.set({ name: name.trim().slice(0, 80) || null });
+      // Every open folder's note follows, so others see the new name on their next look.
+      for (const id of windows.keys()) {
+        const f = folders.current(id);
+        if (f && device && f.mode === "writable")
+          await noteName(f.path, device, await personName(f.path, appSettings.get().name));
+      }
+    }
     if (defaultAgent !== undefined) await appSettings.set({ defaultAgent });
     if (autoApply !== undefined) await appSettings.set({ autoApply });
     if (commitAnur !== undefined && folder?.mode === "writable") {
@@ -631,12 +666,120 @@ const handlers: { [C in Channel]: Handler<C> } = {
       commitAnur: folder ? await commitsAnur(folder.path) : null,
       defaultAgent: appSettings.get().defaultAgent,
       autoApply: appSettings.get().autoApply,
+      name: await personName(folder?.path ?? homedir(), appSettings.get().name),
     };
   },
   "thread:rename": async ({ thread, path: rel, text, title }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.rename(rel, text, thread, title) : false };
+  },
+  "thread:close": async ({ thread, path: rel, text, closed }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    return { ok: t ? await t.setClosed(rel, text, thread, closed) : false };
+  },
+  "thread:delete": async ({ thread }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    return t ? t.deleteThread(thread) : { kind: "refused", reason: "No folder is open." };
+  },
+  "storage:read": async (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || !device || folder.mode !== "writable")
+      return { kinds: [], cleanable: { count: 0, bytes: 0 }, blockedBy: [], attachments: [] };
+    const [kinds, unused, open, attachments] = await Promise.all([
+      storageOf(folder.path),
+      unusedSnapshots(folder.path),
+      devicesStillOpen(folder.path, device),
+      unusedAttachments(folder.path, folder.docs, folder.files),
+    ]);
+    return {
+      kinds,
+      cleanable: { count: unused.length, bytes: unused.reduce((n, s) => n + s.bytes, 0) },
+      blockedBy: open.map((d) => ({ openedAt: d.openedAt || null })),
+      attachments,
+    };
+  },
+  "storage:clean": async (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || !device || folder.mode !== "writable")
+      return { kind: "refused", reason: "Needs a folder Anur can write to." };
+    if ((await devicesStillOpen(folder.path, device)).length > 0)
+      return {
+        kind: "refused",
+        reason:
+          "Another device has this folder open, or didn't quit cleanly. Quit Anur there first.",
+      };
+    const store = new SnapshotStore(path.join(folder.path, ".anur"), device);
+    const found = await unusedSnapshots(folder.path);
+    const removed = await removeSnapshots(
+      folder.path,
+      found.map((f) => f.hash),
+      (h) => store.delete(h as never, "cleanup"),
+    );
+    return { kind: "ok", removed };
+  },
+  "attachment:trash": async ({ path: rel }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || folder.mode !== "writable" || !folder.files.includes(rel)) return { ok: false };
+    const unused = await unusedAttachments(folder.path, folder.docs, folder.files);
+    if (!unused.some((f) => f.path === rel)) return { ok: false };
+    await shell.trashItem(path.join(folder.path, rel));
+    return { ok: true };
+  },
+  "orphans:list": async ({ path: rel, text }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const v = folder ? versionsFor(folder) : null;
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !v || !t || !folder.docs.includes(rel)) return { orphans: [] };
+    const at = await v.locate(rel, text);
+    if (!at) return { orphans: [] };
+    const [gone, threads] = await Promise.all([v.orphansOf(rel), t.sectionsOfThreads(rel, text)]);
+    const live = at.tree.sections.map((s) => ({ path: s.path, text: subtreeText(text, s) }));
+    const orphans = gone
+      .map((o) => {
+        const on = threads.filter((x) => x.section === o.id);
+        const i = on.length > 0 || o.history ? suggestMatch(o, live) : null;
+        return {
+          id: o.id,
+          path: o.path,
+          threads: on.map((x) => ({ id: x.thread, title: x.title })),
+          history: o.history,
+          suggestion: i === null ? null : { index: i, path: at.tree.sections[i]?.path ?? [] },
+        };
+      })
+      // Only what something is behind: a gone heading with no threads or history is no loss.
+      .filter((o) => o.threads.length > 0 || o.history)
+      .sort((a, b) => b.threads.length - a.threads.length);
+    return { orphans };
+  },
+  "orphans:reattach": async ({ path: rel, text, orphan, section }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const v = folder ? versionsFor(folder) : null;
+    if (!folder || !v || !folder.docs.includes(rel))
+      return { kind: "refused", reason: "This folder is read-only." };
+    const at = await v.locate(rel, text);
+    const node = at?.tree.sections[section.index];
+    const onto = at?.ids[section.index];
+    if (!at || !node || !onto || node.path.join("\u0000") !== section.path.join("\u0000"))
+      return { kind: "refused", reason: "That section has moved; pick it again." };
+    try {
+      await v.reattach(rel, orphan as never, onto);
+    } catch (e) {
+      return { kind: "refused", reason: e instanceof Error ? e.message : String(e) };
+    }
+    return { kind: "ok" };
+  },
+  "orphans:delete": async ({ path: rel, text, orphan }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const v = folder ? versionsFor(folder) : null;
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !v || !t || !folder.docs.includes(rel)) return { ok: false };
+    if (!(await v.orphansOf(rel)).some((o) => o.id === orphan)) return { ok: false };
+    await t.forgetSection(rel, text, orphan as never);
+    await v.forget(rel, orphan as never);
+    return { ok: true };
   },
   "thread:undo-created": async ({ thread, id }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -1299,6 +1442,8 @@ function createWindow(): BrowserWindow {
     docWatcher.stop(id);
     folderWatch.stop(id);
     senders.remove(id);
+    if (folder && device && folder.mode === "writable")
+      quitNotes.add(noteQuit(folder.path, device).catch(() => undefined));
     void folders.close(id);
   });
 
@@ -1603,6 +1748,15 @@ app.on("will-quit", (event) => {
     hub.stop();
     anurSocket.close();
     await Promise.all([...threads.values()].map((t) => t.close()));
+    // Windows close before will-quit: their notes are written by now or soon (11.4).
+    await Promise.all(quitNotes);
+    await Promise.all(
+      [...windows.keys()].map(async (id) => {
+        const f = folders.current(id);
+        if (f && device && f.mode === "writable")
+          await noteQuit(f.path, device).catch(() => undefined);
+      }),
+    );
     await folders.closeAll();
   };
   // Never more than a few seconds: a stuck write mustn't keep the app open.
@@ -1615,6 +1769,8 @@ app.on("will-quit", (event) => {
     });
 });
 let cleanedUp = false;
+/** Each closed window's "quit cleanly" note, awaited before the app exits (11.4). */
+const quitNotes = new Set<Promise<void>>();
 
 // A window with unsaved typing holds its close until the save lands
 // (the page's beforeunload), then closes itself; a quit carries on after it.
