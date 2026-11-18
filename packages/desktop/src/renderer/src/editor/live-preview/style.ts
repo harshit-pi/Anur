@@ -53,6 +53,14 @@ export const livePreviewTheme = EditorView.theme({
     cursor: "pointer",
     opacity: "1",
   },
+  // A block mark being typed ("#", ">", "-") shows faint until its space makes it one.
+  ".cm-lp-pending": {
+    color: "var(--graphite)",
+  },
+  ".cm-lp-placeholder": {
+    color: "var(--pencil)",
+    pointerEvents: "none",
+  },
   ".cm-lp-quote": {
     borderLeft: "3px solid var(--rule)",
     paddingLeft: "14px !important",
