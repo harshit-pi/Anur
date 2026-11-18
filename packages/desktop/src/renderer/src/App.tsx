@@ -50,6 +50,7 @@ import { newDocPath } from "./layout/new-doc.ts";
 import { MergeDialog } from "./regions/MergeDialog.tsx";
 import { Center, LeftSidebar, Ribbon, RightSidebar, StatusBar } from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
+import { MapView } from "./regions/MapView.tsx";
 
 export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -72,6 +73,10 @@ export function App() {
   const [sections, setSections] = useState<SectionTree | null>(null);
   /** The section the cursor is in, by index: what the Think panel is about. */
   const [cursorSection, setCursorSection] = useState(0);
+  /** Page or Map in the centre (task 7). */
+  const [centerView, setCenterView] = useState<"page" | "map">("page");
+  /** Bumped when a map box is picked, so the section panel brings Think forward. */
+  const [mapPicks, setMapPicks] = useState(0);
   const sectionsNow = useRef(sections);
   sectionsNow.current = sections;
   const onCursor = useCallback((pos: number) => {
@@ -427,6 +432,45 @@ export function App() {
     },
     [sections],
   );
+  /** A box picked on the map: Think shows its section, and the page's cursor moves there unseen. */
+  const pickOnMap = useCallback(
+    (index: number) => {
+      setCursorSection(index);
+      setMapPicks((n) => n + 1);
+      setOpen((o) => {
+        if (o.right) return o;
+        const next = { ...o, right: true };
+        saveOpen(window.localStorage, next);
+        return next;
+      });
+      const target = sections?.sections[index]?.headingRange;
+      const v = view.current;
+      if (target && v) v.dispatch({ selection: { anchor: target.to } });
+    },
+    [sections],
+  );
+  /**
+   * A section added on the map: a heading one level under `parent`, after
+   * everything already under it. Returns its heading path.
+   */
+  const addSection = useCallback(
+    (parent: number, name: string): string[] | null => {
+      const v = view.current;
+      const p = sections?.sections[parent];
+      if (!v || !p) return null;
+      const sibling = p.children.map((c) => sections.sections[c]).find(Boolean);
+      const level = Math.min(6, sibling ? sibling.level : Math.max(2, p.level + 1));
+      const at = p.subtreeRange.to;
+      const before = v.state.doc.sliceString(Math.max(0, at - 2), at);
+      const lead =
+        at === 0 ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+      const tail = at < v.state.doc.length ? "\n\n" : "\n";
+      const insert = `${lead}${"#".repeat(level)} ${name}${tail}`;
+      v.dispatch({ changes: { from: at, insert }, userEvent: "input.map" });
+      return [...p.path, name];
+    },
+    [sections],
+  );
   // A link's heading: once its doc is open and parsed, scroll to it.
   useEffect(() => {
     // Wait until the page shows that doc: until then, the sections are the old doc's.
@@ -548,6 +592,10 @@ export function App() {
         e.preventDefault();
         toggle(e.altKey ? "right" : "left");
       }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "m") {
+        e.preventDefault();
+        setCenterView((v) => (v === "map" ? "page" : "map"));
+      }
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "e") {
         e.preventDefault();
         setSource((s) => !s);
@@ -579,6 +627,8 @@ export function App() {
           setTabs((t) => newTab(t));
         }}
         onListTabs={listTabs}
+        view={doc && sections ? centerView : null}
+        onView={setCenterView}
       />
       <Ribbon
         filesOpen={open.left}
@@ -628,6 +678,19 @@ export function App() {
             />
           ) : null
         }
+        map={
+          centerView === "map" && doc && !holding && doc.path === selected && sections ? (
+            <MapView
+              docPath={doc.path}
+              tree={sections}
+              docText={docText}
+              selected={cursorSection}
+              onSelect={pickOnMap}
+              onAddSection={addSection}
+              writable={folder?.mode === "writable" && doc.mode === "editable"}
+            />
+          ) : null
+        }
         opening={opening}
         docNote={doc?.note ?? null}
         docError={docError ?? save.detail}
@@ -655,7 +718,7 @@ export function App() {
         sections={sections}
         onJump={jumpTo}
         hidden={!open.right}
-        showThink={threadRequest?.n ?? 0}
+        showThink={(threadRequest?.n ?? 0) + mapPicks}
         think={
           <Think
             docPath={doc && sections ? doc.path : null}

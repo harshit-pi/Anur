@@ -494,6 +494,30 @@ export const ipcContract = {
     ]),
   },
 
+  /**
+   * The doc's map (task 7): each section's ID, in the order of the page's
+   * sections for `text`, and where a person put boxes, by section ID.
+   */
+  "map:read": {
+    request: z.object({ path: z.string().max(4096), text: z.string() }).strict(),
+    response: z.object({
+      ids: z.array(z.string()),
+      positions: z.record(z.string(), z.object({ x: z.number(), y: z.number() })),
+    }),
+  },
+  /** Boxes a person moved on the map; null puts a box back in the layout. */
+  "map:save": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        positions: z
+          .record(z.string().max(200), z.object({ x: z.number(), y: z.number() }).nullable())
+          .refine((r) => Object.keys(r).length <= 5000),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Whether threads can run; asking connects the agent once (3.1). */
   "agent:status": {
     /** Without an agent, the default one. */
