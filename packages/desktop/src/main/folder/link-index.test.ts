@@ -50,6 +50,8 @@ describe("LinkIndex", () => {
     ]);
     expect(out[2]?.written).toBe("Nowhere");
     expect(await index.linksOut("Plan.md", ["Plan", "Risks"])).toEqual([]);
+    // Only a section's own text: the title doesn't gather its sections' links.
+    expect(await index.linksOut("Plan.md", ["Plan"])).toEqual([]);
   });
 
   it("finds the sections that link in, by heading or to the whole doc", async () => {

@@ -1245,8 +1245,8 @@ export function Think({
             </>
           ) : null}
           {links.into.length > 0 ? (
-            <>
-              <div className="think-subhead">Linked from</div>
+            <details className="think-linked-from">
+              <summary className="think-subhead">Linked from ({String(links.into.length)})</summary>
               <ul>
                 {links.into.map((l) => (
                   <li key={`${l.doc}#${l.path.join(">")}`}>
@@ -1269,7 +1269,7 @@ export function Think({
                   </li>
                 ))}
               </ul>
-            </>
+            </details>
           ) : null}
         </div>
       ) : null}
