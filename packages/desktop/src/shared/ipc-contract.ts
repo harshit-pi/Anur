@@ -577,6 +577,15 @@ export const ipcContract = {
     request: z.object({ paths: z.array(z.string().max(1024)).max(1000) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
+  /** Live agent sessions, the memory the agents use, and the limit (13.3, 13.4). */
+  "agent:sessions": {
+    request: z.object({}).strict(),
+    response: z.object({ live: z.number(), limit: z.number(), memoryMb: z.number().nullable() }),
+  },
+  "agent:set-session-limit": {
+    request: z.object({ limit: z.number().int().min(1).max(50) }).strict(),
+    response: z.object({ live: z.number(), limit: z.number(), memoryMb: z.number().nullable() }),
+  },
   /** Which switchable Core features are on (group 12). */
   "features:get": {
     request: z.object({}).strict(),

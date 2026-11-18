@@ -57,6 +57,30 @@ type Connected = {
 type ConnectionState =
   { kind: "connecting"; ready: Promise<boolean> } | Connected | { kind: "failed"; reason: string };
 
+/** How long a session stays after its last turn before the limit may close it; checks can shorten it. */
+const QUIET_MS = Number(process.env.ANUR_SESSION_QUIET_MS ?? 2 * 60 * 1000);
+
+/**
+ * Which live sessions to close to get back to the limit (13.3): the ones
+ * idle longest, never one with a turn running or one that finished a turn
+ * within the quiet spell, since background work it started may still run.
+ */
+export function sessionsToClose(
+  live: readonly string[],
+  busy: ReadonlySet<string>,
+  lastUsed: ReadonlyMap<string, number>,
+  limit: number,
+  now: number,
+  quietMs: number,
+): string[] {
+  const over = live.length - limit;
+  if (over <= 0) return [];
+  return live
+    .filter((t) => !busy.has(t) && now - (lastUsed.get(t) ?? 0) >= quietMs)
+    .sort((a, b) => (lastUsed.get(a) ?? 0) - (lastUsed.get(b) ?? 0))
+    .slice(0, over);
+}
+
 export class AgentHost {
   /** One connection per agent, started when a thread first needs it. */
   private readonly agents = new Map<AgentId, ConnectionState>();
@@ -65,6 +89,10 @@ export class AgentHost {
   /** The turn running in each session, so updates reach the right thread. */
   private readonly running = new Map<string, Turn>();
   private readonly permissions = new Map<string, (option: string | null) => void>();
+  /** Past this many live sessions, idle ones close; each reopens on its thread's next message (13.3). */
+  private limit = 8;
+  /** When each thread last started or finished a turn, to close the longest idle first. */
+  private readonly lastUsed = new Map<string, number>();
   /** Spare sessions opened ahead, not yet taken by a thread's first message. */
   private readonly warmed = new Set<string>();
   /** Each session's mode and model as last reported, to repeat when a spare is taken. */
@@ -81,7 +109,12 @@ export class AgentHost {
   constructor(
     private readonly send: (m: ToMain) => void,
     private readonly env: HostEnv,
-  ) {}
+  ) {
+    // A session past the limit that was still busy closes once it has gone quiet.
+    setInterval(() => {
+      void this.trim();
+    }, 60_000).unref();
+  }
 
   handle(m: ToHost): void {
     switch (m.type) {
@@ -111,10 +144,15 @@ export class AgentHost {
         this.permissions.delete(m.request);
         return;
       case "close":
+        // The thread is gone: its running turn stops and its session ends in the agent (13.5).
         if (this.warmed.has(m.thread)) void this.closeWarm(m.thread);
-        this.sessions.delete(m.thread);
+        else void this.endSession(m.thread, true);
         this.chosen.delete(m.thread);
         this.lastOptions.delete(m.thread);
+        return;
+      case "limit":
+        this.limit = Math.max(1, Math.floor(m.max));
+        void this.trim();
         return;
       case "warm":
         void this.warm(m.spec);
@@ -179,6 +217,7 @@ export class AgentHost {
         this.running.delete(live.id);
         this.sessions.delete(thread);
       }
+      this.report();
       this.fail(
         agent,
         `The agent stopped (exit ${String(code)}). ${stderr.trim().split("\n").at(-1) ?? ""}`,
@@ -276,6 +315,50 @@ export class AgentHost {
         .catch(() => undefined);
   }
 
+  /** Live sessions, not counting spares opened ahead. */
+  private liveThreads(): string[] {
+    return [...this.sessions.keys()].filter((t) => !this.warmed.has(t));
+  }
+
+  private report(): void {
+    this.send({ type: "sessions", live: this.liveThreads().length });
+  }
+
+  /**
+   * End a thread's session in its agent: its turn cancelled first when asked,
+   * as when the thread closes. Its ID stays in the thread, so it can resume.
+   */
+  private async endSession(thread: string, cancelTurn: boolean): Promise<void> {
+    const live = this.sessions.get(thread);
+    this.sessions.delete(thread);
+    this.lastUsed.delete(thread);
+    this.report();
+    const c = live ? this.connected(live.agent) : null;
+    if (!live || !c) return;
+    if (cancelTurn && this.running.has(live.id)) await this.cancelSession(thread, live, c);
+    await c.conn.agent
+      .request(acp.methods.agent.session.close, { sessionId: live.id })
+      .catch(() => undefined);
+  }
+
+  /**
+   * Past the limit, close the sessions idle longest. A session with a turn
+   * running, or one that finished within the quiet spell, stays: background
+   * work it started may still be going.
+   */
+  private async trim(now = Date.now()): Promise<void> {
+    const busy = new Set([...this.running.values()].map((t) => t.thread));
+    const close = sessionsToClose(
+      this.liveThreads(),
+      busy,
+      this.lastUsed,
+      this.limit,
+      now,
+      QUIET_MS,
+    );
+    for (const thread of close) await this.endSession(thread, false);
+  }
+
   private async session(c: Connected, spec: SessionSpec): Promise<string> {
     // A spare still opening: wait for it rather than open a second session.
     for (let i = 0; i < 100 && this.warming.has(spec.thread); i++)
@@ -367,6 +450,9 @@ export class AgentHost {
       );
     }
     this.sessions.set(spec.thread, { agent: spec.agent, id: sessionId });
+    this.lastUsed.set(spec.thread, Date.now());
+    this.report();
+    void this.trim();
     this.hookLogs.set(sessionId, spec.hookLog);
     let current = optionsOf(options);
     for (const [id, value] of this.chosen.get(spec.thread) ?? []) {
@@ -526,6 +612,7 @@ export class AgentHost {
       return;
     }
     this.running.set(sessionId, { thread: spec.thread, turn });
+    this.lastUsed.set(spec.thread, Date.now());
     try {
       const res = await c.conn.agent.request(acp.methods.agent.session.prompt, {
         sessionId,
@@ -553,6 +640,7 @@ export class AgentHost {
       } else fail(messageOf(e));
     } finally {
       this.running.delete(sessionId);
+      if (this.sessions.has(spec.thread)) this.lastUsed.set(spec.thread, Date.now());
     }
   }
 
@@ -560,6 +648,14 @@ export class AgentHost {
     const live = this.sessions.get(thread);
     const c = live ? this.connected(live.agent) : null;
     if (!live || !c) return;
+    await this.cancelSession(thread, live, c);
+  }
+
+  private async cancelSession(
+    thread: string,
+    live: { agent: AgentId; id: string },
+    c: Connected,
+  ): Promise<void> {
     for (const [id, resolve] of this.permissions) {
       if (id.startsWith(`${thread}:`)) {
         resolve(null);
@@ -617,6 +713,7 @@ export class AgentHost {
     this.running.delete(sessionId);
     for (const [thread, live] of this.sessions)
       if (live.agent === agent) this.sessions.delete(thread);
+    this.report();
     c?.child.kill();
     this.fail(agent, reason);
   }

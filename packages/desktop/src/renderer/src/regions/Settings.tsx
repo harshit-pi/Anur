@@ -140,6 +140,51 @@ function UpdateRows() {
   );
 }
 
+/** Live sessions and the agents' memory, with the limit past which idle ones close (13.3, 13.4). */
+function SessionsRow() {
+  const [s, setS] = useState<{ live: number; limit: number; memoryMb: number | null } | null>(null);
+  useEffect(() => {
+    const load = () => void anur.call("agent:sessions", {}).then(setS);
+    load();
+    const every = setInterval(load, 5000);
+    return () => {
+      clearInterval(every);
+    };
+  }, []);
+  const memory =
+    s?.memoryMb == null
+      ? ""
+      : s.memoryMb >= 1024
+        ? `, using ${(s.memoryMb / 1024).toFixed(1)} GB`
+        : `, using ${String(s.memoryMb)} MB`;
+  return (
+    <Row
+      title="Live sessions"
+      detail={
+        s
+          ? `${s.live === 0 ? "None live now" : `${String(s.live)} live now${memory}`}. Past the limit, sessions idle for a few minutes close; each reopens with its chat when its thread is next used.`
+          : "Checking…"
+      }
+    >
+      <select
+        className="settings-select"
+        aria-label="Live session limit"
+        value={s?.limit ?? 8}
+        disabled={!s}
+        onChange={(e) => {
+          void anur.call("agent:set-session-limit", { limit: Number(e.target.value) }).then(setS);
+        }}
+      >
+        {[2, 4, 6, 8, 12, 16, 20].map((n) => (
+          <option key={n} value={n}>
+            {`Up to ${String(n)}`}
+          </option>
+        ))}
+      </select>
+    </Row>
+  );
+}
+
 /** Which app opens .md files from Finder, with a button to make it Anur. */
 function OpenerRow() {
   const [s, setS] = useState<{ can: boolean; isAnur: boolean; current: string | null } | null>(
@@ -430,6 +475,7 @@ export function Settings({
                 }}
               />
             </Row>
+            <SessionsRow />
             {/* Then each agent on its own: how it's connected, and what Anur adds to it. */}
             {AGENT_IDS.map((id) => (
               <section key={id} className="settings-group" aria-label={AGENTS[id].name}>

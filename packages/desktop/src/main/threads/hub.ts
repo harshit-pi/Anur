@@ -33,6 +33,25 @@ export class AgentHub {
     private readonly onAuth: (e: AuthEvent) => void = () => undefined,
   ) {}
 
+  /** Sessions live in the agents, as the host last said (13.4). */
+  private live = 0;
+  /** Past this many, the host closes idle sessions (13.3). */
+  private limit = 8;
+
+  liveSessions(): number {
+    return this.proc ? this.live : 0;
+  }
+
+  /** The host's process, whose children are the agents, for their memory. */
+  hostPid(): number | null {
+    return this.proc?.pid ?? null;
+  }
+
+  setLimit(max: number): void {
+    this.limit = max;
+    this.proc?.postMessage({ type: "limit", max } satisfies ToHost);
+  }
+
   private readonly auths = new Map<AgentId, AgentAuth>();
   private readonly signIns = new Map<AgentId, SignIn>();
 
@@ -97,6 +116,7 @@ export class AgentHub {
     proc.on("exit", (code) => {
       if (this.proc !== proc) return;
       this.proc = null;
+      this.live = 0;
       for (const id of this.statuses.keys())
         this.setStatus({
           id,
@@ -106,6 +126,7 @@ export class AgentHub {
         });
     });
     this.proc = proc;
+    proc.postMessage({ type: "limit", max: this.limit } satisfies ToHost);
     return proc;
   }
 
@@ -129,6 +150,10 @@ export class AgentHub {
     }
     if (m.type === "status") {
       this.setStatus({ id: m.id, connected: m.connected, reason: m.reason, agent: m.agent });
+      return;
+    }
+    if (m.type === "sessions") {
+      this.live = m.live;
       return;
     }
     this.routes.get(m.thread)?.(m);

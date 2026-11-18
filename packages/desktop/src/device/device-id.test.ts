@@ -1,9 +1,9 @@
-import { mkdtempSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { anurPaths } from "@anur/core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadDeviceId } from "./device-id.ts";
+import { hardwareHash, loadDeviceId } from "./device-id.ts";
 
 let appSupport: string;
 beforeEach(() => {
@@ -45,5 +45,31 @@ describe("the device ID", () => {
     await loadDeviceId(appSupport);
     writeFileSync(path.join(appSupport, "device.json"), "garbage");
     await expect(loadDeviceId(appSupport)).rejects.toThrow(/can't be read/);
+  });
+
+  it("stays on the same Mac, and learns it when the file is from before the check", async () => {
+    const mac = () => Promise.resolve("mac-a");
+    const first = await loadDeviceId(appSupport, Date.now, () => Promise.resolve(null));
+    expect(await loadDeviceId(appSupport, Date.now, mac)).toBe(first);
+    const saved = JSON.parse(readFileSync(path.join(appSupport, "device.json"), "utf8")) as {
+      machine?: string;
+    };
+    expect(saved.machine).toBe("mac-a");
+    expect(await loadDeviceId(appSupport, Date.now, mac)).toBe(first);
+  });
+
+  it("is made new when the file came from another Mac", async () => {
+    const first = await loadDeviceId(appSupport, Date.now, () => Promise.resolve("mac-a"));
+    const moved = await loadDeviceId(appSupport, Date.now, () => Promise.resolve("mac-b"));
+    expect(moved).not.toBe(first);
+    expect(moved).toMatch(/^[0-9a-f]{32}$/);
+    // And then it's that Mac's own.
+    expect(await loadDeviceId(appSupport, Date.now, () => Promise.resolve("mac-b"))).toBe(moved);
+  });
+
+  it("reads this Mac as a hash, never the hardware ID itself", async () => {
+    const hash = await hardwareHash();
+    if (process.platform === "darwin") expect(hash).toMatch(/^[0-9a-f]{32}$/);
+    else expect(hash).toBe(null);
   });
 });
