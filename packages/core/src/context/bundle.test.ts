@@ -375,3 +375,9 @@ describe("findings (16.1)", () => {
     expect(b.markdown).toContain("anur_propose_finding");
   });
 });
+
+it("asks the agent to link the notes it writes, as Obsidian notes link", () => {
+  const md = buildBundle({ text: DOC, tree, index: at("Problem"), docPath: "notes.md" }).markdown;
+  expect(md).toContain("[[Note name]]");
+  expect(md).toContain("overview note that links each of them");
+});
