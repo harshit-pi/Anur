@@ -7,12 +7,12 @@ import { listDocs } from "../folder/list-docs.ts";
 /**
  * Docs written while a thread's turn runs (task 3.11; Architecture, "Who
  * writes the file"). A write that lands during a turn, from git, another
- * editor or the agent's own shell, is never silent: the thread shows it,
- * "changed while this thread was running", with Revert.
+ * editor or the agent's own shell, is reported to Threads, which adopts the
+ * running thread's own as its proposal and leaves the rest as they landed.
  *
  * While any turn runs in the folder, its docs are watched. Each doc's text
  * before the change comes from a cache read when the turn starts, re-read
- * only for files whose time changed, so Revert has something to go back to.
+ * only for files whose time changed, so an adopted write can be put back.
  * Anur's own writes are recognised by their content and never reported, and
  * neither is a file last written before the turn began: a move, a rename or
  * an iCloud download shows up as a new path, but its text didn't change.

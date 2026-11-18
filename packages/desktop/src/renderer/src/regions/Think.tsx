@@ -1369,30 +1369,6 @@ export function Think({
                     </button>
                   ) : null}
                 </div>
-              ) : item.kind === "changed" ? (
-                <div key={i} className="think-changed" role="status">
-                  <span>
-                    <strong>{item.path}</strong>{" "}
-                    {item.reverted
-                      ? "changed while this thread was running, and was reverted."
-                      : "changed while this thread was running, by something other than Anur."}
-                  </span>
-                  {item.canRevert ? (
-                    <button
-                      type="button"
-                      className="think-button"
-                      onClick={() => {
-                        void anur
-                          .call("thread:revert", { thread: thread.id, id: item.id })
-                          .then((r) => {
-                            if (r.kind === "refused") setError(r.reason);
-                          });
-                      }}
-                    >
-                      Revert
-                    </button>
-                  ) : null}
-                </div>
               ) : item.kind === "check" ? (
                 <CheckCard
                   key={i}

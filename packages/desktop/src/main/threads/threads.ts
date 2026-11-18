@@ -249,19 +249,8 @@ export class Threads {
   private readonly writers = new Map<string, Promise<JsonlWriter>>();
   /** Each thread's session choices, as the agent last reported them. */
   private readonly options = new Map<string, SessionOption[]>();
-  /** Docs written while a turn runs, flagged on the thread with Revert (3.11). */
+  /** Docs written straight to disk while a turn runs: the agent's own become proposals (3.11). */
   private readonly turnWatch: TurnWatch;
-  private readonly flags = new Map<
-    string,
-    {
-      id: string;
-      turn: string;
-      rel: string;
-      before: string | null;
-      after: string;
-      reverted: boolean;
-    }[]
-  >();
   /** Each thread's token for Anur's MCP tools. */
   private readonly tokens = new Map<string, string>();
   /** An agent picked for a thread's next turn, until a session on it starts. */
@@ -380,60 +369,14 @@ export class Threads {
     return true;
   }
 
-  /** A doc changed while these threads' turns ran: each shows it, with Revert. */
-  private async flag(change: DocChange, threads: string[]): Promise<void> {
-    // One thread running: the write is most likely its own, so it's adopted as its edit.
-    const [only] = threads;
-    if (threads.length === 1 && only && (await this.adopt(change, only))) return;
-    for (const thread of threads) {
-      const live = this.live.get(thread);
-      if (!live?.turn) continue;
-      const id = randomBytes(6).toString("hex");
-      const list = this.flags.get(thread) ?? [];
-      list.push({
-        id,
-        turn: live.turn,
-        rel: change.rel,
-        before: change.before,
-        after: change.after,
-        reverted: false,
-      });
-      this.flags.set(thread, list);
-      // A kind added within format 1: kept on disk as a record, even by apps that don't read it.
-      await this.append(live.doc, thread, {
-        kind: "changed-during",
-        turn: live.turn,
-        path: change.rel,
-      });
-      await this.refresh(live.rel, live.docText, thread);
-    }
-  }
-
   /**
-   * What a Revert of one flagged change needs: the doc, its text before the
-   * change, and the text the change left, which the doc must still hold.
+   * A doc written straight to disk while these threads' turns ran. With one
+   * thread running, the write is most likely its own: adopted as its edit.
+   * Anything else (a new file, git, another app) is left as it landed.
    */
-  revertFor(thread: string, id: string) {
-    const f = this.flags.get(thread)?.find((x) => x.id === id);
-    if (!f)
-      return { kind: "refused" as const, reason: "That change isn't on this thread any more." };
-    if (f.reverted) return { kind: "refused" as const, reason: "That change is already reverted." };
-    if (f.before === null)
-      return {
-        kind: "refused" as const,
-        reason: "Anur had no earlier text of that doc to go back to.",
-      };
-    return { kind: "ok" as const, rel: f.rel, before: f.before, after: f.after };
-  }
-
-  /** The Revert landed. */
-  reverted(thread: string, id: string): void {
-    const f = this.flags.get(thread)?.find((x) => x.id === id);
-    if (!f) return;
-    f.reverted = true;
-    if (f.before !== null) this.turnWatch.ownWrite(f.rel, f.before);
-    const live = this.live.get(thread);
-    if (live) this.later(this.refresh(live.rel, live.docText, thread));
+  private async flag(change: DocChange, threads: string[]): Promise<void> {
+    const [only] = threads;
+    if (threads.length === 1 && only) await this.adopt(change, only);
   }
 
   /** Every thread's working copies live here, outside the folder; each thread has its own. */
@@ -683,15 +626,6 @@ export class Threads {
           within: l.within ?? null,
         });
     }
-    for (const f of this.flags.get(thread) ?? [])
-      items.push({
-        kind: "changed",
-        turn: f.turn,
-        id: f.id,
-        path: f.rel,
-        canRevert: f.before !== null && !f.reverted,
-        reverted: f.reverted,
-      });
     const live = this.live.get(thread);
     if (live?.turn) {
       for (const [toolUse, t] of live.tools)
