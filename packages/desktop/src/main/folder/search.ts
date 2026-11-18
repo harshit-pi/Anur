@@ -16,7 +16,7 @@ export type SearchMatch = { path: string; line: number; column: number; text: st
 const MAX_BYTES = 5 * 1024 * 1024;
 const cache = new Map<string, { mtime: number; text: string }>();
 
-async function textOf(file: string): Promise<string | null> {
+export async function textOf(file: string): Promise<string | null> {
   try {
     const s = await stat(file);
     if (s.size > MAX_BYTES) return null;

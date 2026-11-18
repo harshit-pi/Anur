@@ -3,6 +3,8 @@ import type { FolderState, UpdateState } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import type { AgentStatus } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
+import { useFeatures } from "../features.ts";
+import { FEATURES } from "../../../shared/features.ts";
 import { CloseIcon } from "./Icons.tsx";
 import { type ThemePref, applyTheme, loadTheme, saveTheme } from "./theme-pref.ts";
 
@@ -23,7 +25,6 @@ const SECTIONS: { id: SettingsSection; label: string; group?: string }[] = [
 ];
 
 type MainSettings = {
-  sectionHistory: boolean;
   commitAnur: boolean | null;
   defaultAgent: AgentId;
   autoApply: boolean;
@@ -279,6 +280,7 @@ export function Settings({
   onTour: (() => void) | null;
 }) {
   const [main, setMain] = useState<MainSettings | null>(null);
+  const features = useFeatures();
   const [theme, setTheme] = useState<ThemePref>(() => loadTheme(window.localStorage));
 
   useEffect(() => {
@@ -471,39 +473,25 @@ export function Settings({
             <h2>Core plugins</h2>
             <p className="settings-lede">
               What every doc needs: the page and its map, and threads beside them. These two are
-              always on; the rest can be turned off.
+              always on; turn the rest off and everything they add goes, in every window.
             </p>
-            <Row
-              title="Page and map"
-              detail="Every doc as a page and as a map drawn from its headings: boxes to move, add, link and open."
-            >
-              <span className="settings-status">Always on</span>
-            </Row>
-            <Row
-              title="Think"
-              detail="Threads on each section, each its own chat with your agent: options to pick, edits to use, its inputs kept."
-            >
-              <span className="settings-status">Always on</span>
-            </Row>
-            <Row
-              title="Links as context"
-              detail="A link to another section draws a line and adds its text to what the agent reads. Arrives with group 8."
-            >
-              <Switch on={false} label="Links as context" disabled />
-            </Row>
-            <Row
-              title="Section history"
-              detail="Keeps every version of a section's text: when a doc is first opened, each typing session, and changes made outside Anur. Off, no new versions are written."
-            >
-              <Switch
-                on={main?.sectionHistory ?? true}
-                label="Section history"
-                disabled={!main}
-                onChange={(on) => {
-                  change({ sectionHistory: on });
-                }}
-              />
-            </Row>
+            {FEATURES.map((f) =>
+              f.always ? (
+                <Row key={f.id} title={f.name} detail={f.what}>
+                  <span className="settings-status">Always on</span>
+                </Row>
+              ) : (
+                <Row key={f.id} title={f.name} detail={f.what}>
+                  <Switch
+                    on={features[f.id]}
+                    label={f.name}
+                    onChange={(on) => {
+                      void anur.call("features:set", { id: f.id, on });
+                    }}
+                  />
+                </Row>
+              ),
+            )}
           </>
         );
       case "community":

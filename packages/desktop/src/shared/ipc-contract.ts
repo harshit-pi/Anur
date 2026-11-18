@@ -246,6 +246,12 @@ export type PreviewView = z.infer<typeof PreviewView>;
 /** The section a thread is about: its index in the page's tree and its heading path, to check it. */
 const SectionRef = z.object({ index: z.int().nonnegative(), path: z.array(z.string()).max(50) });
 
+const FeatureFlagsSchema = z.object({
+  links: z.boolean(),
+  history: z.boolean(),
+  actions: z.boolean(),
+});
+
 /** Where an update stands; "off" in Anur Dev, which doesn't update itself. */
 export const UpdateState = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("off") }),
@@ -382,7 +388,6 @@ export const ipcContract = {
   "settings:get": {
     request: z.object({}).strict(),
     response: z.object({
-      sectionHistory: z.boolean(),
       commitAnur: z.boolean().nullable(),
       defaultAgent: AgentIdSchema,
       autoApply: z.boolean(),
@@ -391,14 +396,12 @@ export const ipcContract = {
   "settings:set": {
     request: z
       .object({
-        sectionHistory: z.boolean().optional(),
         commitAnur: z.boolean().optional(),
         defaultAgent: AgentIdSchema.optional(),
         autoApply: z.boolean().optional(),
       })
       .strict(),
     response: z.object({
-      sectionHistory: z.boolean(),
       commitAnur: z.boolean().nullable(),
       defaultAgent: AgentIdSchema,
       autoApply: z.boolean(),
@@ -571,6 +574,16 @@ export const ipcContract = {
   "clipboard:write-files": {
     request: z.object({ paths: z.array(z.string().max(1024)).max(1000) }).strict(),
     response: z.object({ ok: z.boolean() }),
+  },
+  /** Which switchable Core features are on (group 12). */
+  "features:get": {
+    request: z.object({}).strict(),
+    response: FeatureFlagsSchema,
+  },
+  /** Turn one switchable Core feature on or off; every window hears it. */
+  "features:set": {
+    request: z.object({ id: z.enum(["links", "history", "actions"]), on: z.boolean() }).strict(),
+    response: FeatureFlagsSchema,
   },
   /** Where updates stand, the running version, and whether they install by themselves. */
   "update:status": {
@@ -1135,6 +1148,8 @@ export const ipcEvents = {
   }),
   /** An agent in a terminal asked to show a doc (6.7, 6.9): open it, at a section if given. */
   "app:open-doc": z.object({ path: z.string(), section: z.string().nullable() }),
+  /** A Core feature was switched on or off, in this window or another. */
+  "features:changed": FeatureFlagsSchema,
   /** Where updates stand changed, as when a new version finished downloading. */
   "app:update-state": UpdateState,
   /** A doc's previews changed, as when a thread's turn ended with edits. */

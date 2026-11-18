@@ -11,6 +11,7 @@ import type {
 } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
+import { useFeatures } from "../features.ts";
 import { formatTokens } from "../layout/tokens.ts";
 import { SectionEditor } from "../editor/section-editor.tsx";
 import { putOption, renameSection } from "../editor/section-range.ts";
@@ -449,6 +450,7 @@ export function Think({
   /** Scroll the page to a section, by its index in the tree. */
   onJump: (index: number) => void;
 }) {
+  const features = useFeatures();
   const { threads, setThreads, prompts, setPrompts } = useThreads(docPath, docText);
   const [open, setOpen] = useState<string | null>(null);
   /** Each agent's connection, as main last reported it. */
@@ -1240,7 +1242,7 @@ export function Think({
         </button>
       ) : null}
       <SectionFooter>
-        {links.out.length > 0 || links.into.length > 0 ? (
+        {features.links && (links.out.length > 0 || links.into.length > 0) ? (
           <div className="think-links">
             {links.out.length > 0 ? (
               <>
@@ -1307,7 +1309,7 @@ export function Think({
             ) : null}
           </div>
         ) : null}
-        {docPath ? (
+        {docPath && features.history ? (
           <SectionHistory
             key={sectionKey}
             docPath={docPath}
@@ -1405,7 +1407,7 @@ export function Think({
           onSend={(m) => start(m)}
         />
       )}
-      {writable && AGENTS[newAgent].runsThreads && !signedOut(newAgent) ? (
+      {features.actions && writable && AGENTS[newAgent].runsThreads && !signedOut(newAgent) ? (
         <div className="think-actions" role="group" aria-label="Actions">
           <button
             type="button"

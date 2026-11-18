@@ -114,6 +114,7 @@ describe("Anur's tool socket", () => {
     const byId = new Map(replies.map((r) => [r.id, r.result as Record<string, unknown>]));
     expect(byId.get(1)).toMatchObject({ serverInfo: { name: "anur" } });
     expect((byId.get(2)?.tools as { name: string }[]).map((t) => t.name)).toEqual([
+      "anur_search_sections",
       "anur_read_section",
       "anur_links",
       "anur_offer_options",

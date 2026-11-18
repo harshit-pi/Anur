@@ -17,6 +17,8 @@ export type TerminalDeps = {
   threads: (folder: string, rel: string, text: string) => Promise<string | null>;
   /** A section's links in and out (8.4); the title's when no section is named. */
   links: (folder: string, rel: string, text: string, section: string | null) => Promise<ToolAnswer>;
+  /** anur_search_sections: sections across the folder with every word. */
+  search: (words: string) => Promise<ToolAnswer>;
   propose: (
     folder: string,
     rel: string,
@@ -141,6 +143,11 @@ export function terminalHandler(d: TerminalDeps) {
       return {
         text: `Made ${made.path} in Anur's open folder, and opened it.${summary ? " This chat is kept on its title." : ""}`,
       };
+    }
+
+    if (tool === "anur_search_sections") {
+      const words = str(args.words);
+      return words ? d.search(words) : { error: "Say which words to look for." };
     }
 
     const given = str(args.doc);

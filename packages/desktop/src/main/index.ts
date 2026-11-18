@@ -141,7 +141,7 @@ function versionsFor(folder: FolderState): SectionVersions | null {
       },
       lastSavedIn(app.getPath("userData"), folder.path),
       undefined,
-      () => appSettings.get().sectionHistory,
+      () => appSettings.get().features.history,
     );
     versions.set(folder.path, v);
   }
@@ -226,6 +226,13 @@ async function startClaudeSkill(): Promise<void> {
       threads: async (_f, rel, text) => {
         const at = front();
         return at ? ((await t(at.win.webContents.id)?.threadsOf(rel, text)) ?? null) : null;
+      },
+      search: async (words) => {
+        const at = front();
+        const threads = at ? t(at.win.webContents.id) : null;
+        return threads
+          ? threads.searchSectionsReport(words)
+          : { error: "Anur has no folder open." };
       },
       links: async (_f, rel, text, section) => {
         const at = front();
@@ -314,6 +321,10 @@ function threadsFor(folder: FolderState): Threads | null {
       rememberOptions: rememberChoices,
       mcp: { socket: anurSocket, script: path.join(here, "mcp-server.js") },
       autoApply: () => appSettings.get().autoApply,
+      features: () => appSettings.get().features,
+      folderState: () =>
+        [...windows.keys()].map((id) => folders.current(id)).find((f) => f?.path === folder.path) ??
+        null,
       filesChanged: () => {
         for (const [id, win] of windows) {
           if (folders.current(id)?.path !== folder.path) continue;
@@ -603,25 +614,19 @@ const handlers: { [C in Channel]: Handler<C> } = {
   "settings:get": async (_request, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     return {
-      sectionHistory: appSettings.get().sectionHistory,
       commitAnur: folder ? await commitsAnur(folder.path) : null,
       defaultAgent: appSettings.get().defaultAgent,
       autoApply: appSettings.get().autoApply,
     };
   },
-  "settings:set": async (
-    { sectionHistory, commitAnur, defaultAgent, autoApply },
-    { webContentsId },
-  ) => {
+  "settings:set": async ({ commitAnur, defaultAgent, autoApply }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
-    if (sectionHistory !== undefined) await appSettings.set({ sectionHistory });
     if (defaultAgent !== undefined) await appSettings.set({ defaultAgent });
     if (autoApply !== undefined) await appSettings.set({ autoApply });
     if (commitAnur !== undefined && folder?.mode === "writable") {
       await setCommitsAnur(folder.path, commitAnur);
     }
     return {
-      sectionHistory: appSettings.get().sectionHistory,
       commitAnur: folder ? await commitsAnur(folder.path) : null,
       defaultAgent: appSettings.get().defaultAgent,
       autoApply: appSettings.get().autoApply,
@@ -1043,6 +1048,13 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.removeInput(rel, text, thread, input) : false };
+  },
+  "features:get": () => appSettings.get().features,
+  "features:set": async ({ id, on }) => {
+    const features = { ...appSettings.get().features, [id]: on };
+    await appSettings.set({ features });
+    for (const win of windows.values()) send(win, "features:changed", features);
+    return features;
   },
   "update:status": () => ({
     state: updateState(),

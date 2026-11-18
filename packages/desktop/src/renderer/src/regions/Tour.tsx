@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { TOUR, bubbleAt, type Rect } from "../layout/tour.ts";
+import { bubbleAt, tourSteps, type Rect } from "../layout/tour.ts";
+import { useFeatures } from "../features.ts";
 
 /**
  * The tour's overlay: the window dims, the step's part stays lit, and a
@@ -15,6 +16,7 @@ export function Tour({
   onStep: (n: number) => void;
   onEnd: () => void;
 }) {
+  const TOUR = tourSteps(useFeatures());
   const s = TOUR[step];
   const bubble = useRef<HTMLDivElement>(null);
   const [hole, setHole] = useState<Rect | null>(null);
