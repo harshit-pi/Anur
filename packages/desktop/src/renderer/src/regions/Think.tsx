@@ -767,6 +767,32 @@ export function Think({
                   </div>
                 ))}
               </div>
+            ) : item.kind === "auto-used" ? (
+              <div key={i} className="think-changed auto" role="status">
+                <span>
+                  {item.undone ? "Taken back: " : "Used as it landed: "}
+                  the edit to <strong>{item.sections.map((p) => p.at(-1) ?? "").join(", ")}</strong>
+                  {item.doc !== docPath ? ` in ${item.doc}` : ""}.
+                  {!item.undone && !item.undoable && item.doc === docPath
+                    ? " ⌘Z on the page takes it back."
+                    : ""}
+                </span>
+                {item.undoable ? (
+                  <button
+                    type="button"
+                    className="think-button"
+                    onClick={() => {
+                      void anur
+                        .call("thread:auto-undo", { thread: thread.id, id: item.id })
+                        .then((r) => {
+                          if (r.kind === "refused") setError(r.reason);
+                        });
+                    }}
+                  >
+                    Undo
+                  </button>
+                ) : null}
+              </div>
             ) : item.kind === "changed" ? (
               <div key={i} className="think-changed" role="status">
                 <span>

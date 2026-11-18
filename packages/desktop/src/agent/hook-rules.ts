@@ -66,8 +66,6 @@ export const MESSAGES = {
   otherCopy: "Anur: that is another thread's working copy, and off limits to this one.",
   ownRule: (rule: string, rel: string) =>
     `Your own settings deny this (${rule}), and that holds for the working copy of ${rel} too.`,
-  shellDocWrite:
-    "Anur: a shell command can't write a doc. Edit the doc's working copy with your Edit tool: read the doc first, and Anur gives you its working copy's path.",
 } as const;
 
 /** The message that sends the agent to a doc's working copy. */
@@ -152,12 +150,7 @@ export function decideShell(
     if (fromHere.some((r) => inside(config.anurDir, r))) return MESSAGES.recursive;
   }
 
-  // Writes onto a doc the command names.
-  const writes =
-    /(^|[;&|]\s*)(mv|cp|rm|tee|truncate)\b|\bsed\s+-i|>{1,2}\s*['"]?[^\s'"]+\.md\b|\bgit\s+(mv|rm)\b/i.test(
-      cmd,
-    );
-  if (writes && words.some((w) => /\.md$/i.test(w) && isDoc(resolve(w), config.folder)))
-    return MESSAGES.shellDocWrite;
+  // Writes onto a doc from the shell are not refused: an agent can make them
+  // in Obsidian, and Anur turns them into the thread's proposal afterwards.
   return null;
 }

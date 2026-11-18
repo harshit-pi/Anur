@@ -14,6 +14,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import type { Response } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
+import { TERMINAL_EDIT, UNSAVED_EDIT } from "../../../shared/agents.ts";
 import { CloseIcon } from "../regions/Icons.tsx";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { pagePath } from "./bases/base-widget.ts";
@@ -169,8 +170,44 @@ export function Page({
       void anur
         .call("preview:list", { path: doc.path, text: editor.state.doc.toString() })
         .then(({ previews }) => {
-          if (!closed) editor.dispatch({ effects: setPreviews.of(previews) });
+          if (closed) return;
+          editor.dispatch({ effects: setPreviews.of(previews) });
+          void useAsTheyLand(previews);
         });
+    };
+    /** Each edit the setting has already tried, so a clash isn't tried again and again. */
+    const autoTried = new Set<string>();
+    /**
+     * The setting "Use agents' edits as they land": an open doc's page uses
+     * each new edit itself, through Apply, and the thread notes it. Your own
+     * kept typing is never applied this way.
+     */
+    const useAsTheyLand = async (previews: { thread: string; parts: PreviewPart[] }[]) => {
+      if (editor.state.readOnly) return;
+      const fresh = previews.flatMap((p) =>
+        p.thread === UNSAVED_EDIT
+          ? []
+          : p.parts
+              .filter(
+                (part) =>
+                  !autoTried.has(`${p.thread}\u0000${sectionKey(part.path)}\u0000${part.proposed}`),
+              )
+              .map((part) => ({ thread: p.thread, part })),
+      );
+      if (fresh.length === 0) return;
+      const settings = await anur.call("settings:get", {});
+      if (!settings.autoApply || closed) return;
+      for (const { thread, part } of fresh) {
+        autoTried.add(`${thread}\u0000${sectionKey(part.path)}\u0000${part.proposed}`);
+        const ok = await applyPreviewPart(thread, part, false, true);
+        if (ok && thread !== TERMINAL_EDIT)
+          void anur.call("thread:auto-used", {
+            thread,
+            path: doc.path,
+            text: editor.state.doc.toString(),
+            section: part.path,
+          });
+      }
     };
     /** The thread's preview, with the section's part replaced by `part`, or dropped when null. */
     const withPart = (thread: string, key: string, part: PreviewPart | null) => {
@@ -200,24 +237,32 @@ export function Page({
      * its version written to History first, then one editor transaction, so
      * ⌘Z and the toast's Undo both take it back.
      */
-    const applyPreviewPart = async (thread: string, part: PreviewPart, force = false) => {
+    const applyPreviewPart = async (
+      thread: string,
+      part: PreviewPart,
+      force = false,
+      /** Used as it landed, by the setting: a quieter word, and kept as a proposal on a clash. */
+      auto = false,
+    ): Promise<boolean> => {
       const conflict = () => {
         flash(
-          "This section changed where the preview did. Ask in the thread again, and it works from the new text.",
+          auto
+            ? `Kept the agent's edit to ${part.path.at(-1) ?? "a section"} as a proposal: that section changed where it did.`
+            : "This section changed where the preview did. Ask in the thread again, and it works from the new text.",
           null,
           9000,
         );
       };
       const s = sectionFor(editor.state, part.path);
       if (!s || !part.section) {
-        flash("That section isn't on the page any more.", null, 6000);
-        return;
+        if (!auto) flash("That section isn't on the page any more.", null, 6000);
+        return false;
       }
       const current = editor.state.sliceDoc(s.subtreeRange.from, s.subtreeRange.to);
       const made = applyPart(current, part, force);
       if (made.kind === "conflict") {
         conflict();
-        return;
+        return false;
       }
       const r = await anur.call("preview:apply", {
         path: doc.path,
@@ -228,16 +273,16 @@ export function Page({
       });
       if (r.kind === "refused") {
         flash(r.reason, null, 6000);
-        return;
+        return false;
       }
       // Typing may have landed while History was written: apply onto the section as it is now.
       const s2 = sectionFor(editor.state, part.path);
-      if (!s2) return;
+      if (!s2) return false;
       const now = editor.state.sliceDoc(s2.subtreeRange.from, s2.subtreeRange.to);
       const again = now === current ? made : applyPart(now, part, force);
       if (again.kind === "conflict") {
         conflict();
-        return;
+        return false;
       }
       const before = editor.state.field(previewState).previews.find((p) => p.thread === thread);
       editor.dispatch({
@@ -248,7 +293,9 @@ export function Page({
       const remaining = withPart(thread, sectionKey(part.path), null);
       await savePreview(thread, remaining);
       flash(
-        `Applied to ${part.path.at(-1) ?? "the section"}.`,
+        auto
+          ? `Used the agent's edit to ${part.path.at(-1) ?? "the section"}.`
+          : `Applied to ${part.path.at(-1) ?? "the section"}.`,
         () => {
           // Back to the text before Apply, keeping any typing since in the section.
           const s3 = sectionFor(editor.state, part.path);
@@ -268,6 +315,7 @@ export function Page({
         },
         8000,
       );
+      return true;
     };
     const actions: PreviewActions = {
       apply: (thread, part, force) => {

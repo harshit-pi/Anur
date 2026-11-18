@@ -81,14 +81,14 @@ describe("the hook's shell rules", () => {
     expect(bash("git clean -fd")).toBeNull();
   });
 
-  it("blocks shell writes onto a doc, and lets git that only reads run", () => {
-    expect(bash("echo hi >> notes/plan.md")).toBe(MESSAGES.shellDocWrite);
-    expect(bash("sed -i '' s/a/b/ plan.md")).toBe(MESSAGES.shellDocWrite);
-    expect(bash("rm plan.md")).toBe(MESSAGES.shellDocWrite);
-    expect(bash("git mv plan.md old.md")).toBe(MESSAGES.shellDocWrite);
+  it("lets shell writes onto a doc run, as an agent can in Obsidian; Anur adopts them afterwards", () => {
+    expect(bash("echo hi >> notes/plan.md")).toBeNull();
+    expect(bash("sed -i '' s/a/b/ plan.md")).toBeNull();
+    expect(
+      bash(`python3 -I - Notes.md <<'EOF'\nimport sys\np=sys.argv[1]\nopen(p,'w').write('x')\nEOF`),
+    ).toBeNull();
     expect(bash("git diff plan.md")).toBeNull();
     expect(bash("cat plan.md")).toBeNull();
-    expect(bash("echo hi > /tmp/x.md")).toBeNull();
   });
 });
 

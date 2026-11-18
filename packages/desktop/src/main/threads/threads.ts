@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { SnapshotStore } from "../../vault/snapshot-store.ts";
 import { classify } from "./inputs.ts";
+import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { watch, type FSWatcher } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -10,6 +11,7 @@ import {
   ThreadLine,
   anurPaths,
   budgetFor,
+  applyPart,
   buildBundle,
   embedTargets,
   compareLines,
@@ -57,6 +59,18 @@ export { readSection } from "./read-section.ts";
 type Located = { doc: DocId; tree: SectionTree; ids: SectionId[] };
 
 export type ThreadDeps = {
+  /** Whether agents' edits are used as they land (Settings, Agent). */
+  autoApply?: () => boolean;
+  /** Whether a doc is open in a window: its page writes it, never main. */
+  isOpen?: (rel: string) => boolean;
+  /** Write a section's version to History before an edit is used: the page's Apply does the same. */
+  applied?: (
+    rel: string,
+    text: string,
+    section: SectionId,
+    applied: string,
+    thread: string,
+  ) => Promise<void>;
   /** An embedded base's tables as Markdown, for the bundle (4.11); null when it can't be read. */
   baseTables?: (rel: string, target: string) => Promise<string | null>;
   folder: string;
@@ -165,6 +179,8 @@ export class Threads {
     return this.snapshotStore;
   }
   private snapshotStore: SnapshotStore | null = null;
+  /** What each auto-used edit replaced, so its note's Undo can restore it while this app runs. */
+  private readonly autoUndo = new Map<string, { rel: string; before: string; after: string }>();
   /** The window each agent last reported, for a new thread's first budget (4.2). */
   private readonly windows = new Map<AgentId, number>();
   /** The option each thread is exploring this turn: options offered now go within it. */
@@ -202,8 +218,60 @@ export class Threads {
     this.turnWatch.ownWrite(rel, text);
   }
 
+  /**
+   * A doc written straight to disk during one thread's turn, as from a
+   * shell command or a script: the agent can do this in Obsidian, so Anur
+   * never refuses it (Repo rule: never worse than Obsidian). It lands as
+   * Anur's edits do: with the setting on, kept and noted with Undo; else
+   * the earlier text goes back and the agent's version is its proposal.
+   * Returns false when it can't be read as the thread's edit.
+   */
+  private async adopt(change: DocChange, thread: string): Promise<boolean> {
+    const live = this.live.get(thread);
+    if (!live?.turn || change.before === null) return false;
+    // Only when this turn's own tool call names the file: a person editing in
+    // Obsidian meanwhile is not the agent, and their edit is never undone.
+    const name = path.basename(change.rel);
+    const named = [...live.tools.values()].some((t) =>
+      JSON.stringify(t.input ?? "").includes(name),
+    );
+    if (!named) return false;
+    const full = path.join(this.d.folder, change.rel);
+    const at = await this.d.locate(change.rel, change.before);
+    if (!at) return false;
+    const touched = previewParts(change.before, change.after, Threads.spans(at)).map((p) => p.path);
+    if (this.d.autoApply?.()) {
+      const undo = `u${randomBytes(6).toString("hex")}`;
+      this.autoUndo.set(undo, { rel: change.rel, before: change.before, after: change.after });
+      await this.append(live.doc, thread, {
+        kind: "auto-used",
+        doc: change.rel,
+        sections: touched.length > 0 ? touched : [[change.rel]],
+        undo,
+      });
+      await this.refresh(live.rel, live.docText, thread);
+      return true;
+    }
+    // Back to the text before the write; the write becomes the proposal.
+    this.ownWrite(change.rel, change.before);
+    await writeFileAtomic(full, change.before);
+    const existing = await this.previews.read(at.doc, thread);
+    const current = withPreview(change.before, existing?.parts ?? [], Threads.byId(at));
+    const proposed = merge3(change.before, current, change.after, "theirs").text;
+    await this.previews.write(
+      at.doc,
+      thread,
+      previewParts(change.before, proposed, Threads.spans(at)),
+    );
+    this.d.previewsChanged(change.rel);
+    return true;
+  }
+
   /** A doc changed while these threads' turns ran: each shows it, with Revert. */
   private async flag(change: DocChange, threads: string[]): Promise<void> {
+    // One thread running: the write is most likely its own, so it's adopted as its edit.
+    const [only] = threads;
+    if (threads.length === 1 && only && (await this.adopt(change, only))) return;
     for (const thread of threads) {
       const live = this.live.get(thread);
       if (!live?.turn) continue;
@@ -318,6 +386,7 @@ export class Threads {
     const items: ThreadItem[] = [];
     let closed = false;
     const used = new Map<string, string>();
+    const undone = new Set(lines.flatMap((l) => (l.kind === "auto-undone" ? [l.used] : [])));
     const explored = new Set<string>();
     for (const l of lines) {
       if (l.kind === "option-used") used.set(l.option, l.how);
@@ -337,6 +406,15 @@ export class Threads {
       else if (l.kind === "turn" && l.event === "end" && l.stopReason?.startsWith("error:"))
         items.push({ kind: "error", turn: l.turn, text: l.stopReason.slice(6).trim() });
       else if (l.kind === "state") closed = l.state === "closed";
+      else if (l.kind === "auto-used")
+        items.push({
+          kind: "auto-used",
+          id: l.id,
+          doc: l.doc,
+          sections: l.sections,
+          undoable: l.undo !== null && this.autoUndo.has(l.undo) && !undone.has(l.id),
+          undone: undone.has(l.id),
+        });
       else if (l.kind === "options")
         items.push({
           kind: "options",
@@ -765,6 +843,9 @@ export class Threads {
       const proposed = merge3(start, current, copy, "theirs").text;
       await this.previews.write(at.doc, thread, previewParts(decided, proposed, Threads.spans(at)));
       this.d.previewsChanged(rel);
+      // The setting: edits are used as they land. An open doc's page applies
+      // them itself, as the only writer of an open doc's file; here, the rest.
+      if (this.d.autoApply?.() && !this.d.isOpen?.(rel)) await this.applyToFile(rel, thread);
     }
   }
 
@@ -1333,6 +1414,8 @@ export class Threads {
     if (parts.length === 0) return s.path.join(" > ");
     await this.previews.write(at.doc, TERMINAL_EDIT, parts, summary);
     this.d.previewsChanged(rel);
+    // An agent in a terminal is an agent too: the setting uses its edit as it lands.
+    if (this.d.autoApply?.() && !this.d.isOpen?.(rel)) await this.applyToFile(rel, TERMINAL_EDIT);
     return s.path.join(" > ");
   }
 
@@ -1402,6 +1485,120 @@ export class Threads {
     return thread;
   }
 
+  // ---- Edits used as they land (Settings, Agent) ----
+
+  /** The doc a thread belongs to: its live one, else the doc whose threads hold it. */
+  private async docOfThread(thread: string): Promise<DocId | null> {
+    const live = this.live.get(thread);
+    if (live) return live.doc;
+    const docs = path.join(this.d.folder, ANUR_DIR, "docs");
+    let names: string[];
+    try {
+      names = await readdir(docs);
+    } catch {
+      return null;
+    }
+    for (const d of names) {
+      try {
+        await readdir(path.join(docs, d, "threads", thread));
+        return d as DocId;
+      } catch {
+        // Not this doc.
+      }
+    }
+    return null;
+  }
+
+  /**
+   * A doc that isn't open: use the thread's edits on its file now. Each part
+   * is merged onto its section as the file has it, as the page's Apply does;
+   * its History version is written first. A part whose section changed
+   * where the edit did stays a proposal.
+   */
+  private async applyToFile(rel: string, thread: string): Promise<void> {
+    const full = path.join(this.d.folder, rel);
+    const before = await readFile(full, "utf8").catch(() => null);
+    if (before === null) return;
+    const first = await this.d.locate(rel, before);
+    if (!first) return;
+    const preview = await this.previews.read(first.doc, thread);
+    if (!preview || preview.parts.length === 0) return;
+    let text = before;
+    const used: string[][] = [];
+    const kept: PreviewPart[] = [];
+    for (const part of preview.parts) {
+      const at = await this.d.locate(rel, text);
+      const i = at && part.section ? at.ids.indexOf(part.section) : -1;
+      const s = at?.tree.sections[i];
+      if (!at || !s || !part.section) {
+        kept.push(part);
+        continue;
+      }
+      const made = applyPart(text.slice(s.subtreeRange.from, s.subtreeRange.to), part);
+      if (made.kind === "conflict") {
+        kept.push(part);
+        continue;
+      }
+      await this.d.applied?.(rel, text, part.section, made.text, thread);
+      text = text.slice(0, s.subtreeRange.from) + made.text + text.slice(s.subtreeRange.to);
+      used.push(s.path);
+    }
+    if (used.length === 0) return;
+    this.ownWrite(rel, text);
+    await writeFileAtomic(full, text);
+    await this.previews.write(first.doc, thread, kept, preview.summary);
+    this.d.previewsChanged(rel);
+    const undo = `u${randomBytes(6).toString("hex")}`;
+    this.autoUndo.set(undo, { rel, before, after: text });
+    const own = await this.docOfThread(thread);
+    if (own) await this.append(own, thread, { kind: "auto-used", doc: rel, sections: used, undo });
+    const live = this.live.get(thread);
+    if (live) await this.refresh(live.rel, live.docText, thread);
+  }
+
+  /** The page used an edit itself, on an open doc: the thread notes it; ⌘Z takes it back there. */
+  async noteAutoUsed(rel: string, text: string, thread: string, section: string[]): Promise<void> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return;
+    await this.append(at.doc, thread, {
+      kind: "auto-used",
+      doc: rel,
+      sections: [section],
+      undo: null,
+    });
+    await this.refresh(rel, text, thread);
+  }
+
+  /** Undo from an auto-used note: the earlier text, while the file is still as the edit left it. */
+  async autoUndoFor(
+    thread: string,
+    id: string,
+  ): Promise<{ kind: "undone" } | { kind: "refused"; reason: string }> {
+    const live = this.live.get(thread);
+    const own = await this.docOfThread(thread);
+    const lines = own ? await this.linesOf(own, thread) : [];
+    const line = lines.find((l) => l.id === id && l.kind === "auto-used");
+    const u = line?.kind === "auto-used" && line.undo ? this.autoUndo.get(line.undo) : undefined;
+    if (!line || !u)
+      return {
+        kind: "refused",
+        reason: "Anur restarted since; use the section's History to go back.",
+      };
+    const full = path.join(this.d.folder, u.rel);
+    const now = await readFile(full, "utf8").catch(() => null);
+    if (now !== u.after)
+      return {
+        kind: "refused",
+        reason: `${u.rel} changed again since. Use the section's History to go back.`,
+      };
+    this.ownWrite(u.rel, u.before);
+    await writeFileAtomic(full, u.before);
+    if (line.kind === "auto-used" && line.undo) this.autoUndo.delete(line.undo);
+    if (own) await this.append(own, thread, { kind: "auto-undone", used: id });
+    if (live) await this.refresh(live.rel, live.docText, thread);
+    return { kind: "undone" };
+  }
+
   /** One of Anur's MCP tools, called by this thread's agent. */
   private async tool(thread: string, tool: string, args: unknown): Promise<ToolAnswer> {
     if (tool === "anur_offer_options") return this.offerOptions(thread, args);
@@ -1456,6 +1653,8 @@ const KNOWN = new Set([
   "option-explored",
   "input",
   "input-removed",
+  "auto-used",
+  "auto-undone",
 ]);
 
 /**

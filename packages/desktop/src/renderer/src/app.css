@@ -1510,10 +1510,16 @@ body.resizing * {
   line-height: 1.3;
 }
 
+/* A thread's name: the panel's own text, two lines at most. */
 .think-title {
-  font-family: var(--font-doc);
-  font-style: italic;
-  font-weight: 400;
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .think-text {
@@ -1602,8 +1608,12 @@ body.resizing * {
 }
 
 .think-thread-title {
-  font-family: var(--font-doc);
-  font-style: italic;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .think-chat {
