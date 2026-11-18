@@ -575,7 +575,7 @@ export function Think({
   const sectionKey = section?.path.join("\u0000") ?? null;
   /** What new threads on this section receive from earlier ones (4.4). */
   const [inputs, setInputs] = useState<
-    { id: string; thread: string; source: string; label: string; trust: string }[]
+    { id: string; thread: string; source: string; label: string; trust: string; local: boolean }[]
   >([]);
   const threadsSeen = threads.map((t) => `${t.id}:${String(t.items.length)}`).join(",");
   useEffect(() => {
@@ -1183,6 +1183,14 @@ export function Think({
                   {i.label}
                 </span>
                 {i.trust === "untrusted" ? <span className="quiet">untrusted</span> : null}
+                {i.local ? (
+                  <span
+                    className="quiet"
+                    title="Read from outside the folder: its content stays on the device that read it, and never goes into .anur/ or git"
+                  >
+                    kept local
+                  </span>
+                ) : null}
                 {writable ? (
                   <button
                     type="button"

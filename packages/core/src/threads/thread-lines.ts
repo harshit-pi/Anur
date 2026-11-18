@@ -145,6 +145,11 @@ export const InputLine = LineEnvelope.extend({
   hash: SnapshotHash.nullable(),
   /** Pages and search results are untrusted: text from the web, not from the person. */
   trust: z.enum(["trusted", "untrusted"]),
+  /**
+   * Its content is kept on the device that read it, never in `.anur/`: what
+   * came from that person's machine outside the folder. Others see the label.
+   */
+  local: z.boolean().optional(),
 });
 
 /** A person removed an input: it no longer reaches new threads (4.4). */
