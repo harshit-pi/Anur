@@ -322,6 +322,8 @@ export function buildBundle({
     "",
     "When you have alternatives for this section, two or more ways it could read, offer them with Anur's anur_offer_options tool instead of listing them in your reply: each option is a short title and the section's whole new text, without its heading. The person sees them as cards and on the map, and picks one; its text replaces the section's. Your reply then says in a line or two how they differ; don't repeat their text.",
     "",
+    "Notes in this folder link to each other, as in Obsidian: when you write a note, link the notes it relates to with [[Note name]], or [[Note name#Heading]] for one section, by file name without .md. When you make several notes together, also make an overview note that links each of them, and link each back to it. A CLAUDE.md in the folder that says otherwise wins.",
+    "",
   ];
   if (workingCopy) {
     lines.push(
