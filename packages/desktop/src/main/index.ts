@@ -1063,9 +1063,10 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const win = windows.get(webContentsId);
     if (!win) return { files: [] };
     const picked = await dialog.showOpenDialog(win, {
-      title: "Add files as inputs",
-      buttonLabel: "Add",
-      properties: ["openFile", "multiSelections"],
+      title: "Attach files or folders",
+      buttonLabel: "Attach",
+      // Files and folders both, as in Claude: a folder goes as a whole.
+      properties: ["openFile", "openDirectory", "multiSelections"],
     });
     return { files: picked.canceled ? [] : picked.filePaths };
   },
