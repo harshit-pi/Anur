@@ -90,6 +90,14 @@ export function Ribbon({
   );
 }
 
+/** A line under the files: a refusal, or an offer such as updating links. */
+export type FileNotice = {
+  text: string;
+  tone: "error" | "info";
+  action?: { label: string; run: () => void };
+  dismiss?: () => void;
+};
+
 const SORT_LABELS: Record<Sort, string> = {
   name: "Name (A to Z)",
   "name-desc": "Name (Z to A)",
@@ -125,8 +133,8 @@ export function LeftSidebar({
   /** Changes whenever a tab is pressed or a doc comes into focus: reveal it in the tree. */
   reveal: number;
   actions?: FileActions | undefined;
-  /** Why the last change to the files didn't happen. */
-  notice?: string | null;
+  /** Why the last change to the files didn't happen, or what it offers next. */
+  notice?: FileNotice | null;
 }) {
   const [collapse, setCollapse] = useState(0);
   const [request, setRequest] = useState<MakeRequest | null>(null);
@@ -233,9 +241,22 @@ export function LeftSidebar({
         request={request}
       />
       {notice ? (
-        <p className="tree-notice" role="alert">
-          {notice}
-        </p>
+        <div
+          className={`tree-notice ${notice.tone}`}
+          role={notice.tone === "error" ? "alert" : "status"}
+        >
+          <span>{notice.text}</span>
+          {notice.action ? (
+            <span className="tree-notice-actions">
+              <button type="button" className="tree-notice-button" onClick={notice.action.run}>
+                {notice.action.label}
+              </button>
+              <button type="button" className="tree-notice-dismiss" onClick={notice.dismiss}>
+                Not now
+              </button>
+            </span>
+          ) : null}
+        </div>
       ) : null}
       {folder.truncated ? (
         <p className="quiet">This folder has more files than Anur lists; some are left out.</p>

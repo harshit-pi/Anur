@@ -166,3 +166,13 @@ export {
   type BundlePart,
   type BundleRule,
 } from "./context/index.ts";
+export {
+  docsBefore,
+  headingKey,
+  nameOf,
+  resolveHref,
+  resolveWiki,
+  rewriteLinks,
+  type LinkTarget,
+  type Move,
+} from "./links/index.ts";
