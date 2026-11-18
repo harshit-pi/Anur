@@ -879,6 +879,8 @@ export class Threads {
     if (!at) return;
     const now = await this.previews.read(at.doc, thread);
     await this.previews.write(at.doc, thread, parts, now?.summary ?? null);
+    // Think's cards and the map's boxes follow what's left of the preview.
+    this.d.previewsChanged(rel);
   }
 
   /**

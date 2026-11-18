@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { boxSize, mapLayout, type MapNode, type SectionTree } from "@anur/core";
-import type { ThreadView } from "../../../shared/ipc-contract.ts";
+import type { PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { Markdown, bodyOf } from "./Think.tsx";
 
@@ -21,7 +21,7 @@ type Pos = { x: number; y: number };
 type View = { x: number; y: number; z: number };
 type Box = {
   id: string;
-  kind: "section" | "thread" | "option";
+  kind: "section" | "thread" | "option" | "edit";
   index: number;
   thread?: ThreadView;
   /** An option a thread offered for this section, not picked yet. */
@@ -90,7 +90,8 @@ export function MapView({
   /** Saved positions have arrived: only then is the first fit right. */
   const [loaded, setLoaded] = useState(false);
   const [threads, setThreads] = useState<ThreadView[]>([]);
-  const [previewed, setPreviewed] = useState<Set<string>>(new Set());
+  const [previews, setPreviews] = useState<PreviewView[]>([]);
+  const previewed = useMemo(() => new Set(previews.map((p) => p.thread)), [previews]);
   const [view, setView] = useState<View | null>(null);
   /** The person panned or zoomed: the map stays where they put it. Until then it fits itself. */
   const userMoved = useRef(false);
@@ -175,7 +176,7 @@ export function MapView({
         if (current) setThreads(r.threads.filter((t) => !t.closed));
       });
       void anur.call("preview:list", { path: docPath, text }).then((r) => {
-        if (current) setPreviewed(new Set(r.previews.map((p) => p.thread)));
+        if (current) setPreviews(r.previews);
       });
     };
     load();
@@ -263,9 +264,31 @@ export function MapView({
           });
         }
       }
+      // An edit a thread proposed to this section: a dashed box until it's used or set aside.
+      for (const p of previews) {
+        const part = p.parts.find((x) => samePath(x.path, s.path));
+        const t = threads.find((x) => x.id === p.thread);
+        if (!part || !t) continue;
+        const eid = `p:${p.thread}`;
+        nodes.push({ id: `${eid}:${id}`, parent: id, ...boxSize("Proposed edit", "") });
+        info.set(`${eid}:${id}`, {
+          id: `${eid}:${id}`,
+          kind: "edit",
+          index: s.index,
+          thread: t,
+          option: {
+            id: eid,
+            title: "Proposed edit",
+            text: part.proposed.replace(/^#{1,6}[ \t].*\n?/, "").trim(),
+          },
+          heading: "Proposed edit",
+          parent: id,
+        });
+      }
     }
     // Threads before subsections, so they sit nearest their section.
-    const near = (n: MapNode) => Number(n.id.startsWith("t:") || n.id.startsWith("o:"));
+    const near = (n: MapNode) =>
+      Number(n.id.startsWith("t:") || n.id.startsWith("o:") || n.id.startsWith("p:"));
     nodes.sort((a, b) => near(b) - near(a));
     const placed = mapLayout(
       [nodes.find((n) => n.parent === null), ...nodes.filter((n) => n.parent !== null)].filter(
@@ -306,7 +329,7 @@ export function MapView({
       }
     }
     return out;
-  }, [tree, threads, idOf, moved, drag]);
+  }, [tree, threads, previews, idOf, moved, drag]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
 
@@ -486,7 +509,7 @@ export function MapView({
     if (e.button !== 0) return;
     e.stopPropagation();
     host.current?.focus();
-    if ((b.kind === "thread" || b.kind === "option") && b.thread) {
+    if ((b.kind === "thread" || b.kind === "option" || b.kind === "edit") && b.thread) {
       onSelect(b.index);
       window.dispatchEvent(
         new CustomEvent("anur:open-thread", { detail: { thread: b.thread.id } }),
@@ -764,12 +787,18 @@ export function MapView({
           {drawing}
         </svg>
         {boxes.map((b) =>
-          b.kind === "option" && b.option ? (
+          (b.kind === "option" || b.kind === "edit") && b.option ? (
             <div
               key={b.id}
               role="button"
               tabIndex={-1}
-              className={b.explored ? "map-option explored" : "map-option"}
+              className={
+                b.kind === "edit"
+                  ? "map-option edit"
+                  : b.explored
+                    ? "map-option explored"
+                    : "map-option"
+              }
               data-peek={b.id}
               title="An option from a thread: open it to pick"
               style={{ left: b.x - b.w / 2, top: b.y, width: b.w, transform: "translateY(-50%)" }}
@@ -857,7 +886,7 @@ export function MapView({
         />
       ) : null}
       {(() => {
-        const opt = peek?.startsWith("o:") ? byId.get(peek) : undefined;
+        const opt = peek?.startsWith("o:") || peek?.startsWith("p:") ? byId.get(peek) : undefined;
         const s = peek?.startsWith("s:") ? tree.sections[Number(peek.slice(2))] : undefined;
         const b = opt ?? (s ? byId.get(idOf(s.index)) : undefined);
         if (!b || drag || linking || (!s && !opt?.option)) return null;
@@ -875,7 +904,13 @@ export function MapView({
             role="note"
             aria-label={`${name}: its text`}
           >
-            <div className="map-peek-name">{opt ? `Option: ${name}` : name}</div>
+            <div className="map-peek-name">
+              {opt?.kind === "edit"
+                ? `Proposed edit to ${tree.sections[opt.index]?.path.at(-1) ?? ""}`
+                : opt
+                  ? `Option: ${name}`
+                  : name}
+            </div>
             {body ? <Markdown text={body} /> : <p className="quiet">No text yet.</p>}
           </div>
         );
@@ -892,6 +927,9 @@ export function MapView({
         </span>
         <span>
           <i className="map-key option" /> Option
+        </span>
+        <span>
+          <i className="map-key edit" /> Proposed edit
         </span>
         <span>
           <i className="map-key link" /> Link

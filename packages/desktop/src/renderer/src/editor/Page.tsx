@@ -313,6 +313,26 @@ export function Page({
         });
     };
     window.addEventListener("anur:show-preview", onShowPreview);
+    /**
+     * A proposed edit used or set aside from its card in Think: the same
+     * Apply as on the page, so the map and Think need no page in view.
+     */
+    const partOf = (e: Event) => {
+      const { thread, path } = (e as CustomEvent<{ thread: string; path: string[] }>).detail;
+      const preview = editor.state.field(previewState).previews.find((p) => p.thread === thread);
+      const part = preview?.parts.find((x) => sectionKey(x.path) === sectionKey(path));
+      return part ? { thread, part } : null;
+    };
+    const onUsePreview = (e: Event) => {
+      const at = partOf(e);
+      if (at) void applyPreviewPart(at.thread, at.part);
+    };
+    const onDropPreview = (e: Event) => {
+      const at = partOf(e);
+      if (at) void savePreview(at.thread, withPart(at.thread, sectionKey(at.part.path), null));
+    };
+    window.addEventListener("anur:use-preview", onUsePreview);
+    window.addEventListener("anur:drop-preview", onDropPreview);
     const offPreviews = anur.on("preview:changed", ({ path }) => {
       if (path === doc.path) loadPreviews();
     });
@@ -611,6 +631,8 @@ export function Page({
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
       window.removeEventListener("anur:show-preview", onShowPreview);
+      window.removeEventListener("anur:use-preview", onUsePreview);
+      window.removeEventListener("anur:drop-preview", onDropPreview);
       offPreviews();
       offReplace();
       offRelink();

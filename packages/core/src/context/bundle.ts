@@ -224,7 +224,7 @@ export function buildBundle({
   ];
   if (workingCopy) {
     lines.push(
-      `Your working copy of \`${docPath}\` is at \`${workingCopy}\`. Only when the person asks you to change the doc, edit that file with your own tools; Anur shows your edits to them in place, section by section, and they apply what they want. Don't edit it otherwise. The doc in the folder is the decided text and changes only when they apply. Shell commands such as \`git diff\` see the decided text, not your edits.`,
+      `Your working copy of \`${docPath}\` is at \`${workingCopy}\`. Use your judgment: answer a question; offer options when there is a real choice; when the person asks for a change, or the change is clear, edit that file with your own tools. Anur shows each edit to them as a proposal on its section, and the doc changes only when they use it, so say your edit is ready for them to use, never that you've updated the doc. The doc in the folder is the decided text. Shell commands such as \`git diff\` see the decided text, not your edits.`,
       "",
     );
   }

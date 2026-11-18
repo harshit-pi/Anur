@@ -289,7 +289,7 @@ class BodyWidget extends WidgetType {
       );
       foot.append(note, back, again, force);
     } else {
-      const apply = button("Apply", true, () => actions?.apply(this.thread, this.part));
+      const apply = button("Use this", true, () => actions?.apply(this.thread, this.part));
       foot.append(note, toggle, back, apply);
     }
     wrap.append(foot);
