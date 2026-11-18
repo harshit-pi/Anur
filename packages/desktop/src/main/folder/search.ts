@@ -11,7 +11,13 @@ import type { FolderState } from "../../shared/ipc-contract.ts";
  * you type stays quick.
  */
 
-export type SearchMatch = { path: string; line: number; column: number; text: string };
+export type SearchMatch = {
+  path: string;
+  line: number;
+  column: number;
+  text: string;
+  length?: number;
+};
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const cache = new Map<string, { mtime: number; text: string }>();
@@ -41,30 +47,55 @@ function snippet(line: string, at: number, length: number): { text: string; colu
   };
 }
 
+/**
+ * Docs that hold every word, in any order (2.26), each with its best lines:
+ * the lines with the most of the words first, up to PER_DOC. The docs with
+ * the most matching lines come first. Docs still in iCloud are counted, not read.
+ */
+const PER_DOC = 3;
+
 export async function searchFolder(
   folder: FolderState,
   query: string,
-  limit = 200,
+  limit = 600,
 ): Promise<{ matches: SearchMatch[]; truncated: boolean; skipped: number }> {
-  const needle = query.trim().toLowerCase();
-  if (needle === "") return { matches: [], truncated: false, skipped: 0 };
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return { matches: [], truncated: false, skipped: 0 };
   const offloaded = new Set(folder.offloaded);
-  const matches: SearchMatch[] = [];
+  const found: { doc: string; hits: number; lines: SearchMatch[] }[] = [];
   for (const doc of folder.docs) {
     if (offloaded.has(doc)) continue;
     const text = await textOf(path.join(folder.path, doc));
-    if (text === null || !text.toLowerCase().includes(needle)) continue;
+    if (text === null) continue;
+    const lower = text.toLowerCase();
+    if (!words.every((w) => lower.includes(w))) continue;
     const lines = text.split("\n");
+    const hits: { i: number; count: number; at: number; len: number }[] = [];
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i] ?? "";
-      const at = line.toLowerCase().indexOf(needle);
-      if (at < 0) continue;
-      const { text: shown, column } = snippet(line, at, needle.length);
-      matches.push({ path: doc, line: i + 1, column, text: shown });
-      if (matches.length >= limit) return { matches, truncated: true, skipped: offloaded.size };
+      const line = (lines[i] ?? "").toLowerCase();
+      const at = words.map((w) => ({ w, at: line.indexOf(w) })).filter((x) => x.at >= 0);
+      const first = at.sort((a, b) => a.at - b.at)[0];
+      if (first) hits.push({ i, count: at.length, at: first.at, len: first.w.length });
     }
+    const best = [...hits].sort((a, b) => b.count - a.count || a.i - b.i).slice(0, PER_DOC);
+    found.push({
+      doc,
+      hits: hits.length,
+      lines: best
+        .sort((a, b) => a.i - b.i)
+        .map((h) => {
+          const { text: shown, column } = snippet(lines[h.i] ?? "", h.at, h.len);
+          return { path: doc, line: h.i + 1, column, text: shown, length: h.len };
+        }),
+    });
   }
-  return { matches, truncated: false, skipped: offloaded.size };
+  found.sort((a, b) => b.hits - a.hits || a.doc.localeCompare(b.doc));
+  const matches = found.flatMap((f) => f.lines);
+  return {
+    matches: matches.slice(0, limit),
+    truncated: matches.length > limit,
+    skipped: offloaded.size,
+  };
 }
 
 /**

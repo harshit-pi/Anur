@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FolderState, Response } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { inlineRuns, splitMatches } from "../layout/inline-markdown.ts";
-import { docsNamed } from "../layout/new-doc.ts";
+import { findDocs } from "../layout/find-docs.ts";
 
 /**
  * 7. Command palette, from the magnifier or ⌘K. Typing searches the folder:
@@ -15,7 +15,14 @@ type Found = Response<"folder:search">;
 
 type Item =
   | { kind: "doc"; path: string }
-  | { kind: "line"; path: string; line: number; column: number; text: string }
+  | {
+      kind: "line";
+      path: string;
+      line: number;
+      column: number;
+      text: string;
+      length?: number | undefined;
+    }
   | { kind: "command"; name: string; hint: string; run: (() => void) | null };
 
 const name = (p: string) => (p.split("/").pop() ?? p).replace(/\.md$/i, "");
@@ -35,6 +42,7 @@ export function CommandPalette({
   onThread,
   onAsk,
   onSystem,
+  recent = [],
 }: {
   open: boolean;
   onClose: () => void;
@@ -51,6 +59,8 @@ export function CommandPalette({
   onAsk: (() => void) | null;
   /** Open the system tab, when the Engineering plugin is on. */
   onSystem: (() => void) | null;
+  /** Docs opened lately, the latest first: they rank higher. */
+  recent?: readonly string[];
 }) {
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Found | null>(null);
@@ -98,8 +108,9 @@ export function CommandPalette({
   if (!open) return null;
 
   const q = query.trim();
-  const docs = folder ? docsNamed(folder.docs, q, 6) : [];
-  const lines = (found?.matches ?? []).slice(0, 8);
+  // No cap on either: the list scrolls.
+  const docs = folder ? findDocs(folder.docs, q, recent) : [];
+  const lines = found?.matches ?? [];
   const exact = folder?.docs.some((d) => name(d).toLowerCase() === q.toLowerCase()) ?? false;
   const commands: Item[] = [
     {
@@ -135,7 +146,7 @@ export function CommandPalette({
   const run = (it: Item | undefined, newTab: boolean) => {
     if (!it) return;
     if (it.kind === "doc") onOpen(it.path, newTab);
-    else if (it.kind === "line") onOpenLine(it.path, it.line, it.column, q.length);
+    else if (it.kind === "line") onOpenLine(it.path, it.line, it.column, it.length ?? q.length);
     else if (it.run) it.run();
     else return;
     onClose();
@@ -235,6 +246,13 @@ export function CommandPalette({
           ))}
           {q && found && docs.length === 0 && lines.length === 0 ? (
             <li className="palette-item quiet">No doc or line in this folder matches</li>
+          ) : null}
+          {q && found && found.skipped > 0 ? (
+            <li className="palette-item quiet">
+              {found.skipped === 1
+                ? "1 doc is still in iCloud, so its text wasn't searched."
+                : `${String(found.skipped)} docs are still in iCloud, so their text wasn't searched.`}
+            </li>
           ) : null}
         </ul>
         <p className="palette-note quiet">

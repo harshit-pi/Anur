@@ -611,7 +611,14 @@ export const ipcContract = {
     request: z.object({ query: z.string().max(500) }).strict(),
     response: z.object({
       matches: z.array(
-        z.object({ path: z.string(), line: z.int(), column: z.int(), text: z.string() }),
+        z.object({
+          path: z.string(),
+          line: z.int(),
+          column: z.int(),
+          text: z.string(),
+          /** How long the match at `column` is, to select on opening. */
+          length: z.int().optional(),
+        }),
       ),
       truncated: z.boolean(),
       /** Docs left out because their bytes are still in iCloud. */
