@@ -116,6 +116,31 @@ export const OptionUsedLine = LineEnvelope.extend({
   how: z.enum(["replace", "subsection"]),
 });
 
+/**
+ * Something the agent picked up with its own tools (4.3): a file it read, a
+ * pointer to another doc, a command's output, a fetch's answer, another MCP
+ * server's result. Its content is a snapshot, by hash; a doc is a pointer.
+ */
+export const InputLine = LineEnvelope.extend({
+  kind: z.literal("input"),
+  turn: z.string().min(1),
+  toolUse: z.string().min(1),
+  source: z.enum(["file", "doc", "command", "fetch", "search", "mcp"]),
+  /** What the person and the agent see it as: a path, a command, a URL. */
+  label: z.string(),
+  /** Where it came from: a path in or out of the folder, a URL, a command, a server's tool. */
+  ref: z.string(),
+  hash: SnapshotHash.nullable(),
+  /** Pages and search results are untrusted: text from the web, not from the person. */
+  trust: z.enum(["trusted", "untrusted"]),
+});
+
+/** A person removed an input: it no longer reaches new threads (4.4). */
+export const InputRemovedLine = LineEnvelope.extend({
+  kind: z.literal("input-removed"),
+  input: z.string().min(1),
+});
+
 /** The person chose to explore an option before picking: the thread digs into it. */
 export const OptionExploredLine = LineEnvelope.extend({
   kind: z.literal("option-explored"),
@@ -132,6 +157,8 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   OptionsLine,
   OptionUsedLine,
   OptionExploredLine,
+  InputLine,
+  InputRemovedLine,
 ]);
 export type KnownThreadLine = z.infer<typeof KnownThreadLine>;
 
@@ -145,6 +172,8 @@ const KNOWN_KINDS = new Set([
   "options",
   "option-used",
   "option-explored",
+  "input",
+  "input-removed",
 ]);
 
 /** A kind added by a later version of format 1; kept as written. */

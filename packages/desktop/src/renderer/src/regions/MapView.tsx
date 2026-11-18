@@ -209,7 +209,9 @@ export function MapView({
     for (const s of tree.sections) {
       const id = idOf(s.index);
       const heading = s.path.at(-1) ?? "";
-      const size = boxSize(heading, "");
+      // Room for the thread count beside the name, so the name never breaks mid-word.
+      const count = threads.filter((t) => samePath(t.path, s.path)).length;
+      const size = boxSize(count > 0 ? `${heading}  ${String(count)} threads` : heading, "");
       nodes.push({ id, parent: s.parent === null ? null : idOf(s.parent), ...size });
       info.set(id, {
         id,
@@ -370,7 +372,9 @@ export function MapView({
   const count = boxes.length;
   const lastCount = useRef(count);
   useEffect(() => {
-    if (count > lastCount.current && !userMoved.current) setView(null);
+    // Only a map already framed is framed again: while the first fit is
+    // pending, clearing the view here would undo it in the same commit.
+    if (count > lastCount.current && !userMoved.current && view !== null) setView(null);
     lastCount.current = count;
   }, [count]);
 

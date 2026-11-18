@@ -30,6 +30,7 @@ import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
+import { baseAsMarkdown } from "@anur/core";
 import { readImage, saveImage } from "./folder/images.ts";
 import { MapLayouts } from "./folder/map-layout.ts";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
@@ -157,6 +158,19 @@ function threadsFor(folder: FolderState): Threads | null {
       defaultAgent: () => appSettings.get().defaultAgent,
       rememberOptions: rememberChoices,
       mcp: { socket: anurSocket, script: path.join(here, "mcp-server.js") },
+      baseTables: async (rel, target) => {
+        const r = await readEmbeddedBase(folder, target, rel);
+        if (r.kind !== "base") return null;
+        const views = r.view ? r.views.filter((v) => v.name === r.view) : r.views;
+        const tables = (views.length > 0 ? views : r.views).map((v) =>
+          r.views.length > 1 && !r.view
+            ? `**${v.name}**\n\n${baseAsMarkdown(v)}`
+            : baseAsMarkdown(v),
+        );
+        return [`The base ${r.path}, as a table:`, "", ...tables.flatMap((t) => [t, ""])]
+          .join("\n")
+          .trimEnd();
+      },
       previewsChanged: (rel) => {
         for (const [id, win] of windows) {
           if (folders.current(id)?.path === folder.path)
@@ -622,6 +636,26 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (folder) threadsFor(folder)?.setOption(thread, id, value);
     return {};
+  },
+  "inputs:list": async ({ path: rel, text, section }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { inputs: [] };
+    const list = await t.listInputs(rel, text, section.index, section.path);
+    return {
+      inputs: list.map((c) => ({
+        id: c.id,
+        thread: c.thread,
+        source: c.source,
+        label: c.label,
+        trust: c.trust,
+      })),
+    };
+  },
+  "inputs:remove": async ({ path: rel, text, thread, input }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    return { ok: t ? await t.removeInput(rel, text, thread, input) : false };
   },
   "thread:explore-option": async ({ thread, path: rel, text, option }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

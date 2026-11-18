@@ -21,12 +21,6 @@ type Item =
 const name = (p: string) => (p.split("/").pop() ?? p).replace(/\.md$/i, "");
 const dir = (p: string) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
 
-const LATER = [
-  { name: "Switch to Map", hint: "⌘M" },
-  { name: "Start a thread on this section", hint: "" },
-  { name: "Ask about this doc", hint: "whole-doc thread" },
-];
-
 const keyOf = (it: Item) =>
   it.kind === "command" ? it.name : it.kind === "line" ? `${it.path}:${String(it.line)}` : it.path;
 
@@ -37,6 +31,9 @@ export function CommandPalette({
   onOpen,
   onOpenLine,
   onNewDoc,
+  onSwitchView,
+  onThread,
+  onAsk,
 }: {
   open: boolean;
   onClose: () => void;
@@ -45,6 +42,12 @@ export function CommandPalette({
   onOpenLine: (path: string, line: number, column: number, length: number) => void;
   /** Make a new doc named as given (2.26); null when no writable folder is open. */
   onNewDoc: ((name: string) => void) | null;
+  /** Page to Map and back; null with no doc open. */
+  onSwitchView: (() => void) | null;
+  /** Think on the cursor's section, ready to type; null with no doc open. */
+  onThread: (() => void) | null;
+  /** Ask, the whole-doc thread (4.8); null with no doc open. */
+  onAsk: (() => void) | null;
 }) {
   const [query, setQuery] = useState("");
   const [found, setFound] = useState<Found | null>(null);
@@ -106,7 +109,9 @@ export function CommandPalette({
           }
         : null,
     },
-    ...LATER.map((c) => ({ kind: "command" as const, name: c.name, hint: c.hint, run: null })),
+    { kind: "command" as const, name: "Switch Page and Map", hint: "⇧⌘M", run: onSwitchView },
+    { kind: "command" as const, name: "Start a thread on this section", hint: "", run: onThread },
+    { kind: "command" as const, name: "Ask about this doc", hint: "whole-doc thread", run: onAsk },
   ].filter(
     (c) =>
       q === "" || c.name.startsWith("New doc") || c.name.toLowerCase().includes(q.toLowerCase()),

@@ -661,6 +661,35 @@ export const ipcContract = {
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
   },
+  /** The inputs new threads on a section receive: picked up by earlier threads on it or above (4.4). */
+  "inputs:list": {
+    request: z
+      .object({ path: z.string().max(4096), text: z.string(), section: SectionRef })
+      .strict(),
+    response: z.object({
+      inputs: z.array(
+        z.object({
+          id: z.string(),
+          thread: z.string(),
+          source: z.string(),
+          label: z.string(),
+          trust: z.enum(["trusted", "untrusted"]),
+        }),
+      ),
+    }),
+  },
+  /** A person removes an input: it no longer reaches new threads (4.4). */
+  "inputs:remove": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        thread: z.string().max(200),
+        input: z.string().max(100),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   /** Stop the thread's running turn. */
   "thread:stop": {
     request: z.object({ thread: z.string().max(200) }).strict(),
