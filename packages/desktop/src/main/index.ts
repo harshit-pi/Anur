@@ -45,6 +45,7 @@ import { loadDeviceId } from "../device/device-id.ts";
 import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
 import { readRecent } from "./folder/recent.ts";
+import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
 import { buildMenu } from "./menu.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
@@ -246,6 +247,32 @@ async function chooseFolder(win: BrowserWindow): Promise<OpenOutcome | { kind: "
   return outcome;
 }
 
+/** "New Folder…": name it and pick where in one sheet; Anur makes it and opens it. */
+async function newFolder(win: BrowserWindow): Promise<OpenOutcome | { kind: "cancelled" }> {
+  const picked = await dialog.showSaveDialog(win, {
+    title: "New folder",
+    message: "Name the folder your docs will live in.",
+    nameFieldLabel: "Folder name:",
+    buttonLabel: "Create",
+    defaultPath: path.join(app.getPath("documents"), "Docs"),
+    properties: ["createDirectory"],
+  });
+  if (picked.canceled || !picked.filePath) return { kind: "cancelled" };
+  const made = await makeStartFolder(picked.filePath);
+  const outcome: OpenOutcome =
+    made.kind === "made"
+      ? await openFolderIn(win, picked.filePath)
+      : { kind: "refused", reason: made.reason };
+  if (outcome.kind === "refused") {
+    await dialog.showMessageBox(win, {
+      type: "warning",
+      message: "Anur can't make this folder",
+      detail: outcome.reason,
+    });
+  }
+  return outcome;
+}
+
 const handlers: { [C in Channel]: Handler<C> } = {
   "app:info": () => ({
     name: app.getName(),
@@ -258,6 +285,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const win = windows.get(webContentsId);
     if (!win) return { kind: "cancelled" };
     const outcome = await chooseFolder(win);
+    return outcome.kind === "elsewhere" ? { kind: "elsewhere" } : outcome;
+  },
+  "folder:new": async (_req, { webContentsId }) => {
+    const win = windows.get(webContentsId);
+    if (!win) return { kind: "cancelled" };
+    const outcome = await newFolder(win);
     return outcome.kind === "elsewhere" ? { kind: "elsewhere" } : outcome;
   },
   "doc:open": async ({ path: requested }, { webContentsId }) => {
@@ -934,6 +967,9 @@ void app.whenReady().then(async () => {
     buildMenu({
       openFolder: () => {
         void chooseFolder(focusedOrNew());
+      },
+      newFolder: () => {
+        void newFolder(focusedOrNew());
       },
       newWindow: () => {
         createWindow();

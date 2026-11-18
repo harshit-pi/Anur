@@ -707,6 +707,22 @@ export function App() {
       if (r.kind === "opened") setFolder(r.folder);
     });
   }, []);
+  const newFolder = useCallback(() => {
+    void anur.call("folder:new", {}).then((r) => {
+      if (r.kind === "opened") setFolder(r.folder);
+    });
+  }, []);
+  /** Bumped by "New doc" on an empty folder's page: the files panel starts a new doc. */
+  const [makeDoc, setMakeDoc] = useState(0);
+  const firstDoc = useCallback(() => {
+    setOpen((o) => {
+      if (o.left) return o;
+      const next = { ...o, left: true };
+      saveOpen(window.localStorage, next);
+      return next;
+    });
+    setMakeDoc((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -796,6 +812,7 @@ export function App() {
         reveal={reveal}
         actions={fileActions}
         notice={fileNotice}
+        makeDoc={makeDoc}
         outline={<OutlinePanel sections={sections} current={outlineAt} onJump={jumpTo} />}
       />
       <Center
@@ -842,6 +859,8 @@ export function App() {
         docNote={doc?.note ?? null}
         docError={docError ?? save.detail}
         onOpenFolder={openFolder}
+        onNewFolder={newFolder}
+        onFirstDoc={firstDoc}
         onMerge={setMerging}
         onCrumb={showFolder}
         onCopyLink={copySectionLink}

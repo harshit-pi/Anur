@@ -125,6 +125,7 @@ export function LeftSidebar({
   reveal,
   actions,
   notice = null,
+  makeDoc = 0,
   outline = null,
 }: {
   /** The open doc's outline, under the files; folds away. */
@@ -139,9 +140,14 @@ export function LeftSidebar({
   actions?: FileActions | undefined;
   /** Why the last change to the files didn't happen, or what it offers next. */
   notice?: FileNotice | null;
+  /** Bumped to start a new doc, as an empty folder's page asks. */
+  makeDoc?: number;
 }) {
   const [collapse, setCollapse] = useState(0);
   const [request, setRequest] = useState<MakeRequest | null>(null);
+  useEffect(() => {
+    if (makeDoc > 0) setRequest((r) => ({ kind: "doc", n: (r?.n ?? 0) + 1 }));
+  }, [makeDoc]);
   const folderPath = folder?.path ?? null;
   const [sort, setSort] = useState<Sort>("name");
   useEffect(() => {
@@ -154,8 +160,8 @@ export function LeftSidebar({
           No folder open
         </p>
         <p className="quiet">
-          Open a folder of Markdown files, such as a repo or an Obsidian vault. Anur works on the
-          files as they are.
+          Make a new folder for your docs, or open one of Markdown files you already have. Anur
+          works on the files as they are.
         </p>
       </aside>
     );
@@ -333,6 +339,8 @@ export function Center({
   docNote,
   docError,
   onOpenFolder,
+  onNewFolder,
+  onFirstDoc,
   onMerge,
   onBack,
   onForward,
@@ -359,6 +367,9 @@ export function Center({
   docNote: string | null;
   docError: string | null;
   onOpenFolder: () => void;
+  onNewFolder: () => void;
+  /** Start the first doc in an empty folder. */
+  onFirstDoc: () => void;
   onMerge: (copy: string) => void;
 }) {
   const [copied, setCopied] = useState<string | null>(null);
@@ -473,6 +484,16 @@ export function Center({
         <div className="page-empty">
           <p className="quiet">{opening}</p>
         </div>
+      ) : folder && folder.docs.length === 0 && folder.mode === "writable" ? (
+        <div className="page-empty">
+          <h1>{`${folder.name} is empty`}</h1>
+          <p>Start with a doc. Each one is a plain Markdown file in this folder.</p>
+          <div className="page-empty-buttons">
+            <button className="primary-button" type="button" onClick={onFirstDoc}>
+              New doc
+            </button>
+          </div>
+        </div>
       ) : folder ? (
         <div className="page-empty">
           <h1>Pick a doc</h1>
@@ -482,14 +503,19 @@ export function Center({
         </div>
       ) : (
         <div className="page-empty">
-          <h1>Open a folder to start</h1>
+          <h1>Start with a folder</h1>
           <p>
-            Anur reads the Markdown files already in it. Your docs stay plain files that open in any
-            editor.
+            Make a new folder for your docs, or open one you already have. Your docs stay plain
+            Markdown files that open in any editor.
           </p>
-          <button className="primary-button" type="button" onClick={onOpenFolder}>
-            Open folder <span className="kbd">⌘O</span>
-          </button>
+          <div className="page-empty-buttons">
+            <button className="primary-button" type="button" onClick={onNewFolder}>
+              New folder
+            </button>
+            <button className="secondary-button" type="button" onClick={onOpenFolder}>
+              Open folder <span className="kbd">⌘O</span>
+            </button>
+          </div>
         </div>
       )}
     </main>
