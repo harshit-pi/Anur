@@ -631,6 +631,22 @@ export function Think({
     };
   }, [newAgent]);
   const [error, setError] = useState<string | null>(null);
+  /** "Use agents' edits as they land", as set in Settings: the thread says when it is on. */
+  const [autoApply, setAutoApply] = useState(false);
+  /** Earlier Use alls are folded to one link until it is pressed. */
+  const [showEarlier, setShowEarlier] = useState(false);
+  useEffect(() => {
+    const read = () => {
+      void anur.call("settings:get", {}).then((s) => {
+        setAutoApply(s.autoApply);
+      });
+    };
+    read();
+    window.addEventListener("anur:settings-changed", read);
+    return () => {
+      window.removeEventListener("anur:settings-changed", read);
+    };
+  }, []);
   /** Branch (10.5): the next thread started here continues that thread up to that item. */
   const [branch, setBranch] = useState<{
     thread: string;
@@ -1005,6 +1021,10 @@ export function Think({
     const asks = prompts.filter((p) => p.thread === thread.id);
     // Who answered heads each reply: above its first step or its text, once per turn.
     const folded = foldSteps(thread.items, thread.busy);
+    /** Every Use all but the latest folds to one link, so the thread isn't a column of them. */
+    const earlierUsedAll = thread.items
+      .flatMap((x, n) => (x.kind === "used-all" ? [n] : []))
+      .slice(0, -1);
     const whoBefore = new Set<number>();
     let afterPerson = true;
     for (const { item, i } of folded) {
@@ -1379,17 +1399,40 @@ export function Think({
                 />
               ) : item.kind === "finding" ? (
                 <FindingCard key={i} item={item} thread={thread.id} writable={writable} />
+              ) : item.kind === "used-all" && earlierUsedAll.includes(i) && !showEarlier ? (
+                i === earlierUsedAll[0] ? (
+                  <button
+                    key={i}
+                    type="button"
+                    className="think-link think-earlier"
+                    onClick={() => {
+                      setShowEarlier(true);
+                    }}
+                  >
+                    {`${String(earlierUsedAll.length)} earlier Use all${earlierUsedAll.length === 1 ? "" : "s"}`}
+                  </button>
+                ) : null
               ) : item.kind === "used-all" ? (
-                <div key={i} className="think-changed auto" role="status">
-                  <span>
-                    {item.undone ? "Taken back: " : "Used all: "}
-                    {item.docs
+                <div key={i} className="think-changed auto compact" role="status">
+                  <span
+                    title={item.docs
                       .map(
                         (d) =>
-                          `${d.doc.replace(/\.md$/i, "")} (${d.sections.map((p) => p.at(-1) ?? "").join(", ")})`,
+                          `${d.doc.replace(/\.md$/i, "")}: ${d.sections.map((p) => p.at(-1) ?? "").join(", ")}`,
                       )
-                      .join("; ")}
-                    .{item.kept.length > 0 ? ` Kept as proposals: ${item.kept.join(", ")}.` : ""}
+                      .join("\n")}
+                  >
+                    {item.undone ? "Taken back: " : "Used "}
+                    {countOf(
+                      item.docs.reduce((n, d) => n + d.sections.length, 0),
+                      "edit",
+                    )}{" "}
+                    in {item.docs.map((d) => d.doc.replace(/\.md$/i, "")).join(", ")}
+                    {item.kept.length > 0 ? (
+                      <span className="quiet" title={item.kept.join("\n")}>
+                        {` · ${String(item.kept.length)} kept as proposal${item.kept.length === 1 ? "" : "s"}`}
+                      </span>
+                    ) : null}
                   </span>
                   {item.undoable ? (
                     <button
@@ -1529,7 +1572,6 @@ export function Think({
         </div>
         {notConnected(thread.agent)}
         {error ? <p className="think-error">{error}</p> : null}
-        {!thread.busy ? <ChangeSet thread={thread} writable={writable} /> : null}
         {!thread.busy
           ? (previews.find((p) => p.thread === thread.id)?.parts ?? []).map((part) => (
               <EditCard
@@ -1558,6 +1600,26 @@ export function Think({
               />
             ))
           : null}
+        {/* Last before the reply box, so Use all is on screen where the chat ends. */}
+        {!thread.busy ? (
+          <ChangeSet thread={thread} writable={writable} autoApply={autoApply} />
+        ) : null}
+        {autoApply ? (
+          <p className="think-state">
+            Agents&apos; edits apply as they land ·{" "}
+            <button
+              type="button"
+              className="think-link"
+              onClick={() => {
+                window.dispatchEvent(
+                  new CustomEvent("anur:open-settings", { detail: { section: "agent" } }),
+                );
+              }}
+            >
+              Change
+            </button>
+          </p>
+        ) : null}
         {signedOut(thread.agent) ?? (
           <Composer
             placeholder="Reply in this thread"
@@ -3028,61 +3090,45 @@ function SectionHistory({
 }
 
 /**
- * A thread's change set (9.3): every edit it proposes now, by doc and
- * section, when there's more than one; each opens where it is, and Use all
- * uses every one (9.4).
+ * A thread's change set (9.3): one bar at the foot of the chat, with every
+ * edit it proposes now counted; each edit has its own card above, and Use all
+ * uses every one (9.4). With "as they land" on, what is left here is what
+ * clashed with typing.
  */
-function ChangeSet({ thread, writable }: { thread: ThreadView; writable: boolean }) {
+function ChangeSet({
+  thread,
+  writable,
+  autoApply,
+}: {
+  thread: ThreadView;
+  writable: boolean;
+  autoApply: boolean;
+}) {
   const set = thread.changeSet ?? [];
   const count = set.reduce((n, d) => n + d.sections.length, 0);
   if (count < 2) return null;
+  const docs = set.map((d) => d.doc.replace(/\.md$/i, "")).join(", ");
   return (
-    <div
-      className="think-offer edit think-changeset"
-      role="group"
-      aria-label="Edits from this thread"
-    >
-      <div className="think-offer-head">
-        <strong>
-          {String(count)} edits in {String(set.length)} doc{set.length === 1 ? "" : "s"}
-        </strong>
-        <span className="quiet">Not in the docs yet</span>
+    <div className="think-changeset" role="group" aria-label="Edits from this thread">
+      <div className="think-changeset-text">
+        <strong>{autoApply ? `${countOf(count, "edit")} kept` : countOf(count, "edit")}</strong>
+        {autoApply ? " as proposals" : ` in ${docs}`}
+        <span className="quiet">
+          {autoApply ? "Their sections changed" : "Not in the docs yet"}
+        </span>
       </div>
-      <ul>
-        {set.flatMap((d) =>
-          d.sections.map((p) => (
-            <li key={`${d.doc}#${p.join(">")}`}>
-              <button
-                type="button"
-                className="think-link"
-                onClick={() => {
-                  window.dispatchEvent(
-                    new CustomEvent("anur:open-path", {
-                      detail: { path: d.doc, heading: p.length > 1 ? p.slice(1).join("#") : null },
-                    }),
-                  );
-                }}
-              >
-                {linkLabel(d.doc, p.length > 1 ? p.slice(1).join("#") : null)}
-              </button>
-            </li>
-          )),
-        )}
-      </ul>
       {writable ? (
-        <div className="think-offer-actions">
-          <button
-            type="button"
-            className="think-button primary"
-            onClick={() => {
-              window.dispatchEvent(
-                new CustomEvent("anur:use-all", { detail: { thread: thread.id } }),
-              );
-            }}
-          >
-            Use all
-          </button>
-        </div>
+        <button
+          type="button"
+          className="think-button primary"
+          onClick={() => {
+            window.dispatchEvent(
+              new CustomEvent("anur:use-all", { detail: { thread: thread.id } }),
+            );
+          }}
+        >
+          {`Use all ${String(count)}`}
+        </button>
       ) : null}
     </div>
   );

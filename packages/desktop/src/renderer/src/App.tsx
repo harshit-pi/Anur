@@ -83,6 +83,17 @@ export function App() {
   const closeSettings = useCallback(() => {
     setSettings(null);
   }, []);
+  // From the side chat's "Change" next to the auto-apply line.
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      const { section } = (e as CustomEvent<{ section: SettingsSection }>).detail;
+      setSettings(section);
+    };
+    window.addEventListener("anur:open-settings", onOpen);
+    return () => {
+      window.removeEventListener("anur:open-settings", onOpen);
+    };
+  }, []);
   const [version, setVersion] = useState<string | null>(null);
   const [folder, setFolder] = useState<FolderState | null>(null);
   const [tabs, setTabs] = useState<Tabs>(noTabs);
