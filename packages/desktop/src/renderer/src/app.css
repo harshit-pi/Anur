@@ -3739,7 +3739,8 @@ body.resizing * {
 /* One header line: back, the thread's name, its section. */
 .think-head {
   display: flex;
-  align-items: flex-start;
+  /* One text line: the arrow, title, section and actions share a baseline. */
+  align-items: baseline;
   gap: 6px;
   margin-bottom: 6px;
 }
@@ -3774,6 +3775,18 @@ body.resizing * {
   padding: 0;
   background: none;
   color: var(--blue);
+}
+
+.think-head .think-back,
+.think-head .think-more {
+  align-self: auto;
+}
+
+/* Close and Delete at the far right, apart from the section's name. */
+.think-head .think-top-actions {
+  flex: none;
+  margin-left: auto;
+  padding-left: 8px;
 }
 
 /* Both sides read as chat: a light bubble for the person, plain sans text for the reply. */
