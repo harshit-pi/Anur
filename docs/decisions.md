@@ -201,3 +201,12 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - One Claude Code chat worked through 40 tasks across the decoy docs (about 790k tokens of context by the end), then each target task ran three times in a fork of it.
 - Quality held: 0.96, no stale facts, one miss (a correction left out). Cost did not: 156k weighted tokens a task against Anur's 62k, as every step re-reads the afternoon's context. Anur's measured edge is cost and speed in long sessions, not fewer mistakes.
 - The grader no longer counts quoting a doc's old figure, to correct it, as using a stale fact.
+
+## Orphans, closing and Clean up (group 11)
+
+- A section whose heading is gone keeps its threads and history under Orphaned in Think, with the live section most like it suggested by its last text and heading. Reattach moves its threads and history there; Delete removes its threads, their previews, its inputs and its history at once, after a confirm. Only orphans with something behind them are listed.
+- Every lookup of a thread's section follows Reattach and alias links, so a reattached thread shows on its new section and its versions join that section's history.
+- A thread can be closed (hidden; "Show closed" brings it back) or deleted with a confirm. A running thread can't be deleted.
+- Each device writes `.anur/open/<device>.json`: when it opened the folder and when it last quit cleanly.
+- Settings, Storage lists what `.anur/` holds by kind. Clean up removes only snapshots older than 30 days that no record names, searching every record for the hash so a kind this app doesn't know still keeps its snapshot. It is off while another device has the folder open or didn't quit cleanly; a device gone over 30 days no longer counts.
+- Unused attachments: images, and files attached as inputs whose input was removed, that no doc names. Listed for review; each goes to the system Trash only on a click.

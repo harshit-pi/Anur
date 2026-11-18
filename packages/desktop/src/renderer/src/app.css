@@ -2726,6 +2726,76 @@ body.resizing * {
   font-size: 12px;
 }
 
+/* Group 11: closing and deleting threads, and the orphaned list. */
+.think-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.think-top-actions {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+}
+
+.think-more.danger,
+.think-button.danger {
+  color: var(--red);
+}
+
+.think-more:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.think-closed-toggle {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.think-orphans-why {
+  margin: 4px 0 0;
+  font-size: 12px;
+}
+
+.think-orphan .think-elsewhere-where {
+  color: var(--graphite);
+  text-decoration: line-through;
+}
+
+.think-orphan p {
+  margin: 2px 0;
+  font-size: 12px;
+}
+
+.think-orphan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.think-orphan-actions select {
+  flex: 1 1 140px;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+}
+
+.think-orphan-actions .think-button {
+  align-self: auto;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
 /* Actions (group 15): Build and Check on a section. */
 .think-actions {
   display: flex;
@@ -3943,4 +4013,51 @@ button.file-card-name:hover {
 .think-composer .think-pickers {
   gap: 0;
   min-width: 0;
+}
+
+/* Settings, Storage (11.5, 11.6). */
+.settings-storage {
+  width: 100%;
+  margin: 0 0 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.settings-storage td {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.settings-storage td:nth-child(2) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-storage td:nth-child(3) {
+  width: 90px;
+  padding-left: 16px;
+  text-align: right;
+}
+
+.settings-attachments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-attachments li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+}
+
+.settings-attachment-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

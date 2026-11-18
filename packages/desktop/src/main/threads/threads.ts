@@ -50,7 +50,7 @@ import { JsonlWriter, readJsonlFile } from "../../vault/jsonl-writer.ts";
 import { IMAGE_TYPES, attachmentDir, attachmentFolder } from "../folder/images.ts";
 import { pageText, readLink } from "./read-link.ts";
 import type { AgentHub } from "./hub.ts";
-import { PreviewStore } from "./previews.ts";
+import { PreviewStore, previewIdOf } from "./previews.ts";
 import { denyRulesOf, type DenyRule } from "../../agent/deny-rules.ts";
 import type { AnurSocket, ToolAnswer } from "./anur-socket.ts";
 import { TurnWatch, type DocChange } from "./turn-watch.ts";
@@ -70,7 +70,17 @@ export { readSection } from "./read-section.ts";
  * and become the thread's preview, one part per section.
  */
 
-type Located = { doc: DocId; tree: SectionTree; ids: SectionId[] };
+type Located = {
+  doc: DocId;
+  tree: SectionTree;
+  ids: SectionId[];
+  /** IDs joined to another by an alias or a Reattach, to the ID they stand for (11.1). */
+  canon?: ReadonlyMap<SectionId, SectionId>;
+};
+
+/** A section's place in the tree by its ID, following aliases and Reattaches. */
+const indexIn = (at: Located, id: SectionId): number => at.ids.indexOf(at.canon?.get(id) ?? id);
+const canonIn = (at: Located, id: SectionId) => at.canon?.get(id) ?? id;
 
 export type ThreadDeps = {
   /** The folder's files changed: a doc an agent made, or one taken back. */
@@ -520,7 +530,7 @@ export class Threads {
     const lines = await this.linesOf(at.doc, thread);
     const start = lines.find((l) => l.kind === "thread");
     if (!start) return null;
-    const index = at.ids.indexOf(start.section);
+    const index = indexIn(at, start.section);
     const items: ThreadItem[] = [];
     let closed = false;
     const used = new Map<string, string>();
@@ -905,7 +915,7 @@ export class Threads {
     live: Live,
     rebuildFrom: KnownThreadLine[] | null,
   ): string | null {
-    const index = at.ids.indexOf(section);
+    const index = indexIn(at, section);
     if (index < 0) return null;
     const bundle = buildBundle({
       text,
@@ -1072,7 +1082,7 @@ export class Threads {
   /** Where each part's section is in the doc, by section ID. */
   private static byId(at: Located) {
     return (part: PreviewPart) => {
-      const i = part.section ? at.ids.indexOf(part.section) : -1;
+      const i = part.section ? indexIn(at, part.section) : -1;
       return i >= 0 ? (at.tree.sections[i]?.subtreeRange ?? null) : null;
     };
   }
@@ -1397,7 +1407,7 @@ export class Threads {
                   ? start.title
                   : "A thread",
           parts: p.parts.map((part) => {
-            const i = part.section ? at.ids.indexOf(part.section) : -1;
+            const i = part.section ? indexIn(at, part.section) : -1;
             return { ...part, path: at.tree.sections[i]?.path ?? part.path };
           }),
         };
@@ -1469,7 +1479,7 @@ export class Threads {
    * and ones never decided, don't carry.
    */
   async findingsFor(at: Located, section: SectionId): Promise<KeptFinding[]> {
-    const index = at.ids.indexOf(section);
+    const index = indexIn(at, section);
     if (index < 0) return [];
     const above = new Set<string>();
     for (let i: number | null = index; i !== null; i = at.tree.sections[i]?.parent ?? null) {
@@ -1486,9 +1496,9 @@ export class Threads {
     for (const t of names) {
       const lines = await this.linesOf(at.doc, t);
       const start = lines.find((l) => l.kind === "thread");
-      if (start?.kind !== "thread" || !above.has(start.section)) continue;
+      if (start?.kind !== "thread" || !above.has(canonIn(at, start.section))) continue;
       const sectionName =
-        at.tree.sections[at.ids.indexOf(start.section)]?.path.at(-1) ?? "an earlier section";
+        at.tree.sections[indexIn(at, start.section)]?.path.at(-1) ?? "an earlier section";
       for (const l of lines) {
         if (l.kind !== "finding") continue;
         const last = lines.findLast((d) => d.kind === "finding-decided" && d.finding === l.id);
@@ -1580,7 +1590,7 @@ export class Threads {
   }
 
   async carriedFor(at: Located, section: SectionId, except: string | null): Promise<Carried[]> {
-    const index = at.ids.indexOf(section);
+    const index = indexIn(at, section);
     if (index < 0) return [];
     const above = new Set<string>();
     for (let i: number | null = index; i !== null; i = at.tree.sections[i]?.parent ?? null) {
@@ -1600,7 +1610,7 @@ export class Threads {
       const lines = await this.linesOf(at.doc, t);
       for (const l of lines) if (l.kind === "input-removed") removed.add(l.input);
       const start = lines.find((l) => l.kind === "thread");
-      if (start?.kind !== "thread" || !above.has(start.section)) continue;
+      if (start?.kind !== "thread" || !above.has(canonIn(at, start.section))) continue;
       // What a person added to a thread reaches it, and new threads; its agent's own reads don't come back to it.
       for (const l of lines) if (l.kind === "added-input") found.push(addedCarried(l));
       if (t === except) continue;
@@ -1650,7 +1660,7 @@ export class Threads {
   }> {
     // Links as context off: a thread reads its own doc only.
     if (this.d.features?.().links === false) return { linked: [], broken: [] };
-    const index = at.ids.indexOf(section);
+    const index = indexIn(at, section);
     const node = at.tree.sections[index];
     if (!node) return { linked: [], broken: [] };
     const out = await this.links.linksOut(rel, node.path, text);
@@ -2402,7 +2412,7 @@ export class Threads {
     const kept: PreviewPart[] = [];
     for (const part of preview.parts) {
       const at = await this.d.locate(rel, text);
-      const i = at && part.section ? at.ids.indexOf(part.section) : -1;
+      const i = at && part.section ? indexIn(at, part.section) : -1;
       const s = at?.tree.sections[i];
       if (!at || !s || !part.section) {
         kept.push(part);
@@ -2620,7 +2630,7 @@ export class Threads {
       // This thread's own section.
       const at = await this.d.locate(live.rel, live.docText);
       const start = (await this.linesOf(live.doc, thread)).find((l) => l.kind === "thread");
-      own = Math.max(0, at && start?.kind === "thread" ? at.ids.indexOf(start.section) : 0);
+      own = Math.max(0, at && start?.kind === "thread" ? indexIn(at, start.section) : 0);
     }
     return this.linksReport(rel, text, typeof a.section === "string" ? a.section : null, own);
   }
@@ -2704,6 +2714,90 @@ export class Threads {
       copy ?? (rel === live.rel ? live.docText : await readFile(full, "utf8").catch(() => null));
     if (text === null) return { error: `There's no ${rel} in this folder.` };
     return readSection(text, rel, a.section, copy !== null);
+  }
+
+  // ---- Closing, deleting and orphans (group 11) ----
+
+  /** Close or reopen a thread (11.3): a closed one is hidden, never deleted by this. */
+  async setClosed(rel: string, text: string, thread: string, closed: boolean): Promise<boolean> {
+    const own = await this.docOfThread(thread);
+    if (!own) return false;
+    await this.append(own, thread, { kind: "state", state: closed ? "closed" : "open" });
+    const live = this.live.get(thread);
+    await this.refresh(live?.rel ?? rel, live?.docText ?? text, thread);
+    return true;
+  }
+
+  /** Delete a thread (11.3): its lines from every device, its previews and its working copies. */
+  async deleteThread(
+    thread: string,
+  ): Promise<{ kind: "ok" } | { kind: "refused"; reason: string }> {
+    if (this.live.get(thread)?.turn) return { kind: "refused", reason: "Stop the thread first." };
+    const own = await this.docOfThread(thread);
+    if (!own) return { kind: "refused", reason: "That thread is gone already." };
+    await this.forgetThread(own, thread);
+    return { kind: "ok" };
+  }
+
+  private async forgetThread(doc: DocId, thread: string): Promise<void> {
+    const live = this.live.get(thread);
+    if (live) {
+      live.watching?.stop();
+      this.d.hub.drop(thread);
+      this.live.delete(thread);
+    }
+    const dir = path.join(this.threadsDir(doc), thread);
+    for (const [file, w] of this.writers) {
+      if (!file.startsWith(dir + path.sep)) continue;
+      this.writers.delete(file);
+      await (await w).close().catch(() => undefined);
+    }
+    await rm(dir, { recursive: true, force: true });
+    await rm(this.copiesOf(thread), { recursive: true, force: true });
+    const previews = path.join(this.d.folder, ANUR_DIR, anurPaths.doc(doc), "previews");
+    for (const dev of await readdir(previews).catch(() => [] as string[]))
+      await rm(path.join(previews, dev, `${previewIdOf(thread)}.json`), { force: true });
+  }
+
+  /** Each thread's section, as the ID it stands for now, for the orphaned list (11.1). */
+  async sectionsOfThreads(
+    rel: string,
+    text: string,
+  ): Promise<{ thread: string; section: SectionId; title: string; closed: boolean }[]> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return [];
+    const names = await readdir(this.threadsDir(at.doc)).catch(() => [] as string[]);
+    const out = await Promise.all(
+      names.map(async (thread) => {
+        const lines = await this.linesOf(at.doc, thread);
+        const start = lines.find((l) => l.kind === "thread");
+        if (start?.kind !== "thread") return null;
+        const title = lines.findLast((l) => l.kind === "renamed")?.title ?? start.title;
+        const closed = lines.findLast((l) => l.kind === "state")?.state === "closed";
+        return { thread, section: canonIn(at, start.section), title, closed };
+      }),
+    );
+    return out.filter((x) => x !== null);
+  }
+
+  /**
+   * Delete what an orphan holds here (11.2): the threads on it and their
+   * previews, and inputs added to it, which are marked removed.
+   */
+  async forgetSection(rel: string, text: string, section: SectionId): Promise<void> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return;
+    for (const t of await this.sectionsOfThreads(rel, text))
+      if (t.section === section) await this.forgetThread(at.doc, t.thread);
+    const removed = new Set<string>();
+    const lines = await this.sectionInputLines(at.doc);
+    for (const l of lines) if (l.kind === "input-removed") removed.add(l.input);
+    for (const l of lines)
+      if (l.kind === "added-input" && canonIn(at, l.section) === section && !removed.has(l.id))
+        await this.appendTo(path.join(this.sectionInputsDir(at.doc), `${this.d.device}.jsonl`), {
+          kind: "input-removed",
+          input: l.id,
+        });
   }
 
   /** Close every file this folder's threads write. */
