@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSectionTree } from "../sections/tree.ts";
-import { buildBundle } from "./bundle.ts";
+import { buildBundle, budgetFor, FULL_TEXT_BUDGET } from "./bundle.ts";
 
 const DOC = `# Failed-payment notifications
 
@@ -198,5 +198,17 @@ describe("the full-text and fetch-hint variants", () => {
       rules: ["ancestors-own-text", "section-subtree", "doc-outline", "fetch-hint"],
     });
     expect(b.markdown).toContain("Before you answer, read with anur_read_section");
+  });
+});
+
+describe("the budget, sized to the model's window (4.2)", () => {
+  it("is a third of the window, at about four characters a token", () => {
+    expect(budgetFor(1_000_000)).toBe(1_333_333);
+    expect(budgetFor(200_000)).toBe(266_667);
+  });
+
+  it("is the 200,000-token default before the agent reports a window", () => {
+    expect(budgetFor(null)).toBe(FULL_TEXT_BUDGET);
+    expect(budgetFor(0)).toBe(FULL_TEXT_BUDGET);
   });
 });

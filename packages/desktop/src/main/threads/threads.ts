@@ -7,6 +7,7 @@ import {
   ANUR_DIR,
   ThreadLine,
   anurPaths,
+  budgetFor,
   buildBundle,
   compareLines,
   merge3,
@@ -94,6 +95,8 @@ type Live = {
   merged: Map<string, string>;
   /** The session's context and the model's window, as the agent last reported them (4.9). */
   context?: { used: number; size: number } | null;
+  /** The window known when the turn started: this thread's last, or its agent's (4.2). */
+  window?: number | null;
 };
 
 /** How long after a turn its working copies are watched for background edits. */
@@ -124,6 +127,8 @@ export class Threads {
   private readonly tokens = new Map<string, string>();
   /** An agent picked for a thread's next turn, until a session on it starts. */
   private readonly picked = new Map<string, AgentId>();
+  /** The window each agent last reported, for a new thread's first budget (4.2). */
+  private readonly windows = new Map<AgentId, number>();
   /** The option each thread is exploring this turn: options offered now go within it. */
   private readonly exploring = new Map<string, string>();
 
@@ -438,6 +443,10 @@ export class Threads {
     live.written = new Set();
     live.pending = { message, docText: text };
     const agent = this.agentOf(thread, lines);
+    live.window =
+      tokensOf(lines.filter((l): l is KnownThreadLine => "kind" in l))?.window ??
+      this.windows.get(agent) ??
+      null;
     const status = this.d.hub.status(agent);
     await this.append(doc, thread, {
       kind: "turn",
@@ -507,6 +516,8 @@ export class Threads {
       index,
       docPath: rel,
       workingCopy: path.join(this.copiesOf(live.threadId), rel),
+      // A third of the model's window (4.2): this thread's, else the agent's last, else the default.
+      budget: budgetFor(live.context?.size ?? live.window ?? null),
     }).markdown;
     const parts: string[] = [];
     if (rebuildFrom) {
@@ -794,9 +805,12 @@ export class Threads {
       case "turn-end":
         await this.endTurn(thread, live, m.stopReason, m.usage);
         return;
-      case "context":
+      case "context": {
         live.context = { used: m.used, size: m.size };
+        const lines = await this.linesOf(live.doc, thread);
+        this.windows.set(this.agentOf(thread, lines), m.size);
         return;
+      }
       case "error": {
         if (m.message === "resume-failed" && live.pending) {
           // The saved session is gone, as after Claude Code removes old transcripts: rebuild it.
