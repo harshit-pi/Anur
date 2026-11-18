@@ -158,3 +158,9 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - A thread's bundle carries the sections its section links to in other docs, one link deep: a heading link brings that section with its subsections, a doc link brings the doc. What doesn't fit the budget left after the doc is named with its path; links that go nowhere are named as broken. Links within the doc aren't repeated: the bundle has the doc.
 - Think lists a section's links ("A new thread here reads these too") and, folded, the sections that link to it, each once, each opening where it is. `anur_links` gives threads and terminal agents the same, as paths.
 - A link to a missing doc is faded on the page and in Think, as in Obsidian. On the map, a link to another doc's section is a small box under its section that opens it.
+
+## History and Restore (group 5)
+
+- Think shows a section's History, folded: its versions newest first, from every device, each with when, its cause (typed, from a thread, changed outside, restored, first seen) and a one-line summary read from the change itself ("Changed “£4” to “£3”", "Added 2 lines").
+- In a git repo, the commits that changed that section are listed too, each with the section's text then; reading them never writes.
+- A version opens to its text against now: amber for what only it has, struck through for what only now has. Restore puts it back into that section only, as one change ⌘Z undoes, recorded as a "restore" version; anything typed before it is recorded first, so no text is lost. A version from a thread opens that thread.

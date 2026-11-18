@@ -7,6 +7,7 @@ import {
   VersionLine,
   anurPaths,
   buildSectionTree,
+  describeChange,
   hasConflictMarkers,
   matchSections,
   mergeLines,
@@ -271,18 +272,95 @@ export class SectionVersions {
         this.device,
       );
       try {
+        const before = await this.latest(doc, section);
         await w.append({
           kind: "version",
           cause: "apply",
           text,
           path: sectionPath.length > 0 ? sectionPath : [path.basename(doc)],
-          summary: "Applied from a thread",
+          summary: `From a thread: ${lower(describeChange(before, text))}`,
           preview,
           thread,
         });
       } finally {
         await w.close();
       }
+    });
+  }
+
+  /**
+   * Every version of one section, newest first, across devices (5.1): its
+   * text, when, what caused it, its summary, and the thread behind an Apply.
+   */
+  async list(
+    rel: string,
+    text: string,
+    sectionPath: readonly string[],
+  ): Promise<
+    {
+      id: string;
+      at: string;
+      cause: string;
+      summary: string;
+      text: string;
+      thread: string | null;
+    }[]
+  > {
+    const at = await this.locate(rel, text);
+    if (!at) return [];
+    const index = at.tree.sections.findIndex(
+      (s) => s.path.join("\u0000") === sectionPath.join("\u0000"),
+    );
+    const id = at.ids[index];
+    if (!id) return [];
+    let names: string[];
+    try {
+      names = (await readdir(this.historyDir(at.doc, id))).filter((n) => n.endsWith(".jsonl"));
+    } catch {
+      return [];
+    }
+    const files = await Promise.all(
+      names.map(
+        async (n) =>
+          (await readJsonlFile(path.join(this.historyDir(at.doc, id), n), VersionLine)).lines,
+      ),
+    );
+    return mergeLines(...files)
+      .sort((a, b) => b.at.localeCompare(a.at) || b.seq - a.seq)
+      .map((l) => ({
+        id: l.id,
+        at: l.at,
+        cause: l.cause,
+        summary: l.summary,
+        text: l.text,
+        thread: l.thread,
+      }));
+  }
+
+  /**
+   * A person restored an older version of one section (5.3): the doc now
+   * reads `text`, and that section's new text is recorded as a "restore"
+   * version, so the typing that carried it isn't a second one.
+   */
+  restored(rel: string, text: string, sectionPath: readonly string[], from: string): Promise<void> {
+    return this.run(async () => {
+      // What was typed before the restore is a version first: no text is ever lost.
+      await this.closeSession(rel);
+      const before = this.known.get(rel) ?? null;
+      const { doc, now } = await this.assign(rel, text, before);
+      if (!now) return;
+      const i = now.tree.sections.findIndex(
+        (s) => s.path.join("\u0000") === sectionPath.join("\u0000"),
+      );
+      const id = now.ids[i];
+      if (i < 0 || !id) return;
+      const when = new Date(from).toLocaleString("en-GB", {
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      await this.write(doc, id, now, i, "restore", `Restored the version from ${when}`);
     });
   }
 
@@ -416,11 +494,16 @@ export class SectionVersions {
     id: SectionId,
     from: Known,
     i: number,
-    cause: "start" | "typing" | "outside",
+    cause: "start" | "typing" | "outside" | "restore",
     summary: string,
   ): Promise<void> {
     const section = from.tree.sections[i];
     if (!section || !this.recording()) return;
+    // A typed or outside change says what it changed (5.4).
+    if (cause === "typing" || cause === "outside") {
+      const said = describeChange(await this.latest(doc, id), subtreeOf(from, i));
+      summary = cause === "outside" ? `Outside Anur: ${lower(said)}` : said;
+    }
     const w = await JsonlWriter.open(
       path.join(this.anurDir, anurPaths.history(doc, id, this.device)),
       this.device,
@@ -440,6 +523,8 @@ export class SectionVersions {
     }
   }
 }
+
+const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 const subtreeOf = (k: Known, i: number) => {
   const s = k.tree.sections[i];

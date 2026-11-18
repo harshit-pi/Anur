@@ -55,6 +55,7 @@ import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
 import { SectionVersions, lastSavedIn } from "./folder/versions.ts";
+import { sectionCommits } from "./folder/git-history.ts";
 import { loadDeviceId } from "../device/device-id.ts";
 import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
@@ -938,6 +939,21 @@ const handlers: { [C in Channel]: Handler<C> } = {
   "thread:option": ({ thread, id, value }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (folder) threadsFor(folder)?.setOption(thread, id, value);
+    return {};
+  },
+  "history:list": async ({ path: rel, text, section }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const v = folder ? versionsFor(folder) : null;
+    if (!folder || !v) return { versions: [], commits: [] };
+    const [versions, commits] = await Promise.all([
+      v.list(rel, text, section.path),
+      sectionCommits(folder.path, rel, section.path),
+    ]);
+    return { versions, commits };
+  },
+  "history:restored": async ({ path: rel, text, section, from }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (folder) await versionsFor(folder)?.restored(rel, text, section, from);
     return {};
   },
   "links:of": async ({ path: rel, text, section }, { webContentsId }) => {
