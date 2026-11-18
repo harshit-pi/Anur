@@ -125,7 +125,10 @@ export function LeftSidebar({
   reveal,
   actions,
   notice = null,
+  outline = null,
 }: {
+  /** The open doc's outline, under the files; folds away. */
+  outline?: ReactNode;
   folder: FolderState | null;
   selected: string | null;
   onSelect: (path: string, inNewTab: boolean) => void;
@@ -263,6 +266,7 @@ export function LeftSidebar({
       {folder.truncated ? (
         <p className="quiet">This folder has more files than Anur lists; some are left out.</p>
       ) : null}
+      {outline}
     </aside>
   );
 }
@@ -492,14 +496,6 @@ export function Center({
   );
 }
 
-const RIGHT_TABS = ["Outline", "Think", "History"] as const;
-const RIGHT_EMPTY: Record<(typeof RIGHT_TABS)[number], string> = {
-  Outline: "The open doc's headings show here.",
-  Think: "Threads on the section you're in show here.",
-  History: "Earlier versions of the section you're in show here.",
-};
-
-/** The open doc's headings, from the editor's own parse; a click scrolls the page there. */
 function Outline({
   sections,
   current,
@@ -538,58 +534,52 @@ function Outline({
   );
 }
 
-/** 5. Right sidebar: Outline, Think and History. */
-export function RightSidebar({
+/**
+ * The open doc's outline, folded under the files in the left panel: its
+ * headings, the section in focus marked. Folded or open as last left.
+ */
+export function OutlinePanel({
   sections,
   current,
   onJump,
-  hidden,
-  showThink,
-  think,
 }: {
   sections: SectionTree | null;
-  /** The section in focus, by index: the cursor's, the map's pick, or the one scrolled to. */
   current: number;
   onJump: (index: number) => void;
-  hidden: boolean;
-  /** Changes each time Think should come to the front. */
-  showThink: number;
-  /** The Think panel for the section the cursor is in (3.5). */
-  think: React.ReactNode;
 }) {
-  const [tab, setTab] = useState<(typeof RIGHT_TABS)[number]>("Outline");
-  // "Keep discussing" on a preview opens its thread here.
-  useEffect(() => {
-    if (showThink > 0) setTab("Think");
-  }, [showThink]);
+  const [open, setOpen] = useState(() => {
+    try {
+      return window.localStorage.getItem("anur.outline") !== "closed";
+    } catch {
+      return true;
+    }
+  });
+  if (!sections) return null;
   return (
-    <aside className="right-sidebar" aria-label="Section details" hidden={hidden}>
-      <div className="segmented wide" role="tablist" aria-label="Section details">
-        {RIGHT_TABS.map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="tab"
-            aria-selected={tab === t}
-            className={tab === t ? "segment selected" : "segment"}
-            title={t}
-            onClick={() => {
-              setTab(t);
-            }}
-          >
-            {t}
-          </button>
-        ))}
-      </div>
-      <div role="tabpanel" className="tab-panel">
-        {tab === "Outline" && sections ? (
-          <Outline sections={sections} current={current} onJump={onJump} />
-        ) : tab === "Think" ? (
-          think
-        ) : (
-          <p className="quiet">{RIGHT_EMPTY[tab]}</p>
-        )}
-      </div>
+    <details
+      className="left-outline"
+      open={open}
+      onToggle={(e) => {
+        const now = e.currentTarget.open;
+        setOpen(now);
+        try {
+          window.localStorage.setItem("anur.outline", now ? "open" : "closed");
+        } catch {
+          // A remembered fold is a nicety.
+        }
+      }}
+    >
+      <summary className="left-outline-head">Outline</summary>
+      <Outline sections={sections} current={current} onJump={onJump} />
+    </details>
+  );
+}
+
+/** 5. Right sidebar: Think, on the section in focus. */
+export function RightSidebar({ hidden, think }: { hidden: boolean; think: React.ReactNode }) {
+  return (
+    <aside className="right-sidebar" aria-label="Think" hidden={hidden}>
+      {think}
     </aside>
   );
 }

@@ -2530,3 +2530,24 @@ body.resizing * {
   opacity: 0.5;
   cursor: default;
 }
+
+/* The outline, folded under the files: it stays in view as the tree scrolls. */
+.left-outline {
+  position: sticky;
+  bottom: -16px;
+  margin: 8px -16px -16px;
+  padding: 8px 16px 12px;
+  max-height: 45vh;
+  overflow: auto;
+  border-top: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+.left-outline-head {
+  padding: 2px 0 4px;
+  color: var(--slate);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style-position: inside;
+}
