@@ -5,11 +5,11 @@ import { anur } from "../bridge.ts";
 export function UpdateCard() {
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => {
-    void anur.call("update:status", {}).then((s) => {
-      if (s.ready) setVersion(s.ready);
+    void anur.call("update:status", {}).then(({ state }) => {
+      if (state.kind === "ready") setVersion(state.version);
     });
-    return anur.on("app:update-ready", ({ version: v }) => {
-      setVersion(v);
+    return anur.on("app:update-state", (state) => {
+      setVersion(state.kind === "ready" ? state.version : null);
     });
   }, []);
   if (!version) return null;

@@ -30,4 +30,4 @@ aws sso login --profile aws-anur
 - Bucket `anur-releases` in the aws-anur account (516737685507), private; CloudFront `EVKBSGJARHF1U` reads it.
 - `https://do7t8q39ulre5.cloudfront.net/Anur.dmg`: always the newest; the link to share.
 - `…/Anur-<version>-universal.dmg`: that version, kept.
-- `…/latest-mac.yml`: the feed Anur checks on launch and every 4 hours. Updates download quietly; a card offers Restart, and an update not restarted for installs on quit.
+- `…/latest-mac.yml`: the feed Anur checks on launch, every 4 hours, and on Anur → Check for Updates…. With Install updates automatically on (the default, in Settings → General), updates download quietly, a card offers Restart, and an update not restarted for installs on quit; off, Anur says one is available and downloads when asked. Anur never restarts by itself.

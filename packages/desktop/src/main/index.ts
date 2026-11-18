@@ -69,7 +69,14 @@ import {
   makeMarkdownOpener,
   markdownOpener,
 } from "./default-opener.ts";
-import { restartToUpdate, startUpdates, updateReady } from "./updater.ts";
+import {
+  checkNow,
+  download,
+  restartToUpdate,
+  setAuto,
+  startUpdates,
+  updateState,
+} from "./updater.ts";
 import { folderFor } from "./open-file.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
 import { AgentChoices } from "./threads/agent-choices.ts";
@@ -939,10 +946,27 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const t = folder ? threadsFor(folder) : null;
     return { ok: t ? await t.removeInput(rel, text, thread, input) : false };
   },
-  "update:status": () => ({ ready: updateReady() }),
+  "update:status": () => ({
+    state: updateState(),
+    version: app.getVersion(),
+    auto: appSettings.get().autoUpdate,
+  }),
+  "update:check": () => {
+    checkNow();
+    return { ok: updateState().kind !== "off" };
+  },
+  "update:download": () => {
+    download();
+    return { ok: updateState().kind === "downloading" };
+  },
+  "update:set-auto": async ({ auto }) => {
+    await appSettings.set({ autoUpdate: auto });
+    setAuto(auto);
+    return { auto };
+  },
   "update:restart": () => {
     restartToUpdate();
-    return { ok: updateReady() !== null };
+    return { ok: updateState().kind === "ready" };
   },
   "tour:status": async () => {
     // Checks don't see it unless they ask, so other checks' screenshots stay clean.
@@ -1315,8 +1339,8 @@ void app.whenReady().then(async () => {
   registerIpc();
   void startClaudeSkill();
   if (isRelease)
-    startUpdates((version) => {
-      for (const win of windows.values()) send(win, "app:update-ready", { version });
+    startUpdates(appSettings.get().autoUpdate, (state) => {
+      for (const win of windows.values()) send(win, "app:update-state", state);
     });
   // A built app takes its icon from its bundle; in dev, show the diamond in the Dock too.
   if (!app.isPackaged && process.platform === "darwin") {
@@ -1329,6 +1353,10 @@ void app.whenReady().then(async () => {
       },
       newFolder: () => {
         void newFolder(focusedOrNew());
+      },
+      checkUpdates: () => {
+        checkNow();
+        send(focusedOrNew(), "app:command", { command: "updates" });
       },
       newWindow: () => {
         createWindow();
