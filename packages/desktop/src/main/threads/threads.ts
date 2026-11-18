@@ -337,6 +337,7 @@ export class Threads {
       items,
       options: this.options.get(thread) ?? [],
       agent: this.agentOf(thread, lines),
+      tokens: tokensOf(lines),
     };
     return view;
   }
@@ -1034,6 +1035,25 @@ const KNOWN = new Set([
   "option-used",
   "option-explored",
 ]);
+
+/**
+ * A thread's tokens from its turns' usage reports (4.10): everything it has
+ * used, and its context on the last reported turn, which the next turn
+ * starts from.
+ */
+export function tokensOf(lines: readonly KnownThreadLine[]) {
+  let used = 0;
+  let context = 0;
+  let any = false;
+  for (const l of lines) {
+    if (l.kind !== "turn" || l.event !== "end" || !l.usage) continue;
+    const u = l.usage;
+    any = true;
+    used += u.input + u.output + u.cacheRead + u.cacheWrite;
+    context = u.input + u.cacheRead + u.cacheWrite + u.output;
+  }
+  return any ? { used, context } : null;
+}
 
 /** Every file under `dir`, relative to it, with forward slashes. */
 async function listFiles(dir: string, prefix = ""): Promise<string[]> {

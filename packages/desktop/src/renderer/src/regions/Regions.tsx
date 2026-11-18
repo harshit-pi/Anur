@@ -1,3 +1,4 @@
+import { formatTokens } from "../layout/tokens.ts";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
@@ -636,7 +637,10 @@ export function StatusBar({
   saveStatus,
   source,
   onToggleSource,
+  threads,
 }: {
+  /** The open doc's threads and the tokens they've used (4.10); null with no doc open. */
+  threads: { count: number; tokens: number } | null;
   version: string | null;
   folder: FolderState | null;
   docMode: "editable" | "read-only" | "plain-text" | null;
@@ -677,7 +681,15 @@ export function StatusBar({
           {source ? "Source" : "Live preview"}
         </button>
       ) : null}
-      <span className="status-item">No threads</span>
+      {threads ? (
+        <span className="status-item" title="Tokens from the agent's usage reports">
+          {threads.count === 0
+            ? "No threads"
+            : `${threads.count === 1 ? "1 thread" : `${String(threads.count)} threads`}${
+                threads.tokens > 0 ? `, ${formatTokens(threads.tokens)} tokens` : ""
+              }`}
+        </span>
+      ) : null}
       {version ? <span className="status-item quiet">Anur {version}</span> : null}
     </footer>
   );

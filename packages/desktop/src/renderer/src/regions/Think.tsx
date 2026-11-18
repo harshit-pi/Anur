@@ -11,6 +11,7 @@ import type {
 } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
+import { formatTokens } from "../layout/tokens.ts";
 import { SectionEditor } from "../editor/section-editor.tsx";
 import { putOption, renameSection } from "../editor/section-range.ts";
 import type { EditorView } from "@codemirror/view";
@@ -585,6 +586,11 @@ export function Think({
           <span className="think-where quiet">Its section is gone</span>
         )}
         <h2 className="think-title">{thread.title}</h2>
+        {thread.tokens ? (
+          <p className="think-tokens quiet" title="From the agent's usage reports">
+            {formatTokens(thread.tokens.used)} tokens used
+          </p>
+        ) : null}
         <div className="think-chat" aria-live="polite">
           {thread.items.map((item, i) =>
             item.kind === "message" ? (
@@ -1013,7 +1019,9 @@ function ThreadList({
             <span className="quiet">
               {t.busy
                 ? "Replying…"
-                : countOf(t.items.filter((i) => i.kind === "message").length, "message")}
+                : `${countOf(t.items.filter((i) => i.kind === "message").length, "message")}${
+                    t.tokens ? `, ${formatTokens(t.tokens.used)} tokens` : ""
+                  }`}
             </span>
           </button>
         </li>

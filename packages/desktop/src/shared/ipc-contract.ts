@@ -161,6 +161,11 @@ export const ThreadView = z.object({
   /** The session's mode and model, once a session is open on this device. */
   options: z.array(SessionOption),
   /** The agent the thread runs on: its last session's, or the one picked for its next turn. */
+  /**
+   * Tokens from the agent's usage reports (4.10): all the thread has used,
+   * and how big its context was on the last turn; null before any report.
+   */
+  tokens: z.object({ used: z.int().nonnegative(), context: z.int().nonnegative() }).nullable(),
   agent: AgentIdSchema,
 });
 export type ThreadView = z.infer<typeof ThreadView>;
