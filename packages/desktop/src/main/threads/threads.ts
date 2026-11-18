@@ -215,6 +215,20 @@ const newTurnId = () => `u${randomBytes(6).toString("hex")}`;
 
 export class Threads {
   private readonly live = new Map<string, Live>();
+  /** Each thread's messages from the agent, handled one after another, in the order sent. */
+  private readonly fromHost = new Map<string, Promise<void>>();
+  /** Work started without waiting for it: a thread's view refreshed after a change. */
+  private readonly background = new Set<Promise<unknown>>();
+  private later(work: Promise<unknown>): void {
+    const p = work.catch(() => undefined).finally(() => this.background.delete(p));
+    this.background.add(p);
+  }
+  /** Once every agent message so far is handled and the work it started is done. */
+  async settled(): Promise<void> {
+    while (this.fromHost.size > 0 || this.background.size > 0) {
+      await Promise.all([...this.fromHost.values(), ...this.background]);
+    }
+  }
   private readonly writers = new Map<string, Promise<JsonlWriter>>();
   /** Each thread's session choices, as the agent last reported them. */
   private readonly options = new Map<string, SessionOption[]>();
@@ -284,7 +298,7 @@ export class Threads {
     this.picked.set(thread, agent);
     this.options.delete(thread);
     const live = this.live.get(thread);
-    if (live) void this.refresh(live.rel, live.docText, thread);
+    if (live) this.later(this.refresh(live.rel, live.docText, thread));
   }
   readonly previews: PreviewStore;
 
@@ -402,7 +416,7 @@ export class Threads {
     f.reverted = true;
     if (f.before !== null) this.turnWatch.ownWrite(f.rel, f.before);
     const live = this.live.get(thread);
-    if (live) void this.refresh(live.rel, live.docText, thread);
+    if (live) this.later(this.refresh(live.rel, live.docText, thread));
   }
 
   /** Every thread's working copies live here, outside the folder; each thread has its own. */
@@ -920,7 +934,14 @@ export class Threads {
       return { kind: "sent" };
     }
     this.d.hub.route(thread, (m) => {
-      void this.onHost(thread, m);
+      // In order: a session line and the turn's end must land as they came.
+      const next = (this.fromHost.get(thread) ?? Promise.resolve())
+        .then(() => this.onHost(thread, m))
+        .catch(() => undefined)
+        .finally(() => {
+          if (this.fromHost.get(thread) === next) this.fromHost.delete(thread);
+        });
+      this.fromHost.set(thread, next);
     });
     this.d.hub.send({
       type: "prompt",
@@ -928,7 +949,7 @@ export class Threads {
       turn,
       text: prompt,
     });
-    void this.refresh(rel, text, thread);
+    this.later(this.refresh(rel, text, thread));
     return { kind: "sent" };
   }
 

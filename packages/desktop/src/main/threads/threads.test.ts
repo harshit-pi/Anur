@@ -49,11 +49,11 @@ function fakeHub() {
     });
     fn?.({ type: "text", thread, turn: prompt.turn, text });
     fn?.({ type: "turn-end", thread, turn: prompt.turn, stopReason: "end_turn", usage: null });
-    await new Promise((r) => setTimeout(r, 50));
+    await threads?.settled();
   };
   const tell = async (thread: string, m: ToMain) => {
     routes.get(thread)?.(m);
-    await new Promise((r) => setTimeout(r, 50));
+    await threads?.settled();
   };
   return { hub: hub as unknown as AgentHub, sent, reply, tell };
 }
