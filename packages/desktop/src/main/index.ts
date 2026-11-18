@@ -92,6 +92,7 @@ import {
   restartToUpdate,
   setAuto,
   startUpdates,
+  showForCheck,
   updateState,
 } from "./updater.ts";
 import { folderFor } from "./open-file.ts";
@@ -1675,6 +1676,10 @@ void app.whenReady().then(async () => {
   if (isRelease) await offerMoveToApplications();
   if (isRelease)
     startUpdates(appSettings.get().autoUpdate, (state) => {
+      for (const win of windows.values()) send(win, "app:update-state", state);
+    });
+  else if (isCheck && process.env.ANUR_CHECK_UPDATE)
+    showForCheck(process.env.ANUR_CHECK_UPDATE, (state) => {
       for (const win of windows.values()) send(win, "app:update-state", state);
     });
   // A built app takes its icon from its bundle; in dev, show the diamond in the Dock too.

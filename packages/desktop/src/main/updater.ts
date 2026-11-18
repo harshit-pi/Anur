@@ -86,3 +86,12 @@ export const updateState = () => state;
 export function restartToUpdate() {
   if (state.kind === "ready") autoUpdater.quitAndInstall();
 }
+
+/** For checks: ANUR_CHECK_UPDATE shows a state ("available", "downloading" or "ready") as if found. */
+export function showForCheck(kind: string, onState: (s: UpdateState) => void) {
+  tell = onState;
+  const version = "9.9.9";
+  if (kind === "available") set({ kind: "available", version });
+  else if (kind === "downloading") set({ kind: "downloading", version, percent: 42 });
+  else if (kind === "ready") set({ kind: "ready", version });
+}

@@ -2695,11 +2695,19 @@ body.resizing * {
 }
 
 /* The first-launch card for Claude Code (6.1). */
-.skill-card {
+.corner-cards {
   position: fixed;
   right: 20px;
   bottom: 40px;
   z-index: 20;
+}
+
+/* Only the first card due shows; the next waits until it's dealt with. */
+.corner-cards > :not(:first-child) {
+  display: none;
+}
+
+.skill-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -4227,10 +4235,7 @@ button.file-card-name:hover {
 
 /* Asked rarely, after a few days of use: a star, or a feature to ask for. */
 .star-prompt {
-  position: fixed;
-  right: 20px;
-  bottom: 40px;
-  z-index: 40;
+  position: relative;
   width: 360px;
   padding: 14px 16px;
   border: 1px solid var(--rule);

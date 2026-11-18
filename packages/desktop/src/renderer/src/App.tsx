@@ -1195,7 +1195,6 @@ export function App() {
           }}
         />
       ) : null}
-      {tourStep === null ? <StarPrompt /> : null}
       {tourStep !== null ? (
         <Tour
           step={tourStep}
@@ -1208,11 +1207,13 @@ export function App() {
       ) : null}
       {/* The offer cards wait until the tour is over. */}
       {tourStep === null ? (
-        <>
+        // One card at a time in the corner, the most pressing first.
+        <div className="corner-cards">
           <UpdateCard />
-          <SkillCard />
           <OpenerCard />
-        </>
+          <SkillCard />
+          <StarPrompt />
+        </div>
       ) : null}
       <CommandPalette
         open={paletteOpen}
