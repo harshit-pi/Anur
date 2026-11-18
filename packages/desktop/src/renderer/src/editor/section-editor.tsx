@@ -9,7 +9,8 @@ import { formattingKeymap } from "./commands.ts";
 import { livePreview } from "./live-preview/live-preview.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { pageUpdates } from "./page-updates.ts";
-import { markdownSupport, sectionsOf } from "./sections.ts";
+import { markdownSupport } from "./sections.ts";
+import { bodyRange, type Range } from "./section-range.ts";
 import { pageHighlight } from "./theme.ts";
 
 /**
@@ -25,36 +26,6 @@ import { pageHighlight } from "./theme.ts";
 const fromSection = Annotation.define<boolean>();
 /** Marks this view's edits that came from the page. */
 const fromPage = Annotation.define<boolean>();
-
-type Range = { from: number; to: number };
-
-/** The section as the page has it now: by heading path, then which namesake it is. */
-export function sectionNow(state: EditorState, fileName: string, section: SectionNode) {
-  const tree = sectionsOf(state, fileName);
-  const same = (s: SectionNode) =>
-    s.path.length === section.path.length && s.path.every((p, i) => p === section.path[i]);
-  return (
-    tree.sections.find((x) => same(x) && x.ordinal === section.ordinal) ??
-    tree.sections.find(same) ??
-    null
-  );
-}
-
-/** Where a section's own text is in the page now, without its heading or the blank lines around it. */
-export function bodyRange(
-  state: EditorState,
-  fileName: string,
-  section: SectionNode,
-): Range | null {
-  const s = sectionNow(state, fileName, section);
-  if (!s) return null;
-  const start = s.headingRange ? s.headingRange.to : s.ownRange.from;
-  const text = state.doc.sliceString(start, s.ownRange.to);
-  const lead = text.length - text.trimStart().length;
-  const body = text.trim();
-  // An empty body sits right after the heading: typing there starts a new paragraph.
-  return body ? { from: start + lead, to: start + lead + body.length } : { from: start, to: start };
-}
 
 const sectionTheme = EditorView.theme({
   "&": { backgroundColor: "transparent", color: "inherit", fontSize: "inherit" },
@@ -84,7 +55,6 @@ export function SectionEditor({
   const range = useRef<Range | null>(null);
   const fileName = docPath.split("/").pop() ?? docPath;
   const sectionNow = useRef(section);
-  sectionNow.current = section;
 
   // Make this view's text match the page's, changing only what differs so the caret stays.
   const sync = () => {
@@ -195,38 +165,10 @@ export function SectionEditor({
       view.current = null;
     };
     // A new editor per section: the parent keys this component by section.
+    // Its place is found once, here, then followed through every edit; it is
+    // never taken again from the outline, which would trim away a space or a
+    // new line just typed at the end.
   }, []);
 
-  // The outline caught up with the page: take the section's place from it again.
-  useEffect(() => {
-    const main = page();
-    if (!main) return;
-    const r = bodyRange(main.state, fileName, section);
-    if (!r) return;
-    range.current = r;
-    sync();
-  }, [section]);
-
   return <div ref={host} className="think-editor" />;
-}
-
-/** Rename a section on the page: only its heading's words change, never its level or marks. */
-export function renameSection(
-  main: EditorView,
-  fileName: string,
-  section: SectionNode,
-  name: string,
-): boolean {
-  const s = sectionNow(main.state, fileName, section);
-  const h = s?.headingRange;
-  if (!h) return false;
-  const line = main.state.doc.sliceString(h.from, h.to);
-  const atx = /^(\s{0,3}#{1,6}[ \t]+)(.*?)([ \t]+#+[ \t]*)?$/.exec(line.split("\n")[0] ?? "");
-  const [from, to] = atx
-    ? [h.from + (atx[1]?.length ?? 0), h.from + (atx[1]?.length ?? 0) + (atx[2]?.length ?? 0)]
-    : // A setext heading: its words are its first line.
-      [h.from, h.from + (line.split("\n")[0] ?? "").trimEnd().length];
-  if (main.state.doc.sliceString(from, to) === name) return false;
-  main.dispatch({ changes: { from, to, insert: name }, userEvent: "input.rename" });
-  return true;
 }

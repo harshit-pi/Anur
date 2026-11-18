@@ -10,7 +10,8 @@ import type {
 } from "../../../shared/ipc-contract.ts";
 import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
-import { renameSection, SectionEditor } from "../editor/section-editor.tsx";
+import { SectionEditor } from "../editor/section-editor.tsx";
+import { renameSection } from "../editor/section-range.ts";
 import type { EditorView } from "@codemirror/view";
 import { inlineRuns } from "../layout/inline-markdown.ts";
 
