@@ -35,6 +35,14 @@ type Box = {
   exploring?: boolean;
   /** The box's second line: what's under it, or what sets it apart. */
   sub?: string;
+  /** A section's links to other docs (8.6), shown as one badge with a list. */
+  outLinks?: { doc: string | null; heading: string | null; label: string }[];
+  /** Where the layout put its parent's rail for its row, and the spine (group 7). */
+  row?: number;
+  rails?: number[];
+  spine?: number;
+  /** Moved off the layout by a drag: its lines go back to curves. */
+  shifted?: boolean;
   heading: string;
   x: number;
   y: number;
@@ -111,6 +119,10 @@ export function MapView({
 }) {
   const features = useFeatures();
   const host = useRef<HTMLDivElement>(null);
+  /** The section whose list of links is open (8.6). */
+  const [openLinks, setOpenLinks] = useState<string | null>(null);
+  /** The list opens upward from a box low in the view, so it stays on screen. */
+  const [linksUp, setLinksUp] = useState(false);
   /** Section IDs by heading path, so a heading added above can't hand a box another's ID. */
   const [ids, setIds] = useState<Map<string, string>>(new Map());
   const [moved, setMoved] = useState<Record<string, Pos>>({});
@@ -280,8 +292,9 @@ export function MapView({
           parent: id,
         });
       }
-      // Links to other docs' sections (8.6): small boxes under the section, opening where they go.
+      // Links to other docs' sections (8.6): one badge on the section, with the list on a click.
       const seen = new Set<string>();
+      const outLinks: NonNullable<Box["outLinks"]> = [];
       for (const l of features.links ? s.linksOut : []) {
         if (l.sameDoc || l.embed) continue;
         const to = resolveWiki(docs, docPath, l.target, l.heading);
@@ -289,22 +302,24 @@ export function MapView({
         const key = `${doc ?? l.target}#${l.heading ?? ""}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        const lid = `l:${id}:${key}`;
-        const label = doc
-          ? [
-              doc.replace(/\.md$/i, "").split("/").pop() ?? doc,
-              ...(l.heading ? l.heading.split("#") : []),
-            ].join(" › ")
-          : `${l.target} (no such doc)`;
-        nodes.push({ id: lid, parent: id, ...pill(`→ ${label}`) });
-        info.set(lid, {
-          id: lid,
-          kind: "link",
-          index: s.index,
-          heading: label,
-          link: { doc, heading: l.heading, written: l.target },
-          parent: id,
+        outLinks.push({
+          doc,
+          heading: l.heading,
+          label: doc
+            ? [
+                doc.replace(/\.md$/i, "").split("/").pop() ?? doc,
+                ...(l.heading ? l.heading.split("#") : []),
+              ].join(" › ")
+            : `${l.target} (no such doc)`,
         });
+      }
+      const own = info.get(id);
+      if (own && outLinks.length > 0) {
+        own.outLinks = outLinks;
+        // Room for the badge beside the name.
+        const node = nodes.find((n) => n.id === id);
+        if (node)
+          Object.assign(node, boxSize(`${heading}  → ${String(outLinks.length)}`, own.sub ?? ""));
       }
       // Each thread's latest options, until one is picked: what the section could say.
       for (const t of threads.filter((t) => samePath(t.path, s.path))) {
@@ -394,7 +409,17 @@ export function MapView({
     for (const [id, p] of placed) {
       const i = info.get(id);
       if (!i) continue;
-      out.push({ ...i, x: p.x, y: p.y, w: p.w, h: p.h, side: p.side });
+      out.push({
+        ...i,
+        x: p.x,
+        y: p.y,
+        w: p.w,
+        h: p.h,
+        side: p.side,
+        ...(p.row !== undefined ? { row: p.row } : {}),
+        ...(p.rails ? { rails: p.rails } : {}),
+        ...(p.spine !== undefined ? { spine: p.spine } : {}),
+      });
     }
     // A moved box sits where it was put; its threads move with it.
     const byId = new Map(out.map((b) => [b.id, b]));
@@ -415,18 +440,21 @@ export function MapView({
       if (b.kind !== "section") {
         b.x += dx;
         b.y += dy;
+        if (dx !== 0 || dy !== 0) b.shifted = true;
       }
     }
     for (const b of out) {
       if (b.kind !== "section") continue;
       const put = moved[b.id];
       if (put) {
+        if (put.x !== b.x || put.y !== b.y) b.shifted = true;
         b.x = put.x;
         b.y = put.y;
       }
       if (drag?.id === b.id) {
         b.x += drag.dx;
         b.y += drag.dy;
+        b.shifted = true;
       }
     }
     return out;
@@ -801,6 +829,36 @@ export function MapView({
   const edges = boxes.flatMap((b) => {
     const p = b.parent ? byId.get(b.parent) : undefined;
     if (!p) return [];
+    // Laid out as placed: a trunk from the parent, its row's rail, and a drop to the box.
+    const r = b.row ?? 0;
+    const rail = p.rails?.[r];
+    const first = p.rails?.[0];
+    if (!b.shifted && !p.shifted && rail !== undefined && first !== undefined) {
+      const top = b.y - b.h / 2;
+      const pts =
+        r === 0
+          ? [
+              [p.x, p.y + p.h / 2],
+              [p.x, rail],
+              [b.x, rail],
+              [b.x, top],
+            ]
+          : [
+              [p.x, p.y + p.h / 2],
+              [p.x, first],
+              [p.spine ?? p.x, first],
+              [p.spine ?? p.x, rail],
+              [b.x, rail],
+              [b.x, top],
+            ];
+      return [
+        <path
+          key={b.id}
+          className={b.kind === "section" ? "map-edge rail" : "map-edge rail thread"}
+          d={pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" ")}
+        />,
+      ];
+    }
     // From the parent's bottom to the child's top, a soft S; sideways when a moved box sits beside.
     const below = b.y - b.h / 2 >= p.y + p.h / 2;
     const above = b.y + b.h / 2 <= p.y - p.h / 2;
@@ -1020,7 +1078,54 @@ export function MapView({
             >
               <div className="map-box-head">
                 <span className="map-box-name">{b.heading}</span>
+                {b.outLinks ? (
+                  <button
+                    type="button"
+                    className={`map-linkcount${openLinks === b.id ? " open" : ""}`}
+                    title="Links to other docs"
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const r = e.currentTarget.getBoundingClientRect();
+                      const view = host.current?.getBoundingClientRect();
+                      setLinksUp(view ? r.top - view.top > view.height / 2 : false);
+                      setOpenLinks((o) => (o === b.id ? null : b.id));
+                    }}
+                  >
+                    → {String(b.outLinks.length)}
+                  </button>
+                ) : null}
               </div>
+              {openLinks === b.id && b.outLinks ? (
+                <div
+                  className={`map-linklist${linksUp ? " up" : ""}`}
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  {b.outLinks.map((l) => (
+                    <button
+                      key={l.label}
+                      type="button"
+                      className={l.doc ? "map-linkitem" : "map-linkitem broken"}
+                      disabled={!l.doc}
+                      onClick={() => {
+                        setOpenLinks(null);
+                        if (l.doc)
+                          window.dispatchEvent(
+                            new CustomEvent("anur:open-path", {
+                              detail: { path: l.doc, heading: l.heading },
+                            }),
+                          );
+                      }}
+                    >
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
               {(() => {
                 const here = threads.filter((t) =>
                   samePath(t.path, tree.sections[b.index]?.path ?? []),

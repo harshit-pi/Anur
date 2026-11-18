@@ -30,6 +30,12 @@ export type Placed = {
   h: number;
   /** 0 for the title; 1 for every box below it. */
   side: -1 | 0 | 1;
+  /** Which of its parent's rows it sits in, from 0. */
+  row?: number;
+  /** For a parent: the y of each row's rail, top first. */
+  rails?: number[];
+  /** For a parent: the x of the spine joining its rows' rails. */
+  spine?: number;
 };
 
 /** A box's size from its heading and second line, as the map draws them. */
@@ -44,11 +50,23 @@ export function boxSize(heading: string, firstLine: string): { w: number; h: num
 
 const GAP_COLUMN = 28;
 const GAP_ROW = 64;
+/** Between a parent's wrapped rows of children. */
+const GAP_WRAP = 40;
+/** Children per row under one parent, so a row fits the map at a readable zoom; more wrap. */
+export const ROW_MAX = 4;
+
+const chunk = <T>(list: readonly T[], size: number): T[][] => {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+};
 
 /**
- * Every node placed, top down: the title at the top, its sections in a row
- * beneath it, and each box's children in a row beneath it, every parent
- * centred over its children. Rows are by depth, so a row's boxes line up.
+ * Every node placed, top down: the title at the top, each box's children in
+ * rows of at most `ROW_MAX` beneath it, wrapping in reading order, every
+ * parent centred over its rows. A wide doc grows down, never endlessly
+ * sideways. Each parent records where its rows' rails run and the spine
+ * that joins them, so lines can be drawn as a trunk, rails and drops.
  * Nodes are given parents first, in reading order.
  */
 export function mapLayout(nodes: readonly MapNode[]): Map<string, Placed> {
@@ -63,50 +81,67 @@ export function mapLayout(nodes: readonly MapNode[]): Map<string, Placed> {
   const placed = new Map<string, Placed>();
   if (!root) return placed;
 
-  // How wide a subtree is: its own box, or its children side by side, whichever is wider.
-  const width = new Map<string, number>();
-  const rowHeight: number[] = [];
-  const measure = (n: MapNode, depth: number): number => {
-    rowHeight[depth] = Math.max(rowHeight[depth] ?? 0, n.h);
-    const kids = children.get(n.id) ?? [];
-    const row = kids.reduce(
-      (sum, k, i) => sum + measure(k, depth + 1) + (i > 0 ? GAP_COLUMN : 0),
-      0,
-    );
-    const w = Math.max(n.w, row);
-    width.set(n.id, w);
-    return w;
+  // A subtree's width and its height from its box's top.
+  const size = new Map<string, { w: number; h: number }>();
+  const rowsOf = (n: MapNode) => chunk(children.get(n.id) ?? [], ROW_MAX);
+  const rowExtent = (row: readonly MapNode[]) => {
+    const top = Math.max(...row.map((k) => k.h));
+    return Math.max(...row.map((k) => (top - k.h) / 2 + (size.get(k.id)?.h ?? k.h)));
   };
-  measure(root, 0);
-  // Each row's centre line, from the title's down.
-  const rowY: number[] = [0];
-  for (let d = 1; d < rowHeight.length; d++)
-    rowY[d] = (rowY[d - 1] ?? 0) + (rowHeight[d - 1] ?? 0) / 2 + GAP_ROW + (rowHeight[d] ?? 0) / 2;
+  const measure = (n: MapNode): void => {
+    const rows = rowsOf(n);
+    for (const row of rows) for (const k of row) measure(k);
+    let w = n.w;
+    let h = n.h;
+    rows.forEach((row, r) => {
+      const rowW = row.reduce(
+        (sum, k, i) => sum + (size.get(k.id)?.w ?? k.w) + (i > 0 ? GAP_COLUMN : 0),
+        0,
+      );
+      w = Math.max(w, rowW);
+      h += (r === 0 ? GAP_ROW : GAP_WRAP) + rowExtent(row);
+    });
+    size.set(n.id, { w, h });
+  };
+  measure(root);
 
-  /** Place `n` with its subtree's left edge at `left`. */
-  const place = (n: MapNode, left: number, depth: number) => {
-    const w = width.get(n.id) ?? n.w;
-    const x = left + w / 2;
+  /** Place `n`'s box with its top at `top`, centred on `cx`, then its rows below. */
+  const place = (n: MapNode, cx: number, top: number, row: number) => {
+    const rows = rowsOf(n);
+    const rails: number[] = [];
+    let rowTop = top + n.h;
+    let spine = cx;
+    rows.forEach((kids, r) => {
+      rowTop += r === 0 ? GAP_ROW : GAP_WRAP;
+      rails.push(rowTop - (r === 0 ? GAP_ROW : GAP_WRAP) / 2);
+      const boxTop = Math.max(...kids.map((k) => k.h));
+      const rowW = kids.reduce(
+        (sum, k, i) => sum + (size.get(k.id)?.w ?? k.w) + (i > 0 ? GAP_COLUMN : 0),
+        0,
+      );
+      let cursor = cx - rowW / 2;
+      // The spine runs down the left of the widest row, clear of every box.
+      spine = Math.min(spine, cursor - GAP_COLUMN / 2);
+      for (const k of kids) {
+        const kw = size.get(k.id)?.w ?? k.w;
+        place(k, cursor + kw / 2, rowTop + (boxTop - k.h) / 2, r);
+        cursor += kw + GAP_COLUMN;
+      }
+      rowTop += rowExtent(kids);
+    });
     placed.set(n.id, {
       id: n.id,
-      x,
-      y: rowY[depth] ?? 0,
+      x: cx,
+      y: top + n.h / 2,
       w: n.w,
       h: n.h,
-      side: depth === 0 ? 0 : 1,
+      side: n.parent === null ? 0 : 1,
+      row,
+      rails,
+      spine,
     });
-    const kids = children.get(n.id) ?? [];
-    const row = kids.reduce(
-      (sum, k, i) => sum + (width.get(k.id) ?? 0) + (i > 0 ? GAP_COLUMN : 0),
-      0,
-    );
-    let cursor = x - row / 2;
-    for (const k of kids) {
-      place(k, cursor, depth + 1);
-      cursor += (width.get(k.id) ?? 0) + GAP_COLUMN;
-    }
   };
-  place(root, -(width.get(root.id) ?? root.w) / 2, 0);
+  place(root, 0, -root.h / 2, 0);
   return placed;
 }
 
