@@ -3822,7 +3822,8 @@ body.resizing * {
 }
 
 .think-head .think-back,
-.think-head .think-more {
+.think-head .think-more,
+.think-head .think-where {
   align-self: auto;
 }
 
