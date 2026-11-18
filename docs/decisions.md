@@ -78,3 +78,14 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - Claude uses its judgment: it answers questions, offers options when there's a real choice (even unasked, as for "make this sharper"), and edits when asked or when the change is clear. It says an edit is ready to use, never that the doc is updated.
 - An edit is shown as one more option: a card in Think ("Edit to Pricing", Use this, Show on page, Set aside) and a dashed amber box off its section on the map; the page shows it in place, and its button says Use this too.
 - Explore this works an option through before picking; options found while exploring nest under it, on the map and in Think ("Within …").
+
+## Inputs (4.3, 4.4)
+
+- An input is what the agent picked up with its own tools, read from each finished tool call: a file (its contents as on disk), another doc (a pointer, read fresh), a command's output, a fetch's answer or a search (both untrusted), another MCP server's result. Anur's own tools, edits, and the thread's own doc or working copy are not inputs.
+- Content is a snapshot in `.anur/snapshots/` by hash; the thread holds `input` lines. A removal is an `input-removed` line, so the input never returns.
+- A new thread receives the inputs of threads on its section and every section above it, never a sibling's; its bundle lists them by name, and it reads them with `anur_list_inputs` and `anur_read_input` (files and docs as they are now, with a note when they changed).
+
+## Ask (4.8) and bases (4.11)
+
+- Ask is a thread on the doc's title, whose subtree is the whole doc; it opens from the tab bar or the palette.
+- An embedded base reaches the agent as its table(s), in place of the embed line, counted in the budget.

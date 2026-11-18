@@ -70,6 +70,10 @@ export type ToMain =
       kind: string | null;
       status: "pending" | "in_progress" | "completed" | "failed";
       input: unknown;
+      /** The agent's own name for the tool, such as "Read" or "WebFetch", when it gave one (4.3). */
+      name?: string | null;
+      /** What the tool returned, once it finished (4.3). */
+      output?: unknown;
     }
   | {
       type: "permission";

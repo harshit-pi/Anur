@@ -2,6 +2,8 @@ export {
   BUNDLE_RULES,
   FULL_TEXT_BUDGET,
   budgetFor,
+  embedTargets,
+  expandEmbeds,
   buildBundle,
   type Bundle,
   type BundleInput,

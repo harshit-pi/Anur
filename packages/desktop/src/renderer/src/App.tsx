@@ -457,6 +457,31 @@ export function App() {
     },
     [sections],
   );
+  /** Think on a section, ready to type: the right panel open, its box in focus. */
+  const thinkOn = useCallback((index: number | null) => {
+    if (index !== null) {
+      setCursorSection(index);
+      setOutlineAt(index);
+    }
+    setMapPicks((n) => n + 1);
+    setOpen((o) => {
+      if (o.right) return o;
+      const next = { ...o, right: true };
+      saveOpen(window.localStorage, next);
+      return next;
+    });
+    // After Think has shown the section's new-thread box.
+    window.setTimeout(() => {
+      document.querySelector<HTMLElement>(".think .think-back")?.click();
+      window.setTimeout(() => {
+        document.querySelector<HTMLTextAreaElement>(".think .think-input")?.focus();
+      }, 60);
+    }, 60);
+  }, []);
+  /** Ask (4.8): a thread on the doc's title, whose text is the whole doc. */
+  const ask = useCallback(() => {
+    thinkOn(0);
+  }, [thinkOn]);
   /**
    * A section added on the map: a heading one level under `parent`, after
    * everything already under it. Returns its heading path.
@@ -738,6 +763,7 @@ export function App() {
         onListTabs={listTabs}
         view={doc && sections ? centerView : null}
         onView={setCenterView}
+        onAsk={doc && sections ? ask : null}
       />
       <Ribbon
         filesOpen={open.left}
@@ -890,6 +916,21 @@ export function App() {
         onOpen={openDoc}
         onOpenLine={openLine}
         onNewDoc={folder?.mode === "writable" ? newDoc : null}
+        onSwitchView={
+          doc && sections
+            ? () => {
+                setCenterView((v) => (v === "map" ? "page" : "map"));
+              }
+            : null
+        }
+        onThread={
+          doc && sections
+            ? () => {
+                thinkOn(null);
+              }
+            : null
+        }
+        onAsk={doc && sections ? ask : null}
       />
       {settings ? (
         <Settings

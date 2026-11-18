@@ -116,6 +116,8 @@ describe("Anur's tool socket", () => {
     expect((byId.get(2)?.tools as { name: string }[]).map((t) => t.name)).toEqual([
       "anur_read_section",
       "anur_offer_options",
+      "anur_list_inputs",
+      "anur_read_input",
     ]);
     expect(byId.get(3)).toEqual({ content: [{ type: "text", text: "section Risks" }] });
   });

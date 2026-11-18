@@ -376,11 +376,22 @@ function Composer({
         ) : (
           <button
             type="button"
-            className="think-button primary"
+            className="think-send"
+            aria-label={sendLabel}
+            title={`${sendLabel} (Enter)`}
             disabled={disabled || text.trim() === ""}
             onClick={send}
           >
-            {sendLabel}
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+              <path
+                d="M7 12V2M2.5 6.5 7 2l4.5 4.5"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
         )}
       </div>
@@ -520,6 +531,29 @@ export function Think({
   // Moving the cursor to another section shows its threads, unless the open
   // thread is still running. Opening a thread from elsewhere doesn't close it.
   const sectionKey = section?.path.join("\u0000") ?? null;
+  /** What new threads on this section receive from earlier ones (4.4). */
+  const [inputs, setInputs] = useState<
+    { id: string; thread: string; source: string; label: string; trust: string }[]
+  >([]);
+  const threadsSeen = threads.map((t) => `${t.id}:${String(t.items.length)}`).join(",");
+  useEffect(() => {
+    setInputs([]);
+    if (!docPath || !section) return;
+    let current = true;
+    void anur
+      .call("inputs:list", {
+        path: docPath,
+        text: docText(),
+        section: { index: section.index, path: section.path },
+      })
+      .then((r) => {
+        if (current) setInputs(r.inputs);
+      });
+    return () => {
+      current = false;
+    };
+    // Again when the section changes or a thread's turn adds lines.
+  }, [docPath, sectionKey, threadsSeen]);
   const lastSection = useRef(sectionKey);
   useEffect(() => {
     if (lastSection.current === sectionKey) return;
@@ -970,6 +1004,44 @@ export function Think({
           {showText ? "Show less" : "Show all its text"}
         </button>
       ) : null}
+      {inputs.length > 0 ? (
+        <details className="think-inputs">
+          <summary className="think-subhead">Inputs ({String(inputs.length)})</summary>
+          <p className="quiet think-inputs-note">
+            Earlier threads picked these up; new threads here and below can read them.
+          </p>
+          <ul>
+            {inputs.map((i) => (
+              <li key={i.id}>
+                <span className="think-input-source">{i.source}</span>
+                <span className="truncate" title={i.label}>
+                  {i.label}
+                </span>
+                {i.trust === "untrusted" ? <span className="quiet">untrusted</span> : null}
+                {writable ? (
+                  <button
+                    type="button"
+                    className="think-input-remove"
+                    aria-label={`Remove ${i.label}`}
+                    title="Remove: new threads won't receive it"
+                    onClick={() => {
+                      setInputs((all) => all.filter((x) => x.id !== i.id));
+                      void anur.call("inputs:remove", {
+                        path: docPath,
+                        text: docText(),
+                        thread: i.thread,
+                        input: i.id,
+                      });
+                    }}
+                  >
+                    ×
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       <h3 className="think-subhead">
         {here.length === 0 ? "No threads on this section yet" : `Threads (${String(here.length)})`}
       </h3>
@@ -979,7 +1051,11 @@ export function Think({
       {signedOut(newAgent) ?? (
         <Composer
           placeholder={
-            writable ? "Ask about this section" : "Threads need a folder Anur can write to"
+            !writable
+              ? "Threads need a folder Anur can write to"
+              : section.index === 0
+                ? "Ask about the whole doc"
+                : "Ask about this section"
           }
           sendLabel="Start thread"
           pickers={

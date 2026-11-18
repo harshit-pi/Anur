@@ -66,6 +66,7 @@ export function TabBar({
   onListTabs,
   view,
   onView,
+  onAsk,
 }: {
   open: Record<"left" | "right", boolean>;
   onToggle: (side: "left" | "right") => void;
@@ -77,6 +78,8 @@ export function TabBar({
   /** Page or Map; null while no doc is open. */
   view: "page" | "map" | null;
   onView: (view: "page" | "map") => void;
+  /** Ask, the whole-doc thread (4.8); null with no doc open. */
+  onAsk: (() => void) | null;
 }) {
   const active = tabs.active;
   // ⌄ shows once the tabs no longer fit.
@@ -378,7 +381,17 @@ export function TabBar({
           </button>
         ))}
       </div>
-      {/* Ask, the whole-doc thread, comes back here with task 4.8. */}
+      <button
+        className="tab-ask"
+        type="button"
+        disabled={!onAsk}
+        title="Ask about the whole doc"
+        onClick={() => {
+          onAsk?.();
+        }}
+      >
+        Ask
+      </button>
       <button
         className="icon-button"
         type="button"

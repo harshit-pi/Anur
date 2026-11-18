@@ -519,6 +519,10 @@ export class AgentHost {
         kind: u.kind ?? null,
         status: u.status ?? "pending",
         input: u.rawInput ?? null,
+        name:
+          ((u._meta as { claudeCode?: { toolName?: unknown } } | null | undefined)?.claudeCode
+            ?.toolName as string | undefined) ?? null,
+        output: u.rawOutput ?? null,
       });
       if (u.status === "completed") void this.matchCall(agent, params.sessionId, t, u.toolCallId);
     } else if (u.sessionUpdate === "config_option_update") {

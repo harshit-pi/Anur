@@ -2342,10 +2342,33 @@ body.resizing * {
 
 .think-pickers {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   gap: 2px;
   min-width: 0;
+  overflow: hidden;
   margin-left: -4px;
+}
+
+/* Send, as in the Claude app: a round arrow; its name is in its tooltip. */
+.think-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: auto;
+  border: none;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--sheet);
+  cursor: pointer;
+}
+
+.think-send:disabled {
+  background: var(--rule);
+  color: var(--graphite);
+  cursor: default;
 }
 
 /* One line, always: in a narrow panel the agent's name shortens with "…" first. */
@@ -2434,4 +2457,76 @@ body.resizing * {
 
 .think-meter-note .think-more {
   display: inline;
+}
+
+/* Inputs a section's new threads receive (4.4): a quiet, folded list. */
+.think-inputs summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+
+.think-inputs-note {
+  margin: 4px 0;
+  font-size: 12px;
+}
+
+.think-inputs ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.think-inputs li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.think-input-source {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--slate);
+  font-size: 11px;
+}
+
+.think-input-remove {
+  flex: none;
+  margin-left: auto;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  color: var(--graphite);
+  cursor: pointer;
+}
+
+.think-input-remove:hover {
+  color: var(--red);
+}
+
+/* Ask, the whole-doc thread (4.8), beside Page and Map. */
+.tab-ask {
+  margin-left: 8px;
+  padding: 4px 12px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.tab-ask:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.tab-ask:disabled {
+  opacity: 0.5;
+  cursor: default;
 }

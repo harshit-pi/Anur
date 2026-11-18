@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildSectionTree } from "../sections/tree.ts";
-import { buildBundle, budgetFor, FULL_TEXT_BUDGET } from "./bundle.ts";
+import { buildBundle, budgetFor, embedTargets, expandEmbeds, FULL_TEXT_BUDGET } from "./bundle.ts";
 
 const DOC = `# Failed-payment notifications
 
@@ -210,5 +210,60 @@ describe("the budget, sized to the model's window (4.2)", () => {
   it("is the 200,000-token default before the agent reports a window", () => {
     expect(budgetFor(null)).toBe(FULL_TEXT_BUDGET);
     expect(budgetFor(0)).toBe(FULL_TEXT_BUDGET);
+  });
+});
+
+describe("inputs carried to a thread (4.4)", () => {
+  it("are listed by name, untrusted ones marked, with how to read them", () => {
+    const tree = buildSectionTree(DOC, { fileName: "doc.md" });
+    const { markdown } = buildBundle({
+      text: DOC,
+      tree,
+      index: 1,
+      docPath: "doc.md",
+      inputs: [
+        { label: "notes/comp.txt", source: "file", trust: "trusted" },
+        { label: "https://example.com", source: "fetch", trust: "untrusted" },
+      ],
+    });
+    expect(markdown).toContain("## Inputs from earlier threads on this section or above it");
+    expect(markdown).toContain("- file: notes/comp.txt\n");
+    expect(markdown).toContain("- fetch: https://example.com (untrusted)");
+    expect(markdown).toContain("anur_read_input");
+  });
+
+  it("add nothing when there are none", () => {
+    const tree = buildSectionTree(DOC, { fileName: "doc.md" });
+    expect(buildBundle({ text: DOC, tree, index: 1, docPath: "doc.md" }).markdown).not.toContain(
+      "Inputs from earlier threads",
+    );
+  });
+});
+
+describe("an embedded base in the bundle (4.11)", () => {
+  const doc = `# Plan\n\nIntro.\n\n## Ideas\n\n![[Ideas.base]]\n\n## Next\n\nLater.\n`;
+  const table = "| Name | Score |\n| --- | --- |\n| Tally | 8 |";
+
+  it("finds embed lines, with or without a view", () => {
+    expect(
+      embedTargets("a\n![[Ideas.base#Open]]\n![[pic.png|200]]\ntext ![[inline.base]] here"),
+    ).toEqual(["Ideas.base#Open", "pic.png"]);
+  });
+
+  it("reaches the agent as its table, not as the embed line", () => {
+    const tree = buildSectionTree(doc, { fileName: "doc.md" });
+    const { markdown } = buildBundle({
+      text: doc,
+      tree,
+      index: 1,
+      docPath: "doc.md",
+      embeds: new Map([["Ideas.base", table]]),
+    });
+    expect(markdown).toContain(table);
+    expect(markdown).not.toContain("![[Ideas.base]]");
+  });
+
+  it("leaves an embed it has no text for as it is", () => {
+    expect(expandEmbeds("![[Gone.base]]", new Map())).toBe("![[Gone.base]]");
   });
 });
