@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState, type PointerEvent } from "react";
 import type { MenuEntry } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
+import { REPO_URL } from "../layout/github.ts";
 import {
   GROUP_COLORS,
   close,
@@ -26,6 +27,7 @@ import {
 } from "../layout/tabs.ts";
 import {
   ChevronDownIcon,
+  GitHubIcon,
   CloseIcon,
   DocIcon,
   PlusIcon,
@@ -382,6 +384,17 @@ export function TabBar({
           </button>
         ))}
       </div>
+      <button
+        className="icon-button"
+        type="button"
+        aria-label="Anur on GitHub"
+        title="Anur on GitHub: star it, or ask for a feature"
+        onClick={() => {
+          void anur.call("link:open-external", { url: REPO_URL });
+        }}
+      >
+        <GitHubIcon />
+      </button>
       <button
         className="icon-button tab-ask"
         type="button"

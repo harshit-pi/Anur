@@ -72,6 +72,7 @@ import { Tour } from "./regions/Tour.tsx";
 import { tourSteps } from "./layout/tour.ts";
 import { useFeatures } from "./features.ts";
 import { MapView } from "./regions/MapView.tsx";
+import { StarPrompt } from "./regions/StarPrompt.tsx";
 import { keepSame } from "./layout/keep-same.ts";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
@@ -1183,6 +1184,7 @@ export function App() {
           }}
         />
       ) : null}
+      {tourStep === null ? <StarPrompt /> : null}
       {tourStep !== null ? (
         <Tour
           step={tourStep}
