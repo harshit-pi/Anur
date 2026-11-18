@@ -125,3 +125,16 @@ export function renamed(path: string, typed: string, isFolder: boolean): string 
   const want = ending || ".md";
   return `${dir}${name}${name.toLowerCase().endsWith(want.toLowerCase()) ? "" : want}`;
 }
+
+/** The rows from `a` to `b`, either way round, as ⇧-click picks them. */
+export function rangeBetween(rows: readonly string[], a: string, b: string): string[] {
+  const i = rows.indexOf(a);
+  const j = rows.indexOf(b);
+  if (i < 0 || j < 0) return [b];
+  return rows.slice(Math.min(i, j), Math.max(i, j) + 1);
+}
+
+/** Picked paths without any inside a picked folder, which go along with it. */
+export function topmost(paths: readonly string[]): string[] {
+  return paths.filter((p) => !paths.some((q) => q !== p && p.startsWith(`${q}/`)));
+}

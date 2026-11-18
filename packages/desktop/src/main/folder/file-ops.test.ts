@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { FolderState } from "../../shared/ipc-contract.ts";
-import { createFolder, duplicateDoc, moveEntry, trashEntry } from "./file-ops.ts";
+import { copyInto, createFolder, duplicateDoc, moveEntry, trashEntry } from "./file-ops.ts";
 import { listDocs } from "./list-docs.ts";
 
 /** Plan.md, Ideas/Gift.md, Ideas/Deep/Box.md, an empty Archive and a code-only src. */
@@ -161,5 +161,58 @@ describe("the files panel on disk", () => {
       kind: "created",
       path: "attachments/spec copy.pdf",
     });
+  });
+});
+
+describe("copyInto", () => {
+  const outside = () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "anur-outside-"));
+    writeFileSync(path.join(dir, "Plan.md"), "# From Finder\n");
+    writeFileSync(path.join(dir, "photo.png"), "png");
+    mkdirSync(path.join(dir, "Trip"));
+    writeFileSync(path.join(dir, "Trip", "Day 1.md"), "# Day 1\n");
+    return dir;
+  };
+
+  it("copies files and folders in, a taken name getting ' copy'", async () => {
+    const f = await folder();
+    const src = outside();
+    const r = await copyInto(
+      f,
+      ["Plan.md", "photo.png", "Trip"].map((n) => path.join(src, n)),
+      "",
+    );
+    expect(r).toEqual({ kind: "copied", paths: ["Plan copy.md", "photo.png", "Trip"] });
+    expect(readFileSync(path.join(f.path, "Plan.md"), "utf8")).toBe("# Plan\n");
+    expect(readFileSync(path.join(f.path, "Plan copy.md"), "utf8")).toBe("# From Finder\n");
+    expect(existsSync(path.join(f.path, "Trip", "Day 1.md"))).toBe(true);
+    expect(existsSync(path.join(src, "Plan.md"))).toBe(true);
+  });
+
+  it("copies into a folder, and copies a file of the folder beside itself", async () => {
+    const f = await folder();
+    const r = await copyInto(f, [path.join(f.path, "Ideas", "Gift.md")], "Ideas");
+    expect(r).toEqual({ kind: "copied", paths: ["Ideas/Gift copy.md"] });
+    const again = await copyInto(f, [path.join(f.path, "Ideas", "Gift.md")], "Ideas");
+    expect(again).toEqual({ kind: "copied", paths: ["Ideas/Gift copy 2.md"] });
+  });
+
+  it("won't copy a folder inside itself, nor into a folder that isn't there", async () => {
+    const f = await folder();
+    expect((await copyInto(f, [path.join(f.path, "Ideas")], "Ideas/Deep")).kind).toBe("failed");
+    expect((await copyInto(f, [path.join(f.path, "Plan.md")], "Nope")).kind).toBe("failed");
+    expect((await copyInto(f, [path.join(f.path, "Plan.md")], "../x")).kind).toBe("failed");
+  });
+
+  it("skips hidden files and refuses a read-only folder", async () => {
+    const f = await folder();
+    const src = outside();
+    writeFileSync(path.join(src, ".DS_Store"), "");
+    expect(await copyInto(f, [path.join(src, ".DS_Store")], "")).toEqual({
+      kind: "copied",
+      paths: [],
+    });
+    const ro = await folder("read-only");
+    expect((await copyInto(ro, [path.join(src, "Plan.md")], "")).kind).toBe("failed");
   });
 });

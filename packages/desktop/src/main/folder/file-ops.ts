@@ -1,5 +1,5 @@
 import { constants } from "node:fs";
-import { copyFile, lstat, mkdir, rename } from "node:fs/promises";
+import { copyFile, cp, lstat, mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 import { normalizeDocPath } from "@anur/core";
 import type { FolderState } from "../../shared/ipc-contract.ts";
@@ -147,4 +147,62 @@ export async function trashEntry(
     return failed(`Couldn't move it to the Trash: ${(e as Error).message}`);
   }
   return { kind: "trashed", docs: docsUnder(folder, rel) };
+}
+
+/** "Plan.md", then "Plan copy.md", "Plan copy 2.md": the nth name to try in `dir`. */
+function nthName(dir: string, name: string, isFolder: boolean, n: number): string {
+  const ending = isFolder ? "" : path.posix.extname(name);
+  const stem = name.slice(0, name.length - ending.length);
+  const tail = n === 0 ? "" : n === 1 ? " copy" : ` copy ${String(n)}`;
+  return `${dir ? `${dir}/` : ""}${stem}${tail}${ending}`;
+}
+
+/**
+ * Copy files or folders from anywhere, as dropped or pasted from Finder, into
+ * `into` ("" for the top). A name already there gets " copy", as Finder does.
+ */
+export async function copyInto(
+  folder: FolderState,
+  sources: readonly string[],
+  into: string,
+): Promise<{ kind: "copied"; paths: string[] } | Failed> {
+  if (folder.mode !== "writable") return failed("This folder is read-only.");
+  let dir = "";
+  if (into !== "") {
+    const checked = checkPath(folder, into);
+    if (typeof checked !== "string") return checked;
+    if (!isFolderIn(folder, checked)) return failed(`There's no folder ${checked}.`);
+    dir = checked;
+  }
+  const dirFull = path.join(folder.path, dir);
+  const paths: string[] = [];
+  for (const source of sources) {
+    const src = path.resolve(source);
+    const name = path.basename(src);
+    if (!name || name.startsWith(".")) continue;
+    if (dirFull === src || dirFull.startsWith(src + path.sep))
+      return failed(`${name} can't be copied inside itself.`);
+    const isFolder = await lstat(src).then(
+      (s) => s.isDirectory(),
+      () => null,
+    );
+    if (isFolder === null) return failed(`${name} can't be read.`);
+    let rel = "";
+    for (let n = 0; n < 1000 && !rel; n++) {
+      const tryRel = nthName(dir, name, isFolder, n);
+      if (!(await exists(path.join(folder.path, tryRel)))) rel = tryRel;
+    }
+    if (!rel) return failed(`Too many copies of ${name}.`);
+    try {
+      await cp(src, path.join(folder.path, rel), {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+      });
+    } catch (e) {
+      return failed(`Couldn't copy ${name}: ${(e as Error).message}`);
+    }
+    paths.push(rel);
+  }
+  return { kind: "copied", paths };
 }
