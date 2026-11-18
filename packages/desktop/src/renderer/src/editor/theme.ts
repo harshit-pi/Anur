@@ -9,7 +9,7 @@ import { tags as t } from "@lezer/highlight";
 export const pageTheme = EditorView.theme({
   "&": { height: "100%", backgroundColor: "var(--sheet)", color: "var(--ink)" },
   "&.cm-focused": { outline: "none" },
-  ".cm-scroller": { fontFamily: "var(--font-doc)", fontSize: "17px", lineHeight: "1.6" },
+  ".cm-scroller": { fontFamily: "var(--font-doc)", fontSize: "16px", lineHeight: "1.6" },
   ".cm-content": {
     maxWidth: "var(--page-width)",
     margin: "0 auto",
