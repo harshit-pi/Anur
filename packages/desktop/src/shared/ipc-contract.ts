@@ -105,6 +105,8 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     turn: z.string(),
     role: z.enum(["person", "agent"]),
     text: z.string(),
+    /** Who wrote a person's message, when it isn't the one reading. */
+    by: z.string().nullable().optional(),
   }),
   z.object({
     kind: z.literal("tool"),
@@ -249,6 +251,10 @@ export const ThreadView = z.object({
     .nullable(),
   /** An action thread (group 15), or null for thinking. */
   purpose: z.enum(["build", "check"]).nullable(),
+  /** Who started it, when it isn't the one reading; null for their own. */
+  by: z.string().nullable().optional(),
+  /** When it started (ISO). */
+  startedAt: z.string().optional(),
   agent: AgentIdSchema,
 });
 export type ThreadView = z.infer<typeof ThreadView>;
@@ -410,6 +416,8 @@ export const ipcContract = {
       commitAnur: z.boolean().nullable(),
       defaultAgent: AgentIdSchema,
       autoApply: z.boolean(),
+      /** The name others see on this person's threads. */
+      name: z.string(),
     }),
   },
   "settings:set": {
@@ -418,12 +426,16 @@ export const ipcContract = {
         commitAnur: z.boolean().optional(),
         defaultAgent: AgentIdSchema.optional(),
         autoApply: z.boolean().optional(),
+        /** Empty goes back to git's name, else the Mac's. */
+        name: z.string().max(80).optional(),
       })
       .strict(),
     response: z.object({
       commitAnur: z.boolean().nullable(),
       defaultAgent: AgentIdSchema,
       autoApply: z.boolean(),
+      /** The name others see on this person's threads. */
+      name: z.string(),
     }),
   },
   /** Rename a thread, so the person can tell it apart in Think and on the map. */

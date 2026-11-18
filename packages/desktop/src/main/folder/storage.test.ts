@@ -4,6 +4,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   devicesStillOpen,
+  namesOf,
+  noteName,
   noteOpened,
   noteQuit,
   storageOf,
@@ -39,6 +41,18 @@ describe("open notes (11.4)", () => {
     // Gone for over 30 days without a clean quit: it no longer holds Clean up off.
     await noteOpened(dir, "two", old);
     expect(await devicesStillOpen(dir, "one")).toEqual([]);
+  });
+});
+
+describe("names on threads", () => {
+  it("reads each device's person from its note, and follows a rename", async () => {
+    const dir = await folder({});
+    await noteOpened(dir, "one", new Date(), "Duy");
+    await noteOpened(dir, "two");
+    expect([...(await namesOf(dir))]).toEqual([["one", "Duy"]]);
+    await noteName(dir, "one", "Duy N");
+    await noteQuit(dir, "one");
+    expect((await namesOf(dir)).get("one")).toBe("Duy N");
   });
 });
 

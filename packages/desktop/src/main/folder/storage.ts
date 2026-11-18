@@ -12,14 +12,27 @@ import { IMAGE_TYPES } from "./images.ts";
  * a person to review (11.6).
  */
 
-/** What a device last noted: when it opened the folder, and when it quit cleanly after. */
-export type DeviceOpen = { device: string; openedAt: string; quitAt: string | null };
+/**
+ * What a device last noted: when it opened the folder, when it quit cleanly
+ * after, and the name of the person using it, shown on their threads.
+ */
+export type DeviceOpen = {
+  device: string;
+  openedAt: string;
+  quitAt: string | null;
+  name?: string | null;
+};
 
 const openFile = (folder: string, device: string) =>
   path.join(folder, ANUR_DIR, anurPaths.open(device));
 
-export async function noteOpened(folder: string, device: string, now = new Date()): Promise<void> {
-  const note: DeviceOpen = { device, openedAt: now.toISOString(), quitAt: null };
+export async function noteOpened(
+  folder: string,
+  device: string,
+  now = new Date(),
+  name: string | null = null,
+): Promise<void> {
+  const note: DeviceOpen = { device, openedAt: now.toISOString(), quitAt: null, name };
   await mkdir(path.dirname(openFile(folder, device)), { recursive: true });
   await writeFileAtomic(openFile(folder, device), `${JSON.stringify(note)}\n`);
 }
@@ -33,6 +46,34 @@ export async function noteQuit(folder: string, device: string, now = new Date())
     return;
   }
   await writeFileAtomic(file, `${JSON.stringify({ ...note, quitAt: now.toISOString() })}\n`);
+}
+
+/** A person renamed themselves in Settings: their device's note says so from now on. */
+export async function noteName(folder: string, device: string, name: string | null): Promise<void> {
+  const file = openFile(folder, device);
+  let note: DeviceOpen;
+  try {
+    note = JSON.parse(await readFile(file, "utf8")) as DeviceOpen;
+  } catch {
+    return;
+  }
+  await writeFileAtomic(file, `${JSON.stringify({ ...note, name })}\n`);
+}
+
+/** Each device's person, by device ID, from every device's note. */
+export async function namesOf(folder: string): Promise<Map<string, string>> {
+  const dir = path.join(folder, ANUR_DIR, "open");
+  const out = new Map<string, string>();
+  for (const n of await readdir(dir).catch(() => [] as string[])) {
+    if (!n.endsWith(".json")) continue;
+    try {
+      const note = JSON.parse(await readFile(path.join(dir, n), "utf8")) as DeviceOpen;
+      if (typeof note.name === "string" && note.name.trim()) out.set(note.device, note.name.trim());
+    } catch {
+      // A note being synced: its device shows without a name for now.
+    }
+  }
+  return out;
 }
 
 /**

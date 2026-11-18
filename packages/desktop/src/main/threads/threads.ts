@@ -89,6 +89,8 @@ export type ThreadDeps = {
   autoApply?: () => boolean;
   /** Which switchable Core features are on (group 12); all on when not given. */
   features?: () => FeatureFlags;
+  /** Who uses each device, and this person's own name, to show who started others' threads. */
+  people?: () => Promise<{ me: string | null; byDevice: ReadonlyMap<string, string> }>;
   /** The folder as a window shows it: its docs and what's still in iCloud, for section search. */
   folderState?: () => FolderState | null;
   /** Whether a doc is open in a window: its page writes it, never main. */
@@ -526,10 +528,31 @@ export class Threads {
     );
   }
 
+  private peopleSeen: { at: number; who: (dev: string) => string | null } | null = null;
+
+  /**
+   * A line's author, by name, when it isn't this person: null for their own,
+   * on this device or another one under their name.
+   */
+  private async whoIs(): Promise<(dev: string) => string | null> {
+    if (this.peopleSeen && Date.now() - this.peopleSeen.at < 3000) return this.peopleSeen.who;
+    const people = (await this.d.people?.().catch(() => null)) ?? null;
+    const me = people?.me ?? null;
+    const who = (dev: string) => {
+      if (dev === this.d.device) return null;
+      const name = people?.byDevice.get(dev) ?? null;
+      if (name && me && name === me) return null;
+      return name ?? "Another device";
+    };
+    this.peopleSeen = { at: Date.now(), who };
+    return who;
+  }
+
   private async view(at: Located, rel: string, text: string, thread: string) {
     const lines = await this.linesOf(at.doc, thread);
     const start = lines.find((l) => l.kind === "thread");
     if (!start) return null;
+    const who = await this.whoIs();
     const index = indexIn(at, start.section);
     const items: ThreadItem[] = [];
     let closed = false;
@@ -544,7 +567,13 @@ export class Threads {
       if (l.kind === "added-input" && l.thread === thread && l.source !== "link")
         items.push({ kind: "attached", source: l.source, label: l.label });
       else if (l.kind === "message")
-        items.push({ kind: "message", turn: l.turn, role: l.role, text: l.text });
+        items.push({
+          kind: "message",
+          turn: l.turn,
+          role: l.role,
+          text: l.text,
+          ...(l.role === "person" && who(l.dev) ? { by: who(l.dev) } : {}),
+        });
       else if (l.kind === "tool")
         items.push({
           kind: "tool",
@@ -664,6 +693,8 @@ export class Threads {
       agent: this.agentOf(thread, lines),
       tokens: tokensOf(lines),
       purpose: start.purpose ?? null,
+      by: who(start.dev),
+      startedAt: start.at,
     };
     return view;
   }

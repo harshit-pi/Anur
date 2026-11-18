@@ -4061,3 +4061,30 @@ button.file-card-name:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Who wrote it, on others' threads and messages only. */
+.think-by {
+  margin: 0 4px 2px;
+  color: var(--graphite);
+  font-size: 11px;
+}
+
+.think-started-by {
+  margin-left: 6px;
+}
+
+.settings-input {
+  flex: none;
+  width: 160px;
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+
+.think-thread-by {
+  color: var(--ink);
+}
