@@ -1849,6 +1849,7 @@ body.resizing * {
 }
 
 .think-option select,
+.think-orphan-actions select,
 .settings-select {
   width: 100%;
   padding: 5px 26px 5px 8px;
@@ -2845,13 +2846,8 @@ body.resizing * {
 
 .think-orphan-actions select {
   flex: 1 1 140px;
+  width: auto;
   min-width: 0;
-  padding: 5px 6px;
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  background: var(--sheet);
-  color: var(--ink);
-  font: inherit;
   font-size: 12px;
 }
 
