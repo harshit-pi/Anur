@@ -307,6 +307,10 @@ button {
   color: var(--ink2);
 }
 
+.page-empty p + p {
+  margin-top: 12px;
+}
+
 /* 6. Status bar. */
 .status-bar {
   grid-area: status;
@@ -2105,6 +2109,21 @@ body.resizing * {
   height: 7px;
   border-radius: 50%;
   background: var(--amber);
+}
+
+.map-rename {
+  flex: 1;
+  min-width: 0;
+  margin: -2px -4px;
+  padding: 1px 4px;
+  border: 1px solid var(--blue);
+  border-radius: 4px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  box-shadow: 0 0 0 3px var(--blue-wash);
+  outline: none;
 }
 
 .map-add {
@@ -4129,4 +4148,10 @@ button.file-card-name:hover {
 
 .think-orphan-actions .think-more {
   align-self: center;
+}
+
+/* A finished turn's reply leads; the cards it made follow under this. */
+.think-from-answer {
+  margin: 10px 0 -2px;
+  font-size: 12px;
 }

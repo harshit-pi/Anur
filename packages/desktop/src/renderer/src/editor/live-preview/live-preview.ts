@@ -100,6 +100,14 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
     while (end < lineEnd && text(end, end + 1) === " ") end++;
     if (end > from) out.push(hide.range(from, end));
   };
+  /**
+   * Every keystroke shows: a block mark ("#", ">", "-", "[ ]") takes effect
+   * only once the space after it is typed. Until then it shows, faint, as typed.
+   */
+  const started = (to: number) => /[ \t]/.test(text(to, to + 1));
+  const pending = (from: number, to: number) => {
+    out.push(mark("cm-lp-pending").range(from, to));
+  };
   const children = (node: SyntaxNode, name: string) => {
     const found: SyntaxNode[] = [];
     for (let c = node.firstChild; c; c = c.nextSibling) if (c.name === name) found.push(c);
@@ -208,6 +216,8 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           const callout = /^\s*>\s?\[!([A-Za-z]+)\][+-]?/.exec(firstLine.text);
           const kind = callout?.[1]?.toLowerCase();
           for (let n = firstLine.number; n <= doc.lineAt(to).number; n++) {
+            // A lone ">" is still being typed: no quote yet.
+            if (/^\s*>$/.test(doc.line(n).text)) continue;
             const cls = kind
               ? `cm-lp-callout cm-lp-callout-${kind}${n === firstLine.number ? " cm-lp-callout-first" : ""}`
               : "cm-lp-quote";
@@ -226,12 +236,34 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
         // A heading's "#"s, a quote's ">" and a list's marker never show
         // (2.8): the cursor steps over them, and Backspace removes them whole.
         case "QuoteMark":
-          hideWithSpace(from, to);
+          if (to === doc.lineAt(from).to) pending(from, to);
+          else hideWithSpace(from, to);
           return;
         case "HeaderMark": {
           const parent = node.parent?.name ?? "";
-          if (parent.startsWith("SetextHeading")) out.push(hide.range(from, to));
-          else hideWithSpace(from, to);
+          if (parent.startsWith("SetextHeading")) {
+            out.push(hide.range(from, to));
+            return;
+          }
+          const ln = doc.lineAt(from);
+          // Only the opening marks: a closing "##" is part of the heading's text here.
+          if (from !== ln.from + (/^\s*/.exec(ln.text)?.[0].length ?? 0)) {
+            hideWithSpace(from, to);
+            return;
+          }
+          const empty = text(to, ln.to).trim() === "";
+          if (!started(to)) pending(from, to);
+          else if (!empty) hideWithSpace(from, to);
+          else if (isActive(from, to)) {
+            // "## " and nothing yet: the heading it will be, as a faint placeholder.
+            hideWithSpace(from, to);
+            out.push(
+              Decoration.widget({
+                widget: new TextWidget(`Heading ${String(to - from)}`, "cm-lp-placeholder"),
+                side: 1,
+              }).range(ln.to),
+            );
+          } else pending(from, to);
           return;
         }
         // Inline marks never show either (2.11): the cursor steps over them,
@@ -392,7 +424,14 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
         }
         case "ListMark": {
           const listName = node.parent?.parent?.name;
-          const task = node.parent ? children(node.parent, "Task")[0] : undefined;
+          const taskNode = node.parent ? children(node.parent, "Task")[0] : undefined;
+          const box = taskNode ? children(taskNode, "TaskMarker")[0] : undefined;
+          // "- [ ]" becomes a checkbox once its space is typed; until then it's a bullet.
+          const task = box && started(box.to) ? taskNode : undefined;
+          if (!started(to) && !task) {
+            if (listName === "BulletList") pending(from, to);
+            return;
+          }
           if (listName === "BulletList" && !task) {
             const space = text(to, to + 1) === " " ? 1 : 0;
             out.push(Decoration.replace({ widget: new BulletWidget() }).range(from, to + space));
@@ -400,6 +439,7 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           return;
         }
         case "TaskMarker": {
+          if (!started(to)) return;
           const checked = /x/i.test(text(from, to));
           const space = text(to, to + 1) === " " ? 1 : 0;
           out.push(

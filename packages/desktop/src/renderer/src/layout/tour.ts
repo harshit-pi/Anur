@@ -31,7 +31,7 @@ export const TOUR: readonly TourStep[] = [
   },
   {
     title: "Ask about a section",
-    text: "Click in a section and ask. The thread stays on that section and runs on your own agent.",
+    text: "Click in a section and ask, on your own agent. It starts from that section, the rules it links to and what earlier threads settled, not a blank chat.",
     target: ".right-sidebar",
     side: "left",
     view: "page",
