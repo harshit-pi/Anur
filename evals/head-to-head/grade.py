@@ -69,10 +69,11 @@ def pricing(reply: str) -> dict:
         ),
         "flats_27": "27" in r,
     }
-    # The archive's £5, or another doc's £7, taken as the current price.
-    wrong = int(bool(re.search(r"splitwise pro (?:is|costs|at) £?(5|7)\b", r))) + int(
-        "400" in r
-    )
+    # The archive's £5, or another doc's £7, taken as the current price: quoting
+    # the doc's claim to correct it, or naming the archive, doesn't count.
+    stale = bool(re.search(r"splitwise pro (?:is|costs|at) £?(5|7)\b", r))
+    corrected = bool(re.search(r"archiv|2025|out of date|the section says|the claim", r))
+    wrong = int(stale and not corrected) + int("400" in r)
     return {"score": sum(checks.values()) / len(checks), "checks": checks, "wrong": wrong}
 
 
