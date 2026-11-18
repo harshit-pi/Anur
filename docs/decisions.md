@@ -164,3 +164,7 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - Think shows a section's History, folded: its versions newest first, from every device, each with when, its cause (typed, from a thread, changed outside, restored, first seen) and a one-line summary read from the change itself ("Changed “£4” to “£3”", "Added 2 lines").
 - In a git repo, the commits that changed that section are listed too, each with the section's text then; reading them never writes.
 - A version opens to its text against now: amber for what only it has, struck through for what only now has. Restore puts it back into that section only, as one change ⌘Z undoes, recorded as a "restore" version; anything typed before it is recorded first, so no text is lost. A version from a thread opens that thread.
+
+## The check card, problems first
+
+- A check's card leads with what needs a look: "Of 13 claims, 2 are wrong, 1 is missing", then those claims, wrong first, then missing, then unsupported. Claims that hold fold into one line. Each claim is its verdict and the claim on one line, with a short note under it; the source shows on hover. A link points to the corrected text when there is one.
