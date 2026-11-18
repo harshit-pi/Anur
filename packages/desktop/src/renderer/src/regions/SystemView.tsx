@@ -1,31 +1,42 @@
 import { useCallback, useEffect, useState } from "react";
 import { anur } from "../bridge.ts";
-import { boxesAt, trailTo, type SystemSection } from "../layout/system-levels.ts";
+import {
+  boxesAt,
+  partIdsUnder,
+  trailTo,
+  type SystemBox,
+  type SystemSection,
+} from "../layout/system-levels.ts";
+
+type Proposal = { group: string; name: string; merge: string[] };
+type Review = { pending: Proposal[]; reviewed: string[]; asking: boolean; failed: string | null };
 
 type Shown =
   | { kind: "reading" }
   | { kind: "off" }
   | { kind: "failed"; reason: string }
-  | { kind: "ok"; sections: SystemSection[] };
+  | { kind: "ok"; sections: SystemSection[]; review: Review };
 
 /**
  * The system tab (group 20): the folder's repos, read by the engineering
  * plugin in the index process. A click opens a box one level deeper; the
- * trail goes back. No level shows more than a dozen or so boxes where a
- * rule could group them.
+ * trail goes back. Claude proposes names for groups once (20.6); the person
+ * accepts, renames or keeps the rule's name (20.6a); parts not yet seen say
+ * so (20.6b).
  */
 export function SystemView({ onPlugins }: { onPlugins: () => void }) {
   const [shown, setShown] = useState<Shown>({ kind: "reading" });
   const [at, setAt] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
   const read = useCallback(() => {
     setShown((s) => (s.kind === "ok" ? s : { kind: "reading" }));
     void anur.call("system:sections", {}).then((r) => {
-      setShown(r.kind === "ok" ? { kind: "ok", sections: r.sections } : r);
+      setShown(r);
     });
   }, []);
   useEffect(() => {
     read();
-    // A build file changed in one of the repos: read again (20.8).
+    // A build file changed, or the review did: read again (20.8).
     return anur.on("system:changed", read);
   }, [read]);
 
@@ -50,10 +61,30 @@ export function SystemView({ onPlugins }: { onPlugins: () => void }) {
     );
 
   const all = shown.sections;
-  // A level that vanished on a rescan goes back to the top.
+  const { review } = shown;
+  const reviewed = new Set(review.reviewed);
+  // A level that vanished on a rescan or a merge goes back to the top.
   const level = at && all.some((s) => s.id === at) ? at : null;
   const trail = trailTo(all, level);
-  const boxes = boxesAt(all, level);
+  const boxes = boxesAt(all, level, reviewed);
+  const nameOf = (id: string) => all.find((s) => s.id === id)?.path.at(-1) ?? id;
+  const unseen = [...new Set(boxes.flatMap((b) => b.parts))].filter((p) => !reviewed.has(p));
+  const decide = (
+    b: SystemBox,
+    action: "accept" | "rename" | "dismiss",
+    name?: string,
+    merge: string[] = [],
+  ) => {
+    // Accepting or renaming counts the group's parts as seen, a merge's too.
+    const parts = [...b.parts, ...merge.flatMap((m) => partIdsUnder(all, m))];
+    void anur.call("system:decide", {
+      group: b.id,
+      action,
+      ...(name ? { name } : {}),
+      parts: action === "dismiss" ? [] : parts,
+    });
+  };
+
   return (
     <div className="system-view">
       <nav className="system-trail" aria-label="Where you are">
@@ -88,34 +119,155 @@ export function SystemView({ onPlugins }: { onPlugins: () => void }) {
             )}
           </span>
         ))}
-        <button type="button" className="system-rescan" onClick={read} title="Read the repos again">
-          Rescan
-        </button>
+        <span className="system-actions">
+          {level && unseen.length ? (
+            <button
+              type="button"
+              title="Count every part on this level as seen"
+              onClick={() => {
+                void anur.call("system:reviewed", { parts: unseen });
+              }}
+            >
+              Mark {unseen.length} reviewed
+            </button>
+          ) : null}
+          <button type="button" title="Read the repos again" onClick={read}>
+            Rescan
+          </button>
+        </span>
       </nav>
+      {review.asking ? (
+        <p className="system-note quiet" role="status">
+          Claude is suggesting names for the groups…
+        </p>
+      ) : review.failed ? (
+        <p className="system-note quiet" role="status">
+          Claude couldn't suggest names: {review.failed}{" "}
+          <button
+            type="button"
+            className="system-inline"
+            onClick={() => {
+              void anur.call("system:propose", {});
+            }}
+          >
+            Try again
+          </button>
+        </p>
+      ) : null}
       {boxes.length === 0 ? (
         <p className="quiet">No repos in this folder.</p>
       ) : (
         <div className="system-grid">
-          {boxes.map((b) =>
-            b.opens ? (
-              <button
+          {boxes.map((b) => {
+            const proposal = review.pending.find((p) => p.group === b.id);
+            const line =
+              b.kind === "part" ? (
+                <span className="system-line">
+                  {b.line}
+                  {b.unreviewed ? <span className="system-tag">unreviewed</span> : null}
+                </span>
+              ) : (
+                <span className="system-line">
+                  {b.line}
+                  {b.unreviewed ? (
+                    <span className="system-unseen"> · {b.unreviewed} unreviewed</span>
+                  ) : null}
+                </span>
+              );
+            const name =
+              renaming === b.id ? (
+                <input
+                  className="system-rename"
+                  aria-label={`New name for ${b.name}`}
+                  defaultValue={proposal?.name ?? b.name}
+                  autoFocus
+                  maxLength={60}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setRenaming(null);
+                    if (e.key !== "Enter") return;
+                    const next = e.currentTarget.value.trim();
+                    setRenaming(null);
+                    if (next && next !== b.name) decide(b, "rename", next);
+                  }}
+                  onBlur={() => {
+                    setRenaming(null);
+                  }}
+                />
+              ) : (
+                <span className="system-name">{b.name}</span>
+              );
+            return (
+              <div
                 key={b.id}
-                type="button"
-                className="system-box opens"
-                onClick={() => {
-                  setAt(b.id);
-                }}
+                className={`system-box ${b.empty ? "empty" : b.kind === "part" ? "part" : "opens"}`}
               >
-                <span className="system-name">{b.name}</span>
-                <span className="system-line">{b.line}</span>
-              </button>
-            ) : (
-              <div key={b.id} className={`system-box${b.empty ? " empty" : " part"}`}>
-                <span className="system-name">{b.name}</span>
-                <span className="system-line">{b.line}</span>
+                {b.opens && renaming !== b.id ? (
+                  <button
+                    type="button"
+                    className="system-open"
+                    onClick={() => {
+                      setAt(b.id);
+                    }}
+                  >
+                    {name}
+                    {line}
+                  </button>
+                ) : (
+                  <>
+                    {name}
+                    {line}
+                  </>
+                )}
+                {proposal ? (
+                  <div className="system-proposal">
+                    <span>
+                      Claude: “{proposal.name}”
+                      {proposal.merge.length
+                        ? `, with ${proposal.merge.map(nameOf).join(", ")}`
+                        : ""}
+                    </span>
+                    <span className="system-proposal-actions">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          decide(b, "accept", undefined, proposal.merge);
+                        }}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRenaming(b.id);
+                        }}
+                      >
+                        Rename
+                      </button>
+                      <button
+                        type="button"
+                        title={`Keep the name ${b.name}`}
+                        onClick={() => {
+                          decide(b, "dismiss");
+                        }}
+                      >
+                        Keep
+                      </button>
+                    </span>
+                  </div>
+                ) : b.kind === "group" && renaming !== b.id ? (
+                  <button
+                    type="button"
+                    className="system-rename-link"
+                    onClick={() => {
+                      setRenaming(b.id);
+                    }}
+                  >
+                    Rename
+                  </button>
+                ) : null}
               </div>
-            ),
-          )}
+            );
+          })}
         </div>
       )}
     </div>

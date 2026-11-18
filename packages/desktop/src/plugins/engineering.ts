@@ -1,5 +1,14 @@
 import { API_VERSION, type Plugin, type SourcedSection } from "@anur/core";
-import { findRepoDirs, groupParts, scanSystem, watchSystem, type PartGroup } from "@anur/system";
+import {
+  applyReview,
+  findRepoDirs,
+  groupParts,
+  readReview,
+  reviewState,
+  scanSystem,
+  watchSystem,
+  type PartGroup,
+} from "@anur/system";
 
 /**
  * The engineering plugin (Design - Engineering Plugin): a system across
@@ -44,6 +53,8 @@ export const engineering: Plugin = {
  */
 export function systemSections(folder: string): SourcedSection[] {
   const scan = scanSystem(folder);
+  // The person's names and merges for groups (20.6), applied over the rule's.
+  const review = reviewState(readReview(folder));
   const out: SourcedSection[] = [];
   for (const r of scan.repos) {
     const repoId = `repo:${r.id ?? r.dir}`;
@@ -76,7 +87,10 @@ export function systemSections(folder: string): SourcedSection[] {
         else for (const n of g.parts) partSection(n, id);
       }
     };
-    const groups = groupParts(parts.map((p) => p.name));
+    const ruled = groupParts(parts.map((p) => p.name));
+    const groups = ruled
+      ? applyReview(ruled, (key) => `group:${r.id ?? r.dir}/${key}`, review)
+      : null;
     if (groups) place(groups, repoId, []);
     for (const p of [...left]) partSection(p.name, repoId);
   }

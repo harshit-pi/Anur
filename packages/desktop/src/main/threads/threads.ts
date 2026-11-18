@@ -1074,6 +1074,41 @@ export class Threads {
     this.d.hub.send({ type: "cancel", thread });
   }
 
+  /**
+   * One question to the person's own agent, outside any thread (20.6): a
+   * fresh session that may use no tools (each permission ask is refused),
+   * closed once it answers. Resolves with the answer's text.
+   */
+  async askOnce(text: string, timeoutMs = 180_000): Promise<string> {
+    const thread = `ask-${randomBytes(6).toString("hex")}`;
+    const turn = randomBytes(6).toString("hex");
+    const spec = await this.spec(thread, this.d.defaultAgent(), null);
+    return new Promise((resolve, reject) => {
+      let out = "";
+      const finish = () => {
+        clearTimeout(timer);
+        this.d.hub.drop(thread); // Closes the session too.
+      };
+      const timer = setTimeout(() => {
+        finish();
+        reject(new Error("The agent took over three minutes to answer."));
+      }, timeoutMs);
+      this.d.hub.route(thread, (m) => {
+        if (m.type === "text") out += m.text;
+        else if (m.type === "permission")
+          this.d.hub.send({ type: "permission", request: m.request, option: null });
+        else if (m.type === "turn-end") {
+          finish();
+          resolve(out);
+        } else if (m.type === "error") {
+          finish();
+          reject(new Error(m.message));
+        }
+      });
+      this.d.hub.send({ type: "prompt", spec, turn, text });
+    });
+  }
+
   private async endTurn(thread: string, live: Live, stopReason: string, usage: unknown = null) {
     const turn = live.turn;
     if (!turn) return;

@@ -2006,14 +2006,34 @@ body.resizing * {
   color: var(--graphite);
 }
 
-.system-trail .system-rescan {
+.system-actions {
+  display: inline-flex;
+  gap: 14px;
   margin-left: auto;
+}
+
+.system-trail .system-actions button {
   color: var(--slate);
+}
+
+.system-note {
+  margin: -6px 0 14px;
+  font-size: 13px;
+}
+
+.system-inline {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  cursor: pointer;
 }
 
 .system-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  align-items: start;
   gap: 10px;
 }
 
@@ -2032,14 +2052,91 @@ body.resizing * {
   text-align: left;
 }
 
-.system-box.opens {
+.system-box {
+  position: relative;
+}
+
+.system-open {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: -10px -12px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
-.system-box.opens:hover,
-.system-box.opens:focus-visible {
+.system-box.opens:has(.system-open:hover),
+.system-box.opens:has(.system-open:focus-visible) {
   border-color: var(--blue);
   background: var(--hover);
+}
+
+.system-unseen {
+  color: var(--amber);
+}
+
+.system-tag {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--amber-wash);
+  color: var(--amber);
+  font-size: 11px;
+}
+
+.system-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.system-proposal-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.system-proposal-actions button,
+.system-rename-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.system-rename-link {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  opacity: 0;
+}
+
+.system-box:hover .system-rename-link,
+.system-rename-link:focus-visible {
+  opacity: 1;
+}
+
+.system-rename {
+  margin: -2px 0;
+  padding: 1px 4px;
+  border: 1px solid var(--blue);
+  border-radius: 4px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: inherit;
 }
 
 .system-box.part {

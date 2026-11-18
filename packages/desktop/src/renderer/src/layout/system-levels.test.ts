@@ -18,21 +18,24 @@ const all = [
   s("repo:c", ["Billing"], null),
   s("part:4", ["Billing", "billing"], "repo:c", "package in package.json"),
 ];
+const view = (parent: string | null, reviewed = new Set<string>()) =>
+  boxesAt(all, parent, reviewed).map((b) => [b.name, b.line, b.opens, b.unreviewed]);
 
 describe("the system tab's levels (group 20)", () => {
   it("shows repos on top, by name ignoring case, empty ones last, saying what each holds", () => {
-    expect(boxesAt(all, null)).toEqual([
-      { id: "repo:a", name: "api", line: "3 parts in 1 group", opens: true, empty: false },
-      { id: "repo:c", name: "Billing", line: "1 part", opens: true, empty: false },
-      { id: "repo:b", name: "scripts", line: "No build file", opens: false, empty: true },
+    expect(view(null)).toEqual([
+      ["api", "3 parts in 1 group", true, 3],
+      ["Billing", "1 part", true, 1],
+      ["scripts", "No build file", false, 0],
     ]);
   });
 
-  it("opens one level at a time, parts last", () => {
-    expect(boxesAt(all, "group:a/tables").map((b) => [b.name, b.line, b.opens])).toEqual([
-      ["User", "2 parts", true],
-      ["OrdersTable", "stack in cdk.json", false],
+  it("opens one level at a time, parts last, counting what the person hasn't seen", () => {
+    expect(view("group:a/tables", new Set(["part:1"]))).toEqual([
+      ["User", "2 parts", true, 1],
+      ["OrdersTable", "stack in cdk.json", false, 1],
     ]);
+    expect(boxesAt(all, "group:a/tables")[0]?.parts).toEqual(["part:1", "part:2"]);
   });
 
   it("gives the trail back to the top", () => {
