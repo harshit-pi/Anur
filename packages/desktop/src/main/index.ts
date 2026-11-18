@@ -31,6 +31,8 @@ import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
+import { findDrawing, sceneOf, withScene } from "./drawings/drawing-file.ts";
+import { listDocs } from "./folder/list-docs.ts";
 import { ClaudeSkill, claudeHome } from "./claude-skill/install.ts";
 import { terminalHandler, writeTerminalFile } from "./claude-skill/terminal.ts";
 import { findClaude, loginPath } from "../agent/find-claude.ts";
@@ -689,6 +691,33 @@ const handlers: { [C in Channel]: Handler<C> } = {
       if (win && fresh) send(win, "folder:changed", fresh);
     }
     return saved;
+  },
+  "drawing:read": async ({ target, from }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { kind: "failed", reason: "No folder is open." };
+    // Obsidian's drawings are .excalidraw.md docs; plain .excalidraw files are found on disk.
+    const plain = (await listDocs(folder.path, 5_000, ".excalidraw")).docs;
+    const found = findDrawing([...folder.docs, ...plain], target, from);
+    if (!found) return { kind: "failed", reason: `There's no drawing called ${target} here.` };
+    const full = path.resolve(folder.path, found);
+    if (!full.startsWith(path.resolve(folder.path) + path.sep))
+      return { kind: "failed", reason: "That drawing is outside this folder." };
+    const text = await readFile(full, "utf8").catch(() => null);
+    const scene = text === null ? null : sceneOf(text, found);
+    if (scene === null) return { kind: "failed", reason: `${found} has no drawing in it.` };
+    return { kind: "drawing", path: found, scene, editable: folder.mode === "writable" };
+  },
+  "drawing:save": async ({ path: rel, scene }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || folder.mode !== "writable")
+      return { ok: false, reason: "This folder is read-only." };
+    const full = path.resolve(folder.path, rel);
+    if (!full.startsWith(path.resolve(folder.path) + path.sep))
+      return { ok: false, reason: "That drawing is outside this folder." };
+    const text = await readFile(full, "utf8").catch(() => null);
+    if (text === null) return { ok: false, reason: `${rel} is gone.` };
+    await writeFileAtomic(full, withScene(text, rel, scene));
+    return { ok: true, reason: null };
   },
   "base:read": async ({ target, from }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

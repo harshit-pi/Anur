@@ -10,6 +10,8 @@ export type TreeNode =
   | { kind: "file"; name: string; ext: string; path: string };
 
 /** Attachments that open in a tab of their own; the rest open in their default app. */
+/** An Excalidraw drawing: Obsidian's `.excalidraw.md`, or a plain `.excalidraw`. */
+export const isDrawing = (p: string) => /\.excalidraw(\.md)?$/i.test(p);
 export const isViewable = (p: string) => /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(p);
 
 export const SORTS = ["name", "name-desc", "modified", "created"] as const;

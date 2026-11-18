@@ -6,7 +6,8 @@ import { settled } from "./editor/pending-saves.ts";
 import { freeName, renamed } from "./layout/file-tree.ts";
 import type { FileActions } from "./regions/FileTree.tsx";
 import type { FileNotice } from "./regions/Regions.tsx";
-import { isViewable } from "./layout/file-tree.ts";
+import { isDrawing, isViewable } from "./layout/file-tree.ts";
+import { DrawingView } from "./regions/DrawingView.tsx";
 import {
   FileHistory,
   moveLabel,
@@ -178,7 +179,7 @@ export function App() {
     setSections(null);
     setDocError(null);
     // An image shows in its own view, not on the page.
-    if (!selected || isViewable(selected) || selected === SYSTEM_TAB) {
+    if (!selected || isViewable(selected) || isDrawing(selected) || selected === SYSTEM_TAB) {
       setOpening(null);
       return;
     }
@@ -1143,6 +1144,8 @@ export function App() {
             />
           ) : selected && isViewable(selected) ? (
             <ImageView path={selected} />
+          ) : selected && isDrawing(selected) ? (
+            <DrawingView key={selected} path={selected} />
           ) : doc && !holding && doc.path === selected ? (
             <Page
               doc={doc}
@@ -1160,7 +1163,12 @@ export function App() {
           ) : null
         }
         map={
-          centerView === "map" && doc && !holding && doc.path === selected && sections ? (
+          // A drawing has no sections: it shows as itself on Map too.
+          selected && isDrawing(selected) ? null : centerView === "map" &&
+            doc &&
+            !holding &&
+            doc.path === selected &&
+            sections ? (
             <MapView
               // A fresh map for each doc: its own framing, positions and history.
               key={doc.path}

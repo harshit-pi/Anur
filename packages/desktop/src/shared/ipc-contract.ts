@@ -382,6 +382,24 @@ export const ipcContract = {
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
+  /** An Excalidraw drawing, by an embed's name or a path: its scene as JSON. */
+  "drawing:read": {
+    request: z.object({ target: z.string().max(1024), from: z.string().max(4096) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({
+        kind: z.literal("drawing"),
+        path: z.string(),
+        scene: z.string(),
+        editable: z.boolean(),
+      }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /** A drawing's new scene, written back in the file's own format. */
+  "drawing:save": {
+    request: z.object({ path: z.string().max(4096), scene: z.string().max(50_000_000) }).strict(),
+    response: z.object({ ok: z.boolean(), reason: z.string().nullable() }),
+  },
   "base:read": {
     request: z.object({ target: z.string().max(1024), from: z.string().max(4096) }).strict(),
     response: z.discriminatedUnion("kind", [

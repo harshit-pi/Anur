@@ -83,6 +83,21 @@ export const livePreviewTheme = EditorView.theme({
     fontFamily: "var(--font-ui)",
     fontSize: "13px",
   },
+  // An embedded Excalidraw drawing, drawn as the picture; a click opens it.
+  ".cm-lp-drawing": {
+    display: "flex",
+    justifyContent: "center",
+    margin: "8px 0",
+    padding: "12px",
+    border: "1px solid var(--rule)",
+    borderRadius: "10px",
+    cursor: "pointer",
+    color: "var(--graphite)",
+    fontFamily: "var(--font-ui)",
+    fontSize: "13px",
+  },
+  ".cm-lp-drawing svg": { maxWidth: "100%", height: "auto", maxHeight: "560px" },
+  ".cm-lp-drawing:hover": { borderColor: "var(--blue)" },
   ".cm-lp-quote": {
     borderLeft: "3px solid var(--rule)",
     paddingLeft: "14px !important",

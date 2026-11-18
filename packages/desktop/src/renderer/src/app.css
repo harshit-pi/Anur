@@ -4531,3 +4531,29 @@ button.file-card-name:hover {
 .path-actions[hidden] {
   display: none;
 }
+
+/* An Excalidraw drawing in its own tab: the editor fills the page. */
+.drawing-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.drawing-view.quiet {
+  padding: 40px;
+}
+
+.drawing-note {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 5;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--red-wash);
+  color: var(--red);
+  font-size: 12px;
+}

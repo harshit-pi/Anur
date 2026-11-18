@@ -4,3 +4,5 @@ coverage/
 dist/
 node_modules/
 out/
+# Excalidraw's fonts, copied from node_modules at build.
+packages/desktop/src/renderer/public/excalidraw/
