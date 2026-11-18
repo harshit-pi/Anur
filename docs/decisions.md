@@ -182,3 +182,9 @@ Engineering decisions made while building Anur, newest first, each with why. The
 - A parent's children sit in rows of at most four, wrapping in reading order, so a doc with many sections grows down rather than endlessly sideways and opens readable. Lines run as a trunk from the parent, a rail along each row and a short drop to each box, with a spine down the left joining the rows; a dragged box goes back to a curve.
 - A section's links to other docs are one badge on its box ("→ 6"); a click lists them, each opening where it is. The list opens upward from a box low in the view.
 - Think no longer repeats the section's text under its heading: the page shows it, and so does hovering a map box. It sits behind `SHOW_SECTION_TEXT`, off, to turn back on if missed.
+
+## The head-to-head eval (16.5), and a cap on the doc in full
+
+- Three tasks on a 2,300-line doc with rules elsewhere, a stale archive and decoy docs, scored by script, three runs each (evals/head-to-head). Anur 0.98, Claude Code fresh 1.00, Claude Code after six unrelated tasks 0.96 with one stale fact; quality sits near the ceiling for all three.
+- Cost told them apart: Anur sent the whole doc in every bundle, about 153k weighted tokens a task against Claude Code's 65k. With the rest of a doc sent in full only up to about 15k tokens (`DOC_FULL_MAX`), and as an outline past that, Anur scored 1.00 at 62k, with the fewest steps.
+- 16.3 (inputs given in full) is dropped: the eval shows the agent reads what it needs, and more in the bundle costs more for nothing.
