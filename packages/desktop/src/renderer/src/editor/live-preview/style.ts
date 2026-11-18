@@ -65,6 +65,24 @@ export const livePreviewTheme = EditorView.theme({
   ".cm-line.cm-lp-gap": {
     lineHeight: "0.8",
   },
+  // A Mermaid diagram, drawn in place of its source.
+  ".cm-lp-mermaid": {
+    display: "flex",
+    justifyContent: "center",
+    margin: "8px 0",
+    padding: "16px",
+    border: "1px solid var(--rule)",
+    borderRadius: "10px",
+    background: "var(--sheet)",
+    cursor: "pointer",
+    overflowX: "auto",
+  },
+  ".cm-lp-mermaid svg": { maxWidth: "100%", height: "auto" },
+  ".cm-lp-mermaid-error": {
+    color: "var(--red)",
+    fontFamily: "var(--font-ui)",
+    fontSize: "13px",
+  },
   ".cm-lp-quote": {
     borderLeft: "3px solid var(--rule)",
     paddingLeft: "14px !important",
