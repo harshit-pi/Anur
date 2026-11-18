@@ -219,6 +219,8 @@ button {
 .left-sidebar:not([hidden]) {
   display: flex;
   flex-direction: column;
+  /* The files scroll in their own area, so the outline below stays whole. */
+  overflow: hidden;
 }
 
 .right-sidebar {
@@ -506,7 +508,9 @@ body.resizing * {
 }
 
 .tree {
-  flex: 1 0 auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   margin: 0 -8px;
   padding-bottom: 24px;
   border-radius: 8px;
@@ -2555,8 +2559,7 @@ body.resizing * {
 
 /* The outline, folded under the files: it stays in view as the tree scrolls. */
 .left-outline {
-  position: sticky;
-  bottom: -16px;
+  flex: none;
   margin: 8px -16px -16px;
   padding: 8px 16px 12px;
   max-height: 45vh;

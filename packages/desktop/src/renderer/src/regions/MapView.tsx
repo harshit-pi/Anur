@@ -89,6 +89,16 @@ export function MapView({
   const [moved, setMoved] = useState<Record<string, Pos>>({});
   /** Saved positions have arrived: only then is the first fit right. */
   const [loaded, setLoaded] = useState(false);
+  /** Saved positions are late: frame the map without them, and move boxes when they come. */
+  const [waited, setWaited] = useState(false);
+  useEffect(() => {
+    const t = window.setTimeout(() => {
+      setWaited(true);
+    }, 1200);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, []);
   const [threads, setThreads] = useState<ThreadView[]>([]);
   const [previews, setPreviews] = useState<PreviewView[]>([]);
   const previewed = useMemo(() => new Set(previews.map((p) => p.thread)), [previews]);
@@ -355,7 +365,7 @@ export function MapView({
   // Start with the title in the middle, everything in view.
   useEffect(() => {
     const el = host.current;
-    if (!el || view || !loaded || boxes.length === 0) return;
+    if (!el || view || (!loaded && !waited) || boxes.length === 0) return;
     const r = el.getBoundingClientRect();
     const xs = boxes.flatMap((b) => [b.x - b.w / 2, b.x + b.w / 2]);
     const ys = boxes.flatMap((b) => [b.y - b.h / 2, b.y + b.h / 2]);
@@ -365,7 +375,7 @@ export function MapView({
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
     const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
     setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
-  }, [boxes, view, loaded]);
+  }, [boxes, view, loaded, waited]);
 
   // New boxes, such as a thread's options, come into view: the map fits
   // itself again, unless the person has panned or zoomed it.
