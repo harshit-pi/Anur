@@ -3284,3 +3284,65 @@ body.resizing * {
   padding-top: 6px;
   font-size: 13px;
 }
+
+/* A section's links to other docs (8.6): one badge, a list on a click. */
+.map-linkcount {
+  flex: none;
+  padding: 1px 7px;
+  border: 1px solid var(--blue-wash);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--blue);
+  font: 600 11.5px/16px var(--font-ui);
+  cursor: pointer;
+}
+
+.map-linkcount:hover,
+.map-linkcount.open {
+  border-color: var(--blue);
+}
+
+.map-linklist {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  max-width: 320px;
+  padding: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: 0 8px 24px var(--shadow);
+}
+
+.map-linkitem {
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--blue);
+  font: 13px var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-linkitem:hover {
+  background: var(--blue-wash);
+}
+
+.map-linkitem.broken {
+  color: var(--graphite);
+  cursor: default;
+}
+
+.map-edge.rail {
+  stroke-linejoin: round;
+}
+
+.map-linklist.up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}

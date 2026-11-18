@@ -1231,31 +1231,35 @@ export function Think({
       >
         {section.path.at(-1)}
       </h2>
-      <div className={`think-text${showText ? " open" : ""}`}>
-        {docPath && page() ? (
-          <SectionEditor
-            key={`${section.path.join("\u0000")}#${String(section.ordinal)}`}
-            page={page}
-            docPath={docPath}
-            section={section}
-            editable={writable}
-          />
-        ) : body ? (
-          <Markdown text={body} />
-        ) : (
-          <p className="quiet">No text yet.</p>
-        )}
-      </div>
-      {body.split("\n").length > 6 || body.length > 400 ? (
-        <button
-          type="button"
-          className="think-more"
-          onClick={() => {
-            setShowText((s) => !s);
-          }}
-        >
-          {showText ? "Show less" : "Show all its text"}
-        </button>
+      {SHOW_SECTION_TEXT ? (
+        <>
+          <div className={`think-text${showText ? " open" : ""}`}>
+            {docPath && page() ? (
+              <SectionEditor
+                key={`${section.path.join("\u0000")}#${String(section.ordinal)}`}
+                page={page}
+                docPath={docPath}
+                section={section}
+                editable={writable}
+              />
+            ) : body ? (
+              <Markdown text={body} />
+            ) : (
+              <p className="quiet">No text yet.</p>
+            )}
+          </div>
+          {body.split("\n").length > 6 || body.length > 400 ? (
+            <button
+              type="button"
+              className="think-more"
+              onClick={() => {
+                setShowText((s) => !s);
+              }}
+            >
+              {showText ? "Show less" : "Show all its text"}
+            </button>
+          ) : null}
+        </>
       ) : null}
       <SectionFooter>
         {features.links && (links.out.length > 0 || links.into.length > 0) ? (
@@ -2070,6 +2074,13 @@ const linkLabel = (doc: string, heading: string | null) =>
   [doc.replace(/\.md$/i, "").split("/").pop() ?? doc, ...(heading ? heading.split("#") : [])].join(
     " › ",
   );
+
+/**
+ * Think's copy of the section's text, under its heading. Off for now: the
+ * page shows the text, and hovering a map box shows it too. Kept, to turn
+ * back on if it's missed.
+ */
+const SHOW_SECTION_TEXT: boolean = false;
 
 const PURPOSE = { build: "Build", check: "Check" } as const;
 
