@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -6,7 +6,7 @@ import type { EventPayload } from "../../shared/ipc-contract.ts";
 import type { ToHost, ToMain } from "../../agent/protocol.ts";
 import { SectionVersions } from "../folder/versions.ts";
 import type { AgentHub } from "./hub.ts";
-import { Threads } from "./threads.ts";
+import { Threads, linksIn } from "./threads.ts";
 
 const DOC = `# Plan
 
@@ -549,5 +549,53 @@ describe("inputs a person adds, and Branch (group 10)", () => {
     expect(b.thread.branchedFrom).toEqual({ thread: a.thread.id, title: "Remember PELICAN." });
     // A new session: the old thread's isn't resumed.
     expect(prompt?.type === "prompt" ? prompt.spec.resume : "x").toBe(null);
+  });
+
+  it("takes a link written in a message as an input, with no attaching", async () => {
+    expect(linksIn("See https://example.com/spec, and (https://x.io/a).")).toEqual([
+      "https://example.com/spec",
+      "https://x.io/a",
+    ]);
+    const t = await setup();
+    await writeFile(path.join(t.folder, "Plan.md"), DOC);
+    const s = await t.threads.start("Plan.md", DOC, risks, "Read https://example.com/spec first.");
+    if (s.kind !== "started") throw new Error(s.reason);
+    const inputs = await t.threads.listInputs("Plan.md", DOC, risks.index, risks.path);
+    expect(inputs.map((c) => [c.source, c.label, c.trust])).toEqual([
+      ["link", "example.com/spec", "untrusted"],
+    ]);
+    // Not a chip in the chat: the link is in the message itself.
+    expect(s.thread.items.some((i) => i.kind === "attached")).toBe(false);
+  });
+
+  it("attaches files and folders sent with a message, shown above it", async () => {
+    const t = await setup();
+    await writeFile(path.join(t.folder, "Plan.md"), DOC);
+    const outside = await mkdtemp(path.join(tmpdir(), "anur-attach-"));
+    await writeFile(path.join(outside, "brief.txt"), "HERON");
+    await mkdir(path.join(outside, "specs"));
+    await writeFile(path.join(outside, "specs", "a.md"), "# A\n");
+    const s = await t.threads.start(
+      "Plan.md",
+      DOC,
+      risks,
+      "Use these.",
+      undefined,
+      [],
+      undefined,
+      undefined,
+      [path.join(outside, "brief.txt"), path.join(outside, "specs")],
+    );
+    if (s.kind !== "started") throw new Error(s.reason);
+    expect(await readFile(path.join(t.folder, "attachments", "specs", "a.md"), "utf8")).toBe(
+      "# A\n",
+    );
+    expect(s.thread.items.slice(0, 3)).toEqual([
+      { kind: "attached", source: "attachment", label: "attachments/brief.txt" },
+      { kind: "attached", source: "attachment", label: "attachments/specs" },
+      expect.objectContaining({ kind: "message", role: "person", text: "Use these." }),
+    ]);
+    const prompt = t.sent.filter((m) => m.type === "prompt").at(-1);
+    expect(prompt?.type === "prompt" ? prompt.text : "").toContain("attachments/specs");
   });
 });

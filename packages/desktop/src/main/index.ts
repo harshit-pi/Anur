@@ -933,20 +933,21 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return { options: choices.get(agent) };
   },
   "thread:start": async (
-    { path: doc, text, section, message, agent, options, purpose, branch },
+    { path: doc, text, section, message, agent, options, purpose, branch, files },
     { webContentsId },
   ) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!folder || !t || !folder.docs.includes(doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
-    return t.start(doc, text, section, message, agent, options, purpose, branch);
+    return t.start(doc, text, section, message, agent, options, purpose, branch, files ?? []);
   },
-  "thread:send": async ({ thread, path: doc, text, message }, { webContentsId }) => {
+  "thread:send": async ({ thread, path: doc, text, message, files }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!folder || !t || !folder.docs.includes(doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
+    if (files?.length) await t.attach(doc, text, thread, files);
     return t.send(thread, doc, text, message);
   },
   "preview:list": async ({ path: doc, text }, { webContentsId }) => {

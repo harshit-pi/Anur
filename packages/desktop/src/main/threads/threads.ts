@@ -513,7 +513,9 @@ export class Threads {
       if (l.kind === "option-explored") explored.add(l.option);
     }
     for (const l of lines) {
-      if (l.kind === "message")
+      if (l.kind === "added-input" && l.thread === thread && l.source !== "link")
+        items.push({ kind: "attached", source: l.source, label: l.label });
+      else if (l.kind === "message")
         items.push({ kind: "message", turn: l.turn, role: l.role, text: l.text });
       else if (l.kind === "tool")
         items.push({
@@ -633,6 +635,8 @@ export class Threads {
     purpose?: Purpose,
     /** Branch (10.5): the thread this one comes from, and the item it branches after. */
     branch?: { thread: string; upTo: number },
+    /** Files and folders attached in the composer: the thread's own inputs (10.4). */
+    files: readonly string[] = [],
   ): Promise<{ kind: "started"; thread: ThreadView } | { kind: "refused"; reason: string }> {
     if (purpose && this.d.features?.().actions === false)
       return { kind: "refused", reason: "Build and check is off in Settings → Core plugins." };
@@ -668,6 +672,7 @@ export class Threads {
       branchedFrom: branch ? { thread: branch.thread, line: String(branch.upTo) } : null,
       ...(purpose ? { purpose } : {}),
     });
+    if (files.length) await this.addTo(at, rel, section, thread, files, []);
     // A branch's agent starts from the bundle and the chat up to the branch point, quoted (10.5).
     if (branch) {
       const from = await this.view(at, rel, text, branch.thread);
@@ -784,6 +789,10 @@ export class Threads {
       role: "person",
       text: shown ?? message,
     });
+    // A link in what the person wrote is an input of the thread: no attaching needed (10.4).
+    const known = new Set(lines.flatMap((l) => (l.kind === "added-input" ? [l.ref] : [])));
+    const links = linksIn(shown ?? message).filter((u) => !known.has(u));
+    if (links.length) await this.addTo(at, rel, start.section, thread, [], links);
     await this.turnWatch.start(thread);
 
     // This device's last session for the thread, if any: sessions live on the machine that ran them.
@@ -1567,11 +1576,45 @@ export class Threads {
         : at.tree.sections.findIndex((s) => s.path.join("\u0000") === sectionPath.join("\u0000"));
     const section = at.ids[index];
     if (!section) return { error: "That section changed; try again." };
+    return { added: await this.addTo(at, rel, section, thread, files, links) };
+  }
+
+  /** Attach files or folders to a thread before its next message (10.4). */
+  async attach(
+    rel: string,
+    text: string,
+    thread: string,
+    files: readonly string[],
+  ): Promise<number> {
+    if (files.length === 0) return 0;
+    const at = await this.d.locate(rel, text);
+    if (!at) return 0;
+    const start = (await this.linesOf(at.doc, thread)).find((l) => l.kind === "thread");
+    return start?.kind === "thread" ? this.addTo(at, rel, start.section, thread, files, []) : 0;
+  }
+
+  /** Write added-input lines; returns how many were added. */
+  private async addTo(
+    at: Located,
+    rel: string,
+    section: SectionId,
+    thread: string | null,
+    files: readonly string[],
+    links: readonly string[],
+  ): Promise<number> {
     const root = await realpath(this.d.folder);
     const lines: Record<string, unknown>[] = [];
     for (const file of files) {
       const real = await realpath(file).catch(() => null);
-      if (!real || !(await lstat(real)).isFile()) continue;
+      const kind = real ? await lstat(real) : null;
+      if (!real || !kind || (!kind.isFile() && !kind.isDirectory())) continue;
+      // A folder from outside is copied in whole, up to a limit; it's a pointer once inside.
+      if (
+        kind.isDirectory() &&
+        !real.startsWith(root + path.sep) &&
+        (await sizeOf(real)) > FOLDER_LIMIT
+      )
+        continue;
       if (real.startsWith(root + path.sep)) {
         const inFolder = path.relative(root, real).split(path.sep).join("/");
         if (inFolder.split("/").some((p) => p.startsWith("."))) continue;
@@ -1591,7 +1634,11 @@ export class Threads {
       for (let n = 0; n < 1000 && !made; n++) {
         const name = n === 0 ? `${stem}${ext}` : `${stem} ${String(n)}${ext}`;
         try {
-          await cp(real, path.join(into, name), { errorOnExist: true, force: false });
+          await cp(real, path.join(into, name), {
+            errorOnExist: true,
+            force: false,
+            recursive: true,
+          });
           made = path.posix.join(dir, name);
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code !== "ERR_FS_CP_EEXIST") throw e;
@@ -1616,7 +1663,7 @@ export class Threads {
           line,
         );
     }
-    return { added: lines.length };
+    return lines.length;
   }
 
   /** anur_list_inputs: the inputs this thread received, with their IDs. */
@@ -1667,6 +1714,12 @@ export class Threads {
     }
     if (c.source === "file" || c.source === "doc" || c.source === "attachment") {
       const file = path.isAbsolute(c.ref) ? c.ref : path.join(this.d.folder, c.ref);
+      // A folder: what's in it, to read with your own tools or anur_read_input.
+      const entries = await listFolder(file);
+      if (entries)
+        return {
+          text: `${head}\nA folder in the opened folder, at ${c.ref}. Its files (read any you need with your own read tool):\n${entries.join("\n")}`,
+        };
       const now = await readFile(file, "utf8").catch(() => null);
       if (now === null) {
         const old = c.hash ? await store.get(c.hash) : null;
@@ -2561,4 +2614,43 @@ function addedCarried(l: Extract<KnownThreadLine, { kind: "added-input" }>): Car
     local: false,
     at: l.at,
   };
+}
+
+/** A folder copied in from outside stays under this; a bigger one isn't copied. */
+const FOLDER_LIMIT = 50 * 1024 * 1024;
+
+/** A folder's size on disk, its hidden files left out. */
+async function sizeOf(dir: string): Promise<number> {
+  let total = 0;
+  for (const e of await readdir(dir, { withFileTypes: true })) {
+    if (e.name.startsWith(".")) continue;
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) total += await sizeOf(full);
+    else if (e.isFile()) total += (await lstat(full)).size;
+    if (total > FOLDER_LIMIT) return total;
+  }
+  return total;
+}
+
+/** A folder's files, relative to it, up to 200; null when it isn't a folder. */
+async function listFolder(dir: string): Promise<string[] | null> {
+  const kind = await lstat(dir).catch(() => null);
+  if (!kind?.isDirectory()) return null;
+  const out: string[] = [];
+  const walk = async (d: string) => {
+    for (const e of await readdir(d, { withFileTypes: true })) {
+      if (e.name.startsWith(".") || out.length >= 200) continue;
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) await walk(full);
+      else out.push(`- ${path.relative(dir, full)}`);
+    }
+  };
+  await walk(dir);
+  return out;
+}
+
+/** The web addresses in what a person wrote, without trailing punctuation. */
+export function linksIn(text: string): string[] {
+  const found = text.match(/https?:\/\/[^\s<>()"'`]+/gi) ?? [];
+  return [...new Set(found.map((u) => u.replace(/[.,;:!?)\]]+$/, "")))];
 }

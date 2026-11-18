@@ -3516,3 +3516,65 @@ body.resizing * {
   outline-offset: -6px;
   border-radius: 10px;
 }
+
+/* Attachments in the composer (10.4): chips above the text, a paperclip by the pickers. */
+.think-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.think-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: 12.5px var(--font-ui);
+}
+
+.think-chip button {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--slate);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.think-attach {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin-right: 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--slate);
+  cursor: pointer;
+}
+
+.think-attach:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+/* An attachment as sent, above the person's message in the chat. */
+.think-sent-attachment {
+  align-self: flex-end;
+  max-width: 80%;
+  padding: 3px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  color: var(--slate);
+  font: 12.5px var(--font-ui);
+}
