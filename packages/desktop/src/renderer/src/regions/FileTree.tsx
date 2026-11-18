@@ -42,8 +42,22 @@ export type FileActions = {
 /** A request from the panel's header: make a doc or a folder where the keys are. */
 export type MakeRequest = { kind: "doc" | "folder"; n: number };
 
+/** The full paths a drag from another window carries; none if it isn't a list of them. */
+function pathsIn(data: string): string[] {
+  try {
+    const list: unknown = JSON.parse(data);
+    return Array.isArray(list)
+      ? list.filter((p): p is string => typeof p === "string" && p.startsWith("/"))
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 /** A path being dragged in the tree, so drops from elsewhere are told apart. */
 const DRAG_TYPE = "application/x-anur-path";
+/** The dragged rows' full paths, so another Anur window can copy them in. */
+const PATHS_TYPE = "application/x-anur-files";
 
 /** What ⌘C or ⌘X last put on the clipboard from the tree. */
 type Clip = { mode: "copy" | "cut"; paths: string[] };
@@ -67,6 +81,7 @@ export function FileTree({
   actions,
   editable = false,
   request = null,
+  root = null,
 }: {
   docs: readonly string[];
   folders?: readonly string[];
@@ -88,6 +103,8 @@ export function FileTree({
   editable?: boolean;
   /** The header asked for a new doc or folder. */
   request?: MakeRequest | null;
+  /** The folder's full path, so a drag can carry full paths to another window. */
+  root?: string | null;
 }) {
   const tree = useMemo(
     () => buildTree(docs, folders, sort, times, files),
@@ -374,13 +391,16 @@ export function FileTree({
   /** Files dragged in from Finder or another app, to be copied in. */
   const fromOutside = (e: DragEvent) =>
     !dragging.current && editable && e.dataTransfer.types.includes("Files");
+  /** Rows dragged from another Anur window's files panel, to be copied in. */
+  const fromOtherWindow = (e: DragEvent) =>
+    !dragging.current && editable && e.dataTransfer.types.includes(PATHS_TYPE);
   const dragOver = (e: DragEvent, node: TreeNode | null) => {
     const from = dragging.current;
     const into = intoOf(node);
     if (from) {
       if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
       if (!from.every((f) => dropTarget(f, into))) return;
-    } else if (!fromOutside(e)) return;
+    } else if (!fromOutside(e) && !fromOtherWindow(e)) return;
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = from ? "move" : "copy";
@@ -400,11 +420,14 @@ export function FileTree({
     const from = dragging.current;
     const into = intoOf(node);
     if (!from) {
-      if (!fromOutside(e) || !actions) return;
+      const other = fromOtherWindow(e);
+      if ((!other && !fromOutside(e)) || !actions) return;
       e.preventDefault();
       e.stopPropagation();
       endDrag();
-      const sources = [...e.dataTransfer.files].map((f) => anur.pathOf(f)).filter(Boolean);
+      const sources = other
+        ? pathsIn(e.dataTransfer.getData(PATHS_TYPE))
+        : [...e.dataTransfer.files].map((f) => anur.pathOf(f)).filter(Boolean);
       if (sources.length === 0) return;
       void actions.importFiles(sources, into).then((made) => {
         if (made?.length) landed(into, made);
@@ -541,7 +564,12 @@ export function FileTree({
           dragging.current = pickedWith(n.path);
           e.dataTransfer.setData(DRAG_TYPE, n.path);
           e.dataTransfer.setData("text/plain", n.path);
-          e.dataTransfer.effectAllowed = "move";
+          if (root)
+            e.dataTransfer.setData(
+              PATHS_TYPE,
+              JSON.stringify(dragging.current.map((p) => `${root}/${p}`)),
+            );
+          e.dataTransfer.effectAllowed = "copyMove";
         }}
         onDragEnd={endDrag}
         onDragOver={(e) => {
