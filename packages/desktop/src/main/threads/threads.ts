@@ -29,7 +29,14 @@ import {
   type SnapshotHash,
   type SectionTree,
 } from "@anur/core";
-import type { EventPayload, ThreadItem, ThreadView } from "../../shared/ipc-contract.ts";
+import type {
+  EventPayload,
+  FolderState,
+  ThreadItem,
+  ThreadView,
+} from "../../shared/ipc-contract.ts";
+import type { FeatureFlags } from "../../shared/features.ts";
+import { searchSections, sectionHitsText } from "../folder/section-search.ts";
 import type { SessionOption, SessionSpec, ToMain } from "../../agent/protocol.ts";
 import {
   DEFAULT_AGENT,
@@ -68,6 +75,10 @@ export type ThreadDeps = {
   filesChanged?: () => void;
   /** Whether agents' edits are used as they land (Settings, Agent). */
   autoApply?: () => boolean;
+  /** Which switchable Core features are on (group 12); all on when not given. */
+  features?: () => FeatureFlags;
+  /** The folder as a window shows it: its docs and what's still in iCloud, for section search. */
+  folderState?: () => FolderState | null;
   /** Whether a doc is open in a window: its page writes it, never main. */
   isOpen?: (rel: string) => boolean;
   /** Write a section's version to History before an edit is used: the page's Apply does the same. */
@@ -563,6 +574,8 @@ export class Threads {
     options: { id: string; value: string }[] = [],
     purpose?: Purpose,
   ): Promise<{ kind: "started"; thread: ThreadView } | { kind: "refused"; reason: string }> {
+    if (purpose && this.d.features?.().actions === false)
+      return { kind: "refused", reason: "Build and check is off in Settings → Core plugins." };
     const at = await this.d.locate(rel, text);
     if (!at)
       return {
@@ -1363,6 +1376,8 @@ export class Threads {
     linked: { label: string; path: string; text: string; nameOnly?: boolean }[];
     broken: string[];
   }> {
+    // Links as context off: a thread reads its own doc only.
+    if (this.d.features?.().links === false) return { linked: [], broken: [] };
     const index = at.ids.indexOf(section);
     const node = at.tree.sections[index];
     if (!node) return { linked: [], broken: [] };
@@ -2010,6 +2025,13 @@ export class Threads {
     return this.linksReport(rel, text, typeof a.section === "string" ? a.section : null, own);
   }
 
+  /** anur_search_sections (12.6), for a thread or a terminal: sections with every word. */
+  async searchSectionsReport(words: string): Promise<ToolAnswer> {
+    const folder = this.d.folderState?.() ?? null;
+    if (!folder) return { error: "Anur has no window open on this folder." };
+    return { text: sectionHitsText(words, await searchSections(folder, words)) };
+  }
+
   /** A section's links in and out as text, for `anur_links` in a thread or a terminal. */
   async linksReport(
     rel: string,
@@ -2017,6 +2039,8 @@ export class Threads {
     section: string | null,
     fallback = 0,
   ): Promise<ToolAnswer> {
+    if (this.d.features?.().links === false)
+      return { text: "Links as context is off in Anur's settings, so Anur isn't following links." };
     const tree = buildSectionTree(text, { fileName: path.basename(rel) });
     let index: number | null = fallback;
     if (section?.trim()) {
@@ -2052,6 +2076,12 @@ export class Threads {
     if (tool === "anur_report_check") return this.reportCheckTool(thread, args);
     if (tool === "anur_read_input") return this.readInputTool(thread, args);
     if (tool === "anur_links") return this.linksTool(thread, args);
+    if (tool === "anur_search_sections") {
+      const words = (args as { words?: unknown } | null)?.words;
+      return typeof words === "string" && words.trim()
+        ? this.searchSectionsReport(words.trim())
+        : { error: "Say which words to look for." };
+    }
     if (tool !== "anur_read_section") return { error: `Anur has no tool ${tool}.` };
     const a = (args ?? {}) as { section?: unknown; doc?: unknown };
     if (typeof a.section !== "string" || !a.section.trim())

@@ -69,7 +69,8 @@ import { SkillCard } from "./regions/SkillCard.tsx";
 import { UpdateCard } from "./regions/UpdateCard.tsx";
 import { OpenerCard } from "./regions/OpenerCard.tsx";
 import { Tour } from "./regions/Tour.tsx";
-import { TOUR } from "./layout/tour.ts";
+import { tourSteps } from "./layout/tour.ts";
+import { useFeatures } from "./features.ts";
 import { MapView } from "./regions/MapView.tsx";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
@@ -100,6 +101,7 @@ export function App() {
   const markedAt = useRef(0);
   /** Page or Map in the centre (task 7). */
   const [centerView, setCenterView] = useState<"page" | "map">("page");
+  const TOUR = tourSteps(useFeatures());
   /** The tour's step while it runs (null otherwise), and Help → Show the Tour Again. */
   const [tourStep, setTourStep] = useState<number | null>(null);
   const [tourAsked, setTourAsked] = useState(0);

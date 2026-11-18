@@ -17,6 +17,23 @@ type Rpc = { jsonrpc: "2.0"; id?: number | string | null; method?: string; param
 
 const TOOLS = [
   {
+    name: "anur_search_sections",
+    description:
+      "Find sections across the folder open in Anur by their words: every section whose own text has all the words, as doc and heading path, with its matching lines. Case is ignored. Read one in full with anur_read_section.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        words: {
+          type: "string",
+          description:
+            'The words to look for, such as "retry timing"; a section matches when it has every one.',
+        },
+      },
+      required: ["words"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "anur_read_section",
     description:
       "Read one section of a doc in the opened folder, by its heading. Returns the section's own text, from its heading to its first subheading, with its subsections' headings listed. While this thread has a working copy of the doc, it reads the working copy, so your own edits show. Use it to read a section outside the ones this thread was given, such as a sibling's full text.",
@@ -199,6 +216,23 @@ const sectionArg = {
 
 /** The tools an agent in the person's own terminal gets (6.5 to 6.9). */
 const TERMINAL_TOOLS = [
+  {
+    name: "anur_search_sections",
+    description:
+      "Find sections across the folder open in Anur by their words: every section whose own text has all the words, as doc and heading path, with its matching lines. Case is ignored. Read one in full with anur_read_section.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        words: {
+          type: "string",
+          description:
+            'The words to look for, such as "retry timing"; a section matches when it has every one.',
+        },
+      },
+      required: ["words"],
+      additionalProperties: false,
+    },
+  },
   {
     name: "anur_outline",
     description:

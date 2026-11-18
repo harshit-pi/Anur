@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { boxSize, mapLayout, resolveWiki, type MapNode, type SectionTree } from "@anur/core";
 import type { PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
+import { useFeatures } from "../features.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
 
 /**
@@ -108,6 +109,7 @@ export function MapView({
   /** The folder's docs, to place links to other docs (8.6). */
   docs: readonly string[];
 }) {
+  const features = useFeatures();
   const host = useRef<HTMLDivElement>(null);
   /** Section IDs by heading path, so a heading added above can't hand a box another's ID. */
   const [ids, setIds] = useState<Map<string, string>>(new Map());
@@ -280,7 +282,7 @@ export function MapView({
       }
       // Links to other docs' sections (8.6): small boxes under the section, opening where they go.
       const seen = new Set<string>();
-      for (const l of s.linksOut) {
+      for (const l of features.links ? s.linksOut : []) {
         if (l.sameDoc || l.embed) continue;
         const to = resolveWiki(docs, docPath, l.target, l.heading);
         const doc = to.kind === "doc" ? to.path : null;
@@ -428,7 +430,7 @@ export function MapView({
       }
     }
     return out;
-  }, [tree, threads, previews, idOf, moved, drag, docs, docPath]);
+  }, [tree, threads, previews, idOf, moved, drag, docs, docPath, features.links]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
 

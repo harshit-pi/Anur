@@ -3,6 +3,7 @@ import path from "node:path";
 import { ANUR_DIR, IGNORE_ALL, anurPaths } from "@anur/core";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
 import { DEFAULT_AGENT, isAgentId, type AgentId } from "../shared/agents.ts";
+import { DEFAULT_FLAGS, flagsFrom, type FeatureFlags } from "../shared/features.ts";
 
 /**
  * Settings main needs to act on (2.25). App-wide ones live in app support;
@@ -11,7 +12,8 @@ import { DEFAULT_AGENT, isAgentId, type AgentId } from "../shared/agents.ts";
  */
 
 export type AppSettings = {
-  sectionHistory: boolean;
+  /** Which switchable Core features are on (group 12). */
+  features: FeatureFlags;
   /** The agent new threads run on. */
   defaultAgent: AgentId;
   /** Use agents' edits as they land, instead of proposing them; off by default. */
@@ -21,7 +23,7 @@ export type AppSettings = {
 };
 
 const DEFAULTS: AppSettings = {
-  sectionHistory: true,
+  features: { ...DEFAULT_FLAGS },
   defaultAgent: DEFAULT_AGENT,
   autoApply: false,
   autoUpdate: true,
@@ -38,9 +40,11 @@ export class AppSettingsStore {
 
   async load(): Promise<AppSettings> {
     try {
-      const raw = JSON.parse(await readFile(this.file, "utf8")) as Partial<AppSettings>;
+      const raw = JSON.parse(await readFile(this.file, "utf8")) as Partial<AppSettings> & {
+        sectionHistory?: unknown;
+      };
       this.current = {
-        sectionHistory: typeof raw.sectionHistory === "boolean" ? raw.sectionHistory : true,
+        features: flagsFrom(raw.features, { sectionHistory: raw.sectionHistory }),
         defaultAgent: isAgentId(raw.defaultAgent) ? raw.defaultAgent : DEFAULT_AGENT,
         autoApply: raw.autoApply === true,
         autoUpdate: raw.autoUpdate !== false,
