@@ -37,6 +37,7 @@ import { parseFields } from "../properties/properties-model.ts";
 import { PropertiesWidget } from "../properties/properties-widget.ts";
 import { parseTable } from "../table/table-model.ts";
 import { TableWidget } from "../table/table-widget.ts";
+import { DrawingWidget } from "../drawings/drawing-widget.ts";
 import { MermaidWidget } from "../mermaid/mermaid-widget.ts";
 
 /**
@@ -369,6 +370,16 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
             const target = children(node, "WikiLinkTarget")[0];
             const name = target ? text(target.from, target.to) : "";
             const line = doc.lineAt(from);
+            // An Excalidraw drawing alone on its line is drawn as the picture.
+            if (/\.excalidraw(\.md)?$/i.test(name) && line.text.trim() === text(from, to)) {
+              out.push(
+                Decoration.replace({ widget: new DrawingWidget(name), block: true }).range(
+                  line.from,
+                  line.to,
+                ),
+              );
+              return false;
+            }
             // A base alone on its line is drawn as its table.
             if (/\.base$/i.test(name) && line.text.trim() === text(from, to)) {
               const heading = children(node, "WikiLinkHeading")[0];

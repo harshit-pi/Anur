@@ -1,8 +1,40 @@
+import { cpSync, existsSync } from "node:fs";
 import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "electron-vite";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
+
+/**
+ * Excalidraw draws in its own fonts, which it fetches from a CDN unless they
+ * sit beside the page. Copied into the renderer's public folder (not checked
+ * in), the Latin ones only: Xiaolai, for Chinese script, alone is 12 MB.
+ */
+const EXCALIDRAW_FONTS = [
+  "Excalifont",
+  "Virgil",
+  "Nunito",
+  "Cascadia",
+  "Lilita",
+  "ComicShanns",
+  "Liberation",
+  "Assistant",
+];
+function excalidrawFonts() {
+  const from = path.resolve(
+    import.meta.dirname,
+    "node_modules/@excalidraw/excalidraw/dist/prod/fonts",
+  );
+  const to = path.resolve(import.meta.dirname, "src/renderer/public/excalidraw/fonts");
+  return {
+    name: "anur-excalidraw-fonts",
+    buildStart() {
+      for (const f of EXCALIDRAW_FONTS)
+        if (existsSync(path.join(from, f)))
+          cpSync(path.join(from, f), path.join(to, f), { recursive: true });
+    },
+  };
+}
 
 export default defineConfig({
   // Main bundles its dependencies, @anur/core's TypeScript source included.
@@ -35,7 +67,8 @@ export default defineConfig({
     },
   },
   renderer: {
-    plugins: [react()],
+    plugins: [react(), excalidrawFonts()],
+    publicDir: path.resolve(import.meta.dirname, "src/renderer/public"),
     // brand/tokens.css lives at the repo root.
     server: { fs: { allow: [root] } },
   },
