@@ -48,6 +48,17 @@ describe("searching the folder", () => {
   it("finds nothing for an empty query", async () => {
     expect((await searchFolder(folder(), "  ")).matches).toEqual([]);
   });
+
+  it("finds a doc holding every word, in any order and on any line, with its best lines", async () => {
+    const r = await searchFolder(folder(), "friday monday");
+    expect(r.matches.map((m) => [m.path, m.line])).toEqual([
+      ["Plan.md", 3],
+      ["Plan.md", 4],
+    ]);
+    expect(r.matches[1]?.length).toBe(6);
+    // Gift has Monday but not Friday; Cloud is in iCloud and counted, not read.
+    expect(r.skipped).toBe(1);
+  });
 });
 
 describe("making a new doc", () => {

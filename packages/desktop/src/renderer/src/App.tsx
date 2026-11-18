@@ -81,6 +81,8 @@ import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
 export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  /** Docs opened lately in this folder, the latest first, for the palette's ranking. */
+  const [recentDocs, setRecentDocs] = useState<string[]>([]);
   /** The settings section shown, or null when settings are closed (2.25). */
   const [settings, setSettings] = useState<SettingsSection | null>(null);
   const closeSettings = useCallback(() => {
@@ -203,6 +205,30 @@ export function App() {
 
   // Each folder has its own tabs, remembered on this device.
   const folderPath = folder?.path ?? null;
+  // Remembered on this Mac per folder: the palette ranks these docs higher.
+  useEffect(() => {
+    if (!folderPath) return;
+    try {
+      const saved = JSON.parse(
+        window.localStorage.getItem(`anur.recent:${folderPath}`) ?? "[]",
+      ) as unknown;
+      setRecentDocs(Array.isArray(saved) ? saved.filter((d) => typeof d === "string") : []);
+    } catch {
+      setRecentDocs([]);
+    }
+  }, [folderPath]);
+  useEffect(() => {
+    if (!folderPath || !selected) return;
+    setRecentDocs((r) => {
+      const next = [selected, ...r.filter((d) => d !== selected)].slice(0, 50);
+      try {
+        window.localStorage.setItem(`anur.recent:${folderPath}`, JSON.stringify(next));
+      } catch {
+        // Storage blocked: the ranking just forgets.
+      }
+      return next;
+    });
+  }, [folderPath, selected]);
   const folderDocs = folder?.docs;
   useEffect(() => {
     setTabs(
@@ -1248,6 +1274,7 @@ export function App() {
         }}
         folder={shown}
         onOpen={openDoc}
+        recent={recentDocs}
         onOpenLine={openLine}
         onNewDoc={folder?.mode === "writable" ? newDoc : null}
         onSwitchView={

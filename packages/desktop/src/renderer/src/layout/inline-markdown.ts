@@ -71,16 +71,20 @@ export function inlineRuns(line: string): Run[] {
 
 /** Split a run's text where `query` appears, any case, so the matches can be marked. */
 export function splitMatches(text: string, query: string): { text: string; match: boolean }[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return [{ text, match: false }];
+  // Each word typed is marked wherever it appears, as search matches words in any order.
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [{ text, match: false }];
   const lower = text.toLowerCase();
+  const hit = new Array<boolean>(text.length).fill(false);
+  for (const w of words)
+    for (let i = lower.indexOf(w); i >= 0; i = lower.indexOf(w, i + 1))
+      for (let j = i; j < i + w.length; j++) hit[j] = true;
   const parts: { text: string; match: boolean }[] = [];
-  let at = 0;
-  for (let i = lower.indexOf(q); i >= 0; i = lower.indexOf(q, i + q.length)) {
-    if (i > at) parts.push({ text: text.slice(at, i), match: false });
-    parts.push({ text: text.slice(i, i + q.length), match: true });
-    at = i + q.length;
+  for (let i = 0; i < text.length;) {
+    let j = i;
+    while (j < text.length && hit[j] === hit[i]) j++;
+    parts.push({ text: text.slice(i, j), match: hit[i] ?? false });
+    i = j;
   }
-  if (at < text.length) parts.push({ text: text.slice(at), match: false });
-  return parts;
+  return parts.length ? parts : [{ text, match: false }];
 }
