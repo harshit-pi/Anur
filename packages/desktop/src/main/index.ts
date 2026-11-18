@@ -101,6 +101,7 @@ import { folderFor } from "./open-file.ts";
 import { offerMoveToApplications } from "./move-to-applications.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
 import { IndexProcess, indexEntry } from "./index-process/client.ts";
+import { SystemReview } from "./system-review.ts";
 import { AgentChoices } from "./threads/agent-choices.ts";
 import { AnurSocket } from "./threads/anur-socket.ts";
 import { Threads } from "./threads/threads.ts";
@@ -167,10 +168,13 @@ function versionsFor(folder: FolderState): SectionVersions | null {
   return v;
 }
 /** The index process, where plugins read folders; started when first asked (group 20). */
-const indexProcess = new IndexProcess(indexEntry(here), (changed) => {
+const systemChanged = (changed: string) => {
   for (const win of windows.values())
     if (folders.current(win.webContents.id)?.path === changed) send(win, "system:changed", {});
-});
+};
+const indexProcess = new IndexProcess(indexEntry(here), systemChanged);
+/** Claude's names for the system's groups, asked on the person's own agent (20.6). */
+const systemReview = new SystemReview(systemChanged);
 /** The agent host, shared by every window; started when a thread first needs it (3.1). */
 let choices: AgentChoices;
 const hub = new AgentHub(
@@ -801,10 +805,36 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder || !on.includes("engineering")) return { kind: "off" };
     try {
       const sources = await indexProcess.sections(folder.path, on);
-      return { kind: "ok", sections: sources.flatMap((s) => s.sections) };
+      const sections = sources.flatMap((s) => s.sections);
+      return {
+        kind: "ok",
+        sections,
+        review: systemReview.view(folder.path, sections, (prompt) => {
+          const t = threadsFor(folder);
+          return t ? t.askOnce(prompt) : null;
+        }),
+      };
     } catch (e) {
       return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
     }
+  },
+  "system:propose": (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { ok: false };
+    systemReview.retry(folder.path);
+    return { ok: true };
+  },
+  "system:decide": (d, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || !pluginsOn(folder.path).includes("engineering")) return { ok: false };
+    systemReview.decide(folder.path, d);
+    return { ok: true };
+  },
+  "system:reviewed": ({ parts }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || !pluginsOn(folder.path).includes("engineering")) return { ok: false };
+    systemReview.reviewed(folder.path, parts);
+    return { ok: true };
   },
   "plugins:set": async ({ id, on }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

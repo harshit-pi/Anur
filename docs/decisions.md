@@ -273,3 +273,12 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - After 300 ms of quiet the index process tells main, main tells the windows with that folder open, and the System tab reads the system again; a rename shows in under a second.
 - Section sources may now watch: `SectionSource.watch(folder, onChange)` returns a stop. A source whose plugin is switched off stops watching.
 - Symbols in the SQLite cache move to group 22, where edges first need them.
+
+## Claude names the groups (20.6)
+
+- When the System tab first reads groups Claude hasn't seen, main asks the person's own agent once: a fresh session outside any thread, no tools (every permission ask refused), closed after one answer (`Threads.askOnce`). On the team's two biggest repos it took 17 s.
+- Claude gets each group's repo, own name, the groups it sits in, and up to 40 part names. It replies with JSON: a name, and sibling groups to merge. A name given as a path keeps its last step; a merge across levels is dropped.
+- Every group asked about is written as a proposal, so none is asked twice. A proposal that keeps the rule's name and merges nothing is settled at once, so the person sees only real suggestions.
+- The person answers on the group's box: Accept, Rename or Keep (20.6a). Any group can be renamed. Answers are lines in `.anur/system/review.jsonl`, keyed by the group's section ID, applied over the rule's groups by the engineering plugin, so regrouping never mints IDs.
+- Parts the person hasn't seen say "unreviewed" (20.6b). Accepting or renaming a group counts its parts as seen; "Mark N reviewed" does so for a level.
+- A failed ask, such as no sign-in, says why with Try again, and isn't retried on its own.

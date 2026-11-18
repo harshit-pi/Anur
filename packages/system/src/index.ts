@@ -21,3 +21,16 @@ export {
 export { scanSystem, type SystemScan } from "./system.ts";
 export { MAX, groupParts, wordsOf, type PartGroup } from "./groups.ts";
 export { mattersForParts, watchSystem } from "./watch.ts";
+export {
+  appendReview,
+  applyReview,
+  parseProposals,
+  proposalPrompt,
+  readReview,
+  reviewFile,
+  reviewState,
+  type GroupBrief,
+  type Proposal,
+  type ReviewLine,
+  type ReviewState,
+} from "./review.ts";

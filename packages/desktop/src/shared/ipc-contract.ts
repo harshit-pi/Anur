@@ -506,9 +506,43 @@ export const ipcContract = {
             parent: z.string().nullable(),
           }),
         ),
+        /** Claude's proposals waiting on the person, and the parts they have seen (20.6). */
+        review: z.object({
+          pending: z.array(
+            z.object({ group: z.string(), name: z.string(), merge: z.array(z.string()) }),
+          ),
+          reviewed: z.array(z.string()),
+          asking: z.boolean(),
+          failed: z.string().nullable(),
+        }),
       }),
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
+  },
+  /** Ask Claude again for group names, after a failed ask (20.6). */
+  "system:propose": {
+    request: z.object({}).strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /**
+   * The person's answer on a group (20.6a): accept Claude's proposal, rename
+   * it, or dismiss the proposal; and the parts it holds count as seen (20.6b).
+   */
+  "system:decide": {
+    request: z
+      .object({
+        group: z.string().max(400),
+        action: z.enum(["accept", "rename", "dismiss"]),
+        name: z.string().max(60).optional(),
+        parts: z.array(z.string().max(400)).max(5000),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Parts the person has seen, without naming anything (20.6b). */
+  "system:reviewed": {
+    request: z.object({ parts: z.array(z.string().max(400)).max(5000) }).strict(),
+    response: z.object({ ok: z.boolean() }),
   },
   /** Switch a plugin on or off for this window's folder; new threads pick it up. */
   "plugins:set": {
