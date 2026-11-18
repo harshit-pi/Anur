@@ -71,13 +71,23 @@ export type BundleInput = {
   rules?: readonly BundleRule[];
   /**
    * How many characters "doc-full" may add before it falls back to the
-   * outline: about a third of a 200,000-token context window.
+   * outline: a third of the model's window, from `budgetFor`.
    */
   budget?: number;
 };
 
 /** About a third of a 200,000-token context window, at roughly four characters a token. */
 export const FULL_TEXT_BUDGET = 240_000;
+
+/**
+ * The budget for a model's window, in tokens as the agent reported it
+ * (4.2): a third of it, at roughly four characters a token. Before the
+ * agent has reported a window, the 200,000-token default.
+ */
+export function budgetFor(windowTokens: number | null | undefined): number {
+  if (!windowTokens || windowTokens <= 0) return FULL_TEXT_BUDGET;
+  return Math.round((windowTokens / 3) * 4);
+}
 
 const slice = (text: string, r: Range) => text.slice(r.from, r.to).trim();
 
