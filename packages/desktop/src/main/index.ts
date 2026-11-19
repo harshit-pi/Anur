@@ -38,6 +38,7 @@ import { terminalHandler, writeTerminalFile } from "./claude-skill/terminal.ts";
 import { findClaude, loginPath } from "../agent/find-claude.ts";
 import { baseAsMarkdown } from "@anur/core";
 import { readImage, saveImage } from "./folder/images.ts";
+import { MapInk } from "./folder/map-ink.ts";
 import { MapLayouts } from "./folder/map-layout.ts";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
 import { createDoc, searchFolder } from "./folder/search.ts";
@@ -1212,6 +1213,24 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const at = await ids.locate(doc, text);
     if (!at) return { ids: [], positions: {} };
     return { ids: at.ids, positions: await new MapLayouts(folder.path, device).read(at.doc) };
+  },
+  "map:ink": async ({ path: doc, text }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const ids = folder ? versionsFor(folder) : null;
+    if (!folder || !ids || !device || !folder.docs.includes(doc)) return { strokes: [] };
+    const at = await ids.locate(doc, text);
+    if (!at) return { strokes: [] };
+    return { strokes: await new MapInk(folder.path, device).read(at.doc) };
+  },
+  "map:ink-change": async ({ path: doc, text, add, erase }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const ids = folder ? versionsFor(folder) : null;
+    if (!folder || folder.mode !== "writable" || !ids || !device || !folder.docs.includes(doc))
+      return { ok: false };
+    const at = await ids.locate(doc, text);
+    if (!at) return { ok: false };
+    await new MapInk(folder.path, device).change(at.doc, add, erase);
+    return { ok: true };
   },
   "map:save": async ({ path: doc, text, positions }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

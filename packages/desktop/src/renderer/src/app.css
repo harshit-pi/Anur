@@ -4602,3 +4602,54 @@ button.file-card-name:hover {
 .map[data-style="hand"] :is(.map-thread, .map-option.edit) .map-sketch {
   stroke-dasharray: 7 5;
 }
+
+/* Pen strokes on the map: drawn over the boxes, moving with the box they're anchored to. */
+.map-ink {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.map-ink-stroke {
+  fill: none;
+  stroke: var(--red);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-ink-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.map-ink.erasing .map-ink-stroke {
+  stroke-dasharray: 4 3;
+}
+
+/* While the pen is up, the whole map takes the drawing. */
+.map-pen-catch {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.map-tool.on {
+  background: var(--blue-wash);
+  color: var(--blue);
+}
+
+/* The tools and legend stay above the pen's drawing layer, so Pen can be put down. */
+.map-tools,
+.map-legend {
+  z-index: 4;
+}
