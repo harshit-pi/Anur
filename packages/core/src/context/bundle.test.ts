@@ -381,3 +381,26 @@ it("asks the agent to link the notes it writes, as Obsidian notes link", () => {
   expect(md).toContain("[[Note name]]");
   expect(md).toContain("overview note that links each of them");
 });
+
+it("carries at most 30 decisions, nearest first, and counts the rest (18.3)", () => {
+  const text = "# Plan\n\n## Checkout\n\nPay.\n";
+  const many = Array.from({ length: 35 }, (_, i) => ({
+    claim: `Rule ${String(i + 1)}.`,
+    source: null,
+    section: "Checkout",
+    by: "person" as const,
+    who: "Sam",
+    instead: null,
+    until: null,
+  }));
+  const b = buildBundle({
+    text,
+    tree: buildSectionTree(text, { fileName: "Plan.md" }),
+    index: 1,
+    docPath: "Plan.md",
+    findings: many,
+  });
+  expect(b.markdown).toContain("Rule 30.");
+  expect(b.markdown).not.toContain("Rule 31.");
+  expect(b.markdown).toContain("- And 5 more decided further from here, not listed.");
+});

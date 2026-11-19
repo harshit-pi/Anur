@@ -19,7 +19,7 @@ const flat = (s: string) => s.replace(/\s+/g, " ").replace(/-->/g, "-- >").trim(
 function where(scope: string): string | null {
   const section = /^section:([^#]+)#(.*)$/s.exec(scope);
   if (section) return section[2] ? `${section[1] ?? ""} › ${section[2]}` : (section[1] ?? null);
-  if (scope === "repo") return null;
+  if (scope === "repo" || scope === "everywhere") return null;
   const folder = /^folder:(.+)$/.exec(scope);
   if (folder) return folder[1] ?? null;
   return scope;
@@ -29,13 +29,18 @@ function where(scope: string): string | null {
  * How the block opens: the team's, in `CLAUDE.md`, or one person's decisions
  * not yet on the default branch, in their own `CLAUDE.local.md` (23.9).
  */
-export type BlockKind = "team" | "local";
+export type BlockKind = "team" | "local" | "everywhere";
 
 const HEADINGS: Record<BlockKind, { title: string; intro: string }> = {
   team: {
     title: "## Decisions",
     intro:
       "People working on this repo decided these. Follow them. When your work relies on one, say so in one line. If a task can't be done without going against one, don't: say which, and ask. Never edit `.anur/decisions/` yourself; a person changes a decision.",
+  },
+  everywhere: {
+    title: "## Decisions that apply everywhere",
+    intro:
+      "Decided in Anur for every project, not one repo. Follow them in any work: when your work relies on one, say so in one line; if a task can't be done without going against one, don't: say which, and ask. A person changes these in Anur.",
   },
   local: {
     title: "## Decisions not yet merged",

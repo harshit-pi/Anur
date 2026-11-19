@@ -58,7 +58,7 @@ import { TurnWatch, type DocChange } from "./turn-watch.ts";
 import { readSection } from "./read-section.ts";
 import { readFile } from "../../vault/anur-copy.ts";
 import type { CommittedDecisions } from "../committed-decisions.ts";
-import { sectionScope, type CommittedEntry } from "@anur/core";
+import { DecisionScope, sectionScope, type CommittedEntry } from "@anur/core";
 
 export { readSection } from "./read-section.ts";
 
@@ -85,6 +85,16 @@ type Located = {
 /** A section's place in the tree by its ID, following aliases and Reattaches. */
 const indexIn = (at: Located, id: SectionId): number => at.ids.indexOf(at.canon?.get(id) ?? id);
 
+/** How near a committed decision's scope is to a section (18.3); see `KeptFinding.reach`. */
+export function reachOf(scope: string, here: readonly string[]): number {
+  const section = /^section:[^#]+#(.*)$/s.exec(scope);
+  if (section) {
+    const at = section[1] ? section[1].split(" › ") : [];
+    return at.length === 0 ? 2 : at.length === here.length ? 0 : 1;
+  }
+  return scope === "everywhere" ? 4 : 3;
+}
+
 /**
  * Whether a committed decision reaches a doc's section, and what it's on, by
  * name: a section's own scope reaches it and the sections below; a decision
@@ -102,6 +112,7 @@ export function appliesTo(
     return section.doc === rel && section.path.every((p, i) => here[i] === p)
       ? (section.path.at(-1) ?? "this doc")
       : null;
+  if (scope === "everywhere") return "everywhere";
   const inside = (dir: string) => !dir || rel.startsWith(`${dir}/`);
   if (scope === "repo") return inside(home) ? (home ? `all of ${home}` : "the whole folder") : null;
   const folder = /^folder:(.+)$/.exec(scope)?.[1];
@@ -122,6 +133,8 @@ export type ThreadDeps = {
   features?: () => FeatureFlags;
   /** A doc's `.anur/`, in its home (18.15.2); the opened folder's when not given. */
   anurDirOf?: (doc: DocId) => string;
+  /** A doc's path from the folder, from its ID: for a thread that isn't open. */
+  relOf?: (doc: DocId) => Promise<string | null>;
   /** Every home's `.anur/`, the opened folder's first: where threads may be, and what the agent can't touch. */
   anurDirs?: () => Promise<string[]>;
   /** Decisions and kept findings committed with the folder or its repo (18.9). */
@@ -254,6 +267,12 @@ export type KeptFinding = {
   mine: boolean;
   instead: string | null;
   until: string | null;
+  /**
+   * How near it is (18.3), for carrying nearest first within the budget:
+   * 0 this section, 1 a section above, 2 the doc, 3 its folder or repo,
+   * 4 everywhere.
+   */
+  reach: number;
 };
 
 export type Carried = {
@@ -632,6 +651,14 @@ export class Threads {
           claim: last?.kind === "finding-decided" && last.claim ? last.claim : l.claim,
           source: l.source,
           status: last?.kind === "finding-decided" ? last.status : "proposed",
+          // How far it reaches (18.3): as last set, else as the agent judged it.
+          scope:
+            lines.findLast(
+              (d): d is Extract<typeof d, { kind: "finding-decided" }> =>
+                d.kind === "finding-decided" && d.finding === l.id && d.scope !== undefined,
+            )?.scope ??
+            l.scope ??
+            "section",
           ...(l.by === "person"
             ? {
                 by: "person" as const,
@@ -1649,6 +1676,7 @@ export class Threads {
         mine: decision && !!me && e.who === me,
         instead: decision ? e.instead : null,
         until: decision ? e.until : null,
+        reach: reachOf(e.scope, here),
       });
     }
     return out;
@@ -1698,11 +1726,13 @@ export class Threads {
           mine: l.by === "person" && (await this.whoIs())(from?.dev ?? l.dev) === null,
           instead: l.instead ?? null,
           until: l.until ?? null,
+          reach: canonIn(at, start.section) === canonIn(at, section) ? 0 : 1,
         });
       }
     }
     if (rel) out.push(...(await this.committedFor(at, index, rel, out)));
-    return out.sort((a, b) => a.at.localeCompare(b.at));
+    // Nearest first, then oldest first (18.3).
+    return out.sort((a, b) => a.reach - b.reach || a.at.localeCompare(b.at));
   }
 
   /** The kept findings on a section, for Think's list (16.1). */
@@ -1726,7 +1756,7 @@ export class Threads {
   async decideFinding(
     thread: string,
     decision:
-      | { id: string; status: "kept" | "dropped"; claim: string | null }
+      | { id: string; status: "kept" | "dropped"; claim: string | null; scope?: DecisionScope }
       | { add: { claim: string; source: string | null } },
   ): Promise<{ kind: "ok" } | { kind: "refused"; reason: string }> {
     const own = await this.docOfThread(thread);
@@ -1734,6 +1764,7 @@ export class Threads {
     let id: string;
     let status: "kept" | "dropped";
     let claim: string | null;
+    let scope: DecisionScope | undefined;
     if ("add" in decision) {
       const line = await this.append(own, thread, {
         kind: "finding",
@@ -1745,13 +1776,14 @@ export class Threads {
       status = "kept";
       claim = null;
     } else {
-      ({ id, status, claim } = decision);
+      ({ id, status, claim, scope } = decision);
     }
     await this.append(own, thread, {
       kind: "finding-decided",
       finding: id,
       status,
       claim: claim?.trim() ? claim.trim().slice(0, 600) : null,
+      ...(scope ? { scope } : {}),
     });
     await this.commitDecided(thread, id, status);
     const live = this.live.get(thread);
@@ -1766,27 +1798,40 @@ export class Threads {
    */
   private async commitDecided(thread: string, finding: string, status: "kept" | "dropped") {
     const c = this.d.committed;
+    if (!c) return;
+    // A thread that isn't open, as after a restart, still reaches the
+    // committed copy: its doc found from its ID, its text from disk.
     const live = this.live.get(thread);
-    if (!c || !live) return;
+    const doc = live?.doc ?? (await this.docOfThread(thread));
+    if (!doc) return;
+    const rel = live?.rel ?? (await this.d.relOf?.(doc)) ?? null;
+    if (!rel) return;
     try {
       if (status === "dropped") {
-        await c.drop(live.rel, finding);
+        await c.drop(rel, finding);
         return;
       }
-      const lines = await this.linesOf(live.doc, thread);
+      const docText = live?.docText ?? (await readFile(path.join(this.d.folder, rel), "utf8"));
+      const lines = await this.linesOf(doc, thread);
       const f = lines.find((l) => l.kind === "finding" && l.id === finding);
       if (f?.kind !== "finding") return;
       const decided = lines.findLast((d) => d.kind === "finding-decided" && d.finding === finding);
       const claim = (decided?.kind === "finding-decided" && decided.claim) || f.claim;
+      // As the person last set it, else as the agent judged it, else the section (18.3).
+      const scoped = lines.findLast(
+        (d) => d.kind === "finding-decided" && d.finding === finding && d.scope !== undefined,
+      );
+      const scope =
+        (scoped?.kind === "finding-decided" ? scoped.scope : undefined) ?? f.scope ?? "section";
       const start = lines.find((l) => l.kind === "thread");
-      const at = await this.d.locate(live.rel, live.docText);
+      const at = await this.d.locate(rel, docText);
       const section =
         at && start?.kind === "thread"
           ? (at.tree.sections[indexIn(at, start.section)]?.path ?? []).join(" › ")
           : "";
       const from = f.from ? lines.find((m) => m.id === f.from) : undefined;
       await c.keep(
-        live.rel,
+        rel,
         section,
         finding,
         f.by === "person"
@@ -1799,6 +1844,7 @@ export class Threads {
               who: await this.nameOf(from?.dev ?? f.dev),
             }
           : { kind: "finding", claim, source: f.source },
+        scope,
       );
     } catch {
       // The committed copy is best effort; the thread keeps the decision.
@@ -1837,6 +1883,7 @@ export class Threads {
       from: rule.from,
       instead: str(a.instead, 300),
       until: str(a.until, 200),
+      ...(DecisionScope.safeParse(a.scope).success ? { scope: DecisionScope.parse(a.scope) } : {}),
     });
     if (rule.kind === "settle")
       await this.append(live.doc, thread, {

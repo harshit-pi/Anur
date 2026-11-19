@@ -473,6 +473,7 @@ function threadsFor(folder: FolderState): Threads | null {
       node: process.execPath,
       locate: (rel, text) => ids.locate(rel, text),
       anurDirOf: (doc) => ids.anurDirOf(doc),
+      relOf: (doc) => ids.relOf(doc),
       anurDirs: () => ids.anurDirs(),
       committed: committedFor(folder.path, device),
       emit: (event) => {
@@ -1546,13 +1547,18 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (folder) await versionsFor(folder)?.restored(rel, text, section, from);
     return {};
   },
-  "finding:decide": async ({ thread, id, status, claim, add }, { webContentsId }) => {
+  "finding:decide": async ({ thread, id, status, claim, scope, add }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!t) return { kind: "refused", reason: "No folder is open." };
     if (add) return t.decideFinding(thread, { add });
     if (!id || !status) return { kind: "refused", reason: "Say which finding, and keep or drop." };
-    return t.decideFinding(thread, { id, status, claim: claim ?? null });
+    return t.decideFinding(thread, {
+      id,
+      status,
+      claim: claim ?? null,
+      ...(scope ? { scope } : {}),
+    });
   },
   "findings:list": async ({ path: rel, text, section }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

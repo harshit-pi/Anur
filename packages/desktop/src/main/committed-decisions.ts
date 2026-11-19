@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { installPreCommit, writeLocalMd } from "@anur/system";
+import { installPreCommit, writeLocalMd, writeUserClaudeMd } from "@anur/system";
+import os from "node:os";
 import { loginPath } from "../agent/find-claude.ts";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -11,6 +12,7 @@ import {
   CommittedLine,
   DECISIONS_DIR,
   type CommittedEntry,
+  type DecisionScope,
   anurPaths,
   currentEntries,
   gitignoreKeepingDecisions,
@@ -117,6 +119,13 @@ export class CommittedDecisions {
     private readonly localFor: (home: string) => void = (home) => {
       if (existsSync(path.join(home, ".git"))) writeLocalMd(home);
     },
+    /**
+     * Where decisions kept for everywhere live (18.3): the person's own, in
+     * their home folder, never committed with any repo.
+     */
+    private readonly personalHome: string = os.homedir(),
+    /** Decisions kept for everywhere, in Claude Code's own user `CLAUDE.md` (18.3). */
+    private readonly everywhereFor: (entries: CommittedEntry[]) => void = writeUserClaudeMd,
   ) {}
 
   private async place(rel: string) {
@@ -153,15 +162,67 @@ export class CommittedDecisions {
   }
 
   /**
-   * A decision or finding was kept: add it to this person's file, scoped to
-   * its section as "section:<doc>#<A › B>", the doc's path from where the
-   * file lives, so it reads the same in the repo as in the folder.
+   * A decision or finding was kept: add it to this person's file at its
+   * scope (18.3). A section's is "section:<doc>#<A › B>" and a doc's
+   * "section:<doc>#", the doc's path from where the file lives, so it reads
+   * the same in the repo as in the folder; a folder's or repo's is "repo" in
+   * the doc's home; everywhere's is kept in the person's own file, outside
+   * any repo. Kept again at another scope, it moves.
    */
-  async keep(rel: string, section: string, ref: string, entry: KeptEntry): Promise<string | null> {
+  async keep(
+    rel: string,
+    section: string,
+    ref: string,
+    entry: KeptEntry,
+    scope: DecisionScope = "section",
+  ): Promise<string | null> {
     const at = await this.place(rel);
     if (!at) return null;
     const doc = path.relative(at.home, path.join(this.folder, rel)).split(path.sep).join("/");
-    return this.keepIn(at, `section:${doc}#${section}`, ref, entry);
+    const target =
+      scope === "everywhere"
+        ? {
+            home: this.personalHome,
+            person: at.person,
+            file: path.join(this.personalHome, ANUR_DIR, anurPaths.decisions(at.person)),
+          }
+        : at;
+    const as =
+      scope === "everywhere"
+        ? "everywhere"
+        : scope === "folder"
+          ? "repo"
+          : scope === "doc"
+            ? `section:${doc}#`
+            : `section:${doc}#${section}`;
+    // Already kept: as it is, or at another scope, which moves it.
+    const here = (await this.current(target.home)).find((e) => e.ref === ref);
+    if (here?.scope === as) return here.id;
+    if (
+      (await this.current(at.home)).some((e) => e.ref === ref) ||
+      (await this.personal()).some((e) => e.ref === ref)
+    )
+      await this.drop(rel, ref);
+    if (scope === "everywhere") {
+      await mkdir(path.dirname(target.file), { recursive: true });
+      const id = await this.append(target.file, { ...entry, scope: as, ref });
+      this.refreshEverywhere();
+      return id;
+    }
+    return this.keepIn(at, as, ref, entry);
+  }
+
+  /** The person's decisions kept for everywhere. */
+  private personal() {
+    return this.current(this.personalHome);
+  }
+
+  private refreshEverywhere() {
+    void this.personal()
+      .then((all) => {
+        this.everywhereFor(all);
+      })
+      .catch(() => undefined);
   }
 
   /**
@@ -233,6 +294,19 @@ export class CommittedDecisions {
         await this.append(at.file, { kind: "dropped", target: e.id });
       }
     }
+    // Kept for everywhere: never committed, so it simply comes out.
+    for (const e of (await this.personal()).filter((x) => x.ref === ref)) {
+      const own = path.join(this.personalHome, ANUR_DIR, anurPaths.decisions(e.person));
+      const text = await readFile(own, "utf8").catch(() => "");
+      await writeFile(
+        own,
+        text
+          .split("\n")
+          .filter((row) => !row.includes(`"id":"${e.id}"`))
+          .join("\n"),
+      );
+      this.refreshEverywhere();
+    }
     this.refreshLocal(at.home);
   }
 
@@ -248,7 +322,12 @@ export class CommittedDecisions {
         (await this.current(path.join(this.folder, home))).map((e) => ({ ...e, home })),
       ),
     );
-    return found.flat();
+    // And the person's own, kept for everywhere (18.3), unless that's this folder.
+    const personal =
+      path.resolve(this.personalHome) === path.resolve(this.folder)
+        ? []
+        : (await this.personal()).map((e) => ({ ...e, home: "~" }));
+    return [...found.flat(), ...personal];
   }
 
   /** Every person's decisions and findings here, less what anyone dropped. */

@@ -47,6 +47,7 @@ export {
 } from "./jsonl/index.ts";
 export { DeviceId, PreviewId, SnapshotHash, ThreadId } from "./ids.ts";
 export {
+  DecisionScope,
   KnownThreadLine,
   MessageLine,
   OtherThreadLine,

@@ -208,6 +208,14 @@ export const UsedAllLine = LineEnvelope.extend({
 });
 
 /**
+ * How far a kept decision or finding reaches (18.3): its section and those
+ * below, the whole doc, every doc in its folder or repo, or every folder the
+ * person opens.
+ */
+export const DecisionScope = z.enum(["section", "doc", "folder", "everywhere"]);
+export type DecisionScope = z.infer<typeof DecisionScope>;
+
+/**
  * A finding (16.1): a claim a thread established, with the source it came
  * from, proposed by the agent. It carries to later threads only once a
  * person keeps it.
@@ -231,6 +239,8 @@ export const FindingLine = LineEnvelope.extend({
   instead: z.string().nullable().optional(),
   /** When it stops holding, in the person's words ("until 4.8 ships"). */
   until: z.string().nullable().optional(),
+  /** How far the agent judged it reaches, from the person's words (18.3); the section when left out. */
+  scope: DecisionScope.optional(),
 });
 
 /** A person's decision on a finding: kept (perhaps reworded), or dropped. */
@@ -242,6 +252,8 @@ export const FindingDecidedLine = LineEnvelope.extend({
   claim: z.string().nullable(),
   /** "auto" when a decision settled by itself, shown with Undo; a person's Keep otherwise. */
   how: z.enum(["person", "auto"]).optional(),
+  /** How far it reaches, as the person set it (18.3); the finding's own when left out. */
+  scope: DecisionScope.optional(),
 });
 
 /** An auto-used edit taken back from its note. */
