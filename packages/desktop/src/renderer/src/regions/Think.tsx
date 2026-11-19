@@ -42,6 +42,8 @@ const samePath = (a: readonly string[] | null, b: readonly string[]) =>
 function useThreads(docPath: string | null, docText: () => string) {
   const [threads, setThreads] = useState<ThreadView[]>([]);
   const [prompts, setPrompts] = useState<Prompt[]>([]);
+  /** The doc whose list has come back; until then the panel says it's loading, not that there are none. */
+  const [listed, setListed] = useState<string | null>(null);
   const textNow = useRef(docText);
   textNow.current = docText;
 
@@ -60,7 +62,9 @@ function useThreads(docPath: string | null, docText: () => string) {
     if (!docPath) return;
     let current = true;
     void anur.call("thread:list", { path: docPath, text: textNow.current() }).then((r) => {
-      if (current) setThreads(r.threads);
+      if (!current) return;
+      setThreads(r.threads);
+      setListed(docPath);
     });
     const off = anur.on("thread:event", (e) => {
       if (e.kind === "thread") {
@@ -83,7 +87,7 @@ function useThreads(docPath: string | null, docText: () => string) {
     };
   }, [docPath, loads]);
 
-  return { threads, setThreads, prompts, setPrompts, reload };
+  return { threads, setThreads, prompts, setPrompts, reload, loading: listed !== docPath };
 }
 
 /** A reply arriving piece by piece, or a tool call changing state. */
@@ -595,7 +599,10 @@ export function Think({
   onJump: (index: number) => void;
 }) {
   const features = useFeatures();
-  const { threads, setThreads, prompts, setPrompts, reload } = useThreads(docPath, docText);
+  const { threads, setThreads, prompts, setPrompts, reload, loading } = useThreads(
+    docPath,
+    docText,
+  );
   /** Closed threads on this section, shown on a click (11.3). */
   const [showClosed, setShowClosed] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
@@ -1954,7 +1961,9 @@ export function Think({
           </details>
         ) : null}
       </SectionFooter>
-      {here.length === 0 ? (
+      {here.length === 0 && loading ? (
+        <h3 className="think-subhead think-loading">Loading threads…</h3>
+      ) : here.length === 0 ? (
         <h3 className="think-subhead">No threads on this section yet</h3>
       ) : (
         <GroupedThreads threads={here} stateOf={stateOf} onOpen={setOpen} />
@@ -3231,6 +3240,27 @@ function ChangeSet({
 }) {
   const set = thread.changeSet ?? [];
   const count = set.reduce((n, d) => n + d.sections.length, 0);
+  // Saving can take a moment (an offloaded iCloud file waits on its download): say so at once.
+  const [using, setUsing] = useState(false);
+  useEffect(() => {
+    const done = (e: Event) => {
+      if ((e as CustomEvent<{ thread: string }>).detail.thread === thread.id) setUsing(false);
+    };
+    window.addEventListener("anur:use-all-done", done);
+    return () => {
+      window.removeEventListener("anur:use-all-done", done);
+    };
+  }, [thread.id]);
+  // No page took it (none open): the button comes back rather than stay waiting.
+  useEffect(() => {
+    if (!using) return;
+    const t = setTimeout(() => {
+      setUsing(false);
+    }, 60_000);
+    return () => {
+      clearTimeout(t);
+    };
+  }, [using]);
   if (count < 2) return null;
   const docs = set.map((d) => d.doc.replace(/\.md$/i, "")).join(", ");
   return (
@@ -3246,13 +3276,15 @@ function ChangeSet({
         <button
           type="button"
           className="think-button primary"
+          disabled={using}
           onClick={() => {
+            setUsing(true);
             window.dispatchEvent(
               new CustomEvent("anur:use-all", { detail: { thread: thread.id } }),
             );
           }}
         >
-          {`Use all ${String(count)}`}
+          {using ? "Using…" : `Use all ${String(count)}`}
         </button>
       ) : null}
     </div>

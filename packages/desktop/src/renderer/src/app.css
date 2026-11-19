@@ -5296,3 +5296,8 @@ button.file-card-name:hover {
 .line-card-hide {
   color: var(--blue);
 }
+
+/* The doc's threads are still being read (an offloaded iCloud file can take a while). */
+.think-loading {
+  color: var(--graphite);
+}

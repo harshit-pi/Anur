@@ -2598,7 +2598,13 @@ export class Threads {
   ): Promise<{ used: number; kept: string[] }> {
     const own = await this.docOfThread(thread);
     const live = this.live.get(thread);
-    const set = live ? await this.changeSetOf(thread, live.rel, live.docText) : [];
+    // After a restart the thread isn't live: the open page's doc says where it is.
+    const from = live
+      ? { rel: live.rel, text: live.docText }
+      : open
+        ? { rel: open.path, text: open.before }
+        : null;
+    const set = from ? await this.changeSetOf(thread, from.rel, from.text) : [];
     const done: { rel: string; before: string; after: string; sections: string[][] }[] = [];
     const kept: string[] = [];
     if (open && open.before !== open.after)
@@ -2636,7 +2642,9 @@ export class Threads {
         undo,
       });
     }
-    if (live) await this.refresh(live.rel, live.docText, thread);
+    // The thread shows what's left, so its card goes once everything is used.
+    if (open) await this.refresh(open.path, open.after, thread);
+    else if (live) await this.refresh(live.rel, live.docText, thread);
     return { used: done.length, kept };
   }
 
