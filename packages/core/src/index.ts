@@ -202,5 +202,6 @@ export {
   withBlock,
   type BlockKind,
 } from "./decisions/claude-md.ts";
+export { untilDate, untilPassed } from "./decisions/until.ts";
 export * from "./plugins/api.ts";
 export { PluginHost, PluginRefused } from "./plugins/host.ts";

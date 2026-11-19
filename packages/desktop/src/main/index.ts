@@ -463,6 +463,13 @@ function storeFor(base: string, dev: string): CommittedDecisions {
   );
 }
 
+/** The part IDs of the folder's last system read, or null before one (18.2). */
+function partsRead(folderPath: string): ReadonlySet<string> | null {
+  const saved = lastParts.get(folderPath);
+  return saved ?? null;
+}
+const lastParts = new Map<string, Set<string>>();
+
 type HookTroubleRow = { repo: string; why: string; fix: boolean };
 const hookChecks = new Map<string, { at: number; rows: HookTroubleRow[]; running: boolean }>();
 /**
@@ -525,6 +532,7 @@ function committedFor(folderPath: string, device: string) {
   return {
     keep: store.keep.bind(store),
     drop: store.drop.bind(store),
+    revise: store.revise.bind(store),
     collected: async () => {
       const host = await pluginHostFor(folderPath);
       const homes = await Promise.all(
@@ -582,6 +590,7 @@ function threadsFor(folder: FolderState): Threads | null {
       relOf: (doc) => ids.relOf(doc),
       anurDirs: () => ids.anurDirs(),
       committed: committedFor(folder.path, device),
+      liveParts: () => partsRead(folder.path),
       emit: (event) => {
         for (const [id, win] of windows) {
           if (folders.current(id)?.path === folder.path) send(win, "thread:event", event);
@@ -1118,6 +1127,10 @@ const handlers: { [C in Channel]: Handler<C> } = {
         } else read = await fresh;
       } else read = await cached.read;
       const sections = read.sources.flatMap((s) => s.sections);
+      lastParts.set(
+        folder.path,
+        new Set(sections.flatMap((x) => (x.id.startsWith("part:") ? [x.id.slice(5)] : []))),
+      );
       const edgeState = reviewState(readReview(folder.path));
       const onEdges = await edgeDecisions(folder.path);
       // Once a run: teammates' decisions on calls arrive by git pull, not through Anur.
@@ -1710,8 +1723,16 @@ const handlers: { [C in Channel]: Handler<C> } = {
         instead: f.instead,
         until: f.until,
         at: f.at,
+        lapsed: f.lapsed,
+        ...(f.thread === "" && f.home !== undefined ? { home: f.home } : {}),
       })),
     };
+  },
+  "decision:revise": async ({ thread, home, id, action }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { kind: "refused", reason: "No folder is open." };
+    return t.reviseFinding(thread ? { thread } : { home: home ?? "" }, id, action);
   },
   "links:of": async ({ path: rel, text, section }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

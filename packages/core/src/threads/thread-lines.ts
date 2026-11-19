@@ -254,6 +254,8 @@ export const FindingDecidedLine = LineEnvelope.extend({
   how: z.enum(["person", "auto"]).optional(),
   /** How far it reaches, as the person set it (18.3); the finding's own when left out. */
   scope: DecisionScope.optional(),
+  /** Kept again after its "until" passed (18.2): the new one, null for none; the finding's own when left out. */
+  until: z.string().max(200).nullable().optional(),
 });
 
 /** An auto-used edit taken back from its note. */

@@ -436,6 +436,101 @@ describe("Threads", () => {
     expect(listed.map((f) => [f.claim, f.who])).toEqual([["Three retries, not infinite", "Priya"]]);
   });
 
+  it("stops carrying one whose until passed or whose section is gone, shows why, and keeps it again on a click (18.2)", async () => {
+    const base = {
+      at: "2025-12-01T10:00:00.000Z",
+      dev: "mac-b",
+      seq: 0,
+      kind: "decision" as const,
+      ref: null,
+      quote: "x",
+      instead: null,
+      who: "Priya",
+      person: "priya",
+      home: "",
+    };
+    const holds = {
+      ...base,
+      id: "d-holds-01",
+      scope: "section:plan.md#Plan",
+      decision: "Holds",
+      until: "for now",
+    };
+    const passed = {
+      ...base,
+      id: "d-passed-01",
+      scope: "section:plan.md#Plan",
+      decision: "Passed",
+      until: "2026-01-01",
+    };
+    const gone = {
+      ...base,
+      id: "d-gone-001",
+      scope: "section:plan.md#Nowhere",
+      decision: "Gone",
+      until: null,
+    };
+    const revised: unknown[] = [];
+    const { threads: t, sent } = await setup({
+      committed: {
+        keep: () => Promise.resolve(null),
+        drop: () => Promise.resolve(),
+        collected: () => Promise.resolve([holds, passed, gone]),
+        revise: (home: string, id: string, change: unknown) => {
+          revised.push([home, id, change]);
+          return Promise.resolve();
+        },
+      },
+    });
+    // Listed before any thread on the doc, too.
+    expect((await t.listFindings("plan.md", DOC, risks.index, risks.path)).length).toBe(3);
+    const r = await t.start("plan.md", DOC, risks, "Plan the retries.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const asked = sent.find((m) => m.type === "prompt");
+    const text = asked?.type === "prompt" ? asked.text : "";
+    expect(text).toContain("Holds");
+    expect(text).not.toContain("Passed");
+    expect(text).not.toContain("Gone");
+    const listed = await t.listFindings("plan.md", DOC, risks.index, risks.path);
+    expect(listed.map((f) => [f.claim, f.lapsed])).toEqual(
+      expect.arrayContaining([
+        ["Holds", null],
+        ["Passed", "until"],
+        ["Gone", "gone"],
+      ]),
+    );
+    expect(listed.find((f) => f.claim === "Gone")?.section).toBe("Nowhere, which is gone");
+    await t.reviseFinding({ home: "" }, "d-passed-01", "keep");
+    await t.reviseFinding({ home: "" }, "d-gone-001", "doc");
+    await t.reviseFinding({ home: "" }, "d-holds-01", "drop");
+    expect(revised).toEqual([
+      ["", "d-passed-01", { until: null }],
+      ["", "d-gone-001", { scope: "section:plan.md#" }],
+      ["", "d-holds-01", "drop"],
+    ]);
+  });
+
+  it("keeps a thread's own decision again with no end date once its until passed (18.2)", async () => {
+    const { threads: t, reply } = await setup();
+    const a = await t.start("plan.md", DOC, risks, "Use the old API until 2026-01-01.");
+    if (a.kind !== "started") throw new Error(a.reason);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    await tool(a.thread.id, "anur_note_decision", {
+      quote: "Use the old API until 2026-01-01.",
+      decision: "Use the old API.",
+      until: "2026-01-01",
+      confidence: 0.9,
+    });
+    await reply(a.thread.id, "Noted.");
+    const [f] = await t.listFindings("plan.md", DOC, risks.index, risks.path);
+    expect(f?.lapsed).toBe("until");
+    await t.reviseFinding({ thread: a.thread.id }, f?.id ?? "", "keep");
+    const [again] = await t.listFindings("plan.md", DOC, risks.index, risks.path);
+    expect([again?.claim, again?.until, again?.lapsed]).toEqual(["Use the old API.", null, null]);
+  });
+
   it("settles a confident decision in the person's own words, and carries it with their name", async () => {
     const { threads: t, sent, reply } = await setup();
     const a = await t.start(

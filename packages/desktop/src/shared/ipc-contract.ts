@@ -1443,9 +1443,28 @@ export const ipcContract = {
           instead: z.string().nullable().optional(),
           until: z.string().nullable().optional(),
           at: z.string().optional(),
+          /** Why it needs a look and no longer carries (18.2); null while it holds. */
+          lapsed: z.enum(["until", "gone"]).nullable().optional(),
+          /** For one only committed: the home it's in, to keep or drop it. */
+          home: z.string().optional(),
         }),
       ),
     }),
+  },
+  /** A decision that needs a look (18.2): keep it again, keep it for the doc, or drop it. */
+  "decision:revise": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        home: z.string().max(4096).optional(),
+        id: z.string().max(200),
+        action: z.enum(["keep", "doc", "drop"]),
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("ok") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
   },
   /** A person removes an input: it no longer reaches new threads (4.4). */
   "inputs:remove": {

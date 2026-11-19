@@ -804,6 +804,8 @@ export function Think({
       instead?: string | null | undefined;
       until?: string | null | undefined;
       at?: string | undefined;
+      lapsed?: "until" | "gone" | null | undefined;
+      home?: string | undefined;
     }[]
   >([]);
   const [inputs, setInputs] = useState<
@@ -1890,6 +1892,42 @@ export function Think({
                         <span className="quiet"> · {f.who}</span>
                       ) : null}
                     </span>
+                    {f.lapsed ? (
+                      <span className="think-lapsed" role="group" aria-label="Needs a look">
+                        <span className="think-lapsed-why">
+                          Needs a look:{" "}
+                          {f.lapsed === "until"
+                            ? `"until ${f.until ?? ""}" has passed, so new threads don't follow it`
+                            : `it was on ${f.section}`}
+                        </span>
+                        {writable ? (
+                          <>
+                            <button
+                              type="button"
+                              className="think-more"
+                              title={
+                                f.lapsed === "until"
+                                  ? "Keep it, with no end date"
+                                  : "Keep it for this whole doc"
+                              }
+                              onClick={() => {
+                                setFindings((all) =>
+                                  all.map((x) => (x.id === f.id ? { ...x, lapsed: null } : x)),
+                                );
+                                void anur.call("decision:revise", {
+                                  thread: f.thread,
+                                  ...(f.home !== undefined ? { home: f.home } : {}),
+                                  id: f.id,
+                                  action: f.lapsed === "until" ? "keep" : "doc",
+                                });
+                              }}
+                            >
+                              {f.lapsed === "until" ? "Keep" : "Keep for the doc"}
+                            </button>
+                          </>
+                        ) : null}
+                      </span>
+                    ) : null}
                     {writable ? (
                       <button
                         type="button"
@@ -1898,11 +1936,19 @@ export function Think({
                         title="Drop: new threads won't receive it"
                         onClick={() => {
                           setFindings((all) => all.filter((x) => x.id !== f.id));
-                          void anur.call("finding:decide", {
-                            thread: f.thread,
-                            id: f.id,
-                            status: "dropped",
-                          });
+                          // One only committed, as a teammate's, is dropped where it's kept.
+                          void (f.thread
+                            ? anur.call("finding:decide", {
+                                thread: f.thread,
+                                id: f.id,
+                                status: "dropped",
+                              })
+                            : anur.call("decision:revise", {
+                                thread: "",
+                                home: f.home ?? "",
+                                id: f.id,
+                                action: "drop",
+                              }));
                         }}
                       >
                         ×
