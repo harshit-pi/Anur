@@ -3847,6 +3847,12 @@ function actionOf(
 
 /** A step as a person reads it on a box: "PostHog: exec", not "mcp__claude_ai_PostHog__exec". */
 function stepName(title: string): string {
+  // Anur's own tools read as what they did.
+  const own = /^mcp__anur__anur_(\w+)/.exec(title)?.[1];
+  if (own) {
+    const words = own.replace(/_/g, " ");
+    return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+  }
   const m = /^mcp__(?:claude_ai_)?([A-Za-z0-9-]+?)__([A-Za-z0-9_-]+)/.exec(title);
   const name = m ? `${(m[1] ?? "").replace(/_/g, " ")}: ${(m[2] ?? "").replace(/_/g, " ")}` : title;
   return name.slice(0, 40);

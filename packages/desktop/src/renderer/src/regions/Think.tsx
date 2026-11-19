@@ -3363,6 +3363,10 @@ const OWN_TOOLS: Record<string, string> = {
   anur_read_input: "Read an input",
   anur_report_check: "Reported the check",
   anur_offer_options: "Offered options",
+  anur_propose_action: "Proposed an action",
+  anur_note_decision: "Noted a decision",
+  anur_propose_finding: "Proposed a finding",
+  anur_search_sections: "Searched the doc",
   anur_read_section: "Read a section",
   anur_links: "Looked up the section's links",
 };
