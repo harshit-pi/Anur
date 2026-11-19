@@ -206,3 +206,5 @@ export { untilDate, untilPassed } from "./decisions/until.ts";
 export { decisionNamed } from "./decisions/against.ts";
 export * from "./plugins/api.ts";
 export { PluginHost, PluginRefused } from "./plugins/host.ts";
+
+export { SYSTEM_DOC, systemDocText, systemIdsOf, systemIndexOf } from "./sections/system-doc.ts";

@@ -57,7 +57,8 @@ import type { AnurSocket, ToolAnswer } from "./anur-socket.ts";
 import { TurnWatch, type DocChange } from "./turn-watch.ts";
 import { readSection } from "./read-section.ts";
 import { readFile } from "../../vault/anur-copy.ts";
-import type { CommittedDecisions } from "../committed-decisions.ts";
+import type { CommittedDecisions, KeptEntry } from "../committed-decisions.ts";
+import { SYSTEM_DOC, systemReach, type SystemShape } from "./system-doc.ts";
 import {
   DecisionScope,
   decisionNamed,
@@ -185,6 +186,8 @@ export type ThreadDeps = {
   committed?: Pick<CommittedDecisions, "keep" | "drop"> & {
     /** Every committed decision and finding the opened folder collects (18.14). */
     collected?: () => Promise<(CommittedEntry & { home: string })[]>;
+    /** Kept for a place, not a doc's section: a box on the system map (29.1). */
+    keepFor?: CommittedDecisions["keepFor"];
     /** Keep one again, as it is or for the whole doc, or drop it (18.2), by its home and ID. */
     revise?: (
       home: string,
@@ -192,6 +195,8 @@ export type ThreadDeps = {
       change: { until?: null; scope?: string } | "drop",
     ) => Promise<void>;
   };
+  /** The system map as last read (29.8): where a box sits, and each line's ends; null before a read. */
+  systemShape?: () => SystemShape | null;
   /** The parts the system tab last read, as IDs; null before any read. A part's decision whose part is gone needs a look. */
   liveParts?: () => ReadonlySet<string> | null;
   /** Who uses each device, and this person's own name, to show who started others' threads. */
@@ -1130,7 +1135,7 @@ export class Threads {
       tree: at.tree,
       index,
       docPath: rel,
-      workingCopy: path.join(this.copiesOf(live.threadId), rel),
+      workingCopy: rel === SYSTEM_DOC ? null : path.join(this.copiesOf(live.threadId), rel),
       // A third of the model's window (4.2): this thread's, else the agent's last, else the default.
       budget: budgetFor(live.context?.size ?? live.window ?? null),
       inputs: live.carried ?? [],
@@ -1360,6 +1365,8 @@ export class Threads {
 
   /** The doc with this thread's preview made, written where the agent will edit it. */
   private async makeWorkingCopy(thread: string, live: Live, at: Located): Promise<void> {
+    // The system map's doc is never a file: the agent works in the repos (29.1).
+    if (live.rel === SYSTEM_DOC) return;
     const dir = this.copiesOf(thread);
     // A new turn: the last one's copies stop being watched, and start again from the doc.
     live.watching?.stop();
@@ -1761,8 +1768,36 @@ export class Threads {
     const me = (await this.d.people?.().catch(() => null))?.me ?? null;
     const out: KeptFinding[] = [];
     const parts = this.d.liveParts?.() ?? null;
+    // A box on the system map (29.8): its decisions, its parts', its lines' from both sides, its repo's.
+    const shape = rel === SYSTEM_DOC ? (this.d.systemShape?.() ?? null) : null;
+    const box = rel === SYSTEM_DOC ? (at.ids[index] ?? null) : null;
     for (const e of await collected().catch(() => [])) {
       if (e.ref && seen.has(e.ref)) continue;
+      if (rel === SYSTEM_DOC) {
+        const r = shape && box ? systemReach(e, box, shape) : null;
+        if (!r) continue;
+        const decision = e.kind === "decision";
+        out.push({
+          id: e.id,
+          thread: "",
+          claim: decision ? e.decision : e.claim,
+          source: decision ? null : e.source,
+          section: r.label,
+          at: e.at,
+          by: decision ? "person" : "source",
+          quote: decision ? e.quote : null,
+          who: decision ? e.who : null,
+          mine: decision && !!me && e.who === me,
+          instead: decision ? e.instead : null,
+          until: decision ? e.until : null,
+          reach: r.reach,
+          lapsed: decision && untilPassed(e.until, e.at) ? "until" : null,
+          home: e.home,
+          against: e.against ?? null,
+          ref: e.ref,
+        });
+        continue;
+      }
       // On a section of this doc, or a part, that is gone (18.2): shown, never silently lost.
       const gone = goneFrom(e, rel, at, parts);
       const label = gone ?? appliesTo(e.scope, e.home, rel, here, e);
@@ -1966,6 +2001,11 @@ export class Threads {
     const rel = live?.rel ?? (await this.d.relOf?.(doc)) ?? null;
     if (!rel) return;
     try {
+      // A thread on a box of the system map (29.1): kept on the box, in its repo.
+      if (rel === SYSTEM_DOC) {
+        await this.commitOnBox(c, doc, thread, finding, status);
+        return;
+      }
       if (status === "dropped") {
         await c.drop(rel, finding);
         return;
@@ -2016,6 +2056,79 @@ export class Threads {
     } catch {
       // The committed copy is best effort; the thread keeps the decision.
     }
+  }
+
+  /**
+   * A decision or finding kept in a thread on a box (29.1): on that part, as
+   * `part:<id>`, or for that repo, in the repo's own committed file, so it
+   * reaches every agent working there, with or without Anur. Kept for
+   * everywhere, it's the person's own, as any decision is.
+   */
+  private async commitOnBox(
+    c: NonNullable<ThreadDeps["committed"]>,
+    doc: DocId,
+    thread: string,
+    finding: string,
+    status: "kept" | "dropped",
+  ): Promise<void> {
+    const shape = this.d.systemShape?.();
+    const lines = await this.linesOf(doc, thread);
+    const start = lines.find((l) => l.kind === "thread");
+    if (!shape || start?.kind !== "thread" || !c.keepFor) return;
+    const box: string = start.section;
+    const dir = shape.repoDir.get(box);
+    if (dir === undefined) return;
+    const here = path.join(dir, ".anur-here");
+    if (status === "dropped") {
+      await c.drop(here, finding);
+      return;
+    }
+    const f = lines.find((l) => l.kind === "finding" && l.id === finding);
+    if (f?.kind !== "finding") return;
+    const decided = lines.findLast((d) => d.kind === "finding-decided" && d.finding === finding);
+    const claim = (decided?.kind === "finding-decided" && decided.claim) || f.claim;
+    const scoped = lines.findLast(
+      (d) => d.kind === "finding-decided" && d.finding === finding && d.scope !== undefined,
+    );
+    const scope = (scoped?.kind === "finding-decided" ? scoped.scope : undefined) ?? f.scope;
+    const renewed = lines.findLast(
+      (d) => d.kind === "finding-decided" && d.finding === finding && d.until !== undefined,
+    );
+    const until =
+      renewed?.kind === "finding-decided" && renewed.until !== undefined
+        ? renewed.until
+        : (f.until ?? null);
+    const from = f.from ? lines.find((m) => m.id === f.from) : undefined;
+    const entry: KeptEntry =
+      f.by === "person"
+        ? {
+            kind: "decision",
+            decision: claim,
+            quote: f.quote ?? null,
+            instead: f.instead ?? null,
+            until,
+            who: await this.nameOf(from?.dev ?? f.dev),
+            ...(f.against ? { against: f.against } : {}),
+          }
+        : { kind: "finding", claim, source: f.source };
+    if (scope === "everywhere") {
+      await c.keep(here, "", finding, entry, "everywhere");
+      return;
+    }
+    await c.keepFor(
+      dir,
+      finding,
+      entry,
+      box.startsWith("part:")
+        ? {
+            kind: "part",
+            scope: box as `part:${string}`,
+            on: shape.names.get(box) ?? box,
+            repo: dir,
+            dir: shape.dirs.get(box) ?? dir,
+          }
+        : null,
+    );
   }
 
   /**

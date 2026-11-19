@@ -52,6 +52,8 @@ export function SystemMap({
   scope,
   open,
   onToggle,
+  onSelect,
+  selected = null,
   onCollapseAll,
   onHide,
   onShow,
@@ -61,6 +63,9 @@ export function SystemMap({
   scope: string | null;
   open: ReadonlySet<string>;
   onToggle: (id: string) => void;
+  /** A box picked: Think beside the map follows it (29.1). */
+  onSelect?: (id: string) => void;
+  selected?: string | null;
   onCollapseAll: () => void;
   /** Hide one call or link: a person's word that the code misled. */
   onHide: (edge: string) => void;
@@ -230,7 +235,10 @@ export function SystemMap({
       },
       (dragged) => {
         if (dragged) saveMoved(last);
-        else if (n.opens) onToggle(n.id);
+        else {
+          onSelect?.(n.id);
+          if (n.opens) onToggle(n.id);
+        }
       },
     );
   };
@@ -249,10 +257,10 @@ export function SystemMap({
   const node = (n: MapNode) => (
     <div
       key={n.id}
-      className={`map-node ${n.kind}${n.open ? " open" : ""}${n.grey ? " grey" : ""}${n.opens ? " opens" : ""}`}
+      className={`map-node ${n.kind}${n.open ? " open" : ""}${n.grey ? " grey" : ""}${n.opens ? " opens" : ""}${n.id === selected ? " selected" : ""}`}
       style={{ left: n.x, top: n.y, width: n.w, height: n.h }}
-      role={n.opens ? "button" : undefined}
-      tabIndex={n.opens ? 0 : undefined}
+      role="button"
+      tabIndex={0}
       title={n.opens ? (n.open ? `Close ${n.name}` : `Open ${n.name}`) : undefined}
       aria-expanded={n.opens ? n.open : undefined}
       onPointerDown={(e) => {
@@ -265,9 +273,10 @@ export function SystemMap({
         if (!n.open) releaseFocus();
       }}
       onKeyDown={(e) => {
-        if (n.opens && (e.key === "Enter" || e.key === " ")) {
+        if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onToggle(n.id);
+          onSelect?.(n.id);
+          if (n.opens) onToggle(n.id);
         }
       }}
     >

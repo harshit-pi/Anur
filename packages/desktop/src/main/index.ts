@@ -1,4 +1,10 @@
 import { execFile } from "node:child_process";
+import {
+  SYSTEM_DOC,
+  SYSTEM_DOC_ID,
+  systemLocated,
+  type SystemShape,
+} from "./threads/system-doc.ts";
 import { chmodSync, mkdtempSync, mkdirSync } from "node:fs";
 import { readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -463,12 +469,51 @@ function storeFor(base: string, dev: string): CommittedDecisions {
   );
 }
 
+/**
+ * Whether threads may run on this path: a doc in the folder, or the system
+ * map's virtual doc where the engineering plugin is on (29.1).
+ */
+function threadable(folder: { path: string; docs: readonly string[] }, rel: string): boolean {
+  return (
+    folder.docs.includes(rel) ||
+    (rel === SYSTEM_DOC && pluginsOn(folder.path).includes("engineering"))
+  );
+}
+
 /** The part IDs of the folder's last system read, or null before one (18.2). */
 function partsRead(folderPath: string): ReadonlySet<string> | null {
   const saved = lastParts.get(folderPath);
   return saved ?? null;
 }
 const lastParts = new Map<string, Set<string>>();
+/** Each folder's map as last read: where a box sits and what each line joins (29.8). */
+const systemShapes = new Map<string, SystemShape>();
+
+function shapeOf(
+  sections: readonly { id: string; path: string[]; text: string; parent: string | null }[],
+  edges: readonly { id: string; from: string; to: string; label: string }[],
+): SystemShape {
+  const parents = new Map(sections.map((x) => [x.id, x.parent] as const));
+  const byId = new Map(sections.map((x) => [x.id, x] as const));
+  const repoDir = new Map<string, string>();
+  const dirs = new Map<string, string>();
+  for (const x of sections) {
+    let at: string | null | undefined = x.id;
+    while (at && !at.startsWith("repo:")) at = parents.get(at);
+    const repo = at ? byId.get(at) : undefined;
+    if (repo?.path[0] !== undefined) repoDir.set(x.id, repo.path[0] === "." ? "" : repo.path[0]);
+    // A part's text names its build file, from the opened folder: "stack in api/bin/app.ts".
+    const file = x.id.startsWith("part:") ? / in (.+)$/.exec(x.text)?.[1] : undefined;
+    if (file) dirs.set(x.id, path.posix.dirname(file) === "." ? "" : path.posix.dirname(file));
+  }
+  return {
+    parents,
+    repoDir,
+    names: new Map(sections.map((x) => [x.id, x.path.at(-1) ?? x.id] as const)),
+    dirs,
+    edges: edges.map((e) => ({ id: e.id, from: e.from, to: e.to, label: e.label })),
+  };
+}
 
 type HookTroubleRow = { repo: string; why: string; fix: boolean };
 const hookChecks = new Map<string, { at: number; rows: HookTroubleRow[]; running: boolean }>();
@@ -533,6 +578,7 @@ function committedFor(folderPath: string, device: string) {
     keep: store.keep.bind(store),
     drop: store.drop.bind(store),
     revise: store.revise.bind(store),
+    keepFor: store.keepFor.bind(store),
     collected: async () => {
       const host = await pluginHostFor(folderPath);
       const homes = await Promise.all(
@@ -585,9 +631,12 @@ function threadsFor(folder: FolderState): Threads | null {
       hub,
       hookScript: hookEntry(here),
       node: process.execPath,
-      locate: (rel, text) => ids.locate(rel, text),
+      // The system map's virtual doc (29.1): its IDs are the boxes' own.
+      locate: (rel, text) =>
+        rel === SYSTEM_DOC ? Promise.resolve(systemLocated(text)) : ids.locate(rel, text),
       anurDirOf: (doc) => ids.anurDirOf(doc),
-      relOf: (doc) => ids.relOf(doc),
+      relOf: (doc) => (doc === SYSTEM_DOC_ID ? Promise.resolve(SYSTEM_DOC) : ids.relOf(doc)),
+      systemShape: () => systemShapes.get(folder.path) ?? null,
       anurDirs: () => ids.anurDirs(),
       committed: committedFor(folder.path, device),
       liveParts: () => partsRead(folder.path),
@@ -1127,6 +1176,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
         } else read = await fresh;
       } else read = await cached.read;
       const sections = read.sources.flatMap((s) => s.sections);
+      systemShapes.set(folder.path, shapeOf(sections, read.edges));
       lastParts.set(
         folder.path,
         new Set(sections.flatMap((x) => (x.id.startsWith("part:") ? [x.id.slice(5)] : []))),
@@ -1618,14 +1668,14 @@ const handlers: { [C in Channel]: Handler<C> } = {
   ) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
-    if (!folder || !t || !folder.docs.includes(doc))
+    if (!folder || !t || !threadable(folder, doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
     return t.start(doc, text, section, message, agent, options, purpose, branch, files ?? []);
   },
   "thread:send": async ({ thread, path: doc, text, message, files }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
-    if (!folder || !t || !folder.docs.includes(doc))
+    if (!folder || !t || !threadable(folder, doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
     if (files?.length) await t.attach(doc, text, thread, files);
     return t.send(thread, doc, text, message);
@@ -1951,7 +2001,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
   "thread:explore-option": async ({ thread, path: rel, text, option }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
-    if (!folder || !t || !folder.docs.includes(rel))
+    if (!folder || !t || !threadable(folder, rel))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
     return t.exploreOption(rel, text, thread, option);
   },
