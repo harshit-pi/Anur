@@ -48,6 +48,13 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 - Every line Anur writes in `.anur/` has its own ID, and every file that changes often has one writer.
 - A thread runs the person's own agent at full power. Anur blocks only where other threads live, and redirects doc edits to a working copy.
 
+## Experience
+
+- Never make the experience worse than what people already use: a doc editor like Google Docs or Quip, or an agent like Claude Code. Anur works behind the scenes; the page reads and types as people expect.
+- Not supporting something yet is fine. Removing or blocking something those tools already let people do is not.
+- Get the core working and strong before adding features. Prefer fixing what exists to adding a new button, mark or panel.
+- It should feel intuitive at first use. Mock a screen before building it, and drop anything a person would have to learn.
+
 ## Brand
 
 - Colours and type come from `brand/tokens.css`; don't add colours outside it.

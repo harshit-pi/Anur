@@ -384,13 +384,18 @@ async function decisionTool(
       };
     entry = { kind: "finding", claim: claim.slice(0, 600), source: str(args.source) };
   }
-  // How far it reaches (18.3): the repo by default, a doc's section with a doc, or everywhere.
-  const scope = DecisionScope.safeParse(args.scope).data;
+  // How far it reaches (18.3): the repo by default; with a doc, the doc unless the person's
+  // words keep it to a section; or everywhere.
+  const asked = DecisionScope.safeParse(args.scope).data;
+  const scope =
+    doc && entry.kind === "decision"
+      ? scopeFromWords(str(args.quote) ?? "", asked, undefined)
+      : asked;
   const id =
     scope === "everywhere"
       ? await store.keep(doc ? doc.rel : path.join(dir, ".anur-here"), "", ref, entry, "everywhere")
       : doc
-        ? await store.keep(doc.rel, doc.path.join(" › "), ref, entry, scope ?? "section")
+        ? await store.keep(doc.rel, doc.path.join(" › "), ref, entry, scope ?? "doc")
         : await store.keepFor(dir, ref, entry, about);
   if (!id)
     return {

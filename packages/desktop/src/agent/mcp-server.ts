@@ -102,7 +102,7 @@ const TOOLS = [
   {
     name: "anur_note_decision",
     description:
-      "Record a decision the person made that should outlast this task: a choice about the work, or a correction of what you did or proposed. Give their exact words from this thread as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it settles with an Undo for the person; otherwise they're asked to keep it. Kept decisions reach every new thread on this section. Don't record one-off instructions for this task, your own choices or assumptions, or which option or edit they picked: the doc holds that.",
+      "Record a decision the person made that should outlast this task: a choice about the work, or a correction of what you did or proposed. Give their exact words from this thread as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it settles with an Undo for the person; otherwise they're asked to keep it. Kept decisions reach every new thread on this doc. Don't record one-off instructions for this task, your own choices or assumptions, or which option or edit they picked: the doc holds that.",
     inputSchema: {
       type: "object",
       properties: {
@@ -146,7 +146,7 @@ const TOOLS = [
           type: "string",
           enum: ["section", "doc", "folder", "everywhere"],
           description:
-            'How far it reaches, never wider than the person said: "section" for this section\'s subject (the default for the subject); "doc" for this doc, "for this", or a rule about how you work (the default for work); "folder" only when they name the folder or repo, or say "all our docs"; "everywhere" only when they say "always", "everywhere" or "every project". Anur narrows a scope their words don\'t name.',
+            'How far it reaches, never wider than the person said: "doc" for this doc (the default); "section" only when they say "just this section"; "folder" only when they name the folder or repo, or say "all our docs"; "everywhere" only when they say "always", "everywhere" or "every project". Anur sets a scope their words don\'t name back to the doc.',
         },
       },
       required: ["quote", "decision", "confidence"],
@@ -535,7 +535,7 @@ const TERMINAL_TOOLS = [
           type: "string",
           enum: ["section", "doc", "folder", "everywhere"],
           description:
-            'How far it reaches, from the person\'s words: "folder" for this repo (the default without a doc), "doc" or "section" with a doc, or "everywhere" ("always", "in every project").',
+            'How far it reaches, from the person\'s words: "folder" for this repo (the default without a doc), "doc" (the default with a doc) or "section", or "everywhere" ("always", "in every project").',
         },
         about: {
           type: "array",

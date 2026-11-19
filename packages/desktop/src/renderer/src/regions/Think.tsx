@@ -1321,11 +1321,12 @@ export function Think({
             <span className="think-top-actions">
               <button
                 type="button"
-                className="think-more"
+                className={thread.closed ? "think-more" : "think-icon"}
+                aria-label={thread.closed ? "Reopen" : "Close thread"}
                 title={
                   thread.closed
                     ? "Show it with this section's threads again"
-                    : "Hide it from this section's threads; nothing is deleted"
+                    : "Close: hide it from this section's threads; nothing is deleted"
                 }
                 disabled={thread.busy}
                 onClick={() => {
@@ -1340,11 +1341,25 @@ export function Think({
                   if (closed) setOpen(null);
                 }}
               >
-                {thread.closed ? "Reopen" : "Close"}
+                {thread.closed ? (
+                  "Reopen"
+                ) : (
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                    <path
+                      d="M4 4l8 8M12 4l-8 8"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                )}
               </button>
               <button
                 type="button"
-                className="think-more danger"
+                className="think-icon danger"
+                aria-label="Delete thread"
+                title="Delete thread"
                 disabled={thread.busy}
                 onClick={() => {
                   if (
@@ -1368,7 +1383,16 @@ export function Think({
                   });
                 }}
               >
-                Delete
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5M7 7v4M9 7v4"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
               </button>
             </span>
           ) : null}
@@ -3168,59 +3192,14 @@ function FindingCard({
   );
 }
 
+/** How far a decision reaches (18.3): set from the person's words, never picked here. */
+type Scope = "section" | "doc" | "folder" | "everywhere";
+
 /**
  * A decision a person made, in their words. Settled by itself, it's one
  * quiet line with Undo; when the agent was unsure, or the words were a
  * question, it asks once: keep it for later work, or just this once.
  */
-/** How far a decision reaches (18.3), as a person picks it. */
-type Scope = "section" | "doc" | "folder" | "everywhere";
-const SCOPES: { value: Scope; label: string; title: string }[] = [
-  { value: "section", label: "This section", title: "This section and the ones under it" },
-  { value: "doc", label: "This doc", title: "Every section of this doc" },
-  {
-    value: "folder",
-    label: "This repo or folder",
-    title: "Every doc in this repo, or this folder when it isn't in one",
-  },
-  {
-    value: "everywhere",
-    label: "Everywhere",
-    title: "Every folder you open, and every Claude Code session",
-  },
-];
-
-/** Where a decision applies: changed on a kept one at once, or chosen before Keep. */
-function ScopePicker({
-  value,
-  disabled,
-  onChange,
-}: {
-  value: Scope;
-  disabled: boolean;
-  onChange: (s: Scope) => void;
-}) {
-  return (
-    <label className="think-scope quiet">
-      Applies to{" "}
-      <select
-        value={value}
-        disabled={disabled}
-        title={SCOPES.find((s) => s.value === value)?.title}
-        onChange={(e) => {
-          onChange(e.currentTarget.value as Scope);
-        }}
-      >
-        {SCOPES.map((s) => (
-          <option key={s.value} value={s.value} title={s.title}>
-            {s.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 function DecisionCard({
   item,
   writable,
@@ -3239,7 +3218,6 @@ function DecisionCard({
   writable: boolean;
   decide: (status: "kept" | "dropped", claim?: string | null, scope?: Scope) => void;
 }) {
-  const [scope, setScope] = useState<Scope>(item.scope ?? "section");
   const said = item.who ? `${item.who}: ` : "";
   const extra = [
     item.instead ? `instead of ${item.instead}` : null,
@@ -3261,16 +3239,6 @@ function DecisionCard({
           {extra.length ? <span className="quiet"> ({extra.join(", ")})</span> : null}
           {item.who ? <span className="quiet"> · {item.who}</span> : null}
         </span>
-        {item.status === "kept" ? (
-          <ScopePicker
-            value={scope}
-            disabled={!writable}
-            onChange={(next) => {
-              setScope(next);
-              decide("kept", null, next);
-            }}
-          />
-        ) : null}
         {writable && item.status === "kept" && item.auto ? (
           <button
             type="button"
@@ -3295,7 +3263,6 @@ function DecisionCard({
       ) : null}
       <div>{item.claim}</div>
       {extra.length ? <div className="quiet think-claim-note">{extra.join(" · ")}</div> : null}
-      <ScopePicker value={scope} disabled={!writable} onChange={setScope} />
       {writable ? (
         <div className="think-offer-actions">
           <button
@@ -3303,7 +3270,7 @@ function DecisionCard({
             className="think-button primary"
             title="New threads where it applies will follow it"
             onClick={() => {
-              decide("kept", null, scope);
+              decide("kept", null, item.scope);
             }}
           >
             Keep

@@ -35,9 +35,14 @@ describe("how far a decision reaches", () => {
     expect(scopeFromWords("Three retries.", "everywhere", undefined)).toBe("doc");
   });
 
-  it("holds a rule about the work for its doc, and a subject for its section, when unscoped", () => {
+  it("holds a decision for its doc unless the person names a section", () => {
     expect(scopeFromWords("No Linear for this.", undefined, "work")).toBe("doc");
-    expect(scopeFromWords("Three retries.", undefined, undefined)).toBe("section");
+    expect(scopeFromWords("Three retries.", undefined, undefined)).toBe("doc");
+    // A section only when the person keeps it there.
+    expect(scopeFromWords("Three retries.", "section", undefined)).toBe("doc");
+    expect(scopeFromWords("Three retries, just for this section.", "section", undefined)).toBe(
+      "section",
+    );
     expect(scopeFromWords("Three retries.", "doc", undefined)).toBe("doc");
   });
 });

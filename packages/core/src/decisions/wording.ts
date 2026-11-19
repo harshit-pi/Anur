@@ -34,17 +34,22 @@ const FOLDER_WORDS =
 const EVERYWHERE_WORDS =
   /\b(always|everywhere|every project|all projects|any project|in general|from now on,? everywhere)\b/i;
 
+/** Words that keep a decision to one section rather than its doc. */
+const SECTION_WORDS =
+  /\b(this section|just (this|here)|only (this|here)|only in this (part|section)|in this part)\b/i;
+
 type Scope = "section" | "doc" | "folder" | "everywhere";
 
 /**
- * How far a decision reaches: never wider than the person's words say. A
- * folder or everywhere the quote doesn't name comes down to the doc, and a
- * rule about the work, left unscoped, holds for the doc it was said in.
+ * How far a decision reaches: its doc, unless the person's words say
+ * otherwise. A folder or everywhere the quote doesn't name comes down to the
+ * doc, and so does a section it doesn't name: a product decision is about the
+ * doc, so the FAQ follows a choice made on the reward.
  */
 export function scopeFromWords(
   quote: string,
   scope: Scope | undefined,
-  concerns: "work" | "subject" | undefined,
+  _concerns: "work" | "subject" | undefined,
 ): Scope {
   if (scope === "everywhere")
     return EVERYWHERE_WORDS.test(quote)
@@ -53,6 +58,6 @@ export function scopeFromWords(
         ? "folder"
         : "doc";
   if (scope === "folder") return FOLDER_WORDS.test(quote) ? "folder" : "doc";
-  if (scope) return scope;
-  return concerns === "work" ? "doc" : "section";
+  if (scope === "section") return SECTION_WORDS.test(quote) ? "section" : "doc";
+  return "doc";
 }

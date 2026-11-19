@@ -381,7 +381,7 @@ export function buildBundle({
     lines.push(
       "## Decided on this section",
       "",
-      "People decided these. Follow them. When your work relies on one, say so in one line, such as \"Kept Sam's decision: three retries.\" If the task can't be done without going against one, don't: say which, and ask.",
+      "People decided these. Follow them. When your work relies on one, say so in one line, such as \"Kept Sam's decision: three retries.\" If the task can't be done without going against one, don't: say which, and ask. If they want it changed, tell them where: in Think, under Context and history, they can change it, narrow it or undo it, then ask again; or they can tell you to go ahead just this once. Never point them at files in .anur/.",
       "",
       ...subject.map(decidedLine),
       ...(allDecided.length > decided.length
