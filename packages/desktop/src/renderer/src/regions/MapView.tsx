@@ -993,13 +993,16 @@ export function MapView({
     // Never so small the names can't be read: a wide map opens on its title,
     // at the top, and Fit shows the whole of it.
     // Fit pressed shows all of it; opening, never so small the names can't be read.
-    const z = fitAll.current ? Math.max(FIT_MIN, all) : Math.max(READABLE, all);
+    const fitting = fitAll.current;
+    const z = fitting ? Math.max(FIT_MIN, all) : Math.max(READABLE, all);
     fitAll.current = false;
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
     const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
     const title = boxes.find((b) => b.side === 0);
     // In the mind map the title is in the middle, so the view centres on it.
-    if (z > all && title && layout === "mind")
+    // Fit centres on what it frames; opening centres on the title.
+    if (fitting) setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
+    else if (z > all && title && layout === "mind")
       setView({ x: r.width / 2 - title.x * z, y: r.height / 2 - title.y * z, z });
     else if (z > all && title)
       setView({ x: r.width / 2 - title.x * z, y: 60 - Math.min(...ys) * z, z });
