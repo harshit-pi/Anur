@@ -38,6 +38,7 @@ import {
   type EventName,
   type EventPayload,
   type FolderState,
+  type PluginStatusView,
   type MenuEntry,
 } from "../shared/ipc-contract.ts";
 import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts";
@@ -51,7 +52,13 @@ import { listDocs } from "./folder/list-docs.ts";
 import { ClaudeSkill, claudeHome } from "./claude-skill/install.ts";
 import { terminalHandler, writeTerminalFile } from "./claude-skill/terminal.ts";
 import { findClaude, loginPath } from "../agent/find-claude.ts";
-import { baseAsMarkdown, today, withCreatedProperties, type CreatedProperties } from "@anur/core";
+import {
+  baseAsMarkdown,
+  today,
+  withCreatedProperties,
+  type CreatedProperties,
+  type FeedPlugin,
+} from "@anur/core";
 import { readImage, saveImage } from "./folder/images.ts";
 import { MapInk } from "./folder/map-ink.ts";
 import { MapLayouts } from "./folder/map-layout.ts";
@@ -79,6 +86,7 @@ import { HomeVersions } from "./folder/home-versions.ts";
 import { sectionCommits } from "./folder/git-history.ts";
 import { suggestMatch } from "./folder/orphans.ts";
 import { notePerson, peopleIn, personName } from "./folder/people.ts";
+import { Plugins, inICloud } from "./plugins/plugins.ts";
 import { CommittedDecisions, personIn } from "./committed-decisions.ts";
 import { publicRepoFor } from "./public-repo.ts";
 import { writeShim } from "./pre-commit-shim.ts";
@@ -185,6 +193,10 @@ const windows = new Map<number, BrowserWindow>();
 let folders: FolderService;
 let journal: Journal;
 let appSettings: AppSettingsStore;
+/** Plugins from Anur's feed (Plugins and Git mock). */
+let plugins: Plugins;
+/** Each folder's plugins' last status, for a window that asks after they reported. */
+const pluginStatuses = new Map<string, Map<string, PluginStatusView>>();
 let device: string | null = null;
 /** The doc each window shows, so leaving it ends its typing session. */
 const shownDoc = new Map<number, string>();
@@ -901,6 +913,7 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
         .catch(() => undefined);
     }
     folderWatch.start(target.webContents.id, outcome.folder.path);
+    if (outcome.folder.mode === "writable") void plugins.startFolder(outcome.folder.path);
     target.setTitle(outcome.folder.name);
     target.setRepresentedFilename(outcome.folder.path);
     send(target, "folder:changed", outcome.folder);
@@ -1532,6 +1545,119 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const t = folder ? threadsFor(folder) : null;
     await t?.noteAutoUsed(rel, text, thread, section);
     return {};
+  },
+  "market:list": async ({ fresh }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const shown = (p: FeedPlugin) => ({
+      id: p.id,
+      name: p.name,
+      what: p.what,
+      version: p.version,
+      settings: p.settings.map((x) => ({
+        type: x.type,
+        key: x.key,
+        label: x.label,
+        ...(x.detail ? { detail: x.detail } : {}),
+        ...(x.type === "choice" ? { choices: x.choices } : {}),
+      })),
+      actions: p.actions,
+      openFrom: p.openFrom,
+    });
+    const installed = Object.values(await plugins.installed()).map(shown);
+    let feed: ReturnType<typeof shown>[] = [];
+    let error: string | null = null;
+    try {
+      feed = (await plugins.feed(fresh === true)).map(shown);
+    } catch (e) {
+      error = e instanceof Error ? e.message : "Anur couldn't reach its plugin feed.";
+    }
+    return {
+      feed,
+      installed,
+      on: folder ? await plugins.onIn(folder.path) : [],
+      autoUpdate: appSettings.get().autoUpdatePlugins,
+      error,
+      inICloud: folder ? inICloud(folder.path) : false,
+    };
+  },
+  "market:install": async ({ id }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    try {
+      await plugins.install(id, folder?.mode === "writable" ? folder.path : null);
+      return { error: null };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  },
+  "market:uninstall": async ({ id }) => {
+    try {
+      await plugins.uninstall(id);
+      return { error: null };
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) };
+    }
+  },
+  "market:set": async ({ id, on, autoUpdate }, { webContentsId }) => {
+    if (autoUpdate !== undefined) await appSettings.set({ autoUpdatePlugins: autoUpdate });
+    const folder = folders.current(webContentsId);
+    if (id && on !== undefined) {
+      if (!folder) return { error: "Open a folder first: plugins are switched on per folder." };
+      try {
+        await plugins.setOn(folder.path, id, on);
+      } catch (e) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    }
+    return { error: null };
+  },
+  "plugin:settings": async ({ id }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const p = (await plugins.installed())[id];
+    if (!folder || !p) return { values: {}, onMac: false };
+    return {
+      values: Object.fromEntries(
+        p.settings.map((x) => [x.key, plugins.value(folder.path, p, x.key)]),
+      ),
+      onMac: await plugins.keptOnMac(folder.path, id),
+    };
+  },
+  "plugin:keep-on-mac": async ({ id, onMac }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (folder?.mode === "writable") await plugins.setKeptOnMac(folder.path, id, onMac);
+    return {};
+  },
+  "plugin:set-setting": async ({ id, key, value }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (folder) await plugins.setValue(folder.path, id, key, value);
+    return {};
+  },
+  "plugin:action": async ({ id, action }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { message: "Open a folder first." };
+    return { message: await plugins.action(folder.path, id, action) };
+  },
+  "plugin:statuses": (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const now = folder ? pluginStatuses.get(folder.path) : undefined;
+    return { items: [...(now?.entries() ?? [])].map(([plugin, status]) => ({ plugin, status })) };
+  },
+  "open-from:list": async () => {
+    try {
+      return { sources: await plugins.openFromList(), error: null };
+    } catch (e) {
+      return { sources: [], error: e instanceof Error ? e.message : String(e) };
+    }
+  },
+  "open-from:open": async ({ plugin, id }, { webContentsId }) => {
+    const r = await plugins.openFrom(plugin, id);
+    if ("error" in r) return { error: r.error };
+    const win = windows.get(webContentsId);
+    if (!win) return { error: "The window closed." };
+    const outcome = await openFolderIn(win, r.folder);
+    const opened = outcome.kind === "opened" ? outcome.folder.path : null;
+    // The plugin it came from is on for it at once, so it syncs from the start.
+    if (opened) await plugins.setOn(opened, plugin, true).catch(() => undefined);
+    return { error: outcome.kind === "opened" ? null : "Anur couldn't open the cloned folder." };
   },
   "people:list": async (_, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -2295,6 +2421,12 @@ function createWindow(): BrowserWindow {
     senders.remove(id);
     if (folder && device && folder.mode === "writable")
       quitNotes.add(noteQuit(folder.path, device).catch(() => undefined));
+    // Its plugins' quit work, such as Git's push, once no other window shows the folder.
+    if (
+      folder &&
+      ![...windows.keys()].some((other) => folders.current(other)?.path === folder.path)
+    )
+      quitNotes.add(plugins.closeFolder(folder.path).catch(() => undefined));
     void folders.close(id);
   });
 
@@ -2555,7 +2687,49 @@ void app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => {
     callback(false);
   });
+  plugins = new Plugins({
+    dir: path.join(app.getPath("userData"), "plugins"),
+    openFolders: () =>
+      [...windows.keys()].flatMap((id) => {
+        const f = folders.current(id);
+        return f ? [f.path] : [];
+      }),
+    person: async (f) => ({
+      name: await personName(f, appSettings.get().name),
+      handle: await personIn(f).catch(() => null),
+    }),
+    path: loginPath,
+    status: (f, plugin, status) => {
+      const now = pluginStatuses.get(f) ?? new Map<string, PluginStatusView>();
+      if (status) now.set(plugin, status);
+      else now.delete(plugin);
+      pluginStatuses.set(f, now);
+      for (const [id, win] of windows)
+        if (folders.current(id)?.path === f) send(win, "plugin:status", { plugin, status });
+    },
+    notify: (f, text, tone) => {
+      for (const [id, win] of windows)
+        if (folders.current(id)?.path === f) send(win, "plugin:notify", { plugin: "", text, tone });
+    },
+    filesChanged: (f) => {
+      // A pull may bring a teammate's plugin settings too.
+      void plugins.reloadFolder(f);
+      for (const [id, win] of windows) {
+        if (folders.current(id)?.path !== f) continue;
+        void folders.refresh(id).then((now) => {
+          if (now) send(win, "folder:changed", now);
+        });
+      }
+    },
+    autoUpdate: () => appSettings.get().autoUpdatePlugins,
+  });
   registerIpc();
+  // Plugins update themselves, a little after launch and every six hours.
+  const updatePlugins = () => {
+    void plugins.update().catch(() => undefined);
+  };
+  setTimeout(updatePlugins, 30_000);
+  setInterval(updatePlugins, 6 * 60 * 60 * 1000);
   void startClaudeSkill();
   if (isRelease) await offerMoveToApplications();
   if (isRelease)

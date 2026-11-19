@@ -220,6 +220,7 @@ export { decisionNamed } from "./decisions/against.ts";
 export { DECISION_WORDS, decisionWordingProblem, scopeFromWords } from "./decisions/wording.ts";
 export * from "./plugins/api.ts";
 export { PluginHost, PluginRefused } from "./plugins/host.ts";
+export * from "./plugins/installable.ts";
 
 export { SYSTEM_DOC, systemDocText, systemIdsOf, systemIndexOf } from "./sections/system-doc.ts";
 export { FOLDER_DOC, folderDocText } from "./sections/folder-doc.ts";

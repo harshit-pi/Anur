@@ -1,0 +1,38 @@
+{
+  "id": "git",
+  "name": "Git",
+  "what": "Put this folder on GitHub and keep it in sync, so teammates see the same docs, threads and decisions.",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "kind": "standard",
+  "settings": [
+    {
+      "type": "choice",
+      "key": "syncMinutes",
+      "label": "Sync every",
+      "detail": "Pull, then save and push your changes",
+      "choices": [
+        { "value": "0", "label": "Off" },
+        { "value": "1", "label": "1 minute" },
+        { "value": "5", "label": "5 minutes" },
+        { "value": "15", "label": "15 minutes" },
+        { "value": "30", "label": "30 minutes" }
+      ],
+      "default": "5"
+    },
+    { "type": "toggle", "key": "pullOnOpen", "label": "Pull when Anur opens", "default": true },
+    { "type": "toggle", "key": "pushOnQuit", "label": "Push when Anur quits", "default": true },
+    {
+      "type": "text",
+      "key": "commitMessage",
+      "label": "Commit message",
+      "detail": "{{date}} and {{name}} are filled in",
+      "default": "Anur: {{date}} by {{name}}"
+    }
+  ],
+  "actions": [
+    { "id": "createRepo", "label": "Create private repo on GitHub" },
+    { "id": "syncNow", "label": "Sync now" }
+  ],
+  "openFrom": { "label": "Open from GitHub" }
+}

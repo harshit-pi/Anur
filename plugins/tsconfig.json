@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "lib": ["ES2023"],
+    "paths": { "@anur/core": ["../packages/core/src/index.ts"] },
+    "typeRoots": ["../node_modules/@types"]
+  },
+  "include": ["*/src", "*/test"]
+}
