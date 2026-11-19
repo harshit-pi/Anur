@@ -6335,15 +6335,25 @@ button.file-card-name:hover {
   margin-bottom: 8px;
 }
 
+/* One installed plugin is one block: its row, its links and its settings, then the divider. */
+.market-plugin {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.market-plugin > .settings-row {
+  padding-bottom: 6px;
+  border-bottom: none;
+}
+
 .market-plugin-links {
   display: flex;
   gap: 12px;
-  margin: -6px 0 6px;
   font-size: 12.5px;
 }
 
 .market-plugin-settings {
-  margin: 0 0 12px 12px;
+  margin: 10px 0 0 12px;
   padding-left: 12px;
   border-left: 2px solid var(--rule);
 }
