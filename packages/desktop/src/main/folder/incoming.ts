@@ -1,4 +1,5 @@
-import { lstat, readFile, writeFile } from "node:fs/promises";
+import type { Dirent } from "node:fs";
+import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -56,7 +57,7 @@ async function obsidianLink(url: URL, vaults: Vault[]): Promise<string | null> {
 export async function resolveIncoming(
   incoming: Incoming,
   vaults: Vault[],
-): Promise<{ paths: string[]; text: string | null }> {
+): Promise<{ paths: string[]; text: string | null; reason?: string }> {
   const paths: string[] = [];
   try {
     const copied = JSON.parse(incoming.obsidianFiles || "null") as { paths?: unknown } | null;
@@ -97,7 +98,48 @@ export async function resolveIncoming(
   }
   if (paths.length) return { paths: [...new Set(paths)], text: null };
   const text = incoming.text.trim() || incoming.uriList.trim();
+  // A folder dragged from Obsidian's file list says only its name.
+  if (!incoming.uriList && !incoming.obsidianFiles && isName(text)) {
+    const folders = await obsidianFoldersNamed(text, vaults);
+    if (folders.length === 1) return { paths: folders, text: null };
+    if (folders.length > 1)
+      return {
+        paths: [],
+        text: null,
+        reason: `Obsidian gives only a folder's name when it's dragged, and ${String(folders.length)} folders are called "${text}". Copy it in Obsidian (⌘C) and paste it here instead.`,
+      };
+  }
   return { paths: [], text: text || null };
+}
+
+/** One line that could be a file or folder name. */
+const isName = (text: string) =>
+  text !== "" && text.length < 256 && !/[\r\n/]/.test(text) && !text.startsWith(".");
+
+/** Folders with this name in Obsidian's vaults: the open vaults', else every vault's. */
+export async function obsidianFoldersNamed(name: string, vaults: Vault[]): Promise<string[]> {
+  for (const group of [vaults.filter((v) => v.open), vaults.filter((v) => !v.open)]) {
+    const found: string[] = [];
+    for (const v of group) await foldersNamed(v.path, name, found);
+    if (found.length) return found;
+  }
+  return [];
+}
+
+async function foldersNamed(root: string, name: string, out: string[], budget = { n: 20_000 }) {
+  let entries: Dirent[];
+  try {
+    entries = await readdir(root, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const e of entries) {
+    if (--budget.n < 0) return;
+    if (!e.isDirectory() || e.name.startsWith(".")) continue;
+    const full = path.join(root, e.name);
+    if (e.name === name) out.push(full);
+    await foldersNamed(full, name, out, budget);
+  }
 }
 
 /** A name for a doc made from text: its first line, without Markdown marks. */

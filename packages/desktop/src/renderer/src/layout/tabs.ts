@@ -133,7 +133,7 @@ function nearestShown(t: Tabs, at: number, skip: (tab: Tab) => boolean): string 
 }
 
 /** Close tabs; if the active one goes, the nearest tab on show to its right takes focus, else to its left. */
-function closeWhere(t: Tabs, gone: (tab: Tab) => boolean): Tabs {
+export function closeWhere(t: Tabs, gone: (tab: Tab) => boolean): Tabs {
   const at = t.tabs.findIndex((x) => x.id === t.active);
   const active = at >= 0 && gone(t.tabs[at] as Tab) ? nearestShown(t, at, gone) : t.active;
   return tidy({ ...t, tabs: t.tabs.filter((x) => !gone(x)), active });
