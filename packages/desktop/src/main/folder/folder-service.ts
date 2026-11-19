@@ -8,9 +8,11 @@ import { listOffloaded } from "../../vault/icloud.ts";
 import { acquireFolderLock, type LockHolder } from "./folder-lock.ts";
 import { docTimes, listDocs } from "./list-docs.ts";
 import { rememberFolder } from "./recent.ts";
+import { markVault, vaultAbove } from "./vaults.ts";
 
 export type OpenOutcome =
-  | { kind: "opened"; folder: FolderState }
+  /** `inside`: the folder asked for, from the vault it's part of, when that vault opened instead. */
+  | { kind: "opened"; folder: FolderState; inside?: string }
   | { kind: "elsewhere"; windowId: number }
   | { kind: "refused"; reason: string };
 
@@ -41,15 +43,18 @@ export class FolderService {
   }
 
   async open(windowId: number, chosen: string): Promise<OpenOutcome> {
-    let folder: string;
+    let asked: string;
     try {
-      folder = await realpath(chosen);
+      asked = await realpath(chosen);
     } catch {
       return {
         kind: "refused",
         reason: `${chosen} can't be opened: it doesn't exist or can't be read.`,
       };
     }
+    // A folder inside a vault opens that vault, so nothing is ever a smaller vault of its own.
+    const folder = (await vaultAbove(asked)) ?? asked;
+    const inside = folder === asked ? undefined : path.relative(folder, asked);
     const other = this.windowFor(folder);
     if (other !== null) return { kind: "elsewhere", windowId: other };
 
@@ -58,11 +63,13 @@ export class FolderService {
 
     try {
       const anur = await openAnurFolder(folder);
+      // Opened, it's a vault; one inside it stops being one, as this takes over.
+      if (anur.mode === "writable") await markVault(folder);
       const state = await this.describe(folder, anur.mode === "read-only" ? anur.reason : null);
       await this.close(windowId);
       this.byWindow.set(windowId, { state, release: lock.release });
       await rememberFolder(this.appSupportDir, folder);
-      return { kind: "opened", folder: state };
+      return inside ? { kind: "opened", folder: state, inside } : { kind: "opened", folder: state };
     } catch (e) {
       await lock.release();
       return { kind: "refused", reason: `${folder} couldn't be opened: ${(e as Error).message}` };

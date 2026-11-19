@@ -13,6 +13,9 @@ import type {
   PluginInstance,
 } from "../../../packages/core/src/index.ts";
 
+import { readdir, realpath } from "node:fs/promises";
+import path from "node:path";
+
 const pad = (n: number) => String(n).padStart(2, "0");
 const stamp = (d: Date) =>
   `${String(d.getFullYear())}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -40,6 +43,29 @@ const ago = (since: number) => {
   return m < 1 ? "just now" : m < 60 ? `${String(m)}m ago` : `${String(Math.round(m / 60))}h ago`;
 };
 
+/** Whether a folder holds a repo inside it (not its own), a few levels down. */
+export async function holdsRepos(folder: string, depth = 4): Promise<boolean> {
+  const walk = async (dir: string, left: number): Promise<boolean> => {
+    let entries;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return false;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name === "node_modules" || e.name === ".anur") continue;
+      if (e.name === ".git") {
+        if (dir !== folder) return true;
+        continue;
+      }
+      if (e.name.startsWith(".") || left <= 0) continue;
+      if (await walk(path.join(dir, e.name), left - 1)) return true;
+    }
+    return false;
+  };
+  return walk(folder, depth);
+}
+
 /** A remote's page on GitHub, from its URL. */
 export function webOf(remote: string): string | null {
   const m = /github\.com[:/](.+?)(\.git)?$/.exec(remote.trim());
@@ -48,6 +74,8 @@ export function webOf(remote: string): string | null {
 
 type Phase =
   | { kind: "local" }
+  | { kind: "holds" }
+  | { kind: "inside"; top: string }
   | { kind: "icloud" }
   | { kind: "syncing" }
   | { kind: "synced" }
@@ -68,8 +96,21 @@ export function activate(ctx: PluginContext): PluginInstance {
   let stopTimer: (() => void) | null = null;
   let phase: Phase = { kind: "local" };
   let origin: string | null = null;
+  /** The vault can't be a repo of its own: it holds repos, or sits inside one. */
+  const stuck = (): boolean => ["holds", "inside"].includes(phase.kind);
 
-  const isRepo = async () => (await git("rev-parse", "--is-inside-work-tree")).code === 0;
+  /** The repo this vault is part of, when that's a repo around it rather than its own. */
+  const outerRepo = async (): Promise<string | null> => {
+    const top = await git("rev-parse", "--show-toplevel");
+    if (top.code !== 0) return null;
+    const [a, b] = await Promise.all([
+      realpath(top.stdout.trim()).catch(() => top.stdout.trim()),
+      realpath(ctx.folder).catch(() => ctx.folder),
+    ]);
+    return a === b ? null : a;
+  };
+  const isRepo = async () =>
+    (await git("rev-parse", "--is-inside-work-tree")).code === 0 && !(await outerRepo());
   const remote = async () => {
     const r = await git("remote", "get-url", "origin");
     origin = r.code === 0 ? r.stdout.trim() : null;
@@ -117,6 +158,25 @@ export function activate(ctx: PluginContext): PluginInstance {
     if (phase.kind === "conflicts")
       lines.push({ label: "To resolve", value: phase.files.join(", ") });
     if (phase.kind === "failed") lines.push({ label: "Last try", value: phase.why });
+    if (phase.kind === "holds" || phase.kind === "inside") {
+      ctx.status({
+        text: phase.kind === "holds" ? "Holds repos" : "In another repo",
+        tone: "warn",
+        lines: [
+          phase.kind === "holds"
+            ? {
+                label: "Why",
+                value: "This vault holds repos, so Git won't make it one: each repo syncs itself.",
+              }
+            : {
+                label: "Why",
+                value: `This vault is inside the repo at ${phase.top}. Open that folder as the vault to sync it.`,
+              },
+        ],
+        actions: [],
+      });
+      return;
+    }
     const text =
       phase.kind === "icloud"
         ? "Paused in iCloud"
@@ -153,6 +213,16 @@ export function activate(ctx: PluginContext): PluginInstance {
   async function ensureRepo(): Promise<boolean> {
     if (await isRepo()) return true;
     if (blockedByICloud()) return false;
+    // Never a repo inside a repo, nor over repos (vaults): Git syncs exactly the vault.
+    const top = await outerRepo();
+    if (top) {
+      await report({ kind: "inside", top });
+      return false;
+    }
+    if (await holdsRepos(ctx.folder)) {
+      await report({ kind: "holds" });
+      return false;
+    }
     const init = await git("init", "-q", "-b", "main");
     if (init.code !== 0) return false;
     await git("add", "-A");
@@ -166,7 +236,12 @@ export function activate(ctx: PluginContext): PluginInstance {
       await report({ kind: "icloud" });
       return "This folder is in iCloud Drive, which can damage a git repo. Move it out, or choose Continue anyway.";
     }
-    if (!(await ensureRepo()) || !(await remote())) {
+    if (!(await ensureRepo())) {
+      if (phase.kind === "holds") return "This vault holds repos, so Git won't make it one.";
+      if (phase.kind === "inside") return `This vault is inside the repo at ${phase.top}.`;
+      return "git couldn't start a repo here.";
+    }
+    if (!(await remote())) {
       await report({ kind: "local" });
       return "This folder isn't on GitHub yet: Create private repo first.";
     }
@@ -240,12 +315,18 @@ export function activate(ctx: PluginContext): PluginInstance {
   async function createRepo(): Promise<string> {
     if (blockedByICloud())
       return "This folder is in iCloud Drive, which can damage a git repo. Move it out, or choose Continue anyway first.";
+    if (!(await ensureRepo()))
+      return phase.kind === "holds"
+        ? "This vault holds repos, so Git won't make it one: each repo syncs itself."
+        : phase.kind === "inside"
+          ? `This vault is inside the repo at ${phase.top}. Open that folder as the vault to sync it.`
+          : "git couldn't start a repo here.";
+    const already = await remote();
+    if (already) return `This folder is already on GitHub: ${webOf(already) ?? already}`;
+    // Only now GitHub: a vault that can't be a repo never sends anyone to sign in.
     const signedIn = await ctx.run("gh", ["auth", "status"]);
     if (signedIn.code !== 0)
       return "Sign in to GitHub first: in Terminal, run `gh auth login`, then try again.";
-    if (!(await ensureRepo())) return "git couldn't start a repo here.";
-    const already = await remote();
-    if (already) return `This folder is already on GitHub: ${webOf(already) ?? already}`;
     await git("add", "-A");
     await git(...who(), "commit", "-q", "--allow-empty", "-m", "Anur: first version");
     const name = repoName(ctx.folder);
@@ -276,7 +357,7 @@ export function activate(ctx: PluginContext): PluginInstance {
   void (async () => {
     if (blockedByICloud()) return report({ kind: "icloud" });
     // On for a folder that isn't a repo: it becomes one, on this Mac only.
-    await ensureRepo();
+    if (!(await ensureRepo()) && stuck()) return;
     const url = await remote();
     if (url && ctx.setting<boolean>("pullOnOpen")) await sync();
     else await report({ kind: url ? "synced" : "local" });
