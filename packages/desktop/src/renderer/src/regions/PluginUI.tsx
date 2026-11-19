@@ -250,7 +250,9 @@ function OpenFromList({ plugin, onClose }: { plugin: string; onClose: () => void
           </li>
         ))}
       </ul>
-      <p className="quiet open-from-where">Clones into ~/Anur, and turns sync on for it.</p>
+      <p className="quiet open-from-where">
+        You pick where it goes; sync is on for it from the start.
+      </p>
     </div>
   );
 }
