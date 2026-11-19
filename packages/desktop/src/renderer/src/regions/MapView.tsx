@@ -677,18 +677,22 @@ export function MapView({
                     x.path.at(-1)?.trim().toLowerCase() === name,
                 )
               : undefined;
-          if (f.heading && !f.several && (named || home)) {
-            const did = `d:${t.id}:${f.options[0]?.id ?? f.heading}`;
-            const at = home ? idOf(home.index) : tid;
+          // An action's thread is a capsule in the lane, not a label: its
+          // choices still need a line of their own, or they scatter round the section.
+          const inLane = Boolean(t.purpose && t.action);
+          if ((f.heading && !f.several && (named || home)) || inLane) {
+            const did = `d:${t.id}:${f.options[0]?.id ?? f.heading ?? t.id}`;
+            const at = home ? idOf(home.index) : inLane ? id : tid;
+            const label = home || !f.heading ? null : f.heading;
             // Under its own box, the line names the thread; elsewhere, the choice.
-            nodes.push({ id: did, parent: at, ...pill(home ? t.title : f.heading, 0) });
+            nodes.push({ id: did, parent: at, ...pill(label ?? t.title, 0) });
             info.set(did, {
               id: did,
               kind: "thread",
               index: home?.index ?? s.index,
               thread: t,
-              ...(home ? {} : { label: f.heading }),
-              heading: f.heading,
+              ...(label ? { label } : {}),
+              heading: f.heading ?? t.title,
               parent: at,
             });
             tid = did;
@@ -1657,6 +1661,8 @@ export function MapView({
                 e.stopPropagation();
               }}
               onClick={() => {
+                // Opening a fold is the person's click, not new work: the map holds still.
+                clickedAt.current = Date.now();
                 const key = b.id;
                 setUnfolded((u) => {
                   const next = new Set(u);
@@ -1975,6 +1981,14 @@ export function MapView({
                       window.dispatchEvent(
                         new CustomEvent("anur:open-thread", { detail: { thread: t } }),
                       );
+                      // A planned action: its card in the thread, as an option's is.
+                      const action = pl.item.proposal?.action;
+                      if (action)
+                        window.setTimeout(() => {
+                          window.dispatchEvent(
+                            new CustomEvent("anur:show-option", { detail: { action } }),
+                          );
+                        }, 250);
                     }}
                   >
                     <span className="map-pill-icon">{PILL_ICON[pl.item.state]}</span>

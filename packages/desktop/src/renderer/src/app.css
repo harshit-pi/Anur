@@ -5735,7 +5735,8 @@ button.file-card-name:hover {
 }
 
 /* An option picked on the map, marked in its thread for a moment. */
-.think-offer.flash {
+.think-offer.flash,
+.think-proposed-action.flash {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
   transition: outline-color 0.4s;

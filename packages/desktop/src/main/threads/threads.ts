@@ -2746,10 +2746,17 @@ export class Threads {
     const heading = str(a.section, 200);
     let sectionPath: string[] | null = null;
     if (heading) {
-      const at = await this.d.locate(live.rel, live.docText);
-      const tree = at ? Threads.spans(at) : null;
-      const found =
-        tree?.find((p) => p.path.at(-1)?.toLowerCase() === heading.toLowerCase()) ?? null;
+      // The agent's own copy first: a plan it wrote this turn names sections
+      // that are only a proposed edit until the person uses it.
+      const copy = await readFile(path.join(this.copiesOf(thread), live.rel), "utf8").catch(
+        () => null,
+      );
+      const find = async (text: string) => {
+        const at = await this.d.locate(live.rel, text);
+        const tree = at ? Threads.spans(at) : null;
+        return tree?.find((p) => p.path.at(-1)?.toLowerCase() === heading.toLowerCase()) ?? null;
+      };
+      const found = (copy !== null ? await find(copy) : null) ?? (await find(live.docText));
       if (!found)
         return {
           error: `No section is headed "${heading}". Name one that exists, or leave section out.`,
@@ -3868,6 +3875,10 @@ function stepName(title: string): string {
     return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
   }
   const m = /^mcp__(?:claude_ai_)?([A-Za-z0-9-]+?)__([A-Za-z0-9_-]+)/.exec(title);
-  const name = m ? `${(m[1] ?? "").replace(/_/g, " ")}: ${(m[2] ?? "").replace(/_/g, " ")}` : title;
-  return name.slice(0, 40);
+  if (m)
+    return `${(m[1] ?? "").replace(/_/g, " ")}: ${(m[2] ?? "").replace(/_/g, " ")}`.slice(0, 40);
+  // A tool's own title reads as a step ("Read Plan.md"); a shell command is
+  // just its text, which means nothing on a map pill.
+  if (/^[A-Z][a-z]+(?:\s|$)/.test(title)) return title.slice(0, 40);
+  return "Running a command";
 }

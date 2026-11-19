@@ -611,14 +611,18 @@ export function Think({
   // marked for a moment, so Use this is one click away.
   useEffect(() => {
     const onOption = (e: Event) => {
-      const { option } = (e as CustomEvent<{ option: string }>).detail;
+      const { option, action } = (e as CustomEvent<{ option?: string; action?: string }>).detail;
+      const selector = option
+        ? `.think-offer[data-option="${CSS.escape(option)}"]`
+        : action
+          ? `.think-proposed-action[data-action="${CSS.escape(action)}"]`
+          : null;
+      if (!selector) return;
       // The thread may still be drawing when the map asks: look again a few
       // times before giving up.
       let tries = 0;
       const find = () => {
-        const card = document.querySelector<HTMLElement>(
-          `.think-offer[data-option="${CSS.escape(option)}"]`,
-        );
+        const card = document.querySelector<HTMLElement>(selector);
         if (!card) {
           if (++tries < 12) window.setTimeout(find, 150);
           return;
@@ -768,10 +772,32 @@ export function Think({
     return anur.on("agent:status", noteStatus);
   }, [noteStatus]);
 
-  const onSection = useMemo(
-    () => (section ? threads.filter((t) => samePath(t.path, section.path)) : []),
-    [threads, section],
-  );
+  // A section's threads: those on it, and those whose choices or planned
+  // actions the map draws under it, so the panel never says "no threads"
+  // beside a box with choices hanging off it.
+  const onSection = useMemo(() => {
+    if (!section) return [];
+    const name = section.path.at(-1)?.trim().toLowerCase();
+    const under = (t: ThreadView) =>
+      t.path !== null &&
+      section.path.length > t.path.length &&
+      samePath(section.path.slice(0, t.path.length), t.path);
+    return threads.filter(
+      (t) =>
+        samePath(t.path, section.path) ||
+        t.items.some(
+          (it) =>
+            (it.kind === "proposed-action" &&
+              it.path !== null &&
+              samePath(it.path, section.path)) ||
+            (it.kind === "options" &&
+              !it.several &&
+              !t.explores &&
+              it.heading?.trim().toLowerCase() === name &&
+              under(t)),
+        ),
+    );
+  }, [threads, section]);
   const here = useMemo(() => onSection.filter((t) => !t.closed), [onSection]);
   const closedHere = useMemo(() => onSection.filter((t) => t.closed), [onSection]);
   /** Every other thread in the doc, in the order of their sections, the latest first within one. */
@@ -1702,6 +1728,7 @@ export function Think({
                 <div
                   key={i}
                   className="think-proposed-action"
+                  data-action={item.id}
                   role="group"
                   aria-label="Proposed action"
                 >
