@@ -73,7 +73,7 @@ import {
 import { TabBar } from "./regions/TabBar.tsx";
 import { SkillCard } from "./regions/SkillCard.tsx";
 import { EngineeringCard } from "./regions/EngineeringCard.tsx";
-import { UpdateCard } from "./regions/UpdateCard.tsx";
+import { UpdateCard, WhatsNewCard } from "./regions/UpdateCard.tsx";
 import { OpenerCard } from "./regions/OpenerCard.tsx";
 import { Tour } from "./regions/Tour.tsx";
 import { tourSteps } from "./layout/tour.ts";
@@ -1327,6 +1327,7 @@ export function App() {
         // One card at a time in the corner, the most pressing first.
         <div className="corner-cards">
           <UpdateCard />
+          <WhatsNewCard />
           <EngineeringCard />
           <OpenerCard />
           <SkillCard />

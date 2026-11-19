@@ -1,5 +1,6 @@
 import electronUpdater from "electron-updater";
 import type { UpdateState } from "../shared/ipc-contract.ts";
+import { notesFrom } from "../shared/release-notes.ts";
 
 /**
  * Updates for the released app. The feed is checked on launch and every few
@@ -30,8 +31,15 @@ export function reasonOf(e: unknown): string {
     : "the update server didn't answer";
 }
 
-export function startUpdates(auto: boolean, onState: (s: UpdateState) => void) {
+let onDownloaded: (version: string, notes: string[]) => void = () => undefined;
+
+export function startUpdates(
+  auto: boolean,
+  onState: (s: UpdateState) => void,
+  downloaded: (version: string, notes: string[]) => void = () => undefined,
+) {
   tell = onState;
+  onDownloaded = downloaded;
   autoUpdater.setFeedURL({ provider: "generic", url: FEED_URL });
   setAuto(auto);
   state = { kind: "idle", checkedAt: null };
@@ -45,15 +53,23 @@ export function startUpdates(auto: boolean, onState: (s: UpdateState) => void) {
     if (state.kind === "ready") return;
     set(
       autoUpdater.autoDownload
-        ? { kind: "downloading", version: info.version, percent: 0 }
-        : { kind: "available", version: info.version },
+        ? {
+            kind: "downloading",
+            version: info.version,
+            percent: 0,
+            notes: notesFrom(info.releaseNotes),
+          }
+        : { kind: "available", version: info.version, notes: notesFrom(info.releaseNotes) },
     );
   });
   autoUpdater.on("download-progress", (p) => {
     if (state.kind === "downloading") set({ ...state, percent: Math.round(p.percent) });
   });
   autoUpdater.on("update-downloaded", (info) => {
-    set({ kind: "ready", version: info.version });
+    const notes = notesFrom(info.releaseNotes);
+    set({ kind: "ready", version: info.version, notes });
+    // Shown once, after the restart into this version.
+    onDownloaded(info.version, notes);
   });
   autoUpdater.on("error", (e) => {
     // A failed background check stays quiet once a version is waiting.
@@ -91,7 +107,14 @@ export function restartToUpdate() {
 export function showForCheck(kind: string, onState: (s: UpdateState) => void) {
   tell = onState;
   const version = "9.9.9";
-  if (kind === "available") set({ kind: "available", version });
+  const notes = [
+    "Excalidraw drawings show on the page and open full size to edit.",
+    "Mermaid diagrams draw on the page.",
+    "Search finds docs by any words, in any order.",
+    "The map can open as a drawing, look hand-drawn, and take pen notes.",
+    "⌘[ and ⌘] go back and forward.",
+  ];
+  if (kind === "available") set({ kind: "available", version, notes });
   else if (kind === "downloading") set({ kind: "downloading", version, percent: 42 });
-  else if (kind === "ready") set({ kind: "ready", version });
+  else if (kind === "ready") set({ kind: "ready", version, notes });
 }

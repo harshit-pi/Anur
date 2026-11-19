@@ -40,6 +40,7 @@ export function UpdateCard() {
             ? `Updating to Anur ${version}`
             : `Anur ${version} is available`}
       </strong>
+      {state.notes?.length ? <WhatsNew notes={state.notes} /> : null}
       <p>
         {state.kind === "downloading"
           ? `Downloading… ${String(state.percent)}%. Anur restarts into it when it's done.`
@@ -68,6 +69,48 @@ export function UpdateCard() {
           </button>
         </div>
       ) : null}
+    </aside>
+  );
+}
+
+/** A version's notes, the first few; the rest are a count. */
+export function WhatsNew({ notes }: { notes: readonly string[] }) {
+  const shown = notes.slice(0, 4);
+  return (
+    <ul className="whats-new">
+      {shown.map((n) => (
+        <li key={n}>{n}</li>
+      ))}
+      {notes.length > shown.length ? (
+        <li className="quiet">and {String(notes.length - shown.length)} more</li>
+      ) : null}
+    </ul>
+  );
+}
+
+/** After an update: what's new in this version, once. */
+export function WhatsNewCard() {
+  const [seen, setSeen] = useState<{ version: string; notes: string[] } | null>(null);
+  useEffect(() => {
+    void anur.call("app:whats-new", { seen: false }).then(setSeen);
+  }, []);
+  if (!seen) return null;
+  return (
+    <aside className="skill-card" role="dialog" aria-label="What's new">
+      <strong>{`Updated to Anur ${seen.version}`}</strong>
+      <WhatsNew notes={seen.notes} />
+      <div className="skill-card-actions">
+        <button
+          type="button"
+          className="think-button primary"
+          onClick={() => {
+            setSeen(null);
+            void anur.call("app:whats-new", { seen: true });
+          }}
+        >
+          Got it
+        </button>
+      </div>
     </aside>
   );
 }

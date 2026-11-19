@@ -315,9 +315,22 @@ export const UpdateState = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("off") }),
   z.object({ kind: z.literal("idle"), checkedAt: z.string().nullable() }),
   z.object({ kind: z.literal("checking") }),
-  z.object({ kind: z.literal("available"), version: z.string() }),
-  z.object({ kind: z.literal("downloading"), version: z.string(), percent: z.number() }),
-  z.object({ kind: z.literal("ready"), version: z.string() }),
+  z.object({
+    kind: z.literal("available"),
+    version: z.string(),
+    notes: z.array(z.string()).optional(),
+  }),
+  z.object({
+    kind: z.literal("downloading"),
+    version: z.string(),
+    percent: z.number(),
+    notes: z.array(z.string()).optional(),
+  }),
+  z.object({
+    kind: z.literal("ready"),
+    version: z.string(),
+    notes: z.array(z.string()).optional(),
+  }),
   z.object({ kind: z.literal("error"), reason: z.string() }),
 ]);
 export type UpdateState = z.infer<typeof UpdateState>;
@@ -884,6 +897,11 @@ export const ipcContract = {
   "update:restart": {
     request: z.object({}).strict(),
     response: z.object({ ok: z.boolean() }),
+  },
+  /** What's new in the version just updated to, once: null when there's nothing to show. */
+  "app:whats-new": {
+    request: z.object({ seen: z.boolean() }).strict(),
+    response: z.object({ version: z.string(), notes: z.array(z.string()) }).nullable(),
   },
   /** Whether to show the first-run tour: not yet seen on this Mac. */
   "tour:status": {
