@@ -182,5 +182,14 @@ export {
   type Move,
 } from "./links/index.ts";
 export { SETTLE_AT, isQuestion, quotedFrom, settleRule, type Settle } from "./decisions/settle.ts";
+export {
+  CommittedLine,
+  DECISIONS_DIR,
+  currentEntries,
+  gitignoreKeepingDecisions,
+  loginFromEmail,
+  personKey,
+  type CommittedEntry,
+} from "./decisions/committed.ts";
 export * from "./plugins/api.ts";
 export { PluginHost, PluginRefused } from "./plugins/host.ts";

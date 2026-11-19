@@ -10,6 +10,7 @@ import { FORMAT_VERSION } from "../format.ts";
  *   .anur/
  *     format.json                  one format number
  *     .gitignore, .ignore          each "*"
+ *     decisions/<person>.jsonl     committed with the code (23.2)
  *     open/<device>.json
  *     settings/<device>.json
  *     snapshots/<hash>
@@ -40,6 +41,8 @@ const seg = segment;
 export const anurPaths = {
   format: () => "format.json",
   gitignore: () => ".gitignore",
+  /** A person's committed decisions and kept findings (23.2). */
+  decisions: (person: string) => `decisions/${seg("person", person)}.jsonl`,
   ignore: () => ".ignore",
   open: (device: string) => `open/${seg("device", device)}.json`,
   settings: (device: string) => `settings/${seg("device", device)}.json`,
