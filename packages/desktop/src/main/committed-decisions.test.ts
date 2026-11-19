@@ -153,3 +153,19 @@ describe("whose file, in an app opened from Finder (23.2)", () => {
     }
   });
 });
+
+describe("one's next session sees a decision at once (23.9)", () => {
+  it("writes the kept decision into CLAUDE.local.md, before any commit, and takes it out on Undo", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "anur-dec-"));
+    repo(dir);
+    const store = new CommittedDecisions(dir, "mac-a", () => Promise.resolve("sam"));
+    await store.keep("notes.md", "Checkout", "fnd-00000020", decision);
+    const local = path.join(dir, "CLAUDE.local.md");
+    expect(readFileSync(local, "utf8")).toContain(
+      "- Three retries. Instead of: infinite. (Sam, on notes.md › Checkout)",
+    );
+    expect(git(dir, "status", "--porcelain")).not.toContain("CLAUDE.local.md");
+    await store.drop("notes.md", "fnd-00000020");
+    expect(existsSync(local)).toBe(false);
+  });
+});
