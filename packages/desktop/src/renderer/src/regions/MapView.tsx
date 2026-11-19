@@ -340,6 +340,8 @@ export function MapView({
   const placeNew = useRef<{ path: string[]; at: Pos } | null>(null);
   /** The side each box under the title sits on in the mind map, so adding one moves no other. */
   const sidesKept = useRef(new Map<string, -1 | 1>());
+  /** When the person last clicked a box: the map doesn't then pan away to boxes that reappear. */
+  const clickedAt = useRef(0);
   /** Fit was pressed: the next framing shows the whole map, however small. */
   const fitAll = useRef(false);
   /** A section just made by Tab or Enter: named next, and removed if left untouched (mock 8). */
@@ -849,7 +851,10 @@ export function MapView({
     lastIds.current = new Set(boxes.map((b) => b.id));
     // Only a map already framed is framed again: while the first fit is
     // pending, clearing the view here would undo it in the same commit.
-    if (count > lastCount.current && view !== null) {
+    // Boxes that appear just after a click came from opening a thread, not from new work:
+    // the map holds still where the person clicked.
+    const justClicked = Date.now() - clickedAt.current < 2000;
+    if (count > lastCount.current && view !== null && !justClicked) {
       const el = host.current;
       const r = el?.getBoundingClientRect();
       // After a pan the map holds still, unless every new box landed out of
@@ -886,7 +891,8 @@ export function MapView({
   useEffect(() => {
     const el = host.current;
     const b = boxes.find((x) => x.id === selectedId);
-    if (!el || !b || drag) return;
+    // A click selects where the person is already looking: only keys and new sections pan.
+    if (!el || !b || drag || Date.now() - clickedAt.current < 2000) return;
     const r = el.getBoundingClientRect();
     setView((v) => {
       if (!v) return v;
@@ -1090,6 +1096,7 @@ export function MapView({
   // A box: click selects it, drag moves it anywhere.
   const onBoxDown = (e: React.PointerEvent, b: Box) => {
     if (e.button !== 0) return;
+    clickedAt.current = Date.now();
     e.stopPropagation();
     host.current?.focus();
     if (b.kind === "link") {
