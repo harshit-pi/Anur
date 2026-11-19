@@ -16,7 +16,9 @@ export const BLOCK_END = "<!-- anur:decisions:end -->";
 const flat = (s: string) => s.replace(/\s+/g, " ").replace(/-->/g, "-- >").trim();
 
 /** Where a scope points, as a person reads it. */
-function where(scope: string): string | null {
+function where(scope: string, on?: string | null): string | null {
+  // A part or a line, by the name the map gives it (23.1).
+  if (/^(part|edge):/.test(scope)) return on ?? null;
   const section = /^section:([^#]+)#(.*)$/s.exec(scope);
   if (section) return section[2] ? `${section[1] ?? ""} › ${section[2]}` : (section[1] ?? null);
   if (scope === "repo" || scope === "everywhere") return null;
@@ -71,7 +73,7 @@ export function renderBlock(
   if (decisions.length) {
     lines.push(HEADINGS[kind].intro, "");
     for (const d of decisions) {
-      const on = where(d.scope);
+      const on = where(d.scope, d.on);
       const tail = [
         d.instead ? `Instead of: ${flat(d.instead)}.` : null,
         d.until ? `Until: ${flat(d.until)}.` : null,
@@ -92,7 +94,7 @@ export function renderBlock(
       "",
     );
     for (const f of findings) {
-      const on = where(f.scope);
+      const on = where(f.scope, f.on);
       const meta = [
         f.source ? `source: ${flat(f.source)}` : null,
         on ? `on ${flat(on)}` : null,

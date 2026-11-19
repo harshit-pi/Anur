@@ -23,6 +23,14 @@ const Common = LineEnvelope.extend({
   scope: z.string().min(1).max(600),
   /** The thread finding it came from, so Undo there finds it here. */
   ref: z.string().max(64).nullable(),
+  /** A part's or line's name as the map shows it, for a "part:" or "edge:" scope (23.1). */
+  on: z.string().max(300).nullable().optional(),
+  /**
+   * The folder a part covers, from where the file lives ("" for all of it),
+   * so work on docs inside it carries the decision; absent for a line, or a
+   * part in another repo.
+   */
+  within: z.string().max(600).nullable().optional(),
 });
 
 /** A decision a person stands behind, in their exact words. */

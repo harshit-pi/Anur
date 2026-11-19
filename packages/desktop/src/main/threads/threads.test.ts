@@ -888,6 +888,17 @@ describe("where a committed decision reaches (23.4)", () => {
     expect(appliesTo("repo", "", "notes/plan.md", [])).toBe("the whole folder");
     expect(appliesTo("folder:docs", "api", "api/docs/x.md", [])).toBe("all of api/docs");
     expect(appliesTo("folder:docs", "api", "api/src/x.md", [])).toBeNull();
+    // A part's (23.1): docs inside the folder it covers, named by the part.
+    const part = { on: "@acme/api", within: "src" };
+    expect(appliesTo("part:p1", "api", "api/src/auth/x.md", [], part)).toBe("@acme/api");
+    expect(appliesTo("part:p1", "api", "api/docs/x.md", [], part)).toBeNull();
+    expect(appliesTo("part:p1", "api", "api/README.md", [], { on: "Api", within: "" })).toBe("Api");
+    expect(
+      appliesTo("part:p1", "api", "api/README.md", [], { on: "Api", within: null }),
+    ).toBeNull();
+    expect(appliesTo("edge:e1", "api", "api/README.md", [])).toBeNull();
+    expect(reachOf("part:p1", [])).toBeGreaterThan(reachOf("section:a.md#", []));
+    expect(reachOf("part:p1", [])).toBeLessThan(reachOf("repo", []));
     expect(appliesTo("part:abc", "api", "api/README.md", [])).toBeNull();
   });
 
