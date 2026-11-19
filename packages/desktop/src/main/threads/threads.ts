@@ -248,6 +248,8 @@ const agentOfLine = (l: KnownThreadLine): AgentId | null =>
 
 /** What a running thread holds in memory: the turn in flight and what it has said so far. */
 type Live = {
+  /** Where its agent runs: a repo for a repo's doc (18.15.6), else the opened folder. */
+  cwd?: string;
   threadId: string;
   doc: DocId;
   rel: string;
@@ -562,6 +564,18 @@ export class Threads {
   /** The `.anur/` a doc's threads, inputs and previews live in: its home's (18.15.2). */
   private anurOf(doc: DocId): string {
     return this.docDirs.get(doc) ?? this.d.anurDirOf?.(doc) ?? path.join(this.d.folder, ANUR_DIR);
+  }
+
+  /** The doc's home: the folder its `.anur/` is in, such as a repo (18.15.6). */
+  private homeDirOf(doc: DocId): string {
+    return path.dirname(this.anurOf(doc));
+  }
+
+  /** Where a thread's agent runs: the home it started in, else the opened folder. */
+  private cwdOf(lines: readonly KnownThreadLine[]): string {
+    const start = lines.find((l) => l.kind === "thread");
+    const at = start?.kind === "thread" ? start.cwd : undefined;
+    return at ? path.join(this.d.folder, at) : this.d.folder;
   }
 
   private async anurDirsAll(): Promise<string[]> {
@@ -952,7 +966,11 @@ export class Threads {
       return { kind: "refused", reason: "That section changed; try again." };
     // The spare session, if one is open on this agent: the thread takes its ID.
     const runOn = agent ?? this.d.defaultAgent();
-    const spare = this.spare?.agent === runOn ? this.spare : null;
+    // A repo's doc runs its agent in the repo; the spare runs in the opened folder.
+    const home = this.homeDirOf(at.doc);
+    const cwd =
+      home === this.d.folder ? null : path.relative(this.d.folder, home).split(path.sep).join("/");
+    const spare = this.spare?.agent === runOn && cwd === null ? this.spare : null;
     if (spare) this.spare = null;
     const thread = spare?.thread ?? newThreadId();
     const name = at.tree.sections[index]?.path.at(-1) ?? "this section";
@@ -970,6 +988,7 @@ export class Threads {
       branchedFrom: branch ? { thread: branch.thread, line: String(branch.upTo) } : null,
       ...(purpose ? { purpose } : {}),
       ...(explore ? { explores: { thread: explore.thread, option: explore.option } } : {}),
+      ...(cwd ? { cwd } : {}),
     });
     if (files.length) await this.addTo(at, rel, section, thread, files, []);
     // A branch's agent starts from the bundle and the chat up to the branch point, quoted (10.5).
@@ -1053,6 +1072,7 @@ export class Threads {
       watching: null,
       merged: new Map(),
     };
+    live.cwd = this.cwdOf(lines);
     live.rel = rel;
     live.docText = text;
     this.live.set(thread, live);
@@ -1153,7 +1173,7 @@ export class Threads {
         });
       this.fromHost.set(thread, next);
     });
-    const spec = await this.spec(thread, agent, resume);
+    const spec = await this.spec(thread, agent, resume, live.cwd);
     // Stopped while it was being prepared: nothing goes to the agent.
     if (live.turn !== turn) return { kind: "sent" };
     live.sent = true;
@@ -1182,7 +1202,10 @@ export class Threads {
       text,
       tree: at.tree,
       index,
-      docPath: rel,
+      // Named from where the agent runs, so a path it reads from there finds the doc.
+      docPath: live.cwd
+        ? path.relative(live.cwd, path.join(this.d.folder, rel)).split(path.sep).join("/")
+        : rel,
       workingCopy: rel === SYSTEM_DOC ? null : path.join(this.copiesOf(live.threadId), rel),
       // A third of the model's window (4.2): this thread's, else the agent's last, else the default.
       budget: budgetFor(live.context?.size ?? live.window ?? null),
@@ -1252,7 +1275,12 @@ export class Threads {
     return parts.join("\n\n");
   }
 
-  private async spec(thread: string, agent: AgentId, resume: string | null): Promise<SessionSpec> {
+  private async spec(
+    thread: string,
+    agent: AgentId,
+    resume: string | null,
+    cwd: string = this.d.folder,
+  ): Promise<SessionSpec> {
     const dir = path.join(this.d.appSupport, "agent", "hooks");
     await mkdir(dir, { recursive: true });
     const config = path.join(dir, `${thread}.json`);
@@ -1281,7 +1309,7 @@ export class Threads {
     return {
       thread,
       agent,
-      cwd: this.d.folder,
+      cwd,
       resume,
       // The token travels in the environment, never on the command line.
       mcp:
@@ -1740,7 +1768,7 @@ export class Threads {
           if (prompt) {
             this.d.hub.send({
               type: "prompt",
-              spec: await this.spec(thread, this.agentOf(thread, lines), null),
+              spec: await this.spec(thread, this.agentOf(thread, lines), null, this.cwdOf(lines)),
               turn: live.turn,
               text: prompt,
             });

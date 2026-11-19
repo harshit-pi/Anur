@@ -1080,6 +1080,28 @@ describe("threads in each doc's home (18.15.2)", () => {
     expect(decided).toEqual({ kind: "ok" });
   });
 
+  it("runs a repo doc's agent in that repo, naming the doc from there (18.15.6)", async () => {
+    const { folder, t, sent, reply } = await homes();
+    await writeFile(path.join(folder, "notes.md"), README);
+    const r = await t.start("api/README.md", README, setupSection, "Run where?");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const prompt = sent.filter((m) => m.type === "prompt").at(-1);
+    if (prompt?.type !== "prompt") throw new Error("nothing asked");
+    expect(prompt.spec.cwd).toBe(path.join(folder, "api"));
+    expect(prompt.text).toContain("of the doc `README.md`");
+    // A later turn runs there too: the thread remembers where it started.
+    await reply(r.thread.id, "There.");
+    const again = await t.send(r.thread.id, "api/README.md", README, "And now?");
+    expect(again.kind).toBe("sent");
+    const next = sent.filter((m) => m.type === "prompt").at(-1);
+    expect(next?.type === "prompt" ? next.spec.cwd : null).toBe(path.join(folder, "api"));
+    // A doc in the opened folder itself runs there, as before.
+    const own = await t.start("notes.md", README, setupSection, "Here?");
+    if (own.kind !== "started") throw new Error(own.reason);
+    const mine = sent.filter((m) => m.type === "prompt").at(-1);
+    expect(mine?.type === "prompt" ? mine.spec.cwd : null).toBe(folder);
+  });
+
   it("closes every home's .anur/ to the agent, the folder's and each repo's", async () => {
     const { folder, t, sent } = await homes();
     const r = await t.start("api/README.md", README, setupSection, "Go");
