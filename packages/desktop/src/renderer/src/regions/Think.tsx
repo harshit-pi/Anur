@@ -506,14 +506,13 @@ function Composer({
     <>
       {queue.length > 0 ? (
         <div className="think-queue" aria-label="Queued messages">
-          <span className="think-queue-label">Queued · sends when this reply is done</span>
           {queue.map((q, i) => (
             <div className="think-queued" key={q.id}>
               <span className="think-queued-actions">
                 <button
                   type="button"
                   aria-label="Edit"
-                  title="Edit: back into the box"
+                  title="Edit"
                   onClick={() => {
                     edit(i);
                   }}
@@ -523,7 +522,7 @@ function Composer({
                 <button
                   type="button"
                   aria-label="Remove"
-                  title="Remove from the queue"
+                  title="Remove"
                   onClick={() => {
                     onUnqueue?.(i);
                   }}
@@ -626,9 +625,7 @@ function Composer({
               type="button"
               className={`think-send${text.trim() && !disabled ? " ready" : ""}`}
               aria-label={canQueue ? "Queue" : sendLabel}
-              title={
-                canQueue ? "Queue: sends when this reply is done (Enter)" : `${sendLabel} (Enter)`
-              }
+              title={canQueue ? "Queue (Enter)" : `${sendLabel} (Enter)`}
               disabled={disabled || text.trim() === ""}
               onClick={send}
             >
@@ -648,6 +645,46 @@ function Composer({
       </div>
     </>
   );
+}
+
+/** Under a person's message, on hover, as in Claude chat: when, and Copy. */
+function MineActions({ text, at }: { text: string; at: string | null }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="think-mine-actions">
+      {at ? (
+        <time dateTime={at} title={new Date(at).toLocaleString()}>
+          {sentWhen(at)}
+        </time>
+      ) : null}
+      <button
+        type="button"
+        aria-label={copied ? "Copied" : "Copy"}
+        title={copied ? "Copied" : "Copy"}
+        onClick={() => {
+          void anur.call("clipboard:write", { text }).then(() => {
+            setCopied(true);
+            setTimeout(() => {
+              setCopied(false);
+            }, 1500);
+          });
+        }}
+      >
+        <Icon name={copied ? "copied" : "copy"} />
+      </button>
+    </div>
+  );
+}
+
+/** "Just now", "5 min ago", then the time today, else the date. */
+function sentWhen(at: string): string {
+  const d = new Date(at);
+  const ms = Date.now() - d.getTime();
+  if (ms < 60_000) return "Just now";
+  if (ms < 3_600_000) return `${String(Math.round(ms / 60_000))} min ago`;
+  if (d.toDateString() === new Date().toDateString())
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
 /** A message waiting for the agent to finish, with the files attached when it was queued. */
@@ -873,7 +910,16 @@ export function Think({
           ? {
               ...t,
               busy: true,
-              items: [...t.items, { kind: "message", turn: "", role: "person", text: message }],
+              items: [
+                ...t.items,
+                {
+                  kind: "message",
+                  turn: "",
+                  role: "person",
+                  text: message,
+                  at: new Date().toISOString(),
+                },
+              ],
             }
           : t,
       ),
@@ -1623,6 +1669,7 @@ export function Think({
                   <div key={i} className="think-message-wrap person">
                     {item.by ? <div className="think-by">{item.by}</div> : null}
                     <div className="think-message person">{item.text}</div>
+                    <MineActions text={item.text} at={item.at ?? null} />
                   </div>
                 )
               ) : item.kind === "tool" ? (
