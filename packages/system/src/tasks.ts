@@ -6,8 +6,8 @@
  * committed or not. Each changed file gets a category by rule, and the
  * report ranks them: data, auth, calls, UI, other.
  */
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFile, execFileSync } from "node:child_process";
+import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { findRepoDirs } from "./repos.ts";
@@ -59,6 +59,73 @@ const git = (cwd: string, args: string[], input?: string): string =>
     stdio: ["pipe", "pipe", "ignore"],
   });
 
+const gitAsync = (cwd: string, args: string[], input?: string): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const child = execFile(
+      "git",
+      args,
+      { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+      (err, stdout) => {
+        if (err) reject(new Error(err.message));
+        else resolve(stdout);
+      },
+    );
+    if (input !== undefined) child.stdin?.end(input);
+  });
+
+/** The same mark as `markRepo`, with git run asynchronously, so repos are marked at once. */
+async function markRepoAsync(folder: string, dir: string): Promise<RepoMark> {
+  const repo = path.join(folder, dir);
+  const map: Record<string, string> = {};
+  let head: string | null = null;
+  try {
+    const [h, status] = await Promise.all([
+      gitAsync(repo, ["rev-parse", "HEAD"]).then(
+        (x) => x.trim(),
+        () => null,
+      ),
+      gitAsync(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]),
+    ]);
+    head = h;
+    const dirty = parseStatus(status);
+    const live = dirty
+      .filter((d) => !d.deleted && kindAt(path.join(repo, d.path)) === "file")
+      .map((d) => d.path);
+    const hashes = live.length
+      ? (await gitAsync(repo, ["hash-object", "-w", "--stdin-paths"], live.join("\n") + "\n"))
+          .trim()
+          .split("\n")
+      : [];
+    live.forEach((p, i) => (map[p] = hashes[i] ?? ""));
+    for (const d of dirty)
+      if (d.deleted || kindAt(path.join(repo, d.path)) === "gone") map[d.path] = "-";
+  } catch {
+    // A repo git can't read right now: marked by HEAD alone, never failing the others.
+  }
+  return { dir, head, dirty: map };
+}
+
+/** Every repo in the folder marked at once (Claude Code waits for the prompt hook). */
+export async function markTaskAsync(
+  folder: string,
+  session: string,
+  prompt: string,
+): Promise<TaskMark> {
+  const dirs = findRepoDirs(folder);
+  const repos: RepoMark[] = new Array<RepoMark>(dirs.length);
+  let next = 0;
+  // Eight at a time: enough to hide git's start-up, few enough not to flood the Mac.
+  await Promise.all(
+    Array.from({ length: Math.min(8, dirs.length) }, async () => {
+      while (next < dirs.length) {
+        const i = next++;
+        repos[i] = await markRepoAsync(folder, dirs[i] ?? "");
+      }
+    }),
+  );
+  return { at: new Date().toISOString(), session, prompt: prompt.slice(0, 300), repos };
+}
+
 function headOf(repo: string): string | null {
   try {
     return git(repo, ["rev-parse", "HEAD"]).trim();
@@ -69,7 +136,10 @@ function headOf(repo: string): string | null {
 
 /** Dirty paths, relative to the repo, untracked files included. */
 function dirtyPaths(repo: string): { path: string; deleted: boolean }[] {
-  const out = git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]);
+  return parseStatus(git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"]));
+}
+
+function parseStatus(out: string): { path: string; deleted: boolean }[] {
   const items = out.split("\0").filter(Boolean);
   const res: { path: string; deleted: boolean }[] = [];
   for (let i = 0; i < items.length; i++) {
@@ -90,15 +160,35 @@ function blobs(repo: string, files: string[]): string[] {
     .split("\n");
 }
 
+/** What a dirty path is: only regular files are kept as blobs. */
+function kindAt(file: string): "file" | "link" | "other" | "gone" {
+  try {
+    const st = lstatSync(file);
+    return st.isFile() ? "file" : st.isSymbolicLink() ? "link" : "other";
+  } catch {
+    return "gone";
+  }
+}
+
 function markRepo(folder: string, dir: string): RepoMark {
   const repo = path.join(folder, dir);
-  const dirty = dirtyPaths(repo);
-  const live = dirty.filter((d) => !d.deleted).map((d) => d.path);
-  const hashes = blobs(repo, live);
   const map: Record<string, string> = {};
-  live.forEach((p, i) => (map[p] = hashes[i] ?? ""));
-  for (const d of dirty) if (d.deleted) map[d.path] = "-";
-  return { dir, head: headOf(repo), dirty: map };
+  let head: string | null = null;
+  try {
+    head = headOf(repo);
+    const dirty = dirtyPaths(repo);
+    // A symlink (such as a linked node_modules) or a nested folder isn't a file to hash.
+    const live = dirty
+      .filter((d) => !d.deleted && kindAt(path.join(repo, d.path)) === "file")
+      .map((d) => d.path);
+    const hashes = blobs(repo, live);
+    live.forEach((p, i) => (map[p] = hashes[i] ?? ""));
+    for (const d of dirty)
+      if (d.deleted || kindAt(path.join(repo, d.path)) === "gone") map[d.path] = "-";
+  } catch {
+    // A repo git can't read right now: marked by HEAD alone, never failing the others.
+  }
+  return { dir, head, dirty: map };
 }
 
 /** Records every repo in the folder at a prompt. */
@@ -210,17 +300,23 @@ export function reportSince(
   folder: string,
   mark: TaskMark,
   parts: readonly Part[],
+  /** Repos marked now, when the caller marked them already (in parallel). */
+  nowMarks?: readonly RepoMark[],
 ): TaskReport | null {
   const lines: ReportLine[] = [];
   const repos: TaskReport["repos"] = [];
   for (const dir of findRepoDirs(folder)) {
     const repo = path.join(folder, dir);
     const before = mark.repos.find((r) => r.dir === dir) ?? { dir, head: null, dirty: {} };
-    const now = markRepo(folder, dir);
+    const now = nowMarks?.find((m) => m.dir === dir) ?? markRepo(folder, dir);
     const changed = new Set<string>();
     if (before.head && now.head && before.head !== now.head)
-      for (const f of git(repo, ["diff", "--name-only", "-z", before.head, now.head]).split("\0"))
-        if (f) changed.add(f);
+      try {
+        for (const f of git(repo, ["diff", "--name-only", "-z", before.head, now.head]).split("\0"))
+          if (f) changed.add(f);
+      } catch {
+        // History rewritten past the mark: only the dirty files count.
+      }
     for (const f of Object.keys(now.dirty)) changed.add(f);
     for (const f of Object.keys(before.dirty)) changed.add(f); // Reverted to clean counts too.
     const rows: ReportLine[] = [];
@@ -243,9 +339,16 @@ export function reportSince(
         continue;
       }
       const from = wasBlob && wasBlob !== "-" ? wasBlob : null;
-      const first = firstChange(repo, from, nowBlob);
+      let first = { line: 1, text: "" };
+      let added = "";
+      try {
+        first = firstChange(repo, from, nowBlob);
+        added = addedText(repo, from, nowBlob);
+      } catch {
+        // A blob git can't diff: listed by its path alone.
+      }
       rows.push({
-        category: categoryOf(rel, addedText(repo, from, nowBlob)),
+        category: categoryOf(rel, added),
         repo: dir,
         part,
         file: rel,

@@ -10,7 +10,7 @@ import { CHOICES_ASK, choicesIn, lastReply } from "./choices.ts";
 import { scanSystem } from "./system.ts";
 import {
   folderFor,
-  markTask,
+  markTaskAsync,
   readMark,
   reportSince,
   saveMark,
@@ -35,19 +35,20 @@ export type HookResult =
   | { kind: "reported"; folder: string; report: TaskReport; file: string };
 
 /** Handles one hook call. `folder` overrides the folder found from `cwd`. */
-export function handleHook(input: HookInput, folderOverride?: string): HookResult {
+export async function handleHook(input: HookInput, folderOverride?: string): Promise<HookResult> {
   const cwd = input.cwd ?? process.cwd();
   const folder = folderOverride ?? folderFor(cwd);
   if (!folder) return { kind: "skipped", why: "no folder opened in Anur above " + cwd };
   const session = input.session_id ?? "session";
   if (input.hook_event_name === "UserPromptSubmit") {
-    saveMark(folder, markTask(folder, session, input.prompt ?? ""));
+    saveMark(folder, await markTaskAsync(folder, session, input.prompt ?? ""));
     return { kind: "marked", folder, context: CHOICES_ASK };
   }
   if (input.hook_event_name === "Stop") {
     const mark = readMark(folder, session);
     if (!mark) return { kind: "skipped", why: "no mark for this session" };
-    const report = reportSince(folder, mark, scanSystem(folder).parts);
+    const now = await markTaskAsync(folder, session, "");
+    const report = reportSince(folder, mark, scanSystem(folder).parts, now.repos);
     // The next task starts from here, whatever this one did.
     rmSync(path.join(tasksDir(folder), "marks", `${session.replace(/[^\w-]/g, "_")}.json`), {
       force: true,
