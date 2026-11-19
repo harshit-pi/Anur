@@ -41,6 +41,8 @@ export type MapLine = {
   count: number;
   grey: boolean;
   guessed: boolean;
+  /** The calls or links it stands for, for the card a click opens. */
+  edges: SystemEdge[];
 };
 
 export type SystemMap = { nodes: MapNode[]; lines: MapLine[]; width: number; height: number };
@@ -334,6 +336,7 @@ export function layoutMap(
         : plural(a.edges.length, a.edges.every((e) => e.kind === "http") ? "call" : "link"),
     grey: !!(greyOf.get(a.from) || greyOf.get(a.to)),
     guessed: a.edges.some((e) => e.how === "guessed" && e.state === "shown"),
+    edges: a.edges,
   }));
   const width = Math.max(0, ...nodes.map((n) => n.x + n.w));
   const height = Math.max(0, ...nodes.map((n) => n.y + n.h));

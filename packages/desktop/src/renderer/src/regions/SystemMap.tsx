@@ -29,20 +29,24 @@ export function SystemMap({
   scope,
   open,
   onToggle,
-  onLine,
+  onHide,
 }: {
   sections: SystemSection[];
   edges: SystemEdge[];
   scope: string | null;
   open: ReadonlySet<string>;
   onToggle: (id: string) => void;
-  onLine: (line: MapLine) => void;
+  /** Hide one call or link: a person's word that the code misled. */
+  onHide: (edge: string) => void;
 }) {
   const map = useMemo(
     () => layoutMap(sections, edges, scope, open),
     [sections, edges, scope, open],
   );
   const byId = new Map(map.nodes.map((n) => [n.id, n]));
+  // The card a click on a line opens: its calls, each with where it was found.
+  const [card, setCard] = useState<{ key: string; x: number; y: number } | null>(null);
+  const cardLine = card ? map.lines.find((l) => l.key === card.key) : undefined;
   // Fit the pane's width: scale down when the map is wider, never up.
   const wrap = useRef<HTMLDivElement>(null);
   const [paneW, setPaneW] = useState(0);
@@ -103,6 +107,9 @@ export function SystemMap({
       <div style={{ width: fullW * scale, height: fullH * scale }}>
         <div
           className="system-map-canvas"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setCard(null);
+          }}
           style={{
             width: fullW,
             height: fullH,
@@ -126,7 +133,7 @@ export function SystemMap({
                   key={l.key}
                   className={`map-line${l.grey ? " grey" : ""}${l.guessed ? " guessed" : ""}${b.kind === "stub" ? " stub" : ""}`}
                   onClick={() => {
-                    onLine(l);
+                    setCard({ key: l.key, x: p.mx, y: p.my });
                   }}
                 >
                   <path d={p.d} className="map-line-hit" />
@@ -143,8 +150,83 @@ export function SystemMap({
             })}
           </svg>
           {boxes.map(node)}
+          {card && cardLine ? (
+            <LineCard
+              line={cardLine}
+              from={byId.get(cardLine.from)?.name ?? ""}
+              to={byId.get(cardLine.to)?.name ?? ""}
+              // Kept inside the map: near the right or bottom edge it opens the other way.
+              x={Math.max(0, Math.min(card.x + 12, fullW - 392))}
+              y={Math.max(0, Math.min(card.y + 8, fullH - 330))}
+              onHide={onHide}
+              onClose={() => {
+                setCard(null);
+              }}
+            />
+          ) : null}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** A line's calls or links, beside it on the map: each with where the code shows it. */
+function LineCard({
+  line,
+  from,
+  to,
+  x,
+  y,
+  onHide,
+  onClose,
+}: {
+  line: MapLine;
+  from: string;
+  to: string;
+  x: number;
+  y: number;
+  onHide: (edge: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="line-card"
+      role="dialog"
+      aria-label={`${from} to ${to}`}
+      style={{ left: x, top: y }}
+      onClick={(e) => {
+        e.stopPropagation();
+      }}
+    >
+      <div className="line-card-head">
+        <span>
+          {from} <span className="edge-arrow">─▶</span> {to}
+        </span>
+        <button type="button" className="line-card-close" aria-label="Close" onClick={onClose}>
+          ×
+        </button>
+      </div>
+      <ul>
+        {line.edges.map((e) => (
+          <li key={e.id}>
+            <code className="edge-label">{e.label}</code>
+            {e.how === "guessed" ? <span className="edge-guessed"> guessed</span> : null}
+            <span className="edge-where">
+              {e.evidence}
+              {e.declared ? <span className="quiet"> → {e.declared}</span> : null}
+            </span>
+            <button
+              type="button"
+              className="line-card-hide"
+              onClick={() => {
+                onHide(e.id);
+              }}
+            >
+              Hide
+            </button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

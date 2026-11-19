@@ -2,14 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { anur } from "../bridge.ts";
 import { SystemMap } from "./SystemMap.tsx";
-import { taskTitle, type TaskReport } from "../layout/task-report.ts";
 import {
   boxesAt,
   trailTo,
-  edgeGroups,
   isInside,
-  lineKey,
-  endName,
   type SystemBox,
   type SystemEdge,
   type SystemSection,
@@ -72,40 +68,6 @@ type Shown =
  * accepts, renames or keeps the rule's name (20.6a); parts not yet seen say
  * so (20.6b).
  */
-/** Recent task reports atop the system (group 21); a click opens one in its tab. */
-function RecentTasks({ onOpen }: { onOpen: (id: string) => void }) {
-  const [reports, setReports] = useState<TaskReport[]>([]);
-  useEffect(() => {
-    const read = () => {
-      void anur.call("tasks:list", {}).then((r) => {
-        setReports(r.reports);
-      });
-    };
-    read();
-    return anur.on("tasks:changed", read);
-  }, []);
-  if (!reports.length) return null;
-  return (
-    <section className="system-tasks">
-      <h2>Recent tasks</h2>
-      {reports.slice(0, 5).map((r) => (
-        <button
-          key={r.id}
-          type="button"
-          className="system-task"
-          onClick={() => {
-            onOpen(r.id);
-          }}
-        >
-          <span>{taskTitle(r)}</span>
-          <span className="quiet">
-            {r.repos.map((x) => x.dir).join(", ")} · {String(r.lines.length)} files
-          </span>
-        </button>
-      ))}
-    </section>
-  );
-}
 
 /** Whether one section is inside another, for the Esc handler, set from the latest read. */
 let isInsideId: (id: string, outer: string) => boolean = () => false;
@@ -119,11 +81,9 @@ let lastRead: Extract<Shown, { kind: "ok" }> | null = null;
 export function SystemView({
   folder,
   onPlugins,
-  onOpenTask,
 }: {
   folder: string | null;
   onPlugins: () => void;
-  onOpenTask: (id: string) => void;
 }) {
   const [shown, setShown] = useState<Shown>(() =>
     lastRead && lastRead.folder === folder ? lastRead : { kind: "reading" },
@@ -133,7 +93,6 @@ export function SystemView({
   const [choosing, setChoosing] = useState(false);
   /** Frames opened on the map, and the line whose calls the list shows. */
   const [openFrames, setOpenFrames] = useState<ReadonlySet<string>>(new Set());
-  const [focus, setFocus] = useState<string | null>(null);
   // The right sidebar's slot for this tab, filled through a portal.
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   useEffect(() => {
@@ -293,6 +252,7 @@ export function SystemView({
           </button>
         </span>
       </nav>
+      {choosing ? <RepoChooser repos={shown.repos} /> : null}
       {review.asking ? (
         <Asking since={review.askingSince} />
       ) : review.failed ? (
@@ -392,176 +352,22 @@ export function SystemView({
               return next;
             });
           }}
-          onLine={(l) => {
-            setFocus(lineKey(all, l.from, l.to));
+          onHide={(edge) => {
+            void anur.call("system:edge", { edge, action: "hide" });
           }}
         />
       )}
-      {/* What's clicked on the map, recent tasks and the repos chosen: the right sidebar. */}
+      {/* The right sidebar is for the agent on the map, which comes next. */}
       {slot
         ? createPortal(
-            <div className="system-side">
-              {choosing ? <RepoChooser repos={shown.repos} /> : null}
-              <RecentTasks onOpen={onOpenTask} />
-              <EdgeList
-                sections={all}
-                edges={shown.edges}
-                misses={shown.misses.flatMap((m) => m.misses)}
-                within={level}
-                focus={focus}
-              />
-            </div>,
+            <p className="quiet system-side-note">
+              The agent on the map will work here: ask about a repo or part, and it answers with
+              what the code shows.
+            </p>,
             slot,
           )
         : null}
     </div>
-  );
-}
-
-/**
- * The lines between repos (group 22): edges found in code, grouped by the
- * repos they join, each with the call's file and line and where the route
- * is declared. A person confirms or hides each; hidden ones fold away.
- */
-function EdgeList({
-  sections,
-  edges,
-  misses,
-  within,
-  focus,
-}: {
-  sections: SystemSection[];
-  edges: SystemEdge[];
-  misses: string[];
-  within: string | null;
-  /** A group to show open, from a click on its line on the map. */
-  focus: string | null;
-}) {
-  const [open, setOpen] = useState<string | null>(focus);
-  useEffect(() => {
-    if (focus) setOpen(focus);
-  }, [focus]);
-  const [showHidden, setShowHidden] = useState(false);
-  const [menu, setMenu] = useState<string | null>(null);
-  // The list is for lines between repos; links inside a repo show on the map when it's open.
-  const between = edges.filter(
-    (e) => endName(sections, e.from).name !== endName(sections, e.to).name,
-  );
-  const live = between.filter((e) => e.state !== "hidden");
-  const hidden = between.filter((e) => e.state === "hidden");
-  const groups = edgeGroups(sections, showHidden ? between : live, within);
-  if (!edges.length) return null;
-  const act = (edge: string, action: "hide" | "show" | "confirm") => {
-    void anur.call("system:edge", { edge, action });
-  };
-  return (
-    <section className="system-edges">
-      <h2>Lines between repos</h2>
-      {groups.length === 0 ? <p className="quiet">None touch this level.</p> : null}
-      {groups.map((g) => (
-        <div key={g.key} className="edge-group">
-          <button
-            type="button"
-            className="edge-head"
-            aria-expanded={open === g.key}
-            onClick={() => {
-              setOpen((o) => (o === g.key ? null : g.key));
-            }}
-          >
-            <span>
-              {g.from} <span className="edge-arrow">─▶</span> {g.to}
-              {g.stub ? <span className="edge-stub"> {g.stub}</span> : null}
-            </span>
-            <span className="quiet">
-              {g.edges.length}{" "}
-              {g.edges.every((e) => e.kind === "http")
-                ? g.edges.length === 1
-                  ? "call"
-                  : "calls"
-                : g.edges.length === 1
-                  ? "link"
-                  : "links"}
-              {g.edges.some((e) => e.how === "guessed") ? ", some guessed" : ""}{" "}
-              {open === g.key ? "▴" : "▾"}
-            </span>
-          </button>
-          {open === g.key ? (
-            <ul className="edge-rows">
-              {g.edges.map((e) => (
-                <li key={e.id} className={`edge-row ${e.state}`}>
-                  <code className="edge-label">{e.label}</code>
-                  <span className="edge-where">
-                    {e.evidence}
-                    {e.declared ? <span className="quiet"> → {e.declared}</span> : null}
-                  </span>
-                  <span className="edge-acts">
-                    {e.how === "guessed" ? (
-                      <span
-                        className="edge-guessed"
-                        title={
-                          e.kind === "http"
-                            ? "Several repos declare this route; this is one of them."
-                            : "The name matches a resource another repo creates; no construct call joins them."
-                        }
-                      >
-                        guessed
-                      </span>
-                    ) : null}
-                    {e.state === "hidden" ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          act(e.id, "show");
-                        }}
-                      >
-                        Show
-                      </button>
-                    ) : menu === e.id ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMenu(null);
-                          act(e.id, "hide");
-                        }}
-                      >
-                        Hide this line
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="edge-more"
-                        aria-label="More for this line"
-                        onClick={() => {
-                          setMenu(e.id);
-                        }}
-                      >
-                        ⋯
-                      </button>
-                    )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ))}
-      <p className="system-misses quiet">
-        {hidden.length ? (
-          <button
-            type="button"
-            className="system-inline"
-            onClick={() => {
-              setShowHidden((h) => !h);
-            }}
-          >
-            {showHidden ? "Leave out hidden lines" : `${String(hidden.length)} hidden`}
-          </button>
-        ) : null}
-        {hidden.length ? " · " : null}
-        Found from HTTP calls and AWS resources in code; guessed lines are drawn faint. Misses{" "}
-        {misses.join("; ")}.
-      </p>
-    </section>
   );
 }
 

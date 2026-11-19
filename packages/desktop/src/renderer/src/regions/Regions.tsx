@@ -131,7 +131,13 @@ export function LeftSidebar({
   system = null,
 }: {
   /** The folder's system map, when Engineering is on: a row above the files. */
-  system?: { open: boolean; onOpen: () => void } | null;
+  system?: {
+    open: boolean;
+    onOpen: () => void;
+    /** Recent task reports, newest first, under the System row. */
+    tasks: { id: string; title: string; open: boolean }[];
+    onTask: (id: string) => void;
+  } | null;
   /** The open doc's outline, under the files; folds away. */
   outline?: ReactNode;
   folder: FolderState | null;
@@ -250,6 +256,24 @@ export function LeftSidebar({
           <SystemIcon />
           <span className="truncate">System</span>
         </button>
+      ) : null}
+      {system?.tasks.length ? (
+        <ul className="system-tasks-tree" aria-label="Recent tasks">
+          {system.tasks.map((t) => (
+            <li key={t.id}>
+              <button
+                type="button"
+                className={`tree-row task-row${t.open ? " selected" : ""}`}
+                title={`Task report: ${t.title}`}
+                onClick={() => {
+                  system.onTask(t.id);
+                }}
+              >
+                <span className="truncate">{t.title}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       ) : null}
       <FileTree
         root={folder.path}

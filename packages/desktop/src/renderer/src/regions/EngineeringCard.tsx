@@ -2,11 +2,12 @@ import { useEffect, useState } from "react";
 import { anur } from "../bridge.ts";
 
 /**
- * The Engineering offer: once, when a folder holding code repos opens with
- * Engineering off. Turn on switches it on for the folder and opens the
- * System tab; when task reports aren't in Claude Code yet, a second step
- * asks for that on its own, since it changes the person's Claude Code.
- * Not now is remembered for the folder, on this device.
+ * Engineering, on by itself: a folder that opens holding code repos, which
+ * the person hasn't answered for, gets Engineering switched on and a notice
+ * saying so, with Undo (ask only when unsure: code repos are a sure sign).
+ * The answer is remembered per folder on this device, so the notice shows
+ * once. Adding task reports to Claude Code stays the person's own click,
+ * since it changes their Claude Code for the whole Mac.
  */
 const ANSWERED = (folder: string) => `anur.engineeringOffer:${folder}`;
 
@@ -22,53 +23,53 @@ function remember(folder: string) {
   try {
     window.localStorage.setItem(ANSWERED(folder), "1");
   } catch {
-    // Storage off: the card may ask again next time.
+    // Storage off: the notice may show again next time.
   }
 }
 
-type Step = { kind: "offer"; folder: string; repos: number } | { kind: "hooks"; folder: string };
+type Shown = { folder: string; repos: number; hooks: boolean };
 
 export function EngineeringCard() {
-  const [step, setStep] = useState<Step | null>(null);
+  const [shown, setShown] = useState<Shown | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    let current = true;
+    // Read after each await: the folder may have changed meanwhile.
+    const alive = { now: true };
+    const isAlive = () => alive.now;
     const check = () => {
-      void anur.call("engineering:offer", {}).then((o) => {
-        if (!current) return;
+      void anur.call("engineering:offer", {}).then(async (o) => {
+        if (!isAlive()) return;
         if (!o.folder || o.on || o.repos === 0 || answered(o.folder)) {
-          setStep(null);
+          setShown(null);
           return;
         }
-        setStep({ kind: "offer", folder: o.folder, repos: o.repos });
+        const folder = o.folder;
+        remember(folder);
+        const r = await anur.call("plugins:set", { id: "engineering", on: true });
+        if (!isAlive() || r.kind === "refused") return;
+        window.dispatchEvent(new CustomEvent("anur:engineering-on"));
+        const hooks = await anur.call("taskHooks:status", {});
+        if (isAlive()) setShown({ folder, repos: o.repos, hooks: hooks.claude && !hooks.added });
       });
     };
     check();
     const off = anur.on("folder:changed", check);
     return () => {
-      current = false;
+      alive.now = false;
       off();
     };
   }, []);
-  if (!step) return null;
-  const done = () => {
-    remember(step.folder);
-    setStep(null);
+  if (!shown) return null;
+  const close = () => {
+    setShown(null);
   };
-  const turnOn = () => {
+  const undo = () => {
     setBusy(true);
-    setError(null);
-    void anur.call("plugins:set", { id: "engineering", on: true }).then(async (r) => {
+    void anur.call("plugins:set", { id: "engineering", on: false }).then(() => {
       setBusy(false);
-      if (r.kind === "refused") {
-        setError(r.reason);
-        return;
-      }
-      remember(step.folder);
-      window.dispatchEvent(new CustomEvent("anur:engineering-on"));
-      const hooks = await anur.call("taskHooks:status", {});
-      setStep(hooks.claude && !hooks.added ? { kind: "hooks", folder: step.folder } : null);
+      window.dispatchEvent(new CustomEvent("anur:engineering-off"));
+      setShown(null);
     });
   };
   const addHooks = () => {
@@ -77,45 +78,42 @@ export function EngineeringCard() {
     void anur.call("taskHooks:act", { action: "add" }).then((r) => {
       setBusy(false);
       if (r.kind === "failed") setError(r.reason);
-      else setStep(null);
+      else setShown((s) => (s ? { ...s, hooks: false } : s));
     });
   };
   return (
-    <aside className="skill-card" role="dialog" aria-label="Engineering for this folder">
-      {step.kind === "offer" ? (
-        <>
-          <strong>
-            This folder holds {step.repos} code {step.repos === 1 ? "repo" : "repos"}
-          </strong>
-          <p>
-            Turn on Engineering: the system across your repos, and a report after each Claude Code
-            task of what it changed.
-          </p>
-          <p className="quiet">Only for this folder. Switch it off in Settings, Plugins.</p>
-        </>
+    <aside className="skill-card" role="status" aria-label="Opened as a code system">
+      <strong>
+        Opened as a code system: {shown.repos} {shown.repos === 1 ? "repo" : "repos"} found
+      </strong>
+      <p>You see the System map, with the links between repos found in code.</p>
+      {shown.hooks ? (
+        <p className="quiet">
+          For a report after each Claude Code task, add Anur's plugin to Claude Code, once for this
+          Mac.
+        </p>
       ) : (
-        <>
-          <strong>Also add task reports to Claude Code?</strong>
-          <p>
-            Anur adds its plugin to your Claude Code once for this Mac. It acts only in folders
-            opened in Anur, and does nothing elsewhere.
-          </p>
-          <p className="quiet">Remove it in Settings, Plugins.</p>
-        </>
+        <p className="quiet">Switch it off any time in Settings, Plugins.</p>
       )}
       {error ? <p className="skill-card-error">{error}</p> : null}
       <div className="skill-card-actions">
-        <button
-          type="button"
-          className="think-button primary"
-          disabled={busy}
-          onClick={step.kind === "offer" ? turnOn : addHooks}
-        >
-          {busy ? "Working…" : step.kind === "offer" ? "Turn on" : "Add to Claude Code"}
+        {shown.hooks ? (
+          <button type="button" className="think-button primary" disabled={busy} onClick={addHooks}>
+            {busy ? "Working…" : "Add to Claude Code"}
+          </button>
+        ) : (
+          <button type="button" className="think-button primary" disabled={busy} onClick={close}>
+            OK
+          </button>
+        )}
+        <button type="button" className="think-more" disabled={busy} onClick={undo}>
+          Undo
         </button>
-        <button type="button" className="think-more" disabled={busy} onClick={done}>
-          Not now
-        </button>
+        {shown.hooks ? (
+          <button type="button" className="think-more" disabled={busy} onClick={close}>
+            Not now
+          </button>
+        ) : null}
       </div>
     </aside>
   );
