@@ -77,3 +77,44 @@ export function systemReach(
     ? { label: `all of ${dir || "the folder"}`, reach: 3 }
     : null;
 }
+
+/**
+ * How many decisions each box shows on the map (29.9), and how many of
+ * them disagree with another there: a part's or group's own and its lines',
+ * and for a repo its repo-wide ones too. Everywhere's aren't counted; they'd
+ * be on every box.
+ */
+export function boxCounts(
+  entries: readonly {
+    id: string;
+    kind: string;
+    scope: string;
+    home: string;
+    ref: string | null;
+    against?: string | null | undefined;
+    on?: string | null | undefined;
+  }[],
+  shape: SystemShape,
+  boxes: readonly string[],
+): Record<string, { decided: number; disagree: number }> {
+  const out: Record<string, { decided: number; disagree: number }> = {};
+  const decisions = entries.filter((e) => e.kind === "decision");
+  for (const box of boxes) {
+    const repo = box.startsWith("repo:");
+    const here = decisions.filter((e) => {
+      const r = systemReach(e, box, shape);
+      return !!r && (r.reach <= 2 || (repo && r.reach === 3));
+    });
+    if (!here.length) continue;
+    const named = new Set(here.flatMap((e) => [e.id, ...(e.ref ? [e.ref] : [])]));
+    const pairs = new Set<string>();
+    for (const e of here)
+      if (e.against && named.has(e.against)) {
+        pairs.add(e.id);
+        const other = here.find((x) => x.id === e.against || x.ref === e.against);
+        if (other) pairs.add(other.id);
+      }
+    out[box] = { decided: here.length, disagree: pairs.size };
+  }
+  return out;
+}

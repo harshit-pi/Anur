@@ -60,6 +60,7 @@ type Shown =
       edges: SystemEdge[];
       misses: { detector: string; misses: string[] }[];
       hooks: { repo: string; why: string; fix: boolean }[];
+      counts: Record<string, { decided: number; disagree: number }>;
       repos: { dir: string; included: boolean; copyOf: string | null }[];
     };
 
@@ -374,6 +375,7 @@ export function SystemView({
           }}
           selected={picked}
           onSelect={setPicked}
+          counts={shown.counts}
           onCollapseAll={() => {
             setOpenFrames(new Set());
           }}

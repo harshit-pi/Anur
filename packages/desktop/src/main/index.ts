@@ -4,6 +4,7 @@ import {
   SYSTEM_DOC_ID,
   systemLocated,
   type SystemShape,
+  boxCounts,
 } from "./threads/system-doc.ts";
 import { chmodSync, mkdtempSync, mkdirSync } from "node:fs";
 import { readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -1176,7 +1177,18 @@ const handlers: { [C in Channel]: Handler<C> } = {
         } else read = await fresh;
       } else read = await cached.read;
       const sections = read.sources.flatMap((s) => s.sections);
-      systemShapes.set(folder.path, shapeOf(sections, read.edges));
+      const shape = shapeOf(sections, read.edges);
+      systemShapes.set(folder.path, shape);
+      // What each box shows on the map: its decisions, and any that disagree (29.9).
+      const counts = device
+        ? boxCounts(
+            await committedFor(folder.path, device)
+              .collected()
+              .catch(() => []),
+            shape,
+            sections.map((x) => x.id),
+          )
+        : {};
       lastParts.set(
         folder.path,
         new Set(sections.flatMap((x) => (x.id.startsWith("part:") ? [x.id.slice(5)] : []))),
@@ -1204,6 +1216,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
         })),
         misses: read.misses,
         hooks: hookTroubles(folder.path),
+        counts,
         repos: (() => {
           const out = excludedRepos(folder.path);
           const copyOf = new Map(findRepos(folder.path).copies.map((c) => [c.dir, c.of]));
@@ -1747,12 +1760,15 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!t) return { kind: "refused", reason: "No folder is open." };
     if (add) return t.decideFinding(thread, { add });
     if (!id || !status) return { kind: "refused", reason: "Say which finding, and keep or drop." };
-    return t.decideFinding(thread, {
+    const done = await t.decideFinding(thread, {
       id,
       status,
       claim: claim ?? null,
       ...(scope ? { scope } : {}),
     });
+    // The map's counts follow a decision kept or dropped (29.9).
+    if (folder && pluginsOn(folder.path).includes("engineering")) systemNotify(folder.path);
+    return done;
   },
   "findings:list": async ({ path: rel, text, section }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -1783,7 +1799,10 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!t) return { kind: "refused", reason: "No folder is open." };
-    return t.reviseFinding(thread ? { thread } : { home: home ?? "" }, id, action);
+    const done = await t.reviseFinding(thread ? { thread } : { home: home ?? "" }, id, action);
+    // The map's counts follow, such as a disagreement settled (29.9).
+    if (folder && pluginsOn(folder.path).includes("engineering")) systemNotify(folder.path);
+    return done;
   },
   "links:of": async ({ path: rel, text, section }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
