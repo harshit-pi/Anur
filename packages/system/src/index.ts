@@ -52,3 +52,4 @@ export {
   type TaskReport,
 } from "./tasks.ts";
 export { CHOICES_ASK, choicesIn, lastReply } from "./choices.ts";
+export { markTaskAsync } from "./tasks.ts";

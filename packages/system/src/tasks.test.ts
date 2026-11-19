@@ -17,10 +17,10 @@ const touch = (folder: string, rel: string, line: string) => {
 };
 
 describe("the change report (group 21)", () => {
-  it("puts every changed file of the fixture in its category, data first, across both repos", () => {
+  it("puts every changed file of the fixture in its category, data first, across both repos", async () => {
     const dir = tmp();
     const want = twoRepoSystem(dir);
-    const start = handleHook({
+    const start = await handleHook({
       hook_event_name: "UserPromptSubmit",
       session_id: "s1",
       cwd: path.join(dir, "web"),
@@ -34,7 +34,7 @@ describe("the change report (group 21)", () => {
     touch(dir, "web/src/api.ts", "export const me = () => fetch(`${process.env.API_URL}/v1/me`);");
     touch(dir, "web/src/components/Users.tsx", "export const X = 1;");
     touch(dir, "web/src/styles.css", ".x { color: red; }");
-    const end = handleHook({
+    const end = await handleHook({
       hook_event_name: "Stop",
       session_id: "s1",
       cwd: path.join(dir, "web"),
@@ -57,18 +57,18 @@ describe("the change report (group 21)", () => {
     expect((JSON.parse(readFileSync(end.file, "utf8")) as { id: string }).id).toBe(end.report.id);
   });
 
-  it("writes no report when the task changed nothing, and ignores what was dirty before it", () => {
+  it("writes no report when the task changed nothing, and ignores what was dirty before it", async () => {
     const dir = tmp();
     twoRepoSystem(dir);
     touch(dir, "web/src/styles.css", ".before { color: blue; }"); // Dirty before the task.
-    handleHook({ hook_event_name: "UserPromptSubmit", session_id: "s2", cwd: dir });
-    expect(handleHook({ hook_event_name: "Stop", session_id: "s2", cwd: dir }).kind).toBe(
+    await handleHook({ hook_event_name: "UserPromptSubmit", session_id: "s2", cwd: dir });
+    expect((await handleHook({ hook_event_name: "Stop", session_id: "s2", cwd: dir })).kind).toBe(
       "nothing",
     );
     // A file already dirty that the task changes again counts from where it was.
-    handleHook({ hook_event_name: "UserPromptSubmit", session_id: "s2", cwd: dir });
+    await handleHook({ hook_event_name: "UserPromptSubmit", session_id: "s2", cwd: dir });
     touch(dir, "web/src/styles.css", ".during { color: green; }");
-    const end = handleHook({ hook_event_name: "Stop", session_id: "s2", cwd: dir });
+    const end = await handleHook({ hook_event_name: "Stop", session_id: "s2", cwd: dir });
     if (end.kind !== "reported") throw new Error(end.kind);
     expect(end.report.lines).toHaveLength(1);
     expect(end.report.lines[0]).toMatchObject({ file: "web/src/styles.css", line: 3 });
@@ -91,14 +91,14 @@ describe("the change report (group 21)", () => {
     expect(report?.repos[0]?.from).not.toBe(report?.repos[0]?.to);
   });
 
-  it("reports within 30 s of the task ending, on the four-repo fixture", () => {
+  it("reports within 30 s of the task ending, on the four-repo fixture", async () => {
     const dir = tmp();
     const want = generateSystem(dir, { repos: 4, packagesPerRepo: 3, filesPerPackage: 20 });
-    handleHook({ hook_event_name: "UserPromptSubmit", session_id: "s4", cwd: dir });
+    await handleHook({ hook_event_name: "UserPromptSubmit", session_id: "s4", cwd: dir });
     const repo = want.repos[2] ?? "";
     writeFileSync(path.join(dir, repo, "schema.sql"), "create table t (id int);\n");
     const t0 = Date.now();
-    const end = handleHook({ hook_event_name: "Stop", session_id: "s4", cwd: dir });
+    const end = await handleHook({ hook_event_name: "Stop", session_id: "s4", cwd: dir });
     expect(Date.now() - t0).toBeLessThan(30_000);
     expect(end.kind).toBe("reported");
   });
@@ -121,10 +121,14 @@ describe("the change report (group 21)", () => {
 });
 
 describe("Claude's choices at task end (21.3)", () => {
-  it("reads the Choices list from the transcript's last reply into the report", () => {
+  it("reads the Choices list from the transcript's last reply into the report", async () => {
     const dir = tmp();
     twoRepoSystem(dir);
-    const start = handleHook({ hook_event_name: "UserPromptSubmit", session_id: "s5", cwd: dir });
+    const start = await handleHook({
+      hook_event_name: "UserPromptSubmit",
+      session_id: "s5",
+      cwd: dir,
+    });
     expect(start.kind === "marked" && start.context).toContain("Choices:");
     touch(dir, "web/src/styles.css", ".x {}");
     const transcript = path.join(dir, "t.jsonl");
@@ -143,7 +147,7 @@ describe("Claude's choices at task end (21.3)", () => {
         ),
       ].join("\n"),
     );
-    const end = handleHook({
+    const end = await handleHook({
       hook_event_name: "Stop",
       session_id: "s5",
       cwd: dir,

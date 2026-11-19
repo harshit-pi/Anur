@@ -18,7 +18,7 @@ if (cmd === "hook") {
   try {
     const input = JSON.parse(readFileSync(0, "utf8") || "{}") as HookInput;
     const at = args.indexOf("--folder");
-    const result = handleHook(input, at >= 0 ? args[at + 1] : undefined);
+    const result = await handleHook(input, at >= 0 ? args[at + 1] : undefined);
     if (result.kind === "reported") process.stderr.write(`anur: task report ${result.file}\n`);
     // Claude Code reads this from stdout and adds it to the prompt's context.
     if (result.kind === "marked")
