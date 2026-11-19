@@ -745,38 +745,46 @@ body.resizing * {
   font-size: 13px;
 }
 
-/* Cloud folders: a notice, conflict banners, and a mark on docs still in iCloud. */
-.notice,
-.banner.conflict {
+/* The one bar above the page (NoticeBar): info or warn, actions and a close icon on the right. */
+.notice-bar {
   display: flex;
   align-items: center;
   gap: 12px;
+  margin: 12px 16px 0;
+  padding: 6px 6px 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
-.notice {
-  margin: 12px 16px 0;
-  padding: 10px 14px;
-  border-radius: 8px;
+.notice-bar.info {
   background: var(--blue-wash);
   color: var(--ink2);
-  font-size: 13px;
 }
 
-.notice > span,
-.banner.conflict > span {
-  flex: 1;
-}
-
-.banner.conflict {
+.notice-bar.warn {
   background: var(--amber-wash);
   color: var(--amber);
 }
 
-.banner.conflict .ask-button {
-  flex: none;
-  color: var(--ink);
+.notice-bar-text {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 0;
 }
 
+.notice-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.notice-bar .icon-button {
+  color: inherit;
+}
+
+/* A mark on docs still in iCloud. */
 .cloud-mark {
   margin-left: auto;
   flex: none;
@@ -1204,22 +1212,8 @@ body.resizing * {
 }
 
 /* Typing kept from a clash with an outside change (2.18). */
-.banner.kept {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
 .kept-text {
   color: var(--ink);
-}
-
-.kept-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin-left: auto;
-  flex-shrink: 0;
 }
 
 .toast-action:disabled {

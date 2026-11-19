@@ -16,6 +16,7 @@ import type { Response } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { TERMINAL_EDIT, UNSAVED_EDIT } from "../../../shared/agents.ts";
 import { CloseIcon } from "../regions/Icons.tsx";
+import { NoticeBar } from "../regions/NoticeBar.tsx";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { pagePath } from "./bases/base-widget.ts";
 import { pageUpdates } from "./page-updates.ts";
@@ -129,6 +130,8 @@ export function Page({
   const [kept, setKept] = useState<KeptEntry[]>([]);
   /** Merge conflicts in the text, for the banner (2.19). */
   const [conflicts, setConflicts] = useState(0);
+  /** The conflict count when its bar was closed; a different count shows it again. */
+  const [conflictsClosed, setConflictsClosed] = useState(0);
   const dropKept = (id: string) => {
     void anur.call("journal:drop", { id });
     setKept((k) => k.filter((e) => e.id !== id));
@@ -812,65 +815,66 @@ export function Page({
 
   return (
     <>
-      {conflicts > 0 ? (
-        <div className="banner conflict" role="status">
-          <span>
-            {conflicts === 1
-              ? "This doc has a merge conflict."
-              : `This doc has ${String(conflicts)} merge conflicts.`}{" "}
-            Keep one side or both at each one. Typing still saves; matching sections waits until
-            it's resolved.
-          </span>
-          <button type="button" className="toast-action" onClick={nextConflict}>
-            {conflicts === 1 ? "Show it" : "Next conflict"}
-          </button>
-        </div>
+      {conflicts > 0 && conflicts !== conflictsClosed ? (
+        <NoticeBar
+          tone="warn"
+          onClose={() => {
+            setConflictsClosed(conflicts);
+          }}
+          actions={
+            <button type="button" className="toast-action" onClick={nextConflict}>
+              {conflicts === 1 ? "Show it" : "Next conflict"}
+            </button>
+          }
+        >
+          {conflicts === 1
+            ? "This doc has a merge conflict."
+            : `This doc has ${String(conflicts)} merge conflicts.`}{" "}
+          Keep one side or both at each one. Typing still saves; matching sections waits until it's
+          resolved.
+        </NoticeBar>
       ) : null}
       {kept.map((entry) => {
         const canPutBack = view.current
           ? putBack(view.current.state.doc.toString(), entry) !== null
           : false;
         return (
-          <div key={entry.id} className="banner kept" role="status">
-            <span>
-              This doc changed outside Anur where you were typing; your version of those lines is
-              kept: <q className="kept-text">{firstWords(entry.mine)}</q>
-            </span>
-            <span className="kept-actions">
-              <button
-                type="button"
-                className="toast-action"
-                disabled={!canPutBack}
-                title={
-                  canPutBack ? undefined : "Those lines have changed again; copy yours instead"
-                }
-                onClick={() => {
-                  putKeptBack(entry);
-                }}
-              >
-                Put yours back
-              </button>
-              <button
-                type="button"
-                className="toast-action"
-                onClick={() => {
-                  void anur.call("clipboard:write", { text: entry.mine });
-                }}
-              >
-                Copy yours
-              </button>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Dismiss"
-                onClick={() => {
-                  dropKept(entry.id);
-                }}
-              >
-                <CloseIcon />
-              </button>
-            </span>
-          </div>
+          <NoticeBar
+            key={entry.id}
+            tone="warn"
+            onClose={() => {
+              dropKept(entry.id);
+            }}
+            actions={
+              <>
+                <button
+                  type="button"
+                  className="toast-action"
+                  disabled={!canPutBack}
+                  title={
+                    canPutBack ? undefined : "Those lines have changed again; copy yours instead"
+                  }
+                  onClick={() => {
+                    putKeptBack(entry);
+                  }}
+                >
+                  Put yours back
+                </button>
+                <button
+                  type="button"
+                  className="toast-action"
+                  onClick={() => {
+                    void anur.call("clipboard:write", { text: entry.mine });
+                  }}
+                >
+                  Copy yours
+                </button>
+              </>
+            }
+          >
+            This doc changed outside Anur where you were typing; your version of those lines is
+            kept: <q className="kept-text">{firstWords(entry.mine)}</q>
+          </NoticeBar>
         );
       })}
       <div ref={host} className="page" />

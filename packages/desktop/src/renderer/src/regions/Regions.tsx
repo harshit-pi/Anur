@@ -5,10 +5,10 @@ import type { AgentStatus, FolderState } from "../../../shared/ipc-contract.ts";
 import { AGENTS } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { FileTree, type FileActions, type MakeRequest } from "./FileTree.tsx";
+import { NoticeBar } from "./NoticeBar.tsx";
 import { SORTS, type Sort } from "../layout/file-tree.ts";
 import {
   BackIcon,
-  CloseIcon,
   CollapseAllIcon,
   FolderIcon,
   ForwardIcon,
@@ -386,42 +386,49 @@ function FolderNotices({
   // status bar's cloud item carries the same words.
   const [dismissed, setDismissed] = useState(() => noticeSeen(window.localStorage, folder.path));
   const summary = cloudSummary(folder);
+  // Closed for now; a conflict copy still there comes back with the next session.
+  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
   return (
     <>
       {summary && !dismissed ? (
-        <div className="notice" role="status">
-          <span>{summary.join(" ")}</span>
-          <button
-            type="button"
-            className="icon-button"
-            aria-label="Dismiss"
-            title="Dismiss; the status bar keeps this"
-            onClick={() => {
-              markNoticeSeen(window.localStorage, folder.path);
-              setDismissed(true);
-            }}
-          >
-            <CloseIcon />
-          </button>
-        </div>
+        <NoticeBar
+          tone="info"
+          closeTitle="Close; the status bar keeps this"
+          onClose={() => {
+            markNoticeSeen(window.localStorage, folder.path);
+            setDismissed(true);
+          }}
+        >
+          {summary.join(" ")}
+        </NoticeBar>
       ) : null}
-      {folder.conflicts.map((c) => (
-        <div key={c.copy} className="banner conflict" role="status">
-          <span className="truncate" title={c.copy}>
-            <strong>{c.copy}</strong> looks like{" "}
-            {c.service === "icloud" ? "an iCloud" : "a Dropbox"} conflict copy of {c.original}.
-          </span>
-          <button
-            type="button"
-            className="ask-button"
-            onClick={() => {
-              onMerge(c.copy);
+      {folder.conflicts
+        .filter((c) => !closed.has(c.copy))
+        .map((c) => (
+          <NoticeBar
+            key={c.copy}
+            tone="warn"
+            onClose={() => {
+              setClosed((s) => new Set([...s, c.copy]));
             }}
+            actions={
+              <button
+                type="button"
+                className="toast-action"
+                onClick={() => {
+                  onMerge(c.copy);
+                }}
+              >
+                Review merge
+              </button>
+            }
           >
-            Review merge
-          </button>
-        </div>
-      ))}
+            <span className="truncate" title={c.copy}>
+              <strong>{c.copy}</strong> looks like{" "}
+              {c.service === "icloud" ? "an iCloud" : "a Dropbox"} conflict copy of {c.original}.
+            </span>
+          </NoticeBar>
+        ))}
     </>
   );
 }
@@ -470,6 +477,15 @@ export function Center({
   onMerge: (copy: string) => void;
 }) {
   const [copied, setCopied] = useState<string | null>(null);
+  // Bars closed on this doc; another doc shows its own again.
+  const [closed, setClosed] = useState<{ doc: string | null; texts: ReadonlySet<string> }>({
+    doc: selected,
+    texts: new Set(),
+  });
+  const closedNow = closed.doc === selected ? closed.texts : new Set<string>();
+  const close = (text: string) => {
+    setClosed({ doc: selected, texts: new Set([...closedNow, text]) });
+  };
   // The system tab is no file: no path to walk, nothing to link or move.
   const isSystem = selected === SYSTEM_TAB || !!selected?.startsWith("anur:task/");
   return (
@@ -561,20 +577,35 @@ export function Center({
         </div>
       </div>
       {folder ? <FolderNotices key={folder.path} folder={folder} onMerge={onMerge} /> : null}
-      {folder?.mode === "read-only" ? (
-        <div className="banner" role="status">
+      {folder?.mode === "read-only" && !closedNow.has(`read-only:${folder.reason ?? ""}`) ? (
+        <NoticeBar
+          tone="info"
+          onClose={() => {
+            close(`read-only:${folder.reason ?? ""}`);
+          }}
+        >
           <strong>Read-only.</strong> {folder.reason}
-        </div>
+        </NoticeBar>
       ) : null}
-      {docNote ? (
-        <div className="banner" role="status">
+      {docNote && !closedNow.has(docNote) ? (
+        <NoticeBar
+          tone="info"
+          onClose={() => {
+            close(docNote);
+          }}
+        >
           {docNote}
-        </div>
+        </NoticeBar>
       ) : null}
-      {docError ? (
-        <div className="banner" role="alert">
+      {docError && !closedNow.has(docError) ? (
+        <NoticeBar
+          tone="warn"
+          onClose={() => {
+            close(docError);
+          }}
+        >
           {docError}
-        </div>
+        </NoticeBar>
       ) : null}
       {page ? (
         <>
