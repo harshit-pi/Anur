@@ -612,6 +612,9 @@ export function Center({
           {page}
           {map}
         </>
+      ) : map ? (
+        // The doc is away for a moment (moved, renamed, reopening): the map stays.
+        map
       ) : opening ? (
         <div className="page-empty">
           <p className="quiet">{opening}</p>

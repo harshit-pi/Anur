@@ -1,11 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { boxSize, mapLayout, resolveWiki, type MapNode, type SectionTree } from "@anur/core";
+import {
+  boxSize,
+  mapLayout,
+  mindLayout,
+  resolveWiki,
+  type MapNode,
+  type SectionTree,
+} from "@anur/core";
 import type { InkStroke, PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { useFeatures } from "../features.ts";
+import { boxStatus, type BoxStatus } from "../layout/box-status.ts";
 import { changeSummary } from "../layout/change-summary.ts";
 import { mapSkeleton } from "../layout/map-drawing.ts";
 import { BoxSketch, sketchLine } from "./MapSketch.tsx";
+import { useMapLayout } from "./map-layout-pref.ts";
 import { useMapStyle } from "./map-style-pref.ts";
 import "../editor/drawings/assets.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
@@ -40,6 +49,8 @@ type Box = {
   exploring?: boolean;
   /** The box's second line: what's under it, or what sets it apart. */
   sub?: string;
+  /** What happened on a section's box, from its threads (mock 9). */
+  status?: BoxStatus | null;
   /** A section's links to other docs (8.6), shown as one badge with a list. */
   outLinks?: { doc: string | null; heading: string | null; label: string }[];
   /** Where the layout put its parent's rail for its row, and the spine (group 7). */
@@ -169,6 +180,7 @@ export function MapView({
   const [makingDrawing, setMakingDrawing] = useState(false);
   /** Hand-drawn, as Excalidraw draws, when picked in Settings → Appearance. */
   const hand = useMapStyle() === "hand";
+  const [layout, setLayout] = useMapLayout();
   /** A line as the map style draws it: one path, or its sketched strokes. */
   const line = (key: string, className: string, d: string, marker?: string) =>
     hand
@@ -282,6 +294,22 @@ export function MapView({
     }, 450);
   };
   const placeNew = useRef<{ path: string[]; at: Pos } | null>(null);
+  /** A section just made by Tab or Enter: named next, and removed if left untouched (mock 8). */
+  const freshNew = useRef<{ path: string[]; armed: boolean } | null>(null);
+  const [freshIndex, setFreshIndex] = useState<number | null>(null);
+  /** Set by Escape so the blur that follows doesn't save the name. */
+  const cancelRename = useRef(false);
+  /** A short note on the map: what a key just did to the doc, or why it didn't. */
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!note) return;
+    const t = window.setTimeout(() => {
+      setNote(null);
+    }, 3200);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [note]);
   const textNow = useRef(docText);
   textNow.current = docText;
 
@@ -358,19 +386,16 @@ export function MapView({
     for (const s of tree.sections) {
       const id = idOf(s.index);
       const heading = s.path.at(-1) ?? "";
-      // The second line: what's under the box, its sections and threads.
-      const count = threads.filter((t) => samePath(t.path, s.path)).length;
-      const kids = tree.sections.filter((x) => x.parent === s.index).length;
-      const sub = [
-        kids > 0 ? plural(kids, "section") : "",
-        count > 0 ? plural(count, "thread") : "",
-      ]
-        .filter(Boolean)
-        .join(", ");
+      // The second line: the box's threads. Its sections show as its branches.
+      const here = threads.filter((t) => samePath(t.path, s.path));
+      const count = here.length;
+      const sub = count > 0 ? plural(count, "thread") : "";
+      // What happened here, on the box (mock 9).
+      const status = boxStatus(here, here.filter((t) => previewed.has(t.id)).length);
       nodes.push({
         id,
         parent: s.parent === null ? null : idOf(s.parent),
-        ...boxSize(heading, sub),
+        ...boxSize(heading, status ? `${status.label}   ${sub}` : sub),
       });
       info.set(id, {
         id,
@@ -378,10 +403,10 @@ export function MapView({
         index: s.index,
         heading,
         sub,
+        status,
         parent: s.parent === null ? null : idOf(s.parent),
       });
       // A branch hangs off the thread it came from (10.5), so each comes after its source.
-      const here = threads.filter((t) => samePath(t.path, s.path));
       const onSection = new Set(here.map((t) => t.id));
       const depth = (t: ThreadView, seen = new Set<string>()): number => {
         const from = t.branchedFrom?.thread;
@@ -516,7 +541,7 @@ export function MapView({
           n.id.startsWith("l:"),
       );
     nodes.sort((a, b) => near(b) - near(a));
-    const placed = mapLayout(
+    const placed = (layout === "mind" ? mindLayout : mapLayout)(
       [nodes.find((n) => n.parent === null), ...nodes.filter((n) => n.parent !== null)].filter(
         (n): n is MapNode => Boolean(n),
       ),
@@ -574,9 +599,21 @@ export function MapView({
       }
     }
     return out;
-  }, [tree, threads, previews, idOf, moved, drag, docs, docPath, features.links]);
+  }, [tree, threads, previews, idOf, moved, drag, docs, docPath, features.links, layout]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
+
+  // A section made by a key opens for its name once it's in the tree.
+  useEffect(() => {
+    const want = freshNew.current;
+    if (!want?.armed) return;
+    const at = tree.sections.find((x) => samePath(x.path, want.path));
+    if (!at) return;
+    want.armed = false;
+    onSelect(at.index);
+    setFreshIndex(at.index);
+    setRenaming(at.index);
+  }, [tree, onSelect]);
 
   // A section added by double-click is put where it was drawn, once it has an ID.
   useEffect(() => {
@@ -611,9 +648,13 @@ export function MapView({
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
     const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
     const title = boxes.find((b) => b.side === 0);
-    if (z > all && title) setView({ x: r.width / 2 - title.x * z, y: 60 - Math.min(...ys) * z, z });
+    // In the mind map the title is in the middle, so the view centres on it.
+    if (z > all && title && layout === "mind")
+      setView({ x: r.width / 2 - title.x * z, y: r.height / 2 - title.y * z, z });
+    else if (z > all && title)
+      setView({ x: r.width / 2 - title.x * z, y: 60 - Math.min(...ys) * z, z });
     else setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
-  }, [boxes, view, loaded, waited]);
+  }, [boxes, view, loaded, waited, layout]);
 
   // New boxes, such as a thread's options, come into view: the map fits
   // itself again, unless the person has panned or zoomed it.
@@ -898,16 +939,17 @@ export function MapView({
       moving = true;
       setDrag({ id: b.id, dx, dy });
     };
+    // On the window, as for a handle: a box drawn again mid-drag still hears the let-go.
     const up = (ev: PointerEvent) => {
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", up);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
       setDrag(null);
       if (!moving) return;
       const at = { x: b.x + (ev.clientX - start.x) / z, y: b.y + (ev.clientY - start.y) / z };
       moveBoxes({ [b.id]: at });
     };
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
   };
 
   // A box's handle: drag out an arrow. Dropped on a box, it links the two
@@ -933,10 +975,19 @@ export function MapView({
     const move = (ev: PointerEvent) => {
       setLinking({ from: b.id, to: toWorld(ev.clientX, ev.clientY), over: target(ev) });
     };
-    const up = (ev: PointerEvent) => {
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", up);
+    // On the window, not the handle: if the box is drawn again mid-drag (its
+    // section's ID settling after a save), a let-go is still heard.
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
       setLinking(null);
+    };
+    const cancel = () => {
+      stop();
+    };
+    const up = (ev: PointerEvent) => {
+      stop();
       const over = target(ev);
       if (over !== null) {
         onLink(b.index, over);
@@ -952,8 +1003,9 @@ export function MapView({
         parent: b.index,
       });
     };
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
   };
 
   // Arrow keys move between boxes; Shift+arrow nudges the selected one.
@@ -975,14 +1027,51 @@ export function MapView({
       redo();
       return;
     }
-    if ((e.key === "Enter" || e.key === "F2") && writable && tree.sections[selected]) {
+    // Tab: a section under the selected one; Enter: one beside it (mock 8).
+    // Each writes its heading into the doc, then opens for its name.
+    if ((e.key === "Tab" || e.key === "Enter") && !e.shiftKey && !mod && writable) {
+      const here = tree.sections[selected];
+      if (!here) return;
+      e.preventDefault();
+      const parent = e.key === "Enter" && here.parent !== null ? here.parent : selected;
+      if (e.key === "Tab" && here.level >= 6) {
+        setNote("Markdown headings stop at six levels, so this one can't have sections under it");
+        return;
+      }
+      const under = tree.sections[parent];
+      const taken = new Set(
+        tree.sections.filter((x) => x.parent === parent).map((x) => x.path.at(-1) ?? ""),
+      );
+      let name = "New section";
+      for (let n = 2; taken.has(name); n++) name = `New section ${String(n)}`;
+      const path = onAddSection(parent, name);
+      if (path) {
+        record({ kind: "doc" });
+        freshNew.current = { path, armed: true };
+        setNote(`Added a heading under ${under?.path.at(-1) ?? "the title"} in the doc`);
+      }
+      return;
+    }
+    if (e.key === "F2" && writable && tree.sections[selected]) {
       e.preventDefault();
       setRenaming(selected);
       return;
     }
+    // Backspace or Delete: only an empty section goes from the map; one with
+    // text or sections under it is removed on the page, where its words show.
     if ((e.key === "Backspace" || e.key === "Delete") && writable) {
       e.preventDefault();
-      const parent = tree.sections[selected]?.parent ?? 0;
+      const s = tree.sections[selected];
+      if (!s || selected === 0) return;
+      const empty =
+        !tree.sections.some((x) => x.parent === selected) && !bodyOf(docText(), s).trim();
+      if (!empty) {
+        setNote(
+          `${s.path.at(-1) ?? "This section"} has text or sections under it: remove it on the page`,
+        );
+        return;
+      }
+      const parent = s.parent ?? 0;
       if (onDelete(selected)) {
         record({ kind: "doc" });
         onSelect(parent);
@@ -1052,7 +1141,8 @@ export function MapView({
     if (path) {
       record({ kind: "doc" });
       placeNew.current = { path, at };
-    }
+    } else if ((tree.sections[parent]?.level ?? 0) >= 6)
+      setNote("Markdown headings stop at six levels, so that box can't have sections under it");
   };
 
   const v = view ?? { x: 0, y: 0, z: 1 };
@@ -1087,9 +1177,11 @@ export function MapView({
         pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" "),
       );
     }
-    // From the parent's bottom to the child's top, a soft S; sideways when a moved box sits beside.
-    const below = b.y - b.h / 2 >= p.y + p.h / 2;
-    const above = b.y + b.h / 2 <= p.y - p.h / 2;
+    // From the parent's bottom to the child's top, a soft S; sideways when a
+    // moved box sits beside, and always in the mind map, which branches sideways.
+    const beside = layout === "mind" && Math.abs(b.x - p.x) > (b.w + p.w) / 2;
+    const below = !beside && b.y - b.h / 2 >= p.y + p.h / 2;
+    const above = !beside && b.y + b.h / 2 <= p.y - p.h / 2;
     let d: string;
     if (below || above) {
       const dir = below ? 1 : -1;
@@ -1118,23 +1210,44 @@ export function MapView({
     );
     return { x: a.x + dx * Math.min(1, t), y: a.y + dy * Math.min(1, t) };
   };
-  const links = tree.sections.flatMap((s) =>
+  const inText = tree.sections.flatMap((s) =>
     [...new Set(s.linksOut.filter((l) => l.sameDoc).map((l) => l.targetIndex))]
       .filter((t): t is number => t !== null && t !== s.index)
-      .flatMap((t) => {
-        const a = byId.get(idOf(s.index));
-        const b = byId.get(idOf(t));
-        if (!a || !b) return [];
-        const p = edge(a, b);
-        const q = edge(b, a);
-        return line(
-          `${a.id}>${b.id}`,
-          "map-link",
-          `M ${String(p.x)} ${String(p.y)} L ${String(q.x)} ${String(q.y)}`,
-          "url(#map-arrow)",
-        );
-      }),
+      .map((t) => ({ s, t })),
   );
+  const links = inText.flatMap(({ s, t }) => {
+    const a = byId.get(idOf(s.index));
+    const b = byId.get(idOf(t));
+    if (!a || !b) return [];
+    const p = edge(a, b);
+    const q = edge(b, a);
+    // The words the link reads as in the text, when they aren't just the heading.
+    const heading = tree.sections[t]?.path.at(-1) ?? "";
+    const label = s.linksOut.find(
+      (l) => l.sameDoc && l.targetIndex === t && l.alias && l.alias !== heading,
+    )?.alias;
+    return [
+      ...line(
+        `${a.id}>${b.id}`,
+        "map-link",
+        `M ${String(p.x)} ${String(p.y)} L ${String(q.x)} ${String(q.y)}`,
+        "url(#map-arrow)",
+      ),
+      ...(label
+        ? [
+            <text
+              key={`${a.id}>${b.id}:label`}
+              className="map-link-label"
+              x={(p.x + q.x) / 2}
+              y={(p.y + q.y) / 2 - 6}
+              textAnchor="middle"
+            >
+              {label.length > 32 ? `${label.slice(0, 31)}…` : label}
+            </text>,
+          ]
+        : []),
+    ];
+  });
   const drawing = (() => {
     if (!linking) return null;
     const a = byId.get(linking.from);
@@ -1320,15 +1433,32 @@ export function MapView({
                     }}
                     onKeyDown={(e) => {
                       e.stopPropagation();
-                      if (e.key === "Enter") e.currentTarget.blur();
+                      // Enter or Tab names it.
+                      if (e.key === "Enter" || e.key === "Tab") {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      }
                       if (e.key === "Escape") {
+                        const fresh = freshIndex === b.index;
+                        cancelRename.current = true;
                         setRenaming(null);
+                        setFreshIndex(null);
+                        // A section a key just made, left as it was: taken back out.
+                        if (fresh && onDelete(b.index)) {
+                          record({ kind: "doc" });
+                          onSelect(tree.sections[b.index]?.parent ?? 0);
+                        }
                         host.current?.focus();
                       }
                     }}
                     onBlur={(e) => {
+                      if (cancelRename.current) {
+                        cancelRename.current = false;
+                        return;
+                      }
                       const name = e.currentTarget.value.trim();
                       setRenaming(null);
+                      setFreshIndex(null);
                       if (name && name !== b.heading) {
                         onRename(b.index, name);
                         record({ kind: "doc" });
@@ -1396,12 +1526,15 @@ export function MapView({
                   const offers = t.items.flatMap((x) => (x.kind === "options" ? [x] : []));
                   return (offers.length > 0 && !offers.some((x) => x.used)) || previewed.has(t.id);
                 });
-                return b.sub || needs ? (
+                return b.sub || needs || b.status ? (
                   <div
                     className="map-box-sub"
                     title={needs ? "A thread here needs you" : undefined}
                   >
                     {needs ? <span className="think-needs-dot" aria-label="Needs you" /> : null}
+                    {b.status ? (
+                      <span className={`map-status ${b.status.tone}`}>{b.status.label}</span>
+                    ) : null}
                     {b.sub}
                   </div>
                 ) : null;
@@ -1512,6 +1645,7 @@ export function MapView({
           { cls: "option", label: "Option", on: has("option") },
           { cls: "edit", label: "Proposed edit", on: has("edit") },
           { cls: "link", label: "Link", on: has("link") },
+          { cls: "link", label: "Link in the text", on: inText.length > 0 },
         ].filter((k) => k.on);
         if (!has("thread"))
           return (
@@ -1522,14 +1656,36 @@ export function MapView({
         return (
           <div className="map-legend" aria-hidden="true">
             {keys.map((k) => (
-              <span key={k.cls}>
+              <span key={k.label}>
                 <i className={`map-key ${k.cls}`} /> {k.label}
               </span>
             ))}
           </div>
         );
       })()}
+      {writable ? <KeyBar /> : null}
+      {note ? (
+        <div className="map-note" role="status">
+          {note}
+        </div>
+      ) : null}
       <div className="map-tools">
+        <button
+          type="button"
+          className="map-tool"
+          title={
+            layout === "mind"
+              ? "Lay the map out as a tree, read top down"
+              : "Lay the map out as a mind map, the title in the middle"
+          }
+          onClick={() => {
+            setLayout(layout === "mind" ? "tree" : "mind");
+            userMoved.current = false;
+            setView(null);
+          }}
+        >
+          {layout === "mind" ? "Mind map" : "Tree"}
+        </button>
         <button
           type="button"
           className="map-tool"
@@ -1555,7 +1711,7 @@ export function MapView({
         <button
           type="button"
           className="map-tool"
-          title="Make an Excalidraw drawing of this map, to sketch on (⌘-click: open it in a new tab)"
+          title="Sketch on a copy of this map in Excalidraw (⌘-click: open it in a new tab)"
           disabled={!writable || makingDrawing}
           onClick={(e) => {
             const newTab = e.metaKey || e.ctrlKey;
@@ -1565,7 +1721,7 @@ export function MapView({
             });
           }}
         >
-          Drawing
+          Sketch
         </button>
         <button
           type="button"
@@ -1595,6 +1751,46 @@ export function MapView({
         ) : null}
         <span className="map-zoom quiet">{Math.round(v.z * 100)}%</span>
       </div>
+    </div>
+  );
+}
+
+const KEYS: readonly (readonly [string, string])[] = [
+  ["Tab", "a section under it"],
+  ["Enter", "one beside it"],
+  ["F2", "rename"],
+  ["⌫", "remove an empty one"],
+  ["← → ↑ ↓", "move"],
+];
+const KEYS_SEEN = "anur.map.keysSeen";
+
+/**
+ * The map's keys (mock 8): in full the first time, then only the keys,
+ * spelled out again on hover.
+ */
+function KeyBar() {
+  const [first] = useState(() => {
+    try {
+      return !localStorage.getItem(KEYS_SEEN);
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(KEYS_SEEN, "1");
+    } catch {
+      // Without storage it shows in full each time; nothing breaks.
+    }
+  }, []);
+  return (
+    <div className={`map-keys${first ? " open" : ""}`} aria-label="Map keys">
+      {KEYS.map(([k, what]) => (
+        <span key={k}>
+          <kbd>{k}</kbd>
+          <span className="map-keys-what">{what}</span>
+        </span>
+      ))}
     </div>
   );
 }

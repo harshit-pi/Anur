@@ -1,3 +1,4 @@
+import { retitleMoved } from "./folder/title-follows.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
@@ -1533,6 +1534,8 @@ const handlers: { [C in Channel]: Handler<C> } = {
       webContentsId,
       moved.docs.map((d) => d.from),
     );
+    // A renamed doc's title follows its new name, where it matched the old one.
+    await retitleMoved(folder.path, moved.docs);
     await versionsFor(folder)?.moved(moved.docs.filter((d) => /\.md$/i.test(d.to)));
     const now = await folders.refresh(webContentsId);
     return now ? { ...moved, folder: now } : { kind: "failed", reason: "The folder closed." };

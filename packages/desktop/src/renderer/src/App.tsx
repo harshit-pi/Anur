@@ -142,6 +142,15 @@ export function App() {
     setOutlineAt(at);
     markedAt.current = Date.now();
   }, []);
+  // The cursor was placed against the sections as they were; once they're
+  // read again (a heading renamed or added), it's placed again, so the
+  // section in focus is never one a longer or shorter heading pushed it into.
+  useEffect(() => {
+    const v = view.current;
+    if (!sections || !v) return;
+    const at = sectionAt(sections, v.state.selection.main.head)?.index ?? 0;
+    setCursorSection((i) => (i === at ? i : at));
+  }, [sections]);
   const [source, setSource] = useState(false);
   const [save, setSave] = useState<{ status: SaveStatus | null; detail: string | null }>({
     status: null,
@@ -830,7 +839,9 @@ export function App() {
       const p = sections?.sections[parent];
       if (!v || !p) return null;
       const sibling = p.children.map((c) => sections.sections[c]).find(Boolean);
-      const level = Math.min(6, sibling ? sibling.level : Math.max(2, p.level + 1));
+      const level = sibling ? sibling.level : Math.max(2, p.level + 1);
+      // Markdown has six heading levels: under a sixth, a heading would land beside it.
+      if (level > 6) return null;
       const at = p.subtreeRange.to;
       const before = v.state.doc.sliceString(Math.max(0, at - 2), at);
       const lead =
@@ -1313,8 +1324,9 @@ export function App() {
               writable={folder?.mode === "writable" && doc.mode === "editable"}
               docs={folder?.docs ?? []}
             />
-          ) : centerView === "map" ? (
-            // While a doc's sections are read, an empty map, so the page never shows through.
+          ) : centerView === "map" && selected && /\.md$/i.test(selected) ? (
+            // While a doc's sections are read, or the doc is moved or renamed, an
+            // empty map, so neither the page nor "Pick a doc" shows through.
             <div className="map" aria-hidden="true" />
           ) : null
         }

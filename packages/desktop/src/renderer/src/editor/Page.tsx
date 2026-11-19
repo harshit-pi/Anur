@@ -533,12 +533,19 @@ export function Page({
             if (u.selectionSet || u.docChanged) onCursorRef.current?.(u.state.selection.main.head);
             if (!u.docChanged) return;
             saver?.changed();
-            // The outline follows the text, a moment after typing.
+            // The outline follows the text, a moment after typing; at once
+            // after an edit from the map, which waits to show the new box.
+            const fromMap = u.transactions.some(
+              (t) => t.isUserEvent("input.map") || t.isUserEvent("delete.map"),
+            );
             clearTimeout(sectionsTimer);
-            sectionsTimer = setTimeout(() => {
-              if (markdownDoc) onSections(sectionsOf(editor.state, fileName));
-              setConflicts(conflictsIn(editor.state.doc.toString()).length);
-            }, 300);
+            sectionsTimer = setTimeout(
+              () => {
+                if (markdownDoc) onSections(sectionsOf(editor.state, fileName));
+                setConflicts(conflictsIn(editor.state.doc.toString()).length);
+              },
+              fromMap ? 0 : 300,
+            );
           }),
         ],
       }),
