@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Arch, Platform, build } from "electron-builder";
+import { feedBlock, gather } from "../src/shared/release-notes.ts";
 
 const IDENTITY = "Harshit Khandelwal (D3YY6RV4C3)";
 const NOTARY_PROFILE = "anur-notary";
@@ -52,6 +53,27 @@ if (head !== read("git", ["rev-parse", "origin/main"]))
 if (read("git", ["tag", "--list", tag])) stop(`${tag} already exists.`);
 const tags = read("git", ["tag", "--list", "v*", "--sort=-v:refname"]).split("\n").filter(Boolean);
 const previous = tags[0] ?? null;
+
+// What's new: each merged PR's "Release note", gathered before the long part
+// so a missing one shows now. The PRs are those squash-merged since the last tag.
+const prNumbers = [
+  ...new Set(
+    read("git", ["log", "--format=%s", previous ? `${previous}..HEAD` : "HEAD", "-n", "200"])
+      .split("\n")
+      .flatMap((s) => [...s.matchAll(/\(#(\d+)\)\s*$/g)].map((m) => Number(m[1]))),
+  ),
+];
+const prs = prNumbers.map((n) =>
+  JSON.parse(read("gh", ["pr", "view", String(n), "--json", "number,title,body"])),
+);
+const { notes, missing } = gather(prs);
+step(`What's new in ${version}`);
+for (const n of notes) console.log(`  - ${n}`);
+if (notes.length === 0) console.log("  (no release notes written)");
+if (missing.length) {
+  console.log("\n  These PRs have no release note; write one in each PR's description, or 'none':");
+  for (const m of missing) console.log(`    #${String(m.number)} ${m.title}`);
+}
 
 // 2. The tools it needs, checked before the long part.
 try {
@@ -145,7 +167,7 @@ writeFileSync(
   readFileSync(feedFile, "utf8").replace(
     new RegExp(String.raw`(- url: ${dmg.replaceAll(".", "\\.")}\n\s+sha512: )\S+(\n\s+size: )\d+`),
     `$1${sha}$2${String(dmgBytes.length)}`,
-  ),
+  ) + feedBlock(notes),
 );
 
 // 5. Up to S3: versioned files kept for good, the stable names short-lived.
@@ -195,15 +217,18 @@ const log = read("git", [
   previous ? `${previous}..HEAD` : "HEAD",
   ...(previous ? [] : ["-n", "30"]),
 ]);
-const notes = [
+const body = [
+  ...(notes.length ? ["## What's new", "", ...notes.map((n) => `- ${n}`), ""] : []),
   `**Download:** ${SITE}/Anur.dmg (this version: ${SITE}/${dmg})`,
   "",
-  previous ? `Changes since ${previous}:` : "First release. Recent changes:",
+  "<details><summary>Every change" + (previous ? ` since ${previous}` : "") + "</summary>",
   "",
   log,
+  "",
+  "</details>",
 ].join("\n");
 run("git", ["tag", "-a", tag, "-m", `Anur ${version}`]);
 run("git", ["push", "origin", tag]);
-run("gh", ["release", "create", tag, "--title", `Anur ${version}`, "--notes", notes]);
+run("gh", ["release", "create", tag, "--title", `Anur ${version}`, "--notes", body]);
 
 console.log(`\n✓ Anur ${version} is out.\n  Share: ${SITE}/Anur.dmg\n`);

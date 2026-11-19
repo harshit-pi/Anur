@@ -1,5 +1,5 @@
 import { mkdtempSync, mkdirSync } from "node:fs";
-import { readFile, realpath, writeFile } from "node:fs/promises";
+import { readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -483,6 +483,9 @@ const docWatcher = new DocWatcher((windowId, change) => {
   const win = windows.get(windowId);
   if (win) send(win, "doc:changed", change);
 });
+
+/** The notes of a downloaded update, kept for What's new after the restart into it. */
+const whatsNewFile = () => path.join(app.getPath("userData"), "whats-new.json");
 
 /** Plain .excalidraw files per folder, scanned at most every 30 s. */
 const plainScans = new Map<string, { at: number; files: Promise<string[]> }>();
@@ -1521,6 +1524,16 @@ const handlers: { [C in Channel]: Handler<C> } = {
     setAuto(auto);
     return { auto };
   },
+  "app:whats-new": async ({ seen }) => {
+    const file = whatsNewFile();
+    const saved = await readFile(file, "utf8")
+      .then((t) => JSON.parse(t) as { version?: string; notes?: string[] })
+      .catch(() => null);
+    // Only on the version it was saved for: an update that didn't install shows nothing.
+    if (!saved?.version || saved.version !== app.getVersion() || !saved.notes?.length) return null;
+    if (seen) await rm(file, { force: true });
+    return { version: saved.version, notes: saved.notes };
+  },
   "update:restart": () => {
     restartToUpdate();
     return { ok: updateState().kind === "ready" };
@@ -1916,9 +1929,15 @@ void app.whenReady().then(async () => {
   void startClaudeSkill();
   if (isRelease) await offerMoveToApplications();
   if (isRelease)
-    startUpdates(appSettings.get().autoUpdate, (state) => {
-      for (const win of windows.values()) send(win, "app:update-state", state);
-    });
+    startUpdates(
+      appSettings.get().autoUpdate,
+      (state) => {
+        for (const win of windows.values()) send(win, "app:update-state", state);
+      },
+      (version, notes) => {
+        void writeFile(whatsNewFile(), JSON.stringify({ version, notes })).catch(() => undefined);
+      },
+    );
   else if (isCheck && process.env.ANUR_CHECK_UPDATE)
     showForCheck(process.env.ANUR_CHECK_UPDATE, (state) => {
       for (const win of windows.values()) send(win, "app:update-state", state);

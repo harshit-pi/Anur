@@ -2,6 +2,10 @@
 
 <!-- What someone using Anur notices, then how it works. Link the issue if there is one: Fixes #123. -->
 
+## Release note
+
+<!-- One line for people using Anur, as the app's "What's new" shows it, or "none" for changes they won't notice. Example: Excalidraw drawings show on the page and open full size. -->
+
 ## How it was checked
 
 - [ ] `pnpm check` passes (typecheck, lint, format, tests)

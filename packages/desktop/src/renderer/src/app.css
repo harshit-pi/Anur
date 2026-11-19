@@ -4844,3 +4844,15 @@ button.file-card-name:hover {
 .map-legend {
   z-index: 4;
 }
+
+/* A version's notes in the update and What's new cards. */
+.whats-new {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink2);
+  line-height: 1.45;
+}
+
+.whats-new li + li {
+  margin-top: 3px;
+}
