@@ -63,7 +63,7 @@ export {
   routeTree,
   type Edge as SystemEdge,
 } from "./edges.ts";
-export { INTERNAL_MARK } from "./choices.ts";
+export { INTERNAL_MARK, THREAD_PROMPT_START, THREAD_SESSION_ENV } from "./choices.ts";
 export {
   AWS_MISSES,
   appWiring,

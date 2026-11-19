@@ -222,3 +222,47 @@ describe("a repo left out of the folder's system", () => {
     expect(scanSystem(dir).repos.map((r) => r.dir)).toEqual(["api", "web"]);
   });
 });
+
+describe("a thread's session isn't one of the person's tasks", () => {
+  it("skips every turn of a session Anur started for a thread, by its environment", async () => {
+    const dir = tmp();
+    twoRepoSystem(dir);
+    const env = { ANUR_THREAD_SESSION: "1" };
+    const start = await handleHook(
+      { hook_event_name: "UserPromptSubmit", session_id: "t1", cwd: dir, prompt: "a later turn" },
+      undefined,
+      env,
+    );
+    expect(start.kind).toBe("skipped");
+    touch(dir, "api/src/routes.ts", 'router.get("/v1/x", ok);');
+    const end = await handleHook(
+      { hook_event_name: "Stop", session_id: "t1", cwd: dir },
+      undefined,
+      env,
+    );
+    expect(end.kind).toBe("skipped");
+  });
+
+  it("skips a thread's first prompt by its title, even without the environment", async () => {
+    const dir = tmp();
+    twoRepoSystem(dir);
+    const r = await handleHook(
+      {
+        hook_event_name: "UserPromptSubmit",
+        session_id: "t2",
+        cwd: dir,
+        prompt: "# Anur: a thread on one section\n\nThis thread is about one section…",
+      },
+      undefined,
+      {},
+    );
+    expect(r).toEqual({ kind: "skipped", why: "a thread's first prompt" });
+    // The person's own task in the same folder is still marked.
+    const own = await handleHook(
+      { hook_event_name: "UserPromptSubmit", session_id: "p1", cwd: dir, prompt: "add retries" },
+      undefined,
+      {},
+    );
+    expect(own.kind).toBe("marked");
+  });
+});
