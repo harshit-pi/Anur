@@ -1,5 +1,5 @@
 import { EditorView } from "@codemirror/view";
-import type { SectionTree } from "@anur/core";
+import { FOLDER_DOC, buildSectionTree, folderDocText, type SectionTree } from "@anur/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { settled } from "./editor/pending-saves.ts";
@@ -61,6 +61,7 @@ import { loadOpen, loadWidths, saveOpen, saveWidths, type Side } from "./layout/
 import { anur } from "./bridge.ts";
 import { CommandPalette } from "./regions/CommandPalette.tsx";
 import { Think } from "./regions/Think.tsx";
+import { SCOPE_EVENT, type Scope } from "./regions/ThinkScope.tsx";
 import { Settings, type SettingsSection } from "./regions/Settings.tsx";
 import { newDocPath } from "./layout/new-doc.ts";
 import { MergeDialog } from "./regions/MergeDialog.tsx";
@@ -120,6 +121,8 @@ export function App() {
   const [sections, setSections] = useState<SectionTree | null>(null);
   /** The section the cursor is in, by index: what the Think panel is about. */
   const [cursorSection, setCursorSection] = useState(0);
+  /** What a new thread in Think is about: this section, this doc, or the whole folder. */
+  const [scope, setScope] = useState<Scope>("section");
   /** The section the outline marks: the cursor's, the map's pick, or the one scrolled to. */
   const [outlineAt, setOutlineAt] = useState(0);
   /** When the cursor or a pick last set the mark: the scroll a jump causes doesn't move it. */
@@ -1080,6 +1083,29 @@ export function App() {
       window.removeEventListener("anur:show-preview", toPage);
     };
   }, []);
+  // A new doc starts on its section again; with no doc open, Think is the whole folder's.
+  const docShown = doc?.path ?? null;
+  useEffect(() => {
+    setScope("section");
+  }, [docShown]);
+  useEffect(() => {
+    const onScope = (e: Event) => {
+      setScope((e as CustomEvent<{ scope: Scope }>).detail.scope);
+    };
+    window.addEventListener(SCOPE_EVENT, onScope);
+    return () => {
+      window.removeEventListener(SCOPE_EVENT, onScope);
+    };
+  }, []);
+  const wholeFolder = !!folder && (scope === "folder" || !doc || !sections);
+  const folderText = useMemo(
+    () => (folder ? folderDocText(folder.name, folder.docs) : ""),
+    [folder],
+  );
+  const folderTree = useMemo(
+    () => (folder ? buildSectionTree(folderText, { fileName: "Folder" }) : null),
+    [folder, folderText],
+  );
   const setWidth = (side: Side) => (width: number) => {
     setWidths((w) => {
       const next = { ...w, [side]: width };
@@ -1363,14 +1389,35 @@ export function App() {
             <div id="system-panel" className="system-panel" />
           ) : (
             <Think
-              docPath={doc && sections ? doc.path : null}
-              docText={docText}
-              tree={sections}
-              section={sections?.sections[cursorSection] ?? sections?.sections[0] ?? null}
-              writable={folder?.mode === "writable" && doc?.mode === "editable"}
+              key={wholeFolder ? "folder" : "doc"}
+              docPath={wholeFolder ? FOLDER_DOC : doc && sections ? doc.path : null}
+              docText={wholeFolder ? () => folderText : docText}
+              tree={wholeFolder ? folderTree : sections}
+              section={
+                wholeFolder
+                  ? (folderTree?.sections[0] ?? null)
+                  : scope === "doc"
+                    ? (sections?.sections[0] ?? null)
+                    : (sections?.sections[cursorSection] ?? sections?.sections[0] ?? null)
+              }
+              writable={folder?.mode === "writable" && (wholeFolder || doc?.mode === "editable")}
               request={threadRequest}
               onJump={jumpTo}
-              page={pageView}
+              page={wholeFolder ? () => null : pageView}
+              noun={wholeFolder ? "folder" : scope === "doc" ? "doc" : "section"}
+              scope={
+                folder
+                  ? {
+                      value: wholeFolder ? "folder" : scope,
+                      folderName: folder.name,
+                      docName:
+                        doc && sections
+                          ? (doc.path.split("/").pop() ?? doc.path).replace(/\.md$/i, "")
+                          : null,
+                      onChange: setScope,
+                    }
+                  : null
+              }
             />
           )
         }

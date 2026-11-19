@@ -221,3 +221,4 @@ export * from "./plugins/api.ts";
 export { PluginHost, PluginRefused } from "./plugins/host.ts";
 
 export { SYSTEM_DOC, systemDocText, systemIdsOf, systemIndexOf } from "./sections/system-doc.ts";
+export { FOLDER_DOC, folderDocText } from "./sections/folder-doc.ts";

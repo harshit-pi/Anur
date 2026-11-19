@@ -2,6 +2,9 @@ import { retitleMoved } from "./folder/title-follows.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
+  FOLDER_DOC,
+  FOLDER_DOC_ID,
+  folderLocated,
   SYSTEM_DOC,
   SYSTEM_DOC_ID,
   systemLocated,
@@ -544,12 +547,13 @@ function storeFor(base: string, dev: string): CommittedDecisions {
 }
 
 /**
- * Whether threads may run on this path: a doc in the folder, or the system
- * map's virtual doc where the engineering plugin is on (29.1).
+ * Whether threads may run on this path: a doc in the folder, the whole
+ * folder's virtual doc, or the system map's where the engineering plugin is on (29.1).
  */
 function threadable(folder: { path: string; docs: readonly string[] }, rel: string): boolean {
   return (
     folder.docs.includes(rel) ||
+    rel === FOLDER_DOC ||
     (rel === SYSTEM_DOC && pluginsOn(folder.path).includes("engineering"))
   );
 }
@@ -720,9 +724,18 @@ function threadsFor(folder: FolderState): Threads | null {
       node: process.execPath,
       // The system map's virtual doc (29.1): its IDs are the boxes' own.
       locate: (rel, text) =>
-        rel === SYSTEM_DOC ? Promise.resolve(systemLocated(text)) : ids.locate(rel, text),
+        rel === SYSTEM_DOC
+          ? Promise.resolve(systemLocated(text))
+          : rel === FOLDER_DOC
+            ? Promise.resolve(folderLocated(text))
+            : ids.locate(rel, text),
       anurDirOf: (doc) => ids.anurDirOf(doc),
-      relOf: (doc) => (doc === SYSTEM_DOC_ID ? Promise.resolve(SYSTEM_DOC) : ids.relOf(doc)),
+      relOf: (doc) =>
+        doc === SYSTEM_DOC_ID
+          ? Promise.resolve(SYSTEM_DOC)
+          : doc === FOLDER_DOC_ID
+            ? Promise.resolve(FOLDER_DOC)
+            : ids.relOf(doc),
       systemShape: () => systemShapes.get(folder.path) ?? null,
       anurDirs: () => ids.anurDirs(),
       committed: committedFor(folder.path, device),
@@ -1748,6 +1761,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     return { threads: t ? await t.list(doc, text) : [] };
+  },
+  "thread:recent": async (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    return { threads: t ? await t.recent() : [] };
   },
   "agent:auth": ({ agent }) => {
     if (AGENTS[agent].runsThreads) hub.send({ type: "auth", agent });

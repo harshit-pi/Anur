@@ -24,7 +24,7 @@ import {
   previewParts,
   withPreview,
   settleRule,
-  type DocId,
+  DocId,
   type PreviewPart,
   type KnownThreadLine,
   type SectionId,
@@ -59,7 +59,13 @@ import { TurnWatch, type DocChange } from "./turn-watch.ts";
 import { readSection } from "./read-section.ts";
 import { readFile } from "../../vault/anur-copy.ts";
 import type { CommittedDecisions, KeptEntry } from "../committed-decisions.ts";
-import { SYSTEM_DOC, systemReach, type SystemShape } from "./system-doc.ts";
+import {
+  FOLDER_DOC,
+  SYSTEM_DOC,
+  isVirtualDoc,
+  systemReach,
+  type SystemShape,
+} from "./system-doc.ts";
 import {
   DecisionScope,
   decisionNamed,
@@ -247,6 +253,18 @@ const agentOfLine = (l: KnownThreadLine): AgentId | null =>
   l.kind === "session" ? (isAgentId(l.agent) ? l.agent : DEFAULT_AGENT) : null;
 
 /** What a running thread holds in memory: the turn in flight and what it has said so far. */
+/** A thread in Think's Recent list: where it lives and when it last moved. */
+export type RecentThread = {
+  id: string;
+  /** The doc's path from the opened folder, or the whole folder's virtual doc. */
+  path: string;
+  title: string;
+  where: { kind: "folder" } | { kind: "doc" } | { kind: "section"; path: string[] };
+  at: string;
+  /** The agent's last words, shortened. */
+  last: string | null;
+};
+
 type Live = {
   /** Where its agent runs: a repo for a repo's doc (18.15.6), else the opened folder. */
   cwd?: string;
@@ -684,6 +702,65 @@ export class Threads {
     }
     const views = await Promise.all(names.map((t) => this.view(at, rel, text, t)));
     return views.filter((v): v is ThreadView => v !== null);
+  }
+
+  /**
+   * Every thread in the opened folder, newest first, for Think's Recent list:
+   * its name, where it lives (a section, a whole doc, or the whole folder),
+   * when it last moved, and its last words. Closed ones are left out.
+   */
+  async recent(limit = 60): Promise<RecentThread[]> {
+    const out: RecentThread[] = [];
+    const texts = new Map<string, Promise<Located | null>>();
+    const locate = (rel: string) => {
+      let at = texts.get(rel);
+      if (!at) {
+        at = readFile(path.join(this.d.folder, rel), "utf8").then(
+          (text) => this.d.locate(rel, text),
+          () => null,
+        );
+        texts.set(rel, at);
+      }
+      return at;
+    };
+    for (const anurDir of await this.anurDirsAll()) {
+      const docs = await readdir(path.join(anurDir, "docs")).catch(() => [] as string[]);
+      for (const name of docs) {
+        const parsed = DocId.safeParse(name);
+        if (!parsed.success) continue;
+        const doc = parsed.data;
+        const dir = path.join(anurDir, anurPaths.doc(doc), "threads");
+        const names = await readdir(dir).catch(() => [] as string[]);
+        if (!names.length) continue;
+        const rel = (await this.d.relOf?.(doc).catch(() => null)) ?? null;
+        if (!rel || rel === SYSTEM_DOC) continue;
+        this.docDirs.set(doc, anurDir);
+        const at = rel === FOLDER_DOC ? null : await locate(rel);
+        for (const thread of names) {
+          const lines = await this.linesOf(doc, thread);
+          const start = lines.find((l) => l.kind === "thread");
+          if (start?.kind !== "thread") continue;
+          if (lines.findLast((l) => l.kind === "state")?.state === "closed") continue;
+          const said = lines.findLast((l) => l.kind === "message" && l.role === "agent");
+          const index = at ? indexIn(at, start.section) : -1;
+          const where: RecentThread["where"] =
+            rel === FOLDER_DOC
+              ? { kind: "folder" }
+              : index <= 0 || start.start === "ask"
+                ? { kind: "doc" }
+                : { kind: "section", path: at?.tree.sections[index]?.path ?? [] };
+          out.push({
+            id: thread,
+            path: rel,
+            title: lines.findLast((l) => l.kind === "renamed")?.title ?? start.title,
+            where,
+            at: lines.reduce((m, l) => (l.at > m ? l.at : m), start.at),
+            last: said?.kind === "message" ? said.text.replace(/\s+/g, " ").slice(0, 140) : null,
+          });
+        }
+      }
+    }
+    return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
   }
 
   /** A thread's name, as the person last set it, else its first message. */
@@ -1206,7 +1283,7 @@ export class Threads {
       docPath: live.cwd
         ? path.relative(live.cwd, path.join(this.d.folder, rel)).split(path.sep).join("/")
         : rel,
-      workingCopy: rel === SYSTEM_DOC ? null : path.join(this.copiesOf(live.threadId), rel),
+      workingCopy: isVirtualDoc(rel) ? null : path.join(this.copiesOf(live.threadId), rel),
       // A third of the model's window (4.2): this thread's, else the agent's last, else the default.
       budget: budgetFor(live.context?.size ?? live.window ?? null),
       inputs: live.carried ?? [],
@@ -1451,6 +1528,11 @@ export class Threads {
     live.watching = null;
     live.merged.clear();
     await rm(dir, { recursive: true, force: true });
+    // The whole folder's doc isn't a file either: docs it edits are copied in as it reads them.
+    if (live.rel === FOLDER_DOC) {
+      await mkdir(dir, { recursive: true });
+      return;
+    }
     const preview = await this.previews.read(at.doc, thread);
     const start = withPreview(live.docText, preview?.parts ?? [], Threads.byId(at));
     const copy = path.join(dir, live.rel);
@@ -2134,7 +2216,9 @@ export class Threads {
         await c.drop(rel, finding);
         return;
       }
-      const docText = live?.docText ?? (await readFile(path.join(this.d.folder, rel), "utf8"));
+      const docText =
+        live?.docText ??
+        (rel === FOLDER_DOC ? "" : await readFile(path.join(this.d.folder, rel), "utf8"));
       const lines = await this.linesOf(doc, thread);
       const f = lines.find((l) => l.kind === "finding" && l.id === finding);
       if (f?.kind !== "finding") return;
@@ -2160,13 +2244,10 @@ export class Threads {
         renewed?.kind === "finding-decided" && renewed.until !== undefined
           ? renewed.until
           : (f.until ?? null);
-      await c.keep(
-        rel,
-        section,
-        finding,
+      const entry =
         f.by === "person"
           ? {
-              kind: "decision",
+              kind: "decision" as const,
               decision: claim,
               quote: f.quote ?? null,
               instead: f.instead ?? null,
@@ -2175,9 +2256,11 @@ export class Threads {
               ...(f.concerns ? { concerns: f.concerns } : {}),
               ...(f.against ? { against: f.against } : {}),
             }
-          : { kind: "finding", claim, source: f.source },
-        scope,
-      );
+          : ({ kind: "finding", claim, source: f.source } as const);
+      // A thread on the whole folder keeps it for the whole folder.
+      if (rel === FOLDER_DOC && scope !== "everywhere" && c.keepFor)
+        await c.keepFor("", finding, entry);
+      else await c.keep(rel, section, finding, entry, scope);
     } catch {
       // The committed copy is best effort; the thread keeps the decision.
     }
