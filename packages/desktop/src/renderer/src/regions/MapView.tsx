@@ -1625,7 +1625,6 @@ export function MapView({
               }}
             >
               <div className="map-action-head">
-                <span className="map-action-tag">{b.act.tag}</span>
                 {servicesUsed(b.thread.items)
                   .slice(0, 2)
                   .map((sv) => (
@@ -1634,9 +1633,12 @@ export function MapView({
                 <span className="map-action-name truncate">{b.heading}</span>
               </div>
               <div className="map-action-foot">
-                <span className={`map-action-state ${b.act.state}`}>
-                  {ACTION_STATE[b.act.state]}
-                </span>
+                {/* The bar's colour says the state; a word only where it's under way or needs you. */}
+                {b.act.state === "planned" || b.act.state === "done" ? null : (
+                  <span className={`map-action-state ${b.act.state}`}>
+                    {ACTION_STATE[b.act.state]}
+                  </span>
+                )}
                 {/* A few words only where they tell something new: the step under way, why it failed. */}
                 <span className="map-action-detail truncate">
                   {b.act.state === "running" || b.act.state === "failed" ? b.act.detail : ""}

@@ -5927,3 +5927,8 @@ button.file-card-name:hover {
   font-size: 9.5px;
   font-weight: 700;
 }
+
+/* A done action is just its name: hover and its thread tell the rest. */
+.map-action.done .map-action-foot {
+  display: none;
+}
