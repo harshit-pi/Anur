@@ -1462,6 +1462,11 @@ export const ipcContract = {
     request: z.object({ id: z.string().max(200) }).strict(),
     response: z.object({ report: TaskReportView.nullable() }),
   },
+  /** The public GitHub repo this folder's threads would be committed to, if any (18.13). */
+  "anur:publicRepo": {
+    request: z.object({}).strict(),
+    response: z.object({ folder: z.string().nullable(), repo: z.string().nullable() }),
+  },
   /** Whether to offer Engineering for this window's folder: its code repos, and whether it's on. */
   "engineering:offer": {
     request: z.object({}).strict(),

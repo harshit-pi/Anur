@@ -66,6 +66,7 @@ import { sectionCommits } from "./folder/git-history.ts";
 import { suggestMatch } from "./folder/orphans.ts";
 import { personName } from "./folder/people.ts";
 import { CommittedDecisions } from "./committed-decisions.ts";
+import { publicRepoFor } from "./public-repo.ts";
 import { PluginHost, PluginRefused } from "@anur/core";
 import { FIRST_PARTY, pluginById } from "../plugins/index.ts";
 import {
@@ -1676,6 +1677,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
     } catch (e) {
       return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
     }
+  },
+  "anur:publicRepo": async (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || folder.mode !== "writable") return { folder: null, repo: null };
+    return { folder: folder.path, repo: await publicRepoFor(folder.path) };
   },
   "engineering:offer": (_, { webContentsId }) => {
     const folder = folders.current(webContentsId);

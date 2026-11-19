@@ -72,6 +72,7 @@ import {
 } from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
 import { SkillCard } from "./regions/SkillCard.tsx";
+import { PublicRepoCard } from "./regions/PublicRepoCard.tsx";
 import { EngineeringCard } from "./regions/EngineeringCard.tsx";
 import { UpdateCard, WhatsNewCard } from "./regions/UpdateCard.tsx";
 import { OpenerCard } from "./regions/OpenerCard.tsx";
@@ -1383,6 +1384,7 @@ export function App() {
         <div className="corner-cards">
           <UpdateCard />
           <WhatsNewCard />
+          <PublicRepoCard />
           <EngineeringCard />
           <OpenerCard />
           <SkillCard />
