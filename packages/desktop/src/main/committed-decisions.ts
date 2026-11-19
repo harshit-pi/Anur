@@ -40,6 +40,7 @@ export type KeptEntry =
       instead: string | null;
       until: string | null;
       who: string | null;
+      concerns?: "work" | "subject";
       /** The decision it goes against (18.4), by ID. */
       against?: string | null;
     }

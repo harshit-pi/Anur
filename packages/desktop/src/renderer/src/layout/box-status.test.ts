@@ -20,16 +20,19 @@ const offers = (used: string | null) =>
     used,
     explored: [],
     within: null,
+    heading: null,
   }) as T["items"][number];
 
 describe("what a box says happened on it (mock 9)", () => {
-  it("puts what waits on the person first, then work under way, then what was settled", () => {
+  it("puts work under way first, then what waits on the person, then what was settled", () => {
     expect(boxStatus([t({ items: [offers(null)] })], 0)).toEqual({
       label: "2 options",
       tone: "blue",
     });
     expect(boxStatus([t()], 1)).toEqual({ label: "Edit to use", tone: "blue" });
     expect(boxStatus([t({ busy: true, purpose: "build" })], 0)?.label).toBe("Building…");
+    // Running outranks options waiting from an earlier turn.
+    expect(boxStatus([t({ busy: true, items: [offers(null)] })], 1)?.label).toBe("Thinking…");
     expect(boxStatus([t({ items: [offers("a")] })], 0)).toEqual({
       label: "Picked: Free stock",
       tone: "green",

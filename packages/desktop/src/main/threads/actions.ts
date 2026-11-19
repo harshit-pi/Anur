@@ -1,8 +1,9 @@
 /**
  * What Anur asks the person's agent for an action on a section (group 15;
- * Actions, "Build this section" and "Check this section"). The agent runs in
- * the mode the person picked; plan mode, when they pick it, shows its plan
- * as a card to approve.
+ * Actions, "Build this section" and "Check this section"). Check runs in the
+ * mode the person picked. Build always starts in plan mode, so its plan shows
+ * as a card to approve before anything outside the doc changes; on approval
+ * the picked mode comes back.
  */
 
 export type Purpose = "build" | "check";
@@ -18,7 +19,9 @@ export function actionPrompt(purpose: Purpose, section: string, note: string): s
       [
         `Build what the section "${section}" decides, with your own tools, as the person would by hand: files, drafts, tickets, code, whatever the section asks for.`,
         "",
-        "If the section lays out several steps or phases, build the first one that fits one sitting, not all of them.",
+        "If the section lays out several steps or phases, build the first one that fits one sitting, not all of them. If the section has no text of its own, build from what the doc under it decides, and say which part.",
+        "",
+        "You start in plan mode: first show the plan for the person to approve. It says what you will make and where, which tools and services you will use, and what you are relying on. Nothing is built until they approve.",
         "",
         'Before your first tool call, write one line saying what you will build and what you are relying on, such as "Building: the launch email and FAQ. Relying on: beta.csv; no list of addresses in the folder." The person can stop you there if it is wrong.',
         "",

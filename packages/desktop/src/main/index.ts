@@ -2159,8 +2159,10 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (folder) threadsFor(folder)?.stop(thread);
     return {};
   },
-  "thread:permission": ({ request, option }) => {
+  "thread:permission": ({ request, option }, { webContentsId }) => {
     hub.send({ type: "permission", request, option });
+    const folder = folders.current(webContentsId);
+    if (folder) threadsFor(folder)?.answered(request, option);
     return {};
   },
   "conflict:merge": async (request, { webContentsId }) => {

@@ -125,6 +125,12 @@ const TOOLS = [
           description:
             'When it stops holding, in their words, if they said so, such as "until 4.8 ships" or "for now".',
         },
+        concerns: {
+          type: "string",
+          enum: ["work", "subject"],
+          description:
+            '"work" when it is about how you work: which tools or services you use, where the work happens, how you report. "subject" when it is about the plan, product or doc itself. Work rules never become claims in the doc.',
+        },
         confidence: {
           type: "number",
           description:
@@ -149,10 +155,15 @@ const TOOLS = [
   {
     name: "anur_offer_options",
     description:
-      "Offer the person two or more alternatives for this thread's section, instead of listing them in your reply. Each option is a short title and the section's whole new text, without its heading. Anur shows them as cards in the thread and as boxes on the doc's map; the person picks one, and its text replaces the section's text in the doc. Don't also edit the doc for options you offer.",
+      "Offer the person two or more alternatives to pick from, instead of listing them in your reply: ways this thread's section could read, or a choice they have to make, such as a date, an approach or a fallback. One call per choice; call it again for another. Each option is a short title and its text in Markdown, without a heading. Anur shows them as cards in the thread and as boxes on the doc's map; the person picks one. Without `heading`, its text replaces the section's text; with `heading`, it goes under a subsection of that name, so a decision gets its own place in the doc. Don't also edit the doc for options you offer.",
     inputSchema: {
       type: "object",
       properties: {
+        heading: {
+          type: "string",
+          description:
+            'The decision these choose between, as a short subsection name such as "Launch date", when it is not this section itself. Leave it out when the options are ways this section could read.',
+        },
         options: {
           type: "array",
           minItems: 2,
@@ -167,7 +178,7 @@ const TOOLS = [
               text: {
                 type: "string",
                 description:
-                  "The section's whole text if this option is picked, in Markdown, without the section's heading.",
+                  "The text if this option is picked, in Markdown, without a heading: the section's whole text, or with `heading`, the subsection's.",
               },
               why: {
                 type: "string",

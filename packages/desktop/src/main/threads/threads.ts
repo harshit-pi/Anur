@@ -324,6 +324,8 @@ export type KeptFinding = {
   mine: boolean;
   instead: string | null;
   until: string | null;
+  /** "work": how the agent works, never what the doc says (kept apart in the bundle). */
+  concerns?: "work" | "subject";
   /**
    * How near it is (18.3), for carrying nearest first within the budget:
    * 0 this section, 1 a section above, 2 the doc, 2.5 the part of the
@@ -811,7 +813,16 @@ export class Threads {
           used: l.options.find((o) => used.has(o.id))?.id ?? null,
           explored: l.options.filter((o) => explored.has(o.id)).map((o) => o.id),
           within: l.within ?? null,
+          heading: l.heading ?? null,
         });
+    }
+    // A narrower option picked settles the set it was explored from too.
+    for (const item of items) {
+      if (item.kind !== "options" || item.used !== null) continue;
+      const settled = item.explored.find((id) =>
+        items.some((x) => x.kind === "options" && x.within === id && x.used !== null),
+      );
+      if (settled) item.used = settled;
     }
     const live = this.live.get(thread);
     if (live?.turn) {
@@ -963,6 +974,9 @@ export class Threads {
     this.picked.set(thread, agent ?? this.d.defaultAgent());
     // Picks made before the first message: the host sets them as the session opens.
     for (const o of options) this.setOption(thread, o.id, o.value);
+    // Build acts outside the doc, so it always shows its plan first, whatever
+    // mode was picked; once the person approves, the picked mode comes back.
+    if (purpose === "build") this.planFirst(thread, options);
     await this.send(thread, rel, text, message, at.doc, undefined, shown);
     void this.ensureSpare();
     const v = await this.view(at, rel, text, thread);
@@ -1148,6 +1162,7 @@ export class Threads {
         when: new Date(f.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
         instead: f.instead,
         until: f.until,
+        ...(f.concerns ? { concerns: f.concerns } : {}),
         disputed: f.disputed ? { claim: f.disputed.claim, who: f.disputed.who } : null,
       })),
       embeds: live.embeds ?? new Map(),
@@ -1471,6 +1486,40 @@ export class Threads {
     return this.options.get(thread) ?? this.d.knownOptions?.(agent) ?? [];
   }
 
+  /** Builds waiting on their plan's approval: the mode to go back to, and the plan's prompt once asked. */
+  private readonly planned = new Map<
+    string,
+    { id: string; value: string; request: string | null; allow: Set<string> }
+  >();
+
+  /** Start a Build in plan mode, keeping the picked mode to restore on approval. */
+  private planFirst(thread: string, picks: readonly { id: string; value: string }[]): void {
+    const known =
+      this.options.get(thread) ??
+      this.d.knownOptions?.(this.picked.get(thread) ?? this.d.defaultAgent());
+    const mode = known?.find((o) => o.choices.some((c) => c.value === "plan"));
+    if (!mode) return;
+    const picked = picks.find((p) => p.id === mode.id)?.value ?? mode.current;
+    if (picked === "plan") return;
+    this.planned.set(thread, { id: mode.id, value: picked, request: null, allow: new Set() });
+    this.setOption(thread, mode.id, "plan");
+  }
+
+  /**
+   * The person answered one of the agent's prompts. When it was a Build's
+   * plan and they approved, the mode they picked comes back for the build.
+   */
+  answered(request: string, option: string | null): void {
+    for (const [thread, p] of this.planned) {
+      if (p.request !== request) continue;
+      if (option !== null && p.allow.has(option)) {
+        this.planned.delete(thread);
+        this.setOption(thread, p.id, p.value);
+      }
+      return;
+    }
+  }
+
   setOption(thread: string, id: string, value: string): void {
     const now =
       this.options.get(thread) ??
@@ -1604,7 +1653,14 @@ export class Threads {
         }
         return;
       }
-      case "permission":
+      case "permission": {
+        const plan = this.planned.get(thread);
+        if (plan && m.plan)
+          this.planned.set(thread, {
+            ...plan,
+            request: m.request,
+            allow: new Set(m.options.filter((o) => o.kind.startsWith("allow")).map((o) => o.id)),
+          });
         this.d.emit({
           kind: "permission",
           thread,
@@ -1614,6 +1670,7 @@ export class Threads {
           plan: m.plan ?? null,
         });
         return;
+      }
       case "turn-end":
         await this.endTurn(thread, live, m.stopReason, m.usage);
         return;
@@ -1790,6 +1847,8 @@ export class Threads {
           mine: decision && !!me && e.who === me,
           instead: decision ? e.instead : null,
           until: decision ? e.until : null,
+          ...(decision && e.concerns ? { concerns: e.concerns } : {}),
+          ...(decision && e.concerns ? { concerns: e.concerns } : {}),
           reach: r.reach,
           lapsed: decision && untilPassed(e.until, e.at) ? "until" : null,
           home: e.home,
@@ -1816,6 +1875,7 @@ export class Threads {
         mine: decision && !!me && e.who === me,
         instead: decision ? e.instead : null,
         until: decision ? e.until : null,
+        ...(decision && e.concerns ? { concerns: e.concerns } : {}),
         reach: reachOf(e.scope, here),
         lapsed: gone !== null ? "gone" : decision && untilPassed(e.until, e.at) ? "until" : null,
         home: e.home,
@@ -1874,6 +1934,7 @@ export class Threads {
           mine: l.by === "person" && (await this.whoIs())(from?.dev ?? l.dev) === null,
           instead: l.instead ?? null,
           until,
+          ...(l.by === "person" && l.concerns ? { concerns: l.concerns } : {}),
           reach: canonIn(at, start.section) === canonIn(at, section) ? 0 : 1,
           lapsed: untilPassed(until, renewed?.at ?? l.at) ? "until" : null,
           against: l.against ?? null,
@@ -2048,6 +2109,7 @@ export class Threads {
               instead: f.instead ?? null,
               until,
               who: await this.nameOf(from?.dev ?? f.dev),
+              ...(f.concerns ? { concerns: f.concerns } : {}),
               ...(f.against ? { against: f.against } : {}),
             }
           : { kind: "finding", claim, source: f.source },
@@ -2108,6 +2170,7 @@ export class Threads {
             instead: f.instead ?? null,
             until,
             who: await this.nameOf(from?.dev ?? f.dev),
+            ...(f.concerns ? { concerns: f.concerns } : {}),
             ...(f.against ? { against: f.against } : {}),
           }
         : { kind: "finding", claim, source: f.source };
@@ -2176,6 +2239,7 @@ export class Threads {
       from: rule.from,
       instead: str(a.instead, 300),
       until: str(a.until, 200),
+      ...(a.concerns === "work" ? { concerns: "work" as const } : {}),
       ...(DecisionScope.safeParse(a.scope).success ? { scope: DecisionScope.parse(a.scope) } : {}),
       ...(against ? { against } : {}),
     });
@@ -2601,7 +2665,15 @@ export class Threads {
   private async offerOptions(thread: string, args: unknown): Promise<ToolAnswer> {
     const live = this.live.get(thread);
     if (!live?.turn) return { error: "Options can only be offered during a turn." };
-    const raw = (args ?? {}) as { options?: unknown };
+    const raw = (args ?? {}) as { options?: unknown; heading?: unknown };
+    const heading =
+      typeof raw.heading === "string" && raw.heading.trim()
+        ? raw.heading
+            .trim()
+            .replace(/^#+\s*/, "")
+            .replace(/\s+/g, " ")
+            .slice(0, 80)
+        : null;
     const list = Array.isArray(raw.options) ? (raw.options as unknown[]) : [];
     const options = list
       .map((o) => (o ?? {}) as { title?: unknown; text?: unknown; why?: unknown })
@@ -2624,10 +2696,13 @@ export class Threads {
       turn: live.turn,
       options,
       within: this.exploring.get(thread) ?? null,
+      heading,
     });
     await this.refresh(live.rel, live.docText, thread);
     return {
-      text: `Shown to the person as ${String(options.length)} options. They pick one, and its text replaces the section's. Don't also edit the doc for these.`,
+      text: heading
+        ? `Shown to the person as ${String(options.length)} options for "${heading}". They pick one, and its text goes under a subsection "${heading}". Don't also edit the doc for these.`
+        : `Shown to the person as ${String(options.length)} options. They pick one, and its text replaces the section's. Don't also edit the doc for these.`,
     };
   }
 

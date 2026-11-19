@@ -294,6 +294,10 @@ export function MapView({
     }, 450);
   };
   const placeNew = useRef<{ path: string[]; at: Pos } | null>(null);
+  /** The side each box under the title sits on in the mind map, so adding one moves no other. */
+  const sidesKept = useRef(new Map<string, -1 | 1>());
+  /** Fit was pressed: the next framing shows the whole map, however small. */
+  const fitAll = useRef(false);
   /** A section just made by Tab or Enter: named next, and removed if left untouched (mock 8). */
   const freshNew = useRef<{ path: string[]; armed: boolean } | null>(null);
   const [freshIndex, setFreshIndex] = useState<number | null>(null);
@@ -541,11 +545,21 @@ export function MapView({
           n.id.startsWith("l:"),
       );
     nodes.sort((a, b) => near(b) - near(a));
-    const placed = (layout === "mind" ? mindLayout : mapLayout)(
-      [nodes.find((n) => n.parent === null), ...nodes.filter((n) => n.parent !== null)].filter(
-        (n): n is MapNode => Boolean(n),
-      ),
-    );
+    const ordered = [
+      nodes.find((n) => n.parent === null),
+      ...nodes.filter((n) => n.parent !== null),
+    ].filter((n): n is MapNode => Boolean(n));
+    const placed = layout === "mind" ? mindLayout(ordered, sidesKept.current) : mapLayout(ordered);
+    // Each box under the title keeps the side it was given while the map is open.
+    if (layout === "mind") {
+      const root = ordered[0]?.id;
+      sidesKept.current = new Map(
+        ordered.flatMap((n) => {
+          const side = placed.get(n.id)?.side;
+          return n.parent === root && (side === 1 || side === -1) ? [[n.id, side] as const] : [];
+        }),
+      );
+    }
     const out: Box[] = [];
     for (const [id, p] of placed) {
       const i = info.get(id);
@@ -644,7 +658,9 @@ export function MapView({
     const all = Math.min(1, r.width / w, r.height / h);
     // Never so small the names can't be read: a wide map opens on its title,
     // at the top, and Fit shows the whole of it.
-    const z = Math.max(READABLE, all);
+    // Fit pressed shows all of it; opening, never so small the names can't be read.
+    const z = fitAll.current ? all : Math.max(READABLE, all);
+    fitAll.current = false;
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
     const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
     const title = boxes.find((b) => b.side === 0);
@@ -681,10 +697,19 @@ export function MapView({
           const bottom = (b.y - b.h / 2) * view.z + view.y;
           return left < 0 || right > r.width || top < 0 || bottom > r.height;
         });
-      if (!userMoved.current || unseen) {
-        userMoved.current = false;
-        setView(null);
-      }
+      if (unseen) {
+        // Bring the new boxes into view where they are, as one group, keeping
+        // the zoom unless they need less of it: refitting on the title would
+        // leave a mind map's far branches out of sight.
+        const xs = fresh.flatMap((b) => [b.x - b.w / 2, b.x + b.w / 2]);
+        const ys = fresh.flatMap((b) => [b.y - b.h / 2, b.y + b.h / 2]);
+        const w = Math.max(...xs) - Math.min(...xs) + 120;
+        const h = Math.max(...ys) - Math.min(...ys) + 120;
+        const z = Math.min(view.z, r.width / w, r.height / h);
+        const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
+        const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
+        setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
+      } else if (!userMoved.current) setView(null);
     }
     lastCount.current = count;
   }, [count]);
@@ -1689,9 +1714,10 @@ export function MapView({
         <button
           type="button"
           className="map-tool"
-          title="Fit the map in view"
+          title="Fit the whole map in view"
           onClick={() => {
             userMoved.current = false;
+            fitAll.current = true;
             setView(null);
           }}
         >

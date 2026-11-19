@@ -610,15 +610,24 @@ export function Think({
   useEffect(() => {
     const onOption = (e: Event) => {
       const { option } = (e as CustomEvent<{ option: string }>).detail;
-      const card = document.querySelector<HTMLElement>(
-        `.think-offer[data-option="${CSS.escape(option)}"]`,
-      );
-      if (!card) return;
-      card.scrollIntoView({ block: "center", behavior: "smooth" });
-      card.classList.add("flash");
-      window.setTimeout(() => {
-        card.classList.remove("flash");
-      }, 1600);
+      // The thread may still be drawing when the map asks: look again a few
+      // times before giving up.
+      let tries = 0;
+      const find = () => {
+        const card = document.querySelector<HTMLElement>(
+          `.think-offer[data-option="${CSS.escape(option)}"]`,
+        );
+        if (!card) {
+          if (++tries < 12) window.setTimeout(find, 150);
+          return;
+        }
+        card.scrollIntoView({ block: "center", behavior: "smooth" });
+        card.classList.add("flash");
+        window.setTimeout(() => {
+          card.classList.remove("flash");
+        }, 1600);
+      };
+      find();
     };
     window.addEventListener("anur:show-option", onOption);
     return () => {
@@ -1023,14 +1032,32 @@ export function Think({
     t: ThreadView,
     option: { id: string; title: string; text: string },
     how: "replace" | "subsection",
+    heading: string | null = null,
   ) => {
     const main = page();
-    const node = tree?.sections.find((x) => t.path && samePath(t.path, x.path));
-    if (!main || !docPath || !node) {
+    const section = tree?.sections.find((x) => t.path && samePath(t.path, x.path));
+    if (!main || !docPath || !section) {
       setError("This thread's section is gone, so the option has nowhere to go.");
       return;
     }
-    if (!putOption(main, docPath.split("/").pop() ?? docPath, node, option, how)) {
+    // A decision with its own name goes under a subsection of that name:
+    // into the one already there, else a new one.
+    let node = section;
+    let put = option;
+    let mode = how;
+    if (heading) {
+      const own = tree?.sections.find(
+        (x) => x.parent === section.index && x.path.at(-1)?.toLowerCase() === heading.toLowerCase(),
+      );
+      if (own) {
+        node = own;
+        mode = "replace";
+      } else {
+        put = { ...option, title: heading };
+        mode = "subsection";
+      }
+    }
+    if (!putOption(main, docPath.split("/").pop() ?? docPath, node, put, mode)) {
       setError("This thread's section is gone, so the option has nowhere to go.");
       return;
     }
@@ -1039,7 +1066,7 @@ export function Think({
       path: docPath,
       text: main.state.doc.toString(),
       option: option.id,
-      how,
+      how: mode,
     });
   };
 
@@ -1333,6 +1360,11 @@ export function Think({
                 </div>
               ) : item.kind === "options" ? (
                 <div key={i} className="think-offers" role="group" aria-label="Options">
+                  {item.heading ? (
+                    <p className="think-offers-within quiet">
+                      For <strong>{item.heading}</strong>, under this section
+                    </p>
+                  ) : null}
                   {item.within ? (
                     <p className="think-offers-within quiet">
                       Within{" "}
@@ -1364,20 +1396,22 @@ export function Think({
                             type="button"
                             className="think-button primary"
                             onClick={() => {
-                              useOption(thread, o, "replace");
+                              useOption(thread, o, "replace", item.heading);
                             }}
                           >
                             Use this
                           </button>
-                          <button
-                            type="button"
-                            className="think-more"
-                            onClick={() => {
-                              useOption(thread, o, "subsection");
-                            }}
-                          >
-                            Add as subsection
-                          </button>
+                          {item.heading ? null : (
+                            <button
+                              type="button"
+                              className="think-more"
+                              onClick={() => {
+                                useOption(thread, o, "subsection");
+                              }}
+                            >
+                              Add as subsection
+                            </button>
+                          )}
                           {item.explored.includes(o.id) ? null : (
                             <button
                               type="button"
