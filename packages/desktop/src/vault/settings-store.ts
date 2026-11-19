@@ -1,7 +1,8 @@
-import { mkdir, readFile, readdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import { SettingsFile, anurPaths, mergeSettings, withSetting, type SettingEntry } from "@anur/core";
 import { writeFileAtomic } from "./anur-folder.ts";
+import { readFile } from "./anur-copy.ts";
 
 /**
  * Settings in `.anur/settings/`: this device writes only its own file, and

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, rm } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   ANUR_DIR,
@@ -21,6 +21,7 @@ import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { DocIds } from "../../vault/doc-ids.ts";
 import { JsonlWriter, readJsonlFile } from "../../vault/jsonl-writer.ts";
 import { SectionIds } from "../../vault/section-ids.ts";
+import { readFile } from "../../vault/anur-copy.ts";
 
 /**
  * Section versions (task 2.21). The first time a doc is opened, each of its

@@ -1,8 +1,9 @@
-import { mkdir, readFile, readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { ANUR_DIR, anurPaths } from "@anur/core";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { IMAGE_TYPES } from "./images.ts";
+import { readFile } from "../../vault/anur-copy.ts";
 
 /**
  * `.anur/` upkeep (group 11): each device notes when it opened the folder

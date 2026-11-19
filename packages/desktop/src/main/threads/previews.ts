@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import {
   ANUR_DIR,
@@ -10,6 +10,7 @@ import {
   type PreviewPart,
 } from "@anur/core";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
+import { readFile } from "../../vault/anur-copy.ts";
 
 /**
  * Previews on disk (task 1.8's format): one file per thread per doc per

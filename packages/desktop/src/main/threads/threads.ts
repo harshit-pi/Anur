@@ -5,7 +5,7 @@ import { LinkIndex } from "../folder/link-index.ts";
 import { actionPrompt, actionTitle, type Purpose } from "./actions.ts";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { watch, type FSWatcher } from "node:fs";
-import { cp, lstat, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -56,6 +56,7 @@ import { denyRulesOf, type DenyRule } from "../../agent/deny-rules.ts";
 import type { AnurSocket, ToolAnswer } from "./anur-socket.ts";
 import { TurnWatch, type DocChange } from "./turn-watch.ts";
 import { readSection } from "./read-section.ts";
+import { readFile } from "../../vault/anur-copy.ts";
 
 export { readSection } from "./read-section.ts";
 

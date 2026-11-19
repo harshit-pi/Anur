@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
 import { SnapshotHash, TombstoneLine, anurPaths, deletedHashes, mergeLines } from "@anur/core";
 import { writeFileAtomic } from "./anur-folder.ts";
 import { JsonlWriter, readJsonlFile } from "./jsonl-writer.ts";
+import { readFile } from "./anur-copy.ts";
 
 export function hashOf(bytes: Uint8Array): SnapshotHash {
   return SnapshotHash.parse(createHash("sha256").update(bytes).digest("hex"));

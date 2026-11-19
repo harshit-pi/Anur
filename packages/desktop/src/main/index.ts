@@ -29,6 +29,7 @@ import {
 } from "../shared/ipc-contract.ts";
 import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts";
 import { fetchOffloaded } from "./folder/offloaded.ts";
+import { keepAnurCopiesIn } from "../vault/anur-copy.ts";
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
@@ -207,6 +208,8 @@ setInterval(() => {
 }, 10 * 60_000).unref();
 /** Claude's names for the system's groups, asked on the person's own agent (20.6). */
 const systemReview = new SystemReview(systemChanged);
+// This Mac's copies of iCloud folders' .anur files, read when macOS has offloaded the files.
+keepAnurCopiesIn(path.join(app.getPath("userData"), "anur-copies"));
 /** The agent host, shared by every window; started when a thread first needs it (3.1). */
 let choices: AgentChoices;
 const hub = new AgentHub(
