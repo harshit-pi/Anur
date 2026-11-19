@@ -1,3 +1,4 @@
+import { THREAD_SESSION_ENV } from "@anur/system";
 import type { AgentId } from "../shared/agents.ts";
 
 /**
@@ -64,6 +65,8 @@ export function claudeCode(opts: {
           PATH: found.path,
           // The person's own install, not the one bundled in the adapter's SDK.
           CLAUDE_CODE_EXECUTABLE: found.claude,
+          // A thread's session: the person's task hooks leave it out of their tasks.
+          [THREAD_SESSION_ENV]: "1",
         },
         version: found.version,
       };

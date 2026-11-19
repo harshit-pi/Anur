@@ -9,6 +9,16 @@ import { readFileSync } from "node:fs";
 /** Starts Anur's own questions to the agent, such as naming groups: never a task to report. */
 export const INTERNAL_MARK = "[anur:internal]";
 
+/**
+ * Set in the environment of every session Anur starts for a thread. The
+ * person's task hooks inherit it and leave the session out of their tasks:
+ * a thread isn't one of their Claude Code tasks.
+ */
+export const THREAD_SESSION_ENV = "ANUR_THREAD_SESSION";
+
+/** How a thread's first prompt begins (the bundle's title), for a session started without the env. */
+export const THREAD_PROMPT_START = "# Anur: a thread on one section";
+
 /** Added to each prompt in an opened folder, so the reply ends with its choices. */
 export const CHOICES_ASK =
   'Anur: when you finish this task, if you made choices nobody asked for (a value, a default, a behaviour, a library), end your reply with a line "Choices:" and one short "- " bullet per choice. Leave it out when there were none.';

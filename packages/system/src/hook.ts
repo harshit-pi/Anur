@@ -6,7 +6,14 @@
  */
 import { rmSync } from "node:fs";
 import path from "node:path";
-import { CHOICES_ASK, INTERNAL_MARK, choicesIn, lastReply } from "./choices.ts";
+import {
+  CHOICES_ASK,
+  INTERNAL_MARK,
+  THREAD_PROMPT_START,
+  THREAD_SESSION_ENV,
+  choicesIn,
+  lastReply,
+} from "./choices.ts";
 import { edgesIn } from "./edges.ts";
 import { readReview, reviewState } from "./review.ts";
 import { scanSystem } from "./system.ts";
@@ -38,7 +45,14 @@ export type HookResult =
   | { kind: "reported"; folder: string; report: TaskReport; file: string };
 
 /** Handles one hook call. `folder` overrides the folder found from `cwd`. */
-export async function handleHook(input: HookInput, folderOverride?: string): Promise<HookResult> {
+export async function handleHook(
+  input: HookInput,
+  folderOverride?: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<HookResult> {
+  // A session Anur started for a thread is the thread's, not one of the person's tasks.
+  if (env[THREAD_SESSION_ENV])
+    return { kind: "skipped", why: "a session Anur started for a thread" };
   const cwd = input.cwd ?? process.cwd();
   const folder = folderOverride ?? folderFor(cwd);
   if (!folder) return { kind: "skipped", why: "no folder opened in Anur above " + cwd };
@@ -46,6 +60,8 @@ export async function handleHook(input: HookInput, folderOverride?: string): Pro
   // Anur's own one-off questions run in the folder too; they aren't tasks.
   if (input.hook_event_name === "UserPromptSubmit" && input.prompt?.includes(INTERNAL_MARK))
     return { kind: "skipped", why: "Anur's own question" };
+  if (input.hook_event_name === "UserPromptSubmit" && input.prompt?.startsWith(THREAD_PROMPT_START))
+    return { kind: "skipped", why: "a thread's first prompt" };
   if (input.hook_event_name === "UserPromptSubmit") {
     saveMark(folder, await markTaskAsync(folder, session, input.prompt ?? ""));
     return { kind: "marked", folder, context: CHOICES_ASK };
