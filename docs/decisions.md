@@ -39,7 +39,7 @@ any Claude Code session, any folder
 ```
 
 - There is no Claude Code hook per repo. Capture is one user-level install, the skill and the MCP server, through `claude mcp add` (`main/claude-skill/install.ts`), and works in every folder.
-- Where it lands: the folder open in Anur when the session is inside it; otherwise the session's own repo. Left unscoped it holds for that repo, or for the part the touched files name (`about`). It holds everywhere only when the person's words say so.
+- Where it lands: the folder open in Anur when the session is inside it; otherwise the session's own repo. Left unscoped it holds for that repo, or for the part the touched files name (`about`): a system decision. Named on a doc in the folder open in Anur, it's a product decision and holds for that whole doc, a section only when the person says "just this section", as in a thread. It holds everywhere only when the person's words say so. With Anur closed a doc can't be named, so it's the repo's.
 - `main/claude-skill/terminal.ts` runs `settleRule`, `decisionWordingProblem` and `scopeFromWords`, the same as a thread. The skill text in `skill-files.ts` carries the same "what counts" rule, so a session never records a pick, its own assumption or a one-off.
 - With Anur closed, `anur_note_decision`, `anur_propose_finding` and `anur_drop_decision` still work: the MCP program runs the same `terminal.ts` path itself (`main/claude-skill/offline.ts`), loaded only then, into the session's repo found by `git rev-parse --show-toplevel`, with this Mac's device ID, so Anur shows the decision as the person's own when it opens. A doc can't be named while closed, since only Anur knows its folder; the other tools still answer "Anur isn't open".
 
@@ -271,7 +271,7 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 
 - A decision is a finding whose source is a person, not a file: their exact words from the thread, the decision as a statement of at most 7 words (see "What counts as a decision"), what it replaced, and any "until". People see "Decided"; findings stay "Finding". No other kinds are shown (models confused override and decision 40% of the time in the 2026-11-18 eval).
 - The agent records one with `anur_note_decision`. It settles with no click, shown as one line with Undo, only when the words are word for word in something the person typed in that thread, they aren't a question, and the agent's confidence is 0.7 or more (Opus at 0.7 kept 92% right on 286 real messages). Otherwise it asks once: "Keep this for later work?", Keep or Just this once. Words the person never typed are refused, so nothing is put in anyone's mouth.
-- Kept decisions reach every new thread on the section and below, listed apart from findings as "Decided by Sam (3 Nov): … Instead of: …". The agent is told to follow them, to say in a line when it relied on one, and to ask rather than go against one.
+- Kept decisions reach every new thread on their doc (a section only when the person said "just this section"), listed apart from findings as "Decided by Sam (3 Nov): … Instead of: …". There's no picker for how far one reaches: the person's words set it, and the line shows only the decision and Undo (2026-11-19). The agent is told to follow them, to say in a line when it relied on one, and to ask rather than go against one.
 - Names show only on someone else's decisions. In a real run, a new thread asked to cut the price below a competitor answered "No. On 18 November Harshit decided…".
 
 ## What a thread is about, and Recent (Think scope)

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -175,6 +175,37 @@ describe("decisions from a plain Claude Code session (23.4, 23.11)", () => {
     });
     // "Everywhere" wasn't in their words: it stays on this repo.
     expect("text" in ok && ok.text).toContain("Recorded on this repo");
+  });
+
+  it("holds a decision on a doc for the whole doc, a section only when the person names it (2026-11-19)", async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), "anur-term-doc-"));
+    execFileSync("git", ["-C", folder, "init", "-q"]);
+    writeFileSync(path.join(folder, "plan.md"), "# Plan\n\n## Reward\n\nTBD.\n");
+    const call = terminalHandler({
+      front: () => ({ folder, docs: ["plan.md"], webContentsId: 1 }),
+      committed: (base: string) =>
+        new CommittedDecisions(base, "mac-a", () => Promise.resolve("sam")),
+      me: () => Promise.resolve("Sam"),
+      transcript: () =>
+        Promise.resolve(
+          said("a fixed £20 credit, not a percentage", "flat £20, just for this section"),
+        ),
+      sectionPath: () => Promise.resolve(["Plan", "Reward"]),
+    } as unknown as TerminalDeps);
+    const note = (quote: string) =>
+      call("anur_note_decision", {
+        quote,
+        decision: "Fixed £20 credit, not a percentage.",
+        confidence: 0.9,
+        doc: "plan.md",
+        section: "Reward",
+        scope: "section",
+        _cwd: folder,
+      });
+    await note("a fixed £20 credit, not a percentage");
+    await note("flat £20, just for this section");
+    const kept = lines(path.join(folder, ".anur/decisions/sam.jsonl")).map((l) => l.scope);
+    expect(kept).toEqual(["section:plan.md#", "section:plan.md#Plan › Reward"]);
   });
 
   it("reads only what the person typed from a transcript", () => {
