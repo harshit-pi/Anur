@@ -122,12 +122,12 @@ export function App() {
   const [sections, setSections] = useState<SectionTree | null>(null);
   /** The section the cursor is in, by index: what the Think panel is about. */
   const [cursorSection, setCursorSection] = useState(0);
-  /** "Launch is part of the anur-product vault, opened there." (vaults) */
-  const [vaultNotice, setVaultNotice] = useState<string | null>(null);
+  /** "Launch is part of the anur-product space, opened there." (spaces) */
+  const [spaceNotice, setSpaceNotice] = useState<string | null>(null);
   useEffect(
     () =>
       anur.on("app:notice", ({ text }) => {
-        setVaultNotice(text);
+        setSpaceNotice(text);
       }),
     [],
   );
@@ -1279,7 +1279,7 @@ export function App() {
       />
       <LeftSidebar
         folder={shown}
-        onNewVault={newFolder}
+        onNewSpace={newFolder}
         onOpenFolder={openFolder}
         system={
           engineeringOn
@@ -1373,7 +1373,7 @@ export function App() {
         opening={opening}
         docNote={doc?.note ?? null}
         docError={docError ?? save.detail}
-        vaultNotice={vaultNotice}
+        spaceNotice={spaceNotice}
         onOpenFolder={openFolder}
         onNewFolder={newFolder}
         onFirstDoc={firstDoc}
@@ -1419,7 +1419,7 @@ export function App() {
               request={threadRequest}
               onJump={jumpTo}
               page={wholeFolder ? () => null : pageView}
-              noun={wholeFolder ? "vault" : scope === "doc" ? "doc" : "section"}
+              noun={wholeFolder ? "space" : scope === "doc" ? "doc" : "section"}
               scope={
                 folder
                   ? {

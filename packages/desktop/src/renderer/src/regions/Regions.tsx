@@ -6,7 +6,7 @@ import { AGENTS } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { FileTree, type FileActions, type MakeRequest } from "./FileTree.tsx";
 import { OpenFromButtons, PluginStatusItem, usePluginStatuses } from "./PluginUI.tsx";
-import { VaultList, VaultSwitcher } from "./Vaults.tsx";
+import { SpaceList, SpaceSwitcher } from "./Spaces.tsx";
 import { NoticeBar } from "./NoticeBar.tsx";
 import { SORTS, type Sort } from "../layout/file-tree.ts";
 import {
@@ -131,8 +131,8 @@ export function LeftSidebar({
   makeDoc = 0,
   outline = null,
   system = null,
-  onNewVault,
-  onOpenFolder: onOpenVaultFolder,
+  onNewSpace,
+  onOpenFolder: onOpenSpaceFolder,
 }: {
   /** The folder's system map, when Engineering is on: a row above the files. */
   system?: {
@@ -158,8 +158,8 @@ export function LeftSidebar({
   notice?: FileNotice | null;
   /** Bumped to start a new doc, as an empty folder's page asks. */
   makeDoc?: number;
-  /** The vault switcher's New vault and Open folder as vault. */
-  onNewVault?: () => void;
+  /** The space switcher's New space and Open folder as space. */
+  onNewSpace?: () => void;
   onOpenFolder?: () => void;
 }) {
   const [collapse, setCollapse] = useState(0);
@@ -223,7 +223,7 @@ export function LeftSidebar({
   return (
     <aside className="left-sidebar" aria-label="Files" hidden={hidden}>
       <div className="sidebar-head">
-        {/* The vault's name sits at the foot, in its switcher (Vaults mock). */}
+        {/* The space's name sits at the foot, in its switcher (Spaces mock). */}
         <span className="sidebar-title" />
         {editable ? (
           <>
@@ -376,11 +376,11 @@ export function LeftSidebar({
         <p className="quiet">This folder has more files than Anur lists; some are left out.</p>
       ) : null}
       {outline}
-      <VaultSwitcher
+      <SpaceSwitcher
         name={folder.name}
         path={folder.path}
-        onNewVault={() => onNewVault?.()}
-        onOpenFolder={() => onOpenVaultFolder?.()}
+        onNewSpace={() => onNewSpace?.()}
+        onOpenFolder={() => onOpenSpaceFolder?.()}
       />
     </aside>
   );
@@ -454,7 +454,7 @@ export function Center({
   opening,
   docNote,
   docError,
-  vaultNotice = null,
+  spaceNotice = null,
   onOpenFolder,
   onNewFolder,
   onFirstDoc,
@@ -483,8 +483,8 @@ export function Center({
   opening: string | null;
   docNote: string | null;
   docError: string | null;
-  /** A note about the vault, shown once: a folder asked for opened as part of its vault. */
-  vaultNotice?: string | null;
+  /** A note about the space, shown once: a folder asked for opened as part of its space. */
+  spaceNotice?: string | null;
   onOpenFolder: () => void;
   onNewFolder: () => void;
   /** Start the first doc in an empty folder. */
@@ -612,14 +612,14 @@ export function Center({
           {docNote}
         </NoticeBar>
       ) : null}
-      {vaultNotice && !closedNow.has(vaultNotice) ? (
+      {spaceNotice && !closedNow.has(spaceNotice) ? (
         <NoticeBar
           tone="info"
           onClose={() => {
-            close(vaultNotice);
+            close(spaceNotice);
           }}
         >
-          {vaultNotice}
+          {spaceNotice}
         </NoticeBar>
       ) : null}
       {docError && !closedNow.has(docError) ? (
@@ -663,25 +663,25 @@ export function Center({
         </div>
       ) : (
         <div className="page-empty">
-          <h1>Open a vault</h1>
+          <h1>Open a space</h1>
           <p>
             Think beside your docs with your own agent. Each section gets its own threads, which
             start from that section, the rules it links to and what earlier threads settled.
           </p>
           <p>
-            A vault is a folder of Markdown docs you work in and share, with what Anur keeps about
+            A space is a folder of Markdown docs you work in and share, with what Anur keeps about
             them inside it. Your docs stay plain files that open in any editor.
           </p>
           <div className="page-empty-buttons">
             <button className="primary-button" type="button" onClick={onNewFolder}>
-              New vault
+              New space
             </button>
             <button className="secondary-button" type="button" onClick={onOpenFolder}>
-              Open folder as vault <span className="kbd">⌘O</span>
+              Open folder as space <span className="kbd">⌘O</span>
             </button>
             <OpenFromButtons />
           </div>
-          <VaultList />
+          <SpaceList />
         </div>
       )}
     </main>

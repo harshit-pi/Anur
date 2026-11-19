@@ -8,10 +8,10 @@ import { listOffloaded } from "../../vault/icloud.ts";
 import { acquireFolderLock, type LockHolder } from "./folder-lock.ts";
 import { docTimes, listDocs } from "./list-docs.ts";
 import { rememberFolder } from "./recent.ts";
-import { markVault, vaultAbove } from "./vaults.ts";
+import { markSpace, spaceAbove } from "./spaces.ts";
 
 export type OpenOutcome =
-  /** `inside`: the folder asked for, from the vault it's part of, when that vault opened instead. */
+  /** `inside`: the folder asked for, from the space it's part of, when that space opened instead. */
   | { kind: "opened"; folder: FolderState; inside?: string }
   | { kind: "elsewhere"; windowId: number }
   | { kind: "refused"; reason: string };
@@ -52,8 +52,8 @@ export class FolderService {
         reason: `${chosen} can't be opened: it doesn't exist or can't be read.`,
       };
     }
-    // A folder inside a vault opens that vault, so nothing is ever a smaller vault of its own.
-    const folder = (await vaultAbove(asked)) ?? asked;
+    // A folder inside a space opens that space, so nothing is ever a smaller space of its own.
+    const folder = (await spaceAbove(asked)) ?? asked;
     const inside = folder === asked ? undefined : path.relative(folder, asked);
     const other = this.windowFor(folder);
     if (other !== null) return { kind: "elsewhere", windowId: other };
@@ -63,9 +63,9 @@ export class FolderService {
 
     try {
       const anur = await openAnurFolder(folder);
-      // Opened, it's a vault; one inside it stops being one, as this takes over. The marker
-      // is written at once; the walk for vaults inside runs after, so opening never waits on it.
-      if (anur.mode === "writable") await markVault(folder, new Date(), "later");
+      // Opened, it's a space; one inside it stops being one, as this takes over. The marker
+      // is written at once; the walk for spaces inside runs after, so opening never waits on it.
+      if (anur.mode === "writable") await markSpace(folder, new Date(), "later");
       const state = await this.describe(folder, anur.mode === "read-only" ? anur.reason : null);
       await this.close(windowId);
       this.byWindow.set(windowId, { state, release: lock.release });

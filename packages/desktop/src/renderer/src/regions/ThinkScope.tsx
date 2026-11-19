@@ -48,7 +48,7 @@ export function ScopeChip({
   const heading = section.path.at(-1) ?? "This section";
   const label =
     scope.value === "folder"
-      ? "The whole vault"
+      ? "The whole space"
       : scope.value === "doc" || section.index === 0
         ? (scope.docName ?? "This doc")
         : heading;
@@ -60,7 +60,7 @@ export function ScopeChip({
       off: !scope.docName,
     },
     { value: "doc", name: "This doc", detail: scope.docName ?? "", off: !scope.docName },
-    { value: "folder", name: "The whole vault", detail: scope.folderName, off: false },
+    { value: "folder", name: "The whole space", detail: scope.folderName, off: false },
   ];
   return (
     <span className="think-scope-pick" ref={host}>
@@ -119,7 +119,7 @@ function ago(at: string): string {
 
 /** Where a recent thread lives, in a word or two. */
 function whereOf(t: Recent): string {
-  if (t.where.kind === "folder") return "Whole vault";
+  if (t.where.kind === "folder") return "Whole space";
   const doc = (t.path.split("/").pop() ?? t.path).replace(/\.md$/i, "");
   return t.where.kind === "doc" ? doc : (t.where.path.at(-1) ?? doc);
 }

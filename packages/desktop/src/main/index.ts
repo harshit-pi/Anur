@@ -108,7 +108,7 @@ import { loadDeviceId } from "../device/device-id.ts";
 import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
 import { readRecent } from "./folder/recent.ts";
-import { onGitHub, vaultsIn } from "./folder/vaults.ts";
+import { onGitHub, spacesIn } from "./folder/spaces.ts";
 import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
 import { buildMenu } from "./menu.ts";
@@ -915,9 +915,9 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
     }
     folderWatch.start(target.webContents.id, outcome.folder.path);
     if (outcome.folder.mode === "writable") void plugins.startFolder(outcome.folder.path);
-    // Asked for a folder inside a vault: the vault opened; say so once, once the page listens.
+    // Asked for a folder inside a space: the space opened; say so once, once the page listens.
     if (outcome.inside) {
-      const text = `${path.basename(outcome.inside)} is part of the ${outcome.folder.name} vault, opened there.`;
+      const text = `${path.basename(outcome.inside)} is part of the ${outcome.folder.name} space, opened there.`;
       const shown = target;
       void whenLoaded(shown).then(() => {
         send(shown, "app:notice", { text });
@@ -1683,15 +1683,15 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (opened) await plugins.setOn(opened, plugin, true).catch(() => undefined);
     return { error: outcome.kind === "opened" ? null : "Anur couldn't open the cloned folder." };
   },
-  "vaults:list": async () => {
-    const roots = await vaultsIn(await readRecent(app.getPath("userData")).catch(() => []));
+  "spaces:list": async () => {
+    const roots = await spacesIn(await readRecent(app.getPath("userData")).catch(() => []));
     return {
-      vaults: await Promise.all(
+      spaces: await Promise.all(
         roots.map(async (p) => ({ path: p, name: path.basename(p), github: await onGitHub(p) })),
       ),
     };
   },
-  "vaults:open": async ({ path: at }, { webContentsId }) => {
+  "spaces:open": async ({ path: at }, { webContentsId }) => {
     const win = windows.get(webContentsId);
     if (!win) return { error: "The window closed." };
     const outcome = await openFolderIn(win, at);

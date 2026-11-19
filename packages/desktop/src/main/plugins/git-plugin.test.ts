@@ -121,7 +121,7 @@ describe("the Git plugin", () => {
     );
   }, 60_000);
 
-  it("never makes a vault that holds repos into a repo, nor syncs one inside another repo", async () => {
+  it("never makes a space that holds repos into a repo, nor syncs one inside another repo", async () => {
     // ~/workspace with a code repo inside: Git leaves it alone.
     const workspace = temp("anur-git-holds-");
     mkdirSync(path.join(workspace, "api"));
@@ -131,7 +131,7 @@ describe("the Git plugin", () => {
     expect(existsSync(path.join(workspace, ".git"))).toBe(false);
     expect(a.statuses.at(-1)).toMatchObject({ text: "Holds repos", tone: "warn" });
     expect(await a.act("createRepo")).toMatch(/holds repos, so Git won't make it one/);
-    // A vault inside a repo: no commit lands in the repo around it.
+    // A space inside a repo: no commit lands in the repo around it.
     const outer = temp("anur-git-outer-");
     git(outer, "init", "-q");
     const inner = path.join(outer, "docs");
