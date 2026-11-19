@@ -1776,14 +1776,28 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return { options: choices.get(agent) };
   },
   "thread:start": async (
-    { path: doc, text, section, message, agent, options, purpose, branch, files },
+    { path: doc, text, section, message, agent, options, purpose, branch, files, fromAction },
     { webContentsId },
   ) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
     if (!folder || !t || !threadable(folder, doc))
       return { kind: "refused", reason: "Threads need a doc in a folder Anur can write to." };
-    return t.start(doc, text, section, message, agent, options, purpose, branch, files ?? []);
+    const r = await t.start(
+      doc,
+      text,
+      section,
+      message,
+      agent,
+      options,
+      purpose,
+      branch,
+      files ?? [],
+    );
+    // A proposed action run from the map: its box points at the Build now.
+    if (fromAction && r.kind === "started")
+      await t.actionRun(doc, text, fromAction.thread, fromAction.action, r.thread.id);
+    return r;
   },
   "thread:send": async ({ thread, path: doc, text, message, files }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -2153,13 +2167,19 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!t) return { ok: false };
     return { ok: await t.useOption(rel, text, thread, option, how) };
   },
+  "thread:lands": ({ threads }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    return { lands: folder ? (threadsFor(folder)?.landing(threads) ?? []) : [] };
+  },
   "thread:stop": ({ thread }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (folder) threadsFor(folder)?.stop(thread);
     return {};
   },
-  "thread:permission": ({ request, option }) => {
+  "thread:permission": ({ request, option }, { webContentsId }) => {
     hub.send({ type: "permission", request, option });
+    const folder = folders.current(webContentsId);
+    if (folder) threadsFor(folder)?.answered(request);
     return {};
   },
   "conflict:merge": async (request, { webContentsId }) => {

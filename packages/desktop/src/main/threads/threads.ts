@@ -724,7 +724,21 @@ export class Threads {
       if (l.kind === "option-used") used.set(l.option, l.how);
       if (l.kind === "option-explored") explored.add(l.option);
     }
+    const ran = new Map(
+      lines.flatMap((l) => (l.kind === "action-run" ? [[l.action, l.thread] as const] : [])),
+    );
     for (const l of lines) {
+      if (l.kind === "action-proposed") {
+        items.push({
+          kind: "proposed-action",
+          id: l.action,
+          title: l.title,
+          what: l.what,
+          path: l.path ?? null,
+          run: ran.get(l.action) ?? null,
+        });
+        continue;
+      }
       if (l.kind === "added-input" && l.thread === thread && l.source !== "link")
         items.push({ kind: "attached", source: l.source, label: l.label });
       else if (l.kind === "message")
@@ -875,6 +889,9 @@ export class Threads {
       agent: this.agentOf(thread, lines),
       tokens: tokensOf(lines),
       purpose: start.purpose ?? null,
+      action: start.purpose
+        ? actionOf(lines, Boolean(live?.turn), this.asking.get(thread), items)
+        : null,
       by: who(start.dev),
       startedAt: start.at,
     };
@@ -1323,6 +1340,7 @@ export class Threads {
   }
 
   private async endTurn(thread: string, live: Live, stopReason: string, usage: unknown = null) {
+    this.asking.delete(thread);
     const turn = live.turn;
     if (!turn) return;
     if (live.text)
@@ -1484,12 +1502,38 @@ export class Threads {
     return this.options.get(thread) ?? this.d.knownOptions?.(agent) ?? [];
   }
 
+  /** Of these threads, those whose mode lands edits as they come (the open page asks). */
+  landing(threads: readonly string[]): string[] {
+    return threads.filter((t) => this.editsLand(t));
+  }
+
   /** Edits land as they come in a mode that acts without asking; otherwise they're proposals. */
   private editsLand(thread: string): boolean {
     return editsLand(
       this.options.get(thread) ??
         this.d.knownOptions?.(this.picked.get(thread) ?? this.d.defaultAgent()),
     );
+  }
+
+  /** A prompt waiting on the person in each thread (a plan to approve, a question), for its map box. */
+  private readonly asking = new Map<string, { request: string; option: string }>();
+
+  /** The person answered a prompt: its thread no longer waits on them. */
+  answered(request: string): void {
+    for (const [thread, a] of this.asking)
+      if (a.request === request) {
+        this.asking.delete(thread);
+        const live = this.live.get(thread);
+        if (live) void this.refresh(live.rel, live.docText, thread).catch(() => undefined);
+      }
+  }
+
+  /** A proposed action was run: the proposing thread links its Build, and its box goes. */
+  async actionRun(rel: string, text: string, thread: string, action: string, run: string) {
+    const at = await this.d.locate(rel, text);
+    if (!at) return;
+    await this.append(at.doc, thread, { kind: "action-run", action, thread: run });
+    await this.refresh(rel, text, thread);
   }
 
   setOption(thread: string, id: string, value: string): void {
@@ -1625,7 +1669,14 @@ export class Threads {
         }
         return;
       }
-      case "permission":
+      case "permission": {
+        const allow =
+          m.options.find((o) => o.kind === "allow_once") ??
+          m.options.find((o) => o.kind.startsWith("allow"));
+        if (allow) {
+          this.asking.set(thread, { request: m.request, option: allow.id });
+          void this.refresh(live.rel, live.docText, thread).catch(() => undefined);
+        }
         this.d.emit({
           kind: "permission",
           thread,
@@ -1635,6 +1686,7 @@ export class Threads {
           plan: m.plan ?? null,
         });
         return;
+      }
       case "turn-end":
         await this.endTurn(thread, live, m.stopReason, m.usage);
         return;
@@ -2674,6 +2726,44 @@ export class Threads {
     };
   }
 
+  /** anur_propose_action: a planned action on the map, for the person to ▶ Run (Mock 10). */
+  private async proposeAction(thread: string, args: unknown): Promise<ToolAnswer> {
+    const live = this.live.get(thread);
+    if (!live?.turn) return { error: "Actions can only be proposed during a turn." };
+    const a = (args ?? {}) as Record<string, unknown>;
+    const str = (v: unknown, n: number) =>
+      typeof v === "string" && v.trim() ? v.trim().replace(/\s+/g, " ").slice(0, n) : null;
+    const title = str(a.title, 80);
+    const what = str(a.what, 2000);
+    if (!title || !what) return { error: "Give the action a title and what it should do." };
+    // A named section, found by its heading; the thread's own otherwise.
+    const heading = str(a.section, 200);
+    let sectionPath: string[] | null = null;
+    if (heading) {
+      const at = await this.d.locate(live.rel, live.docText);
+      const tree = at ? Threads.spans(at) : null;
+      const found =
+        tree?.find((p) => p.path.at(-1)?.toLowerCase() === heading.toLowerCase()) ?? null;
+      if (!found)
+        return {
+          error: `No section is headed "${heading}". Name one that exists, or leave section out.`,
+        };
+      sectionPath = [...found.path];
+    }
+    await this.append(live.doc, thread, {
+      kind: "action-proposed",
+      turn: live.turn,
+      action: `a${randomBytes(5).toString("hex")}`,
+      title,
+      what,
+      path: sectionPath,
+    });
+    await this.refresh(live.rel, live.docText, thread);
+    return {
+      text: "On the map as a planned action with ▶ Run. Nothing has run; say so if you mention it.",
+    };
+  }
+
   /** The person picked an option; the page wrote its text, and the thread remembers which. */
   async useOption(
     rel: string,
@@ -3378,6 +3468,7 @@ export class Threads {
   /** One of Anur's MCP tools, called by this thread's agent. */
   private async tool(thread: string, tool: string, args: unknown): Promise<ToolAnswer> {
     if (tool === "anur_offer_options") return this.offerOptions(thread, args);
+    if (tool === "anur_propose_action") return this.proposeAction(thread, args);
     if (tool === "anur_list_inputs") return this.listInputsTool(thread);
     if (tool === "anur_name_thread") return this.nameThreadTool(thread, args);
     if (tool === "anur_report_check") return this.reportCheckTool(thread, args);
@@ -3537,6 +3628,8 @@ const KNOWN = new Set([
   "used-all",
   "finding",
   "finding-decided",
+  "action-proposed",
+  "action-run",
 ]);
 
 /**
@@ -3659,4 +3752,55 @@ async function listFolder(dir: string): Promise<string[] | null> {
 export function linksIn(text: string): string[] {
   const found = text.match(/https?:\/\/[^\s<>()"'`]+/gi) ?? [];
   return [...new Set(found.map((u) => u.replace(/[.,;:!?)\]]+$/, "")))];
+}
+
+/**
+ * A Build or Check as its map box shows it (Mock 10): running, waiting on the
+ * person, or how its last turn ended, with a few words on what it did.
+ */
+function actionOf(
+  lines: readonly ThreadLine[],
+  busy: boolean,
+  ask: { request: string; option: string } | undefined,
+  items: readonly ThreadItem[],
+): {
+  state: "running" | "needs" | "done" | "failed" | "stopped";
+  detail: string;
+  ask: { request: string; option: string } | null;
+} {
+  const tools = items.filter((i): i is Extract<ThreadItem, { kind: "tool" }> => i.kind === "tool");
+  const made = items.filter((i) => i.kind === "created" && !i.undone).length;
+  const services = tools.filter(
+    (t) => /^mcp__(?!anur__)/.test(t.title) && t.status === "completed",
+  ).length;
+  const did = [
+    made ? `${String(made)} doc${made === 1 ? "" : "s"}` : "",
+    services ? `${String(services)} in services` : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  if (ask) return { state: "needs", detail: "Plan waiting", ask };
+  if (busy) {
+    const step = tools.at(-1);
+    return {
+      state: "running",
+      detail: step && !/^(completed|failed)$/.test(step.status) ? stepName(step.title) : "Working…",
+      ask: null,
+    };
+  }
+  const end = [...lines].reverse().find((l) => l.kind === "turn" && l.event === "end");
+  const reason = (end as { stopReason?: unknown } | undefined)?.stopReason;
+  const why = typeof reason === "string" ? reason : "";
+  if (why === "cancelled")
+    return { state: "stopped", detail: `At step ${String(tools.length)}`, ask: null };
+  if (why.startsWith("error:"))
+    return { state: "failed", detail: why.slice(6).trim().slice(0, 40) || "It failed", ask: null };
+  return { state: "done", detail: did || `${String(tools.length)} steps`, ask: null };
+}
+
+/** A step as a person reads it on a box: "PostHog: exec", not "mcp__claude_ai_PostHog__exec". */
+function stepName(title: string): string {
+  const m = /^mcp__(?:claude_ai_)?([A-Za-z0-9-]+?)__([A-Za-z0-9_-]+)/.exec(title);
+  const name = m ? `${(m[1] ?? "").replace(/_/g, " ")}: ${(m[2] ?? "").replace(/_/g, " ")}` : title;
+  return name.slice(0, 40);
 }

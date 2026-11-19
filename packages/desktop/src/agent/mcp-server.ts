@@ -201,6 +201,33 @@ const TOOLS = [
     },
   },
   {
+    name: "anur_propose_action",
+    description:
+      "Propose a piece of work for the person to run later, instead of doing it now: drafting emails, filing issues, writing a spec, anything a Build would do. It shows on the doc's map as a planned action with ▶ Run; when the person runs it, a Build on its section carries out `what`. Use it when the person is still planning, or asked what you could do, not when they asked you to do it now. One call per action.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description:
+            'A few words for the map, starting with a verb, such as "Draft the welcome emails".',
+        },
+        what: {
+          type: "string",
+          description:
+            "What the Build should do, in a sentence or two, with what it should rely on: the person reads it before running.",
+        },
+        section: {
+          type: "string",
+          description:
+            "The heading of the section it acts on, when it isn't this thread's own section.",
+        },
+      },
+      required: ["title", "what"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "anur_name_thread",
     description:
       'Name this thread, once, as you first reply: two to five words for what it is about, such as "Pricing per flat". The person sees it in Anur\'s thread list and on the map. A name the person gave is kept.',

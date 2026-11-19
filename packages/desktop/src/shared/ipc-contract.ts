@@ -176,6 +176,17 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     /** Every option put into the doc from this set. */
     added: z.array(z.string()),
   }),
+  /** An action the agent proposed and didn't run (Mock 10): ▶ Run starts it. */
+  z.object({
+    kind: z.literal("proposed-action"),
+    id: z.string(),
+    title: z.string(),
+    what: z.string(),
+    /** The section it acts on; null for the thread's own. */
+    path: z.array(z.string()).nullable(),
+    /** The Build thread that ran it, once run. */
+    run: z.string().nullable(),
+  }),
   /** A check of the section (15.5): each claim, its verdict and source. */
   z.object({
     kind: z.literal("check"),
@@ -309,6 +320,19 @@ export const ThreadView = z.object({
     .nullable(),
   /** An action thread (group 15), or null for thinking. */
   purpose: z.enum(["build", "check"]).nullable(),
+  /**
+   * An action's state on the map (Mock 10), for a Build or Check: running,
+   * waiting on the person (with the prompt to answer), or how it ended.
+   */
+  action: z
+    .object({
+      state: z.enum(["running", "needs", "done", "failed", "stopped"]),
+      detail: z.string(),
+      /** The plan or question waiting on the person, and the option that approves it. */
+      ask: z.object({ request: z.string(), option: z.string() }).nullable(),
+    })
+    .nullable()
+    .optional(),
   /** Who started it, when it isn't the one reading; null for their own. */
   by: z.string().nullable().optional(),
   /** When it started (ISO). */
@@ -1206,6 +1230,10 @@ export const ipcContract = {
           .array(z.object({ id: z.string().max(100), value: z.string().max(200) }))
           .max(10)
           .optional(),
+        /** A proposed action this Build runs (Mock 10): the thread that proposed it, and its ID. */
+        fromAction: z
+          .object({ thread: z.string().max(200), action: z.string().max(200) })
+          .optional(),
       })
       .strict(),
     response: z.discriminatedUnion("kind", [
@@ -1583,6 +1611,11 @@ export const ipcContract = {
     ]),
   },
   /** Stop the thread's running turn. */
+  /** Which of these threads land their edits as they come: their mode acts without asking. */
+  "thread:lands": {
+    request: z.object({ threads: z.array(z.string().max(200)).max(50) }).strict(),
+    response: z.object({ lands: z.array(z.string()) }),
+  },
   "thread:stop": {
     request: z.object({ thread: z.string().max(200) }).strict(),
     response: z.object({}),

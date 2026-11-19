@@ -11,7 +11,7 @@ import {
 import type { InkStroke, PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { useFeatures } from "../features.ts";
-import { boxStatus, type BoxStatus } from "../layout/box-status.ts";
+import type { BoxStatus } from "../layout/box-status.ts";
 import { changeSummary } from "../layout/change-summary.ts";
 import { mapSkeleton } from "../layout/map-drawing.ts";
 import { BoxSketch, sketchLine } from "./MapSketch.tsx";
@@ -37,7 +37,7 @@ type Pos = { x: number; y: number };
 type View = { x: number; y: number; z: number };
 type Box = {
   id: string;
-  kind: "section" | "thread" | "option" | "edit" | "link";
+  kind: "section" | "thread" | "option" | "edit" | "link" | "action";
   /** A link from this section to another doc's section (8.6). */
   link?: { doc: string | null; heading: string | null; written: string };
   index: number;
@@ -50,6 +50,20 @@ type Box = {
   exploring?: boolean;
   /** An option passed over when another was picked: shown when its fold is open. */
   notPicked?: boolean;
+  /**
+   * An action (Mock 10): a Build or Check thread, or one a thread proposed
+   * and hasn't run. Its state, a few words, and the thread behind it.
+   */
+  act?: {
+    state: "planned" | "running" | "needs" | "done" | "failed" | "stopped";
+    tag: "BUILD" | "CHECK";
+    detail: string;
+    ask: { request: string; option: string } | null;
+    /** For a planned one: the thread that proposed it, and its ID. */
+    proposal?: { thread: string; action: string };
+    /** For a planned one: what it will do, shown on hover. */
+    what?: string;
+  };
   /** The chip folding a made choice's other options, and whether it's open. */
   fold?: { open: boolean; count: number };
   /** The box's second line: what's under it, or what sets it apart. */
@@ -81,6 +95,27 @@ const pill = (title: string, marks = 0) => ({
   w: Math.max(150, Math.min(320, Math.round(title.length * 7.8 + 44 + marks * 18))),
   h: 36,
 });
+/**
+ * A section box's size: room for its name beside the links badge, and for
+ * the status chip beside the thread count on one line, so neither wraps a
+ * word in two. The layout's height is an estimate; the box draws at its own.
+ */
+const sectionSize = (heading: string, status: BoxStatus | null, sub: string, links: number) => {
+  const base = boxSize(heading, sub);
+  const name = Math.round(heading.length * 8.4 + 40 + (links > 0 ? 52 : 0));
+  const line = Math.round(
+    40 + (status ? status.label.length * 6.6 + 24 : 0) + (sub ? sub.length * 6.8 + 8 : 0),
+  );
+  return {
+    w: Math.min(340, Math.max(base.w, Math.min(name, 300), line)),
+    h: base.h + (status ? 6 : 0),
+  };
+};
+
+/** An action box's size (Mock 10): the same for every state. */
+const ACTION_W = 236;
+const ACTION_H = 58;
+
 /** At most this many service marks on a thread's chip. */
 const MARKS_SHOWN = 3;
 
@@ -103,7 +138,6 @@ const plainText = (text: string) =>
     )
     .join(" ");
 const clip = (text: string, n: number) => (text.length > n ? `${text.slice(0, n - 1)}…` : text);
-const plural = (n: number, noun: string) => `${String(n)} ${noun}${n === 1 ? "" : "s"}`;
 const samePath = (a: readonly string[] | null, b: readonly string[]) =>
   a !== null && a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -212,13 +246,14 @@ export function MapView({
     const skeleton = mapSkeleton(
       boxes.map((b) => ({
         id: b.id,
-        kind: b.kind,
+        // In a sketch an action draws as a section-like box, its state in its second line.
+        kind: b.kind === "action" ? "section" : b.kind,
         x: b.x,
         y: b.y,
         w: b.w,
         h: b.h,
         heading: b.kind === "link" ? `→ ${b.heading}` : b.heading,
-        sub: b.sub,
+        sub: b.act ? `${b.act.tag} · ${ACTION_STATE[b.act.state]}` : b.sub,
         parent: b.parent,
       })),
       sameDocLinks,
@@ -399,24 +434,18 @@ export function MapView({
     for (const s of tree.sections) {
       const id = idOf(s.index);
       const heading = s.path.at(-1) ?? "";
-      // The second line: the box's threads. Its sections show as its branches.
       const here = threads.filter((t) => samePath(t.path, s.path));
-      const count = here.length;
-      const sub = count > 0 ? plural(count, "thread") : "";
-      // What happened here, on the box (mock 9).
-      const status = boxStatus(here, here.filter((t) => previewed.has(t.id)).length);
       nodes.push({
         id,
         parent: s.parent === null ? null : idOf(s.parent),
-        ...boxSize(heading, status ? `${status.label}   ${sub}` : sub),
+        // Just its name (Mock 10): what hangs off it says what's happening there.
+        ...sectionSize(heading, null, "", 0),
       });
       info.set(id, {
         id,
         kind: "section",
         index: s.index,
         heading,
-        sub,
-        status,
         parent: s.parent === null ? null : idOf(s.parent),
       });
       // A branch hangs off the thread it came from (10.5), so each comes after its source.
@@ -427,10 +456,54 @@ export function MapView({
         const source = here.find((x) => x.id === from);
         return source ? 1 + depth(source, new Set([...seen, t.id])) : 0;
       };
+      // Actions a thread proposed and nobody has run hang off that thread, planned, with ▶ Run.
+      const planned = (t: ThreadView, tid: string) => {
+        for (const it of t.items) {
+          if (it.kind !== "proposed-action" || it.run) continue;
+          const aid = `a:${it.id}`;
+          nodes.push({ id: aid, parent: tid, w: ACTION_W, h: ACTION_H });
+          info.set(aid, {
+            id: aid,
+            kind: "action",
+            index: s.index,
+            thread: t,
+            heading: it.title,
+            act: {
+              state: "planned",
+              tag: "BUILD",
+              detail: "Proposed",
+              ask: null,
+              proposal: { thread: t.id, action: it.id },
+              what: it.what,
+            },
+            parent: tid,
+          });
+        }
+      };
       for (const t of [...here].sort((a, b) => depth(a) - depth(b))) {
         const tid = `t:${t.id}`;
         const from = t.branchedFrom?.thread;
         const parent = from && onSection.has(from) ? `t:${from}` : id;
+        // A Build or Check is an action box; any other thread, a chip.
+        if (t.purpose && t.action) {
+          nodes.push({ id: tid, parent, w: ACTION_W, h: ACTION_H });
+          info.set(tid, {
+            id: tid,
+            kind: "action",
+            index: s.index,
+            thread: t,
+            heading: t.title.replace(/^(Build|Check)( this section)?:?\s*/i, "") || t.title,
+            act: {
+              state: t.action.state,
+              tag: t.purpose === "check" ? "CHECK" : "BUILD",
+              detail: t.action.detail,
+              ask: t.action.ask,
+            },
+            parent,
+          });
+          planned(t, tid);
+          continue;
+        }
         nodes.push({
           id: tid,
           parent,
@@ -444,6 +517,7 @@ export function MapView({
           heading: t.title,
           parent,
         });
+        planned(t, tid);
       }
       // Links to other docs' sections (8.6): one badge on the section, with the list on a click.
       const seen = new Set<string>();
@@ -471,8 +545,7 @@ export function MapView({
         own.outLinks = outLinks;
         // Room for the badge beside the name.
         const node = nodes.find((n) => n.id === id);
-        if (node)
-          Object.assign(node, boxSize(`${heading}  → ${String(outLinks.length)}`, own.sub ?? ""));
+        if (node) Object.assign(node, sectionSize(heading, null, "", outLinks.length));
       }
       // Each thread's option sets, one family per choice: a first set and the
       // narrower sets found exploring it. A choice still open shows its
@@ -1004,7 +1077,10 @@ export function MapView({
         );
       return;
     }
-    if ((b.kind === "thread" || b.kind === "option" || b.kind === "edit") && b.thread) {
+    if (
+      (b.kind === "thread" || b.kind === "option" || b.kind === "edit" || b.kind === "action") &&
+      b.thread
+    ) {
       onSelect(b.index);
       window.dispatchEvent(
         new CustomEvent("anur:open-thread", { detail: { thread: b.thread.id } }),
@@ -1505,6 +1581,45 @@ export function MapView({
               {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed={false} /> : null}
               <span className="truncate">→ {b.heading}</span>
             </button>
+          ) : b.kind === "action" && b.act && b.thread ? (
+            <div
+              key={b.id}
+              role="button"
+              tabIndex={-1}
+              className={`map-action ${b.act.state}`}
+              data-peek={b.id}
+              style={{ left: b.x - b.w / 2, top: b.y, width: b.w, transform: "translateY(-50%)" }}
+              onPointerDown={(e) => {
+                onBoxDown(e, b);
+              }}
+            >
+              <div className="map-action-head">
+                <span className="map-action-tag">{b.act.tag}</span>
+                {servicesUsed(b.thread.items)
+                  .slice(0, 2)
+                  .map((sv) => (
+                    <ServiceIcon key={sv.name} service={sv} />
+                  ))}
+                <span className="map-action-name truncate">{b.heading}</span>
+              </div>
+              <div className="map-action-foot">
+                <span className={`map-action-state ${b.act.state}`}>
+                  {ACTION_STATE[b.act.state]}
+                </span>
+                {/* A few words only where they tell something new: the step under way, why it failed. */}
+                <span className="map-action-detail truncate">
+                  {b.act.state === "running" || b.act.state === "failed" ? b.act.detail : ""}
+                </span>
+                {writable ? (
+                  <ActionControl
+                    act={b.act}
+                    thread={b.thread}
+                    docPath={docPath}
+                    docText={docText}
+                  />
+                ) : null}
+              </div>
+            </div>
           ) : b.kind === "thread" && b.thread ? (
             <button
               key={b.id}
@@ -1650,28 +1765,7 @@ export function MapView({
                   ))}
                 </div>
               ) : null}
-              {(() => {
-                const here = threads.filter((t) =>
-                  samePath(t.path, tree.sections[b.index]?.path ?? []),
-                );
-                // A thread here needs you: options to pick, or an edit to use.
-                const needs = here.some((t) => {
-                  const offers = t.items.flatMap((x) => (x.kind === "options" ? [x] : []));
-                  return (offers.length > 0 && !offers.some((x) => x.used)) || previewed.has(t.id);
-                });
-                return b.sub || needs || b.status ? (
-                  <div
-                    className="map-box-sub"
-                    title={needs ? "A thread here needs you" : undefined}
-                  >
-                    {needs ? <span className="think-needs-dot" aria-label="Needs you" /> : null}
-                    {b.status ? (
-                      <span className={`map-status ${b.status.tone}`}>{b.status.label}</span>
-                    ) : null}
-                    {b.sub}
-                  </div>
-                ) : null;
-              })()}
+              {/* A section is just its name (Mock 10): its threads and actions hang off it. */}
               {writable
                 ? (["left", "right", "top", "bottom"] as const).map((h) => (
                     <span
@@ -1732,6 +1826,39 @@ export function MapView({
         />
       ) : null}
       {(() => {
+        // An action: what it will do, or what its thread last said it did.
+        const act = peek ? byId.get(peek) : undefined;
+        if (act?.kind === "action" && act.act && act.thread && !drag && !linking) {
+          const said = act.thread.items.findLast((x) => x.kind === "message" && x.role === "agent");
+          const body =
+            act.act.state === "planned"
+              ? (act.act.what ?? "")
+              : said?.kind === "message"
+                ? said.text
+                : "";
+          const r = host.current?.getBoundingClientRect();
+          const right = (act.x + act.w / 2) * v.z + v.x + 12;
+          const left = (act.x - act.w / 2) * v.z + v.x - 12 - 320;
+          const x = r && right + 320 > r.width ? Math.max(8, left) : right;
+          const y = Math.max(
+            8,
+            Math.min((act.y - act.h / 2) * v.z + v.y, (r?.height ?? 600) - 320 - 60),
+          );
+          return (
+            <div
+              className="map-peek"
+              style={{ left: x, top: y }}
+              role="note"
+              aria-label={act.heading}
+            >
+              <div className="map-peek-name">
+                {act.act.tag === "CHECK" ? "Check" : "Build"} · {ACTION_STATE[act.act.state]}:{" "}
+                {act.heading}
+              </div>
+              {body ? <Markdown text={body} /> : <p className="quiet">Nothing said yet.</p>}
+            </div>
+          );
+        }
         const opt = peek?.startsWith("o:") || peek?.startsWith("p:") ? byId.get(peek) : undefined;
         const s = peek?.startsWith("s:") ? tree.sections[Number(peek.slice(2))] : undefined;
         const b = opt ?? (s ? byId.get(idOf(s.index)) : undefined);
@@ -1927,4 +2054,90 @@ function KeyBar() {
       ))}
     </div>
   );
+}
+
+const ACTION_STATE: Record<NonNullable<Box["act"]>["state"], string> = {
+  planned: "Planned",
+  running: "Running",
+  needs: "Needs you",
+  done: "Done",
+  failed: "Failed",
+  stopped: "Stopped",
+};
+
+/**
+ * An action box's one control (Mock 10). A done action only opens: running it
+ * again could send or file things twice, so that's in its thread, asked first.
+ */
+function ActionControl({
+  act,
+  thread,
+  docPath,
+  docText,
+}: {
+  act: NonNullable<Box["act"]>;
+  thread: ThreadView;
+  docPath: string;
+  docText: () => string;
+}) {
+  const say = (message: string) => {
+    void anur.call("thread:send", { thread: thread.id, path: docPath, text: docText(), message });
+  };
+  const button = (label: string, run: () => void, primary = false) => (
+    <button
+      type="button"
+      className={`map-action-go${primary ? " primary" : ""}`}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+      }}
+      onClick={(e) => {
+        e.stopPropagation();
+        run();
+      }}
+    >
+      {label}
+    </button>
+  );
+  switch (act.state) {
+    case "planned":
+      return button(
+        "▶ Run",
+        () => {
+          if (act.proposal)
+            window.dispatchEvent(new CustomEvent("anur:run-action", { detail: act.proposal }));
+        },
+        true,
+      );
+    case "running":
+      return button("■ Stop", () => {
+        void anur.call("thread:stop", { thread: thread.id });
+      });
+    case "needs":
+      return act.ask
+        ? button(
+            "Approve",
+            () => {
+              const ask = act.ask;
+              if (ask)
+                void anur.call("thread:permission", { request: ask.request, option: ask.option });
+            },
+            true,
+          )
+        : null;
+    case "failed":
+      return button("↻ Retry", () => {
+        say(
+          "That failed. Go on from the step that failed; don't redo anything that already worked, such as drafts, issues or messages already made.",
+        );
+      });
+    case "stopped":
+      return button("▶ Resume", () => {
+        say(
+          "Carry on from where you stopped; don't redo anything already done, such as drafts, issues or messages already made.",
+        );
+      });
+    default:
+      // Done: no control. Clicking the box opens its thread; running again is there, asked first.
+      return null;
+  }
 }
