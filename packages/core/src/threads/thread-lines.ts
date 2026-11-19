@@ -318,6 +318,27 @@ export const OptionExploredLine = LineEnvelope.extend({
   option: z.string().min(1),
 });
 
+/**
+ * An action the agent proposes and doesn't run (Mock 10): a planned box on
+ * the map with ▶ Run, which starts a Build on its section with `what`.
+ */
+export const ActionProposedLine = LineEnvelope.extend({
+  kind: z.literal("action-proposed"),
+  turn: z.string().min(1),
+  action: z.string().min(1),
+  title: z.string().min(1),
+  what: z.string().min(1),
+  /** The section it acts on, by heading path; the thread's own when left out. */
+  path: z.array(z.string()).nullable().optional(),
+});
+
+/** A proposed action was run: the Build thread that carries it out. */
+export const ActionRunLine = LineEnvelope.extend({
+  kind: z.literal("action-run"),
+  action: z.string().min(1),
+  thread: z.string().min(1),
+});
+
 export const KnownThreadLine = z.discriminatedUnion("kind", [
   ThreadStartLine,
   SessionLine,
@@ -340,6 +361,8 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   UsedAllLine,
   FindingLine,
   FindingDecidedLine,
+  ActionProposedLine,
+  ActionRunLine,
 ]);
 export type KnownThreadLine = z.infer<typeof KnownThreadLine>;
 

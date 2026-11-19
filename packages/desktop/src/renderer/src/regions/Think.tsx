@@ -975,6 +975,52 @@ export function Think({
     [docPath, section, docText, setThreads, newAgent, newChoices, branch, attached],
   );
 
+  /**
+   * ▶ Run on an action a thread proposed (Mock 10): a Build on its section,
+   * with what the proposal said to do, in the mode picked for new threads.
+   */
+  const runAction = useCallback(
+    async (from: ThreadView, a: { id: string; what: string; path: readonly string[] | null }) => {
+      const target = a.path ?? from.path;
+      const node = tree?.sections.find((x) => target && samePath(target, x.path));
+      if (!docPath || !node) {
+        setError("That action's section is gone.");
+        return;
+      }
+      setError(null);
+      const r = await anur.call("thread:start", {
+        path: docPath,
+        text: docText(),
+        section: { index: node.index, path: node.path },
+        message: a.what,
+        agent: newAgent,
+        options: newChoices.map((o) => ({ id: o.id, value: o.current })),
+        purpose: "build",
+        fromAction: { thread: from.id, action: a.id },
+      });
+      if (r.kind === "refused") {
+        setError(r.reason);
+        return;
+      }
+      setThreads((ts) => [...ts.filter((t) => t.id !== r.thread.id), r.thread]);
+      setOpen(r.thread.id);
+    },
+    [tree, docPath, docText, newAgent, newChoices, setThreads],
+  );
+  // ▶ Run pressed on a planned box on the map.
+  useEffect(() => {
+    const onRun = (e: Event) => {
+      const { thread, action } = (e as CustomEvent<{ thread: string; action: string }>).detail;
+      const from = threads.find((t) => t.id === thread);
+      const a = from?.items.find((x) => x.kind === "proposed-action" && x.id === action);
+      if (from && a?.kind === "proposed-action" && !a.run) void runAction(from, a);
+    };
+    window.addEventListener("anur:run-action", onRun);
+    return () => {
+      window.removeEventListener("anur:run-action", onRun);
+    };
+  }, [threads, runAction]);
+
   /** Dropping files, rows from the files panel, or links on Think adds them as inputs. */
   const dropProps = () =>
     writable
@@ -1627,6 +1673,35 @@ export function Think({
                       openFile(item.label);
                     }}
                   />
+                </div>
+              ) : item.kind === "proposed-action" ? (
+                <div
+                  key={i}
+                  className="think-proposed-action"
+                  role="group"
+                  aria-label="Proposed action"
+                >
+                  <div className="think-offer-head">
+                    <span className="think-action-tag">BUILD</span>
+                    <strong>{item.title}</strong>
+                    <span className="quiet">{item.run ? "Ran" : "Planned"}</span>
+                  </div>
+                  <div className="think-offer-text">
+                    <Markdown text={item.what} />
+                  </div>
+                  {writable && !item.run ? (
+                    <div className="think-offer-actions">
+                      <button
+                        type="button"
+                        className="think-button primary"
+                        onClick={() => {
+                          void runAction(thread, item);
+                        }}
+                      >
+                        ▶ Run
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div key={i} className="think-error" role="alert">

@@ -329,6 +329,8 @@ export function buildBundle({
     "",
     "Whenever the person has a choice to make, offer it with Anur's anur_offer_options tool instead of listing alternatives in your reply: two or more ways this section could read, or a decision such as a date, an approach or a fallback. One call per choice; several choices are several calls. Each option is a short title and its text, without a heading. For a decision that isn't this section itself, give the call a `heading` naming it, such as \"Launch date\": the picked option goes under a subsection of that name, a new branch on the map. When they aren't alternatives but parts that can all belong, such as workstreams or sections of a plan, set `several`: the person adds any of them, each as its own subsection. The person sees the options as cards and on the map, and picks one. Your reply then says in a line or two how they differ and which you'd pick; don't repeat their text.",
     "",
+    "When the person is planning, or asks what you could do, and you see work worth doing later, such as drafting emails, filing issues or writing a spec, propose each with Anur's anur_propose_action tool instead of doing it: it shows on the map with ▶ Run for them to start. When they ask you to do it now, do it.",
+    "",
     "Notes in this folder link to each other, as in Obsidian: when you write a note, link the notes it relates to with [[Note name]], or [[Note name#Heading]] for one section, by file name without .md. When you make several notes together, also make an overview note that links each of them, and link each back to it. A CLAUDE.md in the folder that says otherwise wins.",
     "",
   ];

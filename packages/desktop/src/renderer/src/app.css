@@ -5775,3 +5775,155 @@ button.file-card-name:hover {
 .map-box-sub .map-status {
   white-space: nowrap;
 }
+
+/*
+ * An action on the map (Mock 10): a solid card with a state bar down its
+ * left, apart from a section's plain box and a thread's dashed pill.
+ */
+.map-action {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 7px 10px 8px 11px;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--state, var(--slate));
+  border-radius: 8px;
+  background: var(--sheet);
+  box-shadow: 0 2px 6px rgb(23 34 59 / 8%);
+  font: 13px var(--font-ui);
+  cursor: pointer;
+}
+
+.map-action.planned {
+  --state: var(--slate);
+  border-style: dashed;
+  border-left-style: solid;
+}
+
+.map-action.running {
+  --state: var(--blue);
+}
+
+.map-action.needs {
+  --state: var(--amber);
+}
+
+.map-action.done {
+  --state: var(--green);
+}
+
+.map-action.failed {
+  --state: #d14343;
+}
+
+.map-action.stopped {
+  --state: var(--slate);
+}
+
+.map-action-head,
+.map-action-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.map-action-head .service-icon {
+  margin-right: 0;
+}
+
+.map-action-foot {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--graphite);
+}
+
+.map-action-tag {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--hover);
+  color: var(--graphite);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.map-action-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.map-action-state {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.map-action-state.planned,
+.map-action-state.stopped {
+  background: var(--hover);
+  color: var(--graphite);
+}
+
+.map-action-state.running {
+  background: var(--blue-wash);
+  color: var(--blue);
+}
+
+.map-action-state.needs {
+  background: var(--amber-wash);
+  color: var(--amber);
+}
+
+.map-action-state.done {
+  background: var(--green-wash);
+  color: var(--green);
+}
+
+.map-action-state.failed {
+  background: #fdecec;
+  color: #b42318;
+}
+
+.map-action-detail {
+  flex: 1;
+  min-width: 0;
+}
+
+.map-action-go {
+  flex: none;
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--blue-wash);
+  color: var(--blue);
+  font: 600 11.5px var(--font-ui);
+  cursor: pointer;
+}
+
+.map-action-go.primary {
+  background: var(--ink);
+  color: var(--sheet);
+}
+
+/* A proposed action in a thread: a card with ▶ Run. */
+.think-proposed-action {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px dashed var(--rule);
+  border-left: 4px solid var(--slate);
+  border-radius: 8px;
+}
+
+.think-action-tag {
+  margin-right: 6px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--hover);
+  color: var(--graphite);
+  font-size: 9.5px;
+  font-weight: 700;
+}
