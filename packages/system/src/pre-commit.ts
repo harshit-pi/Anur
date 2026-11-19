@@ -157,7 +157,13 @@ function blockBehind(repo: string): boolean {
   if (!entries.length) return false;
   const now = git(repo, "show", "HEAD:CLAUDE.md");
   const text = now === null ? null : `${now}\n`;
-  const want = withBlock(text, renderBlock(entries, "team"));
+  // As of the commit's own day: a decision whose "until" passed since isn't the hook's fault.
+  const when = git(repo, "log", "-1", "--format=%cI", "HEAD");
+  const at = when ? new Date(when) : new Date();
+  const want = withBlock(
+    text,
+    renderBlock(entries, "team", Number.isNaN(at.getTime()) ? new Date() : at),
+  );
   // git trims nothing but the final newline here; compare without it.
   return (want ?? "").trimEnd() !== (text ?? "").trimEnd();
 }

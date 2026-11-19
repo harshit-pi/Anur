@@ -236,4 +236,32 @@ describe("whether a repo's hook is rebuilding its block (23.8)", () => {
     expect(committed(dir)).toContain("Three retries.");
     expect(hookTrouble(dir, shim)).toBeNull();
   });
+
+  it("doesn't blame the hook for a decision whose until passed after the commit (23.3)", () => {
+    const dir = repo();
+    const h = home();
+    const shim = path.join(h, ".anur", "bin", "anur-pre-commit");
+    installPreCommit(dir);
+    mkdirSync(path.join(dir, ".anur", "decisions"), { recursive: true });
+    writeFileSync(
+      path.join(dir, ".anur", "decisions", "sam.jsonl"),
+      `${JSON.stringify({ id: "d-0000009", at: "2026-01-01T10:00:00.000Z", dev: "mac-a", seq: 0, kind: "decision", scope: "repo", ref: null, decision: "Freeze deploys.", quote: "freeze", instead: null, until: "2026-01-05", who: "sam" })}\n`,
+    );
+    run(dir, {}, "add", ".anur/decisions/sam.jsonl");
+    // Committed on Jan 2, while it held; read today, long after.
+    run(
+      dir,
+      {
+        HOME: h,
+        GIT_COMMITTER_DATE: "2026-01-02T10:00:00Z",
+        GIT_AUTHOR_DATE: "2026-01-02T10:00:00Z",
+      },
+      "commit",
+      "-q",
+      "-m",
+      "A dated decision",
+    );
+    expect(committed(dir)).toContain("- Freeze deploys. Until: 2026-01-05. (sam)");
+    expect(hookTrouble(dir, shim)).toBeNull();
+  });
 });

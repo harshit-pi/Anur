@@ -1,4 +1,5 @@
 import type { CommittedEntry } from "./committed.ts";
+import { untilPassed } from "./until.ts";
 
 /**
  * The block in a repo's `CLAUDE.md` that carries its committed decisions to
@@ -68,11 +69,29 @@ const HEADINGS: Record<BlockKind, { title: string; intro: string; facts?: string
 export function renderBlock(
   entries: readonly CommittedEntry[],
   kind: BlockKind = "team",
+  /** Today, for an "until" that has passed (23.3); the same all day on every Mac. */
+  now: Date = new Date(),
 ): string | null {
   const sorted = [...entries].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const decisions = sorted.flatMap((e) => (e.kind === "decision" ? [e] : []));
+  const all = sorted.flatMap((e) => (e.kind === "decision" ? [e] : []));
+  // Past its "until": listed apart, no longer followed (18.2, 23.3).
+  const lapsed = all.filter((d) => untilPassed(d.until, d.at, now));
+  const decisions = all.filter((d) => !lapsed.includes(d));
+  // Pairs that disagree (18.4): by ID, or the thread finding a copy came from.
+  const byId = new Map<string, (typeof all)[number]>();
+  for (const d of decisions) {
+    byId.set(d.id, d);
+    if (d.ref) byId.set(d.ref, d);
+  }
+  const against = new Map<string, (typeof all)[number]>();
+  for (const d of decisions) {
+    const other = d.against ? byId.get(d.against) : undefined;
+    if (!other || other === d) continue;
+    against.set(d.id, other);
+    against.set(other.id, d);
+  }
   const findings = sorted.flatMap((e) => (e.kind === "finding" ? [e] : []));
-  if (!decisions.length && !findings.length) return null;
+  if (!all.length && !findings.length) return null;
   // Shaped as Prettier formats Markdown, so a repo that runs Prettier on
   // commit leaves it as written and every Mac's bytes stay the same.
   const [begin, end] = markers(kind);
@@ -88,9 +107,13 @@ export function renderBlock(
     lines.push(HEADINGS[kind].intro, "");
     for (const d of decisions) {
       const on = where(d.scope, d.on);
+      const other = against.get(d.id);
       const tail = [
         d.instead ? `Instead of: ${flat(d.instead)}.` : null,
         d.until ? `Until: ${flat(d.until)}.` : null,
+        other
+          ? `Disagrees with "${flat(other.decision)}"${other.who ? ` (${flat(other.who)})` : ""}: neither holds until a person picks, so ask which holds.`
+          : null,
       ].filter(Boolean);
       const meta = [d.who ? flat(d.who) : null, on ? `on ${flat(on)}` : null].filter(Boolean);
       // A sentence of its own, so "Instead of" never runs on from it.
@@ -100,6 +123,17 @@ export function renderBlock(
         `- ${head}${tail.length ? ` ${tail.join(" ")}` : ""}${meta.length ? ` (${meta.join(", ")})` : ""}`,
       );
     }
+    lines.push("");
+  }
+  if (lapsed.length) {
+    lines.push(
+      'These are past their "until", so they no longer hold. Don\'t follow them unless a person keeps them again.',
+      "",
+    );
+    for (const d of lapsed)
+      lines.push(
+        `- ${flat(d.decision)} (until ${flat(d.until ?? "")}${d.who ? `, ${flat(d.who)}` : ""})`,
+      );
     lines.push("");
   }
   if (findings.length) {

@@ -146,3 +146,52 @@ describe("a decision without a full stop", () => {
     expect(renderBlock([decision("d2", "Use Stripe")])).toContain("- Use Stripe (Sam)");
   });
 });
+
+describe("until and disagreements in the committed block (23.3)", () => {
+  const today = new Date("2026-11-18T12:00:00.000Z");
+
+  it("lists one past its until apart, no longer followed, and one still dated as usual", async () => {
+    const block =
+      renderBlock(
+        [
+          decision("d1", "Node 20 for builds.", {
+            until: "2026-01-01",
+            at: "2025-12-01T10:00:00.000Z",
+          }),
+          decision("d2", "Freeze deploys.", { until: "Dec 24" }),
+          decision("d3", "Stripe only.", { until: "for now", at: "2020-01-01T00:00:00.000Z" }),
+        ],
+        "team",
+        today,
+      ) ?? "";
+    expect(block).toContain("- Freeze deploys. Until: Dec 24. (Sam)");
+    expect(block).toContain("- Stripe only. Until: for now. (Sam)");
+    expect(block).toContain('These are past their "until", so they no longer hold.');
+    expect(block).toContain("- Node 20 for builds. (until 2026-01-01, Sam)");
+    expect(block.indexOf("Node 20")).toBeGreaterThan(block.indexOf("no longer hold"));
+    const file = withBlock("# Api\n", block) ?? "";
+    expect(await format(file, { parser: "markdown" })).toBe(file);
+  });
+
+  it("marks both of a pair that disagree, by ID or the thread finding a copy came from", async () => {
+    const block =
+      renderBlock(
+        [
+          decision("d1", "Three retries.", { who: "Priya", ref: "t-finding-1" }),
+          decision("d2", "Five retries.", { against: "t-finding-1" }),
+          decision("d3", "Use Stripe.", { against: "gone-id" }),
+        ],
+        "team",
+        today,
+      ) ?? "";
+    expect(block).toContain(
+      '- Three retries. Disagrees with "Five retries." (Sam): neither holds until a person picks, so ask which holds. (Priya)',
+    );
+    expect(block).toContain(
+      '- Five retries. Disagrees with "Three retries." (Priya): neither holds until a person picks, so ask which holds. (Sam)',
+    );
+    expect(block).toContain("- Use Stripe. (Sam)");
+    const file = withBlock("# Api\n", block) ?? "";
+    expect(await format(file, { parser: "markdown" })).toBe(file);
+  });
+});
