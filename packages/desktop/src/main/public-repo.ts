@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { githubOf } from "@anur/system";
+import { loginPath } from "../agent/find-claude.ts";
 
 const run = promisify(execFile);
 
@@ -36,8 +37,10 @@ export type Visibility = (repo: string) => Promise<boolean | null>;
 /** Asks `gh` first, signed in or not, then GitHub's public API, which answers only for public repos. */
 export const githubVisibility: Visibility = async (repo) => {
   try {
+    // The login shell's PATH: an app opened from Finder can't see Homebrew's gh.
     const { stdout } = await run("gh", ["api", `repos/${repo}`, "--jq", ".private"], {
       timeout: 5000,
+      env: { ...process.env, PATH: await loginPath() },
     });
     if (stdout.trim() === "false") return true;
     if (stdout.trim() === "true") return false;
