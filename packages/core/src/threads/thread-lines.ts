@@ -37,6 +37,11 @@ export const ThreadStartLine = LineEnvelope.extend({
     .object({ thread: ThreadId, option: z.string().min(1) })
     .nullable()
     .optional(),
+  /**
+   * Where its agent runs, as a path from the opened folder: the doc's home,
+   * such as a repo (18.15.6); absent for the opened folder itself.
+   */
+  cwd: z.string().optional(),
 });
 
 /** An agent session this thread runs in; a new line each time one starts, resumes or is rebuilt. */
