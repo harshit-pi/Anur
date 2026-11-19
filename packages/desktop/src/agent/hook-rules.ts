@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import path from "node:path";
 import { denies, type DenyRule } from "./deny-rules.ts";
 
@@ -73,6 +74,8 @@ export const MESSAGES = {
   gitClean:
     "Anur: git clean -x would delete .anur/, where every thread lives. Add -e .anur to keep it.",
   otherCopy: "Anur: that is another thread's working copy, and off limits to this one.",
+  searchCopies:
+    "Anur: a search from there would read other threads' working copies. Search a folder below it, such as the project you're working in.",
   ownRule: (rule: string, rel: string) =>
     `Your own settings deny this (${rule}), and that holds for the working copy of ${rel} too.`,
 } as const;
@@ -120,6 +123,7 @@ export function decide(call: ToolCall, config: HookConfig, resolve: Resolver): D
   for (const value of strings(input)) {
     if (value.includes(".anur") && inAnur(resolve(value, cwd), config))
       return refuse(MESSAGES.anur);
+    if (namesOtherCopy(value, config)) return refuse(MESSAGES.otherCopy);
   }
   return null;
 }
@@ -143,6 +147,27 @@ export function decideShell(
   if (/\bgit\s+clean\b/.test(cmd) && /\s-[a-zA-Z]*[xX]/.test(cmd) && !excludesAnur)
     return MESSAGES.gitClean;
 
+  // Other threads' working copies (30.14): named outright, or under a recursive
+  // read from a folder that holds them, as "find ~ -exec cat" or "rg secret ~"
+  // would be. The path is read as the shell would see it: "~" is home, and
+  // "Application\ Support" one word.
+  const plain = cmd.replace(/\\ /g, " ").replace(/(^|[\s'"=])~(?=\/|\s|$)/g, `$1${homedir()}`);
+  const listsOnly = /^\s*(du|ls|stat)\b/.test(cmd);
+  if (!listsOnly && namesOtherCopy(plain, config)) return MESSAGES.otherCopy;
+  const searches =
+    /\b[ef]?grep\b[^|;&]*\s-[a-zA-Z]*[rR]/.test(plain) ||
+    /\brg\b/.test(plain) ||
+    /\bfind\b[^|;&]*(\|\s*xargs\s+\S+|-exec\s+(cat|grep|head|tail|less|sed|awk))/.test(plain);
+  if (searches) {
+    const roots = plain
+      .split(/[\s;|&<>()'"`]+/)
+      .filter((w) => !w.startsWith("-") && (w === "." || w.includes("/")))
+      .map(resolve);
+    // The disk's root holds everything, the copies too.
+    const holds = (r: string) => r === path.parse(r).root || inside(config.copiesRoot, r);
+    if (roots.some(holds)) return MESSAGES.searchCopies;
+  }
+
   // A path into .anur/, named outright; listing its size or entries reads no thread.
   const words = cmd.split(/[\s;|&<>()'"`]+/).filter(Boolean);
   const namesAnur = words.some((w) => w.includes(".anur") && inAnur(resolve(w), config));
@@ -163,4 +188,22 @@ export function decideShell(
   // Writes onto a doc from the shell are not refused: an agent can make them
   // in Obsidian, and Anur turns them into the thread's proposal afterwards.
   return null;
+}
+
+/**
+ * Whether a command names a path inside another thread's working copies: the
+ * copies folder itself, or a thread's folder in it that isn't this one's.
+ */
+function namesOtherCopy(cmd: string, config: HookConfig): boolean {
+  const root = config.copiesRoot.replace(/\/+$/, "").toLowerCase();
+  const own = (
+    path.relative(config.copiesRoot, config.copies).split(path.sep)[0] ?? ""
+  ).toLowerCase();
+  const text = cmd.toLowerCase();
+  for (let at = text.indexOf(root); at >= 0; at = text.indexOf(root, at + root.length)) {
+    const rest = text.slice(at + root.length);
+    const thread = /^\/([^/\s'"]+)/.exec(rest)?.[1];
+    if (!thread || thread !== own) return true;
+  }
+  return false;
 }

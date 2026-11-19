@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { MESSAGES, decide, toCopy, type HookConfig } from "./hook-rules.ts";
@@ -68,6 +69,29 @@ describe("the hook's shell rules", () => {
     expect(bash("grep -rn retry notes/")).toBeNull();
     expect(bash("find . -name '*.md' | xargs cat")).toBe(MESSAGES.recursive);
     expect(bash("rg -uu secret")).toBe(MESSAGES.recursive);
+  });
+
+  it("keeps the shell out of other threads' working copies, named or searched (30.14)", () => {
+    expect(bash("cat /support/copies/t2/notes/plan.md")).toBe(MESSAGES.otherCopy);
+    expect(bash("grep -n retry /support/copies/T2/plan.md")).toBe(MESSAGES.otherCopy);
+    expect(bash("cat /support/copies/t1/notes/plan.md")).toBeNull();
+    expect(bash("ls /support/copies")).toBeNull();
+    expect(bash("rg secret /support")).toBe(MESSAGES.searchCopies);
+    expect(bash("find / -name '*.md' -exec cat {} +")).toBe(MESSAGES.searchCopies);
+    expect(bash("grep -rn retry /support/copies/t1")).toBeNull();
+    expect(call("mcp__x__read", { path: "/support/copies/t2/a.md" })).toBe(MESSAGES.otherCopy);
+  });
+
+  it("reads a path the way the shell does: home for ~, an escaped space as part of the name", () => {
+    const home = path.join(homedir(), "Library/Application Support/Anur/copies");
+    const c = { ...config, copiesRoot: home, copies: path.join(home, "t1") };
+    const sh = (command: string) =>
+      decide({ tool_name: "Bash", tool_input: { command }, cwd: folder }, c, resolve)?.reason ??
+      null;
+    expect(sh("cat ~/Library/Application\\ Support/Anur/copies/t2/plan.md")).toBe(
+      MESSAGES.otherCopy,
+    );
+    expect(sh("cat ~/Library/Application\\ Support/Anur/copies/t1/plan.md")).toBeNull();
   });
 
   it("lets rg and git grep search, since they skip .anur/ by its ignore files", () => {
