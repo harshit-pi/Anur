@@ -46,4 +46,13 @@ describe("folderFor", () => {
       path.join(h, "inner"),
     );
   });
+
+  it("never opens the home folder, though its own .anur holds the person's decisions", async () => {
+    const h = home();
+    // Since 18.3 the home folder has .anur, for decisions kept for everywhere.
+    mkdirSync(path.join(h, ".anur"));
+    expect(await folderFor(path.join(h, "Downloads", "readme.md"), [], [], h)).toBe(
+      path.join(h, "Downloads"),
+    );
+  });
 });

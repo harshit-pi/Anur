@@ -32,6 +32,12 @@ mac:
         CFBundleTypeExtensions:
           - md
           - markdown
+      # A folder dropped on Anur's icon, or handed to it with `open -a`, opens as a folder.
+      - CFBundleTypeName: Folder
+        CFBundleTypeRole: Viewer
+        LSHandlerRank: None
+        LSItemContentTypes:
+          - public.folder
     UTImportedTypeDeclarations:
       - UTTypeIdentifier: net.daringfireball.markdown
         UTTypeDescription: Markdown document

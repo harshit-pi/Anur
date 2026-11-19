@@ -5599,3 +5599,10 @@ button.file-card-name:hover {
   font-size: 12.5px;
   margin-top: 8px;
 }
+
+/* An option picked on the map, marked in its thread for a moment. */
+.think-offer.flash {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  transition: outline-color 0.4s;
+}

@@ -74,6 +74,8 @@ describe("making a new doc", () => {
   it("never writes over a file, or outside the folder, or in a hidden folder", async () => {
     const f = folder();
     expect(await createDoc(f, "Plan.md")).toMatchObject({ kind: "failed" });
+    // A task report's tab path is no folder (found in the PM run, 2026-11-19).
+    expect(await createDoc(f, "anur:task/Untitled.md")).toMatchObject({ kind: "failed" });
     expect(readFileSync(path.join(f.path, "Plan.md"), "utf8")).toContain("Monday");
     expect(await createDoc(f, "../Escape.md")).toMatchObject({ kind: "failed" });
     expect(await createDoc(f, ".anur/x.md")).toMatchObject({ kind: "failed" });

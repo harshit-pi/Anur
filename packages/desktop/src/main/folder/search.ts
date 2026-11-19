@@ -118,6 +118,10 @@ export async function createDoc(
   if (rel.split("/").some((part) => part.startsWith("."))) {
     return { kind: "failed", reason: "A doc can't go in a hidden folder." };
   }
+  // As folders: no \ or : in a name, so a tab that is no file, as a task
+  // report ("anur:task/…"), is never a folder to make.
+  if (rel.split("/").some((part) => /[\\:]/.test(part)))
+    return { kind: "failed", reason: "Names can't hold \\ or :." };
   const full = path.resolve(folder.path, rel);
   if (!full.startsWith(path.resolve(folder.path) + path.sep)) {
     return { kind: "failed", reason: "That's outside this folder." };
