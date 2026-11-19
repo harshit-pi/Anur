@@ -82,7 +82,9 @@ export {
   SHIM,
   hookFileFor,
   installPreCommit,
+  hookTrouble,
   preCommitInstalled,
+  type HookTrouble,
   withHookLines,
 } from "./pre-commit.ts";
 export {

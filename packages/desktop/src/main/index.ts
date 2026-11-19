@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync } from "node:fs";
 import { readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -122,7 +122,9 @@ import {
   excludedRepos,
   findRepoDirs,
   findRepos,
+  hookFileFor,
   includedRepoDirs,
+  installPreCommit,
   readReview,
   reviewState,
 } from "@anur/system";
@@ -459,6 +461,37 @@ function storeFor(base: string, dev: string): CommittedDecisions {
       edgeSidesSoon(base);
     },
   );
+}
+
+type HookTroubleRow = { repo: string; why: string; fix: boolean };
+const hookChecks = new Map<string, { at: number; rows: HookTroubleRow[]; running: boolean }>();
+/**
+ * Repos whose hook isn't rebuilding their `CLAUDE.md` block (23.8), read by
+ * the headless CLI in its own process; the last answer at once, a fresh one
+ * at most every 30 s, and the tab told when it changes.
+ */
+function hookTroubles(folderPath: string): HookTroubleRow[] {
+  const known = hookChecks.get(folderPath);
+  if (known && (known.running || Date.now() - known.at < 30_000)) return known.rows;
+  const rows = known?.rows ?? [];
+  hookChecks.set(folderPath, { at: known?.at ?? 0, rows, running: true });
+  execFile(
+    process.execPath,
+    [path.join(here, "system-cli.js"), "hooks", folderPath],
+    { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, timeout: 120_000 },
+    (err, stdout) => {
+      let fresh = rows;
+      if (!err)
+        try {
+          fresh = JSON.parse(stdout) as HookTroubleRow[];
+        } catch {
+          fresh = rows;
+        }
+      hookChecks.set(folderPath, { at: Date.now(), rows: fresh, running: false });
+      if (JSON.stringify(fresh) !== JSON.stringify(rows)) systemNotify(folderPath);
+    },
+  );
+  return rows;
 }
 
 const sidesTimers = new Map<string, NodeJS.Timeout>();
@@ -1107,6 +1140,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
           decisions: onEdges.get(e.id) ?? [],
         })),
         misses: read.misses,
+        hooks: hookTroubles(folder.path),
         repos: (() => {
           const out = excludedRepos(folder.path);
           const copyOf = new Map(findRepos(folder.path).copies.map((c) => [c.dir, c.of]));
@@ -1141,6 +1175,23 @@ const handlers: { [C in Channel]: Handler<C> } = {
       action === "hide" ? "edge-hidden" : action === "show" ? "edge-shown" : "edge-confirmed";
     appendReview(folder.path, [{ kind, edge, at: new Date().toISOString() }]);
     systemChanged(folder.path);
+    return { ok: true };
+  },
+  "system:hook": ({ repo }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || !pluginsOn(folder.path).includes("engineering")) return { ok: false };
+    const dir = path.resolve(folder.path, repo);
+    if (!dir.startsWith(path.resolve(folder.path))) return { ok: false };
+    try {
+      installPreCommit(dir);
+      const { file, kind } = hookFileFor(dir);
+      // A plain git hook runs only when executable; husky runs its own with sh.
+      if (kind !== "husky") chmodSync(file, 0o755);
+    } catch {
+      return { ok: false };
+    }
+    hookChecks.delete(folder.path);
+    systemNotify(folder.path);
     return { ok: true };
   },
   "system:propose": (_, { webContentsId }) => {

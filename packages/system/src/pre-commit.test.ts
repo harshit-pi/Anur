@@ -16,6 +16,7 @@ import {
   HOOK_BEGIN,
   HOOK_LINES,
   hookFileFor,
+  hookTrouble,
   installPreCommit,
   preCommitInstalled,
   withHookLines,
@@ -203,5 +204,36 @@ describe("an existing hook file", () => {
     chmodSync(file, 0o644);
     installPreCommit(dir);
     expect(statSync(file).mode & 0o777).toBe(0o644);
+  });
+});
+
+describe("whether a repo's hook is rebuilding its block (23.8)", () => {
+  it("says nothing for a repo with no decisions, and why it isn't otherwise", () => {
+    const dir = repo();
+    const h = home();
+    const shim = path.join(h, ".anur", "bin", "anur-pre-commit");
+    expect(hookTrouble(dir, shim)).toBeNull();
+    decide(dir, "sam", "d-0000001", "Three retries.");
+    expect(hookTrouble(dir, shim)).toEqual({
+      why: "its pre-commit hook doesn't call Anur",
+      fix: true,
+    });
+    installPreCommit(dir);
+    expect(hookTrouble(dir, shim)).toBeNull();
+    // Not executable: git skips it.
+    chmodSync(path.join(dir, ".git", "hooks", "pre-commit"), 0o644);
+    expect(hookTrouble(dir, shim)?.why).toContain("isn't executable");
+    chmodSync(path.join(dir, ".git", "hooks", "pre-commit"), 0o755);
+    // No script on this Mac.
+    expect(hookTrouble(dir, path.join(h, "nothing"))?.fix).toBe(false);
+    // Committed past the hook: the block is behind; a commit through it mends it.
+    run(dir, {}, "add", ".anur/decisions/sam.jsonl");
+    run(dir, { HOME: h }, "commit", "-q", "--no-verify", "-m", "Skipped");
+    expect(hookTrouble(dir, shim)?.why).toContain("without the hook");
+    writeFileSync(path.join(dir, "x.txt"), "x\n");
+    run(dir, {}, "add", "x.txt");
+    run(dir, { HOME: h }, "commit", "-q", "-m", "Through the hook");
+    expect(committed(dir)).toContain("Three retries.");
+    expect(hookTrouble(dir, shim)).toBeNull();
   });
 });
