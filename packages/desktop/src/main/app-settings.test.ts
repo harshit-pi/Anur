@@ -39,7 +39,7 @@ describe("settings main acts on", () => {
     expect(await commitsAnur(f)).toBe(true);
     await setCommitsAnur(f, false);
     expect(readFileSync(path.join(f, ".anur", ".gitignore"), "utf8")).toBe(
-      "*\n!.gitignore\n!decisions/\n!decisions/*.jsonl\n",
+      "*\n!.gitignore\n!decisions/\n!decisions/*.jsonl\n!home-id\n",
     );
   });
 });

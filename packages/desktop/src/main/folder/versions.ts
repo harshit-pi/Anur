@@ -82,9 +82,11 @@ export class SectionVersions {
     private readonly sessionMs = 120_000,
     /** Whether versions are written; IDs are tracked either way, since threads need them (2.25). */
     private readonly recording: () => boolean = () => true,
+    /** The home's own ID, so its new doc IDs are its own (18.15.2). */
+    salt: () => Promise<string | null> = () => Promise.resolve(null),
   ) {
     this.anurDir = path.join(folder, ANUR_DIR);
-    this.docIds = new DocIds(this.anurDir, device);
+    this.docIds = new DocIds(this.anurDir, device, salt);
     this.sectionIds = new SectionIds(this.anurDir, device);
   }
 

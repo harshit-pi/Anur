@@ -24,9 +24,13 @@ const AnyIdLogLine = LineEnvelope.extend({ kind: z.string() }).loose();
 export class DocIds {
   private registry: DocRegistry = { byPath: new Map(), byId: new Map() };
 
+  private salt: string | null = null;
+
   constructor(
     private readonly anurDir: string,
     private readonly device: string,
+    /** The home's own ID, mixed into new doc IDs so homes never share one (18.15.2). */
+    private readonly saltOf: () => Promise<string | null> = () => Promise.resolve(null),
   ) {}
 
   /** Read every doc's ID logs. */
@@ -58,6 +62,7 @@ export class DocIds {
       }
     }
     this.registry = buildDocRegistry(mergeLines(...files));
+    this.salt = await this.saltOf().catch(() => null);
   }
 
   private async write(doc: DocId, line: Record<string, unknown>): Promise<void> {
@@ -74,7 +79,7 @@ export class DocIds {
 
   /** The doc at this path, minting and recording its ID the first time it is seen. */
   async idFor(relPath: string): Promise<DocId> {
-    const { doc, isNew } = docIdFor(this.registry, relPath);
+    const { doc, isNew } = docIdFor(this.registry, relPath, this.salt);
     if (isNew) {
       const p = normalizeDocPath(relPath);
       await this.write(doc, { kind: "doc-mint", doc, path: p });

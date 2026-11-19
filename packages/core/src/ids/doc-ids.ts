@@ -87,10 +87,20 @@ export function buildDocRegistry(lines: readonly DocIdLine[]): DocRegistry {
 }
 
 /** The doc at a path: its existing ID, or a new one minted by the rule. */
-export function docIdFor(registry: DocRegistry, path: string): { doc: DocId; isNew: boolean } {
+export function docIdFor(
+  registry: DocRegistry,
+  path: string,
+  /**
+   * The home's own ID (18.15.2): two homes with a doc at the same path, such
+   * as two repos' README.md, mint different IDs. Docs already known keep theirs.
+   */
+  salt: string | null = null,
+): { doc: DocId; isNew: boolean } {
   const norm = normalizeDocPath(path);
   const live = registry.byPath.get(norm);
   if (live) return { doc: live, isNew: false };
-  const id = mintId(["doc", norm], (candidate) => registry.byId.has(candidate as DocId));
+  const id = mintId(salt ? ["doc", salt, norm] : ["doc", norm], (candidate) =>
+    registry.byId.has(candidate as DocId),
+  );
   return { doc: DocId.parse(id), isNew: true };
 }

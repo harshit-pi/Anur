@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import type { EventPayload } from "../../shared/ipc-contract.ts";
 import type { ToHost, ToMain } from "../../agent/protocol.ts";
 import { SectionVersions } from "../folder/versions.ts";
+import { HomeVersions } from "../folder/home-versions.ts";
+import { execFileSync } from "node:child_process";
 import type { AgentHub } from "./hub.ts";
 import { Threads, linksIn } from "./threads.ts";
 
@@ -776,5 +778,98 @@ describe("inputs a person adds, and Branch (group 10)", () => {
     const sentText = prompt?.type === "prompt" ? prompt.text : "";
     expect(sentText).toContain("The person attached these to this message");
     expect(sentText).toMatch(/### attachments\/brief\.txt\n```\nHERON\n```/);
+  });
+});
+
+describe("threads in each doc's home (18.15.2)", () => {
+  const README = "# Api\n\nHow to run it.\n\n## Setup\n\nnpm install\n";
+
+  /** A workspace with two repos, each with a README, and threads routed by home. */
+  async function homes(ws?: string) {
+    const folder = ws ?? (await mkdtemp(path.join(tmpdir(), "anur-thomes-")));
+    if (!ws)
+      for (const r of ["api", "web"]) {
+        await mkdir(path.join(folder, r));
+        execFileSync("git", ["-C", path.join(folder, r), "init", "-q"]);
+        await writeFile(path.join(folder, r, "README.md"), README);
+      }
+    const versions = new HomeVersions(folder, "dev1");
+    const { hub, sent, reply } = fakeHub();
+    threads = new Threads({
+      folder,
+      device: "dev1",
+      appSupport: path.join(folder, "..", `${path.basename(folder)}-support`),
+      hub,
+      hookScript: "/x/hook.js",
+      node: "/x/node",
+      locate: (rel, text) => versions.locate(rel, text),
+      anurDirOf: (doc) => versions.anurDirOf(doc),
+      anurDirs: () => versions.anurDirs(),
+      emit: () => undefined,
+      previewsChanged: () => undefined,
+      defaultAgent: () => "claude-code",
+    });
+    return { folder, t: threads, sent, reply };
+  }
+  const setupSection = { index: 1, path: ["Api", "Setup"] };
+
+  it("keeps a thread on a repo's doc in that repo's .anur/, not the workspace's", async () => {
+    const { folder, t } = await homes();
+    const r = await t.start("api/README.md", README, setupSection, "How do I run it?");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const docs = await readdir(path.join(folder, "api", ".anur", "docs"));
+    expect(docs).toHaveLength(1);
+    expect(
+      await readdir(path.join(folder, "api", ".anur", "docs", docs[0] ?? "", "threads")),
+    ).toEqual([r.thread.id]);
+    expect(await readdir(path.join(folder, ".anur")).catch(() => [])).not.toContain("docs");
+    const [listed] = await t.list("api/README.md", README);
+    expect(listed?.id).toBe(r.thread.id);
+  });
+
+  it("keeps two repos' READMEs' threads apart, though they share a path in their repos", async () => {
+    const { t } = await homes();
+    const a = await t.start("api/README.md", README, setupSection, "Api question");
+    const b = await t.start("web/README.md", README, setupSection, "Web question");
+    if (a.kind !== "started" || b.kind !== "started") throw new Error("not started");
+    expect((await t.list("api/README.md", README)).map((x) => x.id)).toEqual([a.thread.id]);
+    expect((await t.list("web/README.md", README)).map((x) => x.id)).toEqual([b.thread.id]);
+  });
+
+  it("finds a repo doc's thread again after a restart, by its id alone", async () => {
+    const first = await homes();
+    const r = await first.t.start("api/README.md", README, setupSection, "What does it cost?");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const tool = (
+      first.t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(first.t);
+    await tool(r.thread.id, "anur_propose_finding", { claim: "It costs £40.", source: "bill.pdf" });
+    await first.reply(r.thread.id, "Proposed.");
+    const view = (await first.t.list("api/README.md", README)).find((x) => x.id === r.thread.id);
+    const finding = (view?.items ?? []).find((i) => i.kind === "finding");
+    await first.t.close();
+    threads = null;
+    // A fresh start: nothing live, so the thread is found by looking in each home.
+    const again = await homes(first.folder);
+    if (finding?.kind !== "finding") throw new Error("no finding");
+    const decided = await again.t.decideFinding(r.thread.id, {
+      id: finding.id,
+      status: "kept",
+      claim: null,
+    });
+    expect(decided).toEqual({ kind: "ok" });
+  });
+
+  it("closes every home's .anur/ to the agent, the folder's and each repo's", async () => {
+    const { folder, t, sent } = await homes();
+    const r = await t.start("api/README.md", README, setupSection, "Go");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const prompt = sent.find((m) => m.type === "prompt");
+    if (prompt?.type !== "prompt") throw new Error("nothing asked");
+    const config = JSON.parse(await readFile(prompt.spec.guard.hook.args.at(-1) ?? "", "utf8")) as {
+      anurDirs: string[];
+    };
+    expect(config.anurDirs).toEqual(["", "api", "web"].map((h) => path.join(folder, h, ".anur")));
+    expect(prompt.spec.guard.anurDirs).toEqual(config.anurDirs);
   });
 });

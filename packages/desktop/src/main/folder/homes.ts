@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
@@ -98,4 +99,22 @@ export function homeOf(rel: string, homes: readonly string[]): { home: string; i
 /** A path inside a home, as the opened folder sees it. */
 export function fromHome(home: string, inHome: string): string {
   return home ? `${home}/${inHome}` : inHome;
+}
+
+/**
+ * A home's own ID, kept in `.anur/home-id` and committed with it, so a doc's
+ * ID is the same on every clone and at every level it's opened from. Made
+ * the first time it's asked for, with the `.ignore` that keeps searches out.
+ */
+export async function homeIdOf(home: string): Promise<string> {
+  const dir = path.join(home, ".anur");
+  const file = path.join(dir, "home-id");
+  const known = (await readFile(file, "utf8").catch(() => "")).trim();
+  if (/^[a-f0-9]{32}$/.test(known)) return known;
+  const id = randomUUID().replace(/-/g, "");
+  await mkdir(dir, { recursive: true });
+  await writeFile(file, `${id}\n`);
+  const ignore = path.join(dir, ".ignore");
+  if ((await readFile(ignore, "utf8").catch(() => null)) === null) await writeFile(ignore, "*\n");
+  return id;
 }

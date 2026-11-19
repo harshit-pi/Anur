@@ -26,10 +26,12 @@ export class PreviewStore {
   constructor(
     private readonly folder: string,
     private readonly device: string,
+    /** A doc's `.anur/`, in its home (18.15.2); the folder's when not given. */
+    private readonly anurOf: (doc: DocId) => string = () => path.join(folder, ANUR_DIR),
   ) {}
 
   private dir(doc: DocId) {
-    return path.join(this.folder, ANUR_DIR, anurPaths.doc(doc), "previews");
+    return path.join(this.anurOf(doc), anurPaths.doc(doc), "previews");
   }
 
   /** The thread's current preview of the doc, or null when it has none. */
@@ -93,7 +95,7 @@ export class PreviewStore {
       newDocPath: null,
       parts,
     });
-    const target = path.join(this.folder, ANUR_DIR, anurPaths.preview(doc, this.device, id));
+    const target = path.join(this.anurOf(doc), anurPaths.preview(doc, this.device, id));
     await mkdir(path.dirname(target), { recursive: true });
     await writeFileAtomic(target, encodePreviewFile(file));
     return file;

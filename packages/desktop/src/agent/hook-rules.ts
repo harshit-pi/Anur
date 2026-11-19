@@ -14,8 +14,13 @@ import { denies, type DenyRule } from "./deny-rules.ts";
 export type HookConfig = {
   /** The opened folder, as a real path. */
   folder: string;
-  /** Its `.anur/`, where every thread lives. */
+  /** Its `.anur/`. */
   anurDir: string;
+  /**
+   * Every home's `.anur/` beneath the folder, its own included (18.15.2):
+   * threads live in each doc's home, and none is the agent's to touch.
+   */
+  anurDirs?: string[];
   thread: string;
   /** Where every call is logged, for the call-matching check (3.2). */
   log: string;
@@ -26,6 +31,10 @@ export type HookConfig = {
   /** The person's own deny rules for docs, held to apply to their working copies too (3.3). */
   denies?: DenyRule[];
 };
+
+/** Every `.anur/` the agent must leave alone. */
+const anurDirsOf = (config: HookConfig) => [config.anurDir, ...(config.anurDirs ?? [])];
+const inAnur = (abs: string, config: HookConfig) => anurDirsOf(config).some((d) => inside(abs, d));
 
 /** A refusal, and the working copy to make first when it sends the agent to one. */
 export type Decision = { reason: string; copy: { from: string; to: string } | null };
@@ -83,7 +92,7 @@ export function decide(call: ToolCall, config: HookConfig, resolve: Resolver): D
   // The agent's own file tools.
   if (typeof filePath === "string") {
     const abs = resolve(filePath, cwd);
-    if (inside(abs, config.anurDir)) return refuse(MESSAGES.anur);
+    if (inAnur(abs, config)) return refuse(MESSAGES.anur);
     if (inside(abs, config.copiesRoot) && !inside(abs, config.copies))
       return refuse(MESSAGES.otherCopy);
     // A working copy is held to the person's own rules for the doc it copies.
@@ -109,7 +118,7 @@ export function decide(call: ToolCall, config: HookConfig, resolve: Resolver): D
 
   // Any other tool, MCP tools included: a string argument pointing into .anur/.
   for (const value of strings(input)) {
-    if (value.includes(".anur") && inside(resolve(value, cwd), config.anurDir))
+    if (value.includes(".anur") && inAnur(resolve(value, cwd), config))
       return refuse(MESSAGES.anur);
   }
   return null;
@@ -136,7 +145,7 @@ export function decideShell(
 
   // A path into .anur/, named outright; listing its size or entries reads no thread.
   const words = cmd.split(/[\s;|&<>()'"`]+/).filter(Boolean);
-  const namesAnur = words.some((w) => w.includes(".anur") && inside(resolve(w), config.anurDir));
+  const namesAnur = words.some((w) => w.includes(".anur") && inAnur(resolve(w), config));
   if (namesAnur && !excludesAnur && !/^\s*(du|ls|stat)\b/.test(cmd)) return MESSAGES.anur;
 
   // A recursive read whose root holds .anur/; rg and git grep honour its ignore files.
@@ -147,7 +156,8 @@ export function decideShell(
   if ((recursiveGrep || rgNoIgnore || findReads) && !excludesAnur) {
     const roots = words.filter((w) => !w.startsWith("-") && (w === "." || w.includes("/")));
     const fromHere = roots.length === 0 ? [resolve(".")] : roots.map(resolve);
-    if (fromHere.some((r) => inside(config.anurDir, r))) return MESSAGES.recursive;
+    if (fromHere.some((r) => anurDirsOf(config).some((d) => inside(d, r))))
+      return MESSAGES.recursive;
   }
 
   // Writes onto a doc from the shell are not refused: an agent can make them
