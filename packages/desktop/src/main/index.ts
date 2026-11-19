@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import {
   SYSTEM_DOC,
   SYSTEM_DOC_ID,
@@ -121,7 +122,7 @@ import { IndexProcess, indexEntry } from "./index-process/client.ts";
 import type { FolderRead } from "./index-process/protocol.ts";
 import { loadRead, saveRead } from "./system-saved.ts";
 import { TaskHooks } from "./claude-plugin/task-hooks.ts";
-import { ReportWatch, listReports, readReport } from "./task-reports.ts";
+import { ReportWatch, listReports, readReport, writeReport } from "./task-reports.ts";
 import { codeRepos, looksLikeCode } from "./engineering-offer.ts";
 import { SystemReview } from "./system-review.ts";
 import {
@@ -134,6 +135,9 @@ import {
   installPreCommit,
   readReview,
   reviewState,
+  readAgainst,
+  type AgainstFound,
+  type InScope,
 } from "@anur/system";
 import { AgentChoices } from "./threads/agent-choices.ts";
 import { AnurSocket } from "./threads/anur-socket.ts";
@@ -221,7 +225,75 @@ const indexProcess = new IndexProcess(indexEntry(here), systemChanged);
 const reportWatch = new ReportWatch((changed) => {
   for (const win of windows.values())
     if (folders.current(win.webContents.id)?.path === changed) send(win, "tasks:changed", {});
+  againstSoon(changed);
 });
+
+const execFileP = promisify(execFile);
+const againstRunning = new Set<string>();
+/**
+ * "Against" (24.1): a new task report is checked once against the decisions
+ * on what it touched, by the person's own agent in a short session of its
+ * own, and only when some decisions are in scope. Reports over two hours
+ * old aren't checked, so opening a folder never asks about old work.
+ */
+function againstSoon(folderPath: string): void {
+  if (!pluginsOn(folderPath).includes("engineering") || againstRunning.has(folderPath)) return;
+  againstRunning.add(folderPath);
+  void checkAgainst(folderPath)
+    .catch((e: unknown) => {
+      console.error("Anur couldn't check the task against decisions:", e);
+    })
+    .finally(() => againstRunning.delete(folderPath));
+}
+
+async function checkAgainst(folderPath: string): Promise<void> {
+  const folder = [...windows.keys()]
+    .map((id) => folders.current(id))
+    .find((f) => f?.path === folderPath);
+  const t = folder ? threadsFor(folder) : null;
+  if (!folder || !t || !device) return;
+  for (const r of listReports(folderPath, 10)) {
+    if (r.against !== undefined || Date.now() - Date.parse(r.endedAt) > 2 * 3600_000) continue;
+    const { stdout } = await execFileP(
+      process.execPath,
+      [path.join(here, "system-cli.js"), "against-prompt", folderPath, r.id],
+      {
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+        timeout: 120_000,
+        maxBuffer: 16 * 1024 * 1024,
+      },
+    );
+    const asked = JSON.parse(stdout) as { inScope: InScope[]; prompt: string | null };
+    let found: AgainstFound[] = [];
+    if (asked.prompt) {
+      const answer = await t.askOnce(asked.prompt).catch(() => null);
+      // No answer: checked again on the next change, not marked as clean.
+      if (answer === null) continue;
+      found = readAgainst(answer, asked.inScope).map((f) => {
+        // The agent cites the diff's path, from the repo; the report's are from the folder.
+        const cited = f.file;
+        const line = cited
+          ? r.lines.find((l) => l.file === cited || l.file.endsWith(`/${cited}`))
+          : undefined;
+        return { ...f, file: line?.file ?? f.file };
+      });
+    }
+    writeReport(folderPath, { ...r, against: found });
+    const store = committedFor(folderPath, device);
+    for (const f of found) {
+      const repo = r.lines.find((l) => l.file === f.file)?.repo ?? r.lines[0]?.repo ?? "";
+      await store.noteAgainst(repo, {
+        target: f.target,
+        task: r.id,
+        file: f.file,
+        line: f.line,
+        why: f.why,
+        confidence: f.confidence,
+        status: f.status,
+      });
+    }
+  }
+}
 // A low disk makes macOS offload iCloud files again: fetch open folders' files back now and then.
 setInterval(() => {
   for (const id of windows.keys()) {
@@ -592,6 +664,7 @@ function committedFor(folderPath: string, device: string) {
     drop: store.drop.bind(store),
     revise: store.revise.bind(store),
     keepFor: store.keepFor.bind(store),
+    noteAgainst: store.noteAgainst.bind(store),
     collected: async () => {
       const host = await pluginHostFor(folderPath);
       const homes = await Promise.all(
@@ -2025,6 +2098,29 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder) return { reports: [] };
     reportWatch.ensure(folder.path);
     return { reports: listReports(folder.path) };
+  },
+  "tasks:against": async ({ id, target, answer }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const r = folder ? readReport(folder.path, id) : null;
+    const f = r?.against?.find((x) => x.target === target);
+    if (!folder || !r || !f || !device) return { ok: false };
+    const status = answer === "does" ? ("confirmed" as const) : ("dismissed" as const);
+    writeReport(folder.path, {
+      ...r,
+      against: (r.against ?? []).map((x) => (x.target === target ? { ...x, status } : x)),
+    });
+    // The person's word, after the agent's, in their own file: the PR check reads the last.
+    const repo = r.lines.find((l) => l.file === f.file)?.repo ?? r.lines[0]?.repo ?? "";
+    await committedFor(folder.path, device).noteAgainst(repo, {
+      target,
+      task: id,
+      file: f.file,
+      line: f.line,
+      why: f.why,
+      confidence: f.confidence,
+      status,
+    });
+    return { ok: true };
   },
   "tasks:get": ({ id }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

@@ -63,10 +63,30 @@ export const CommittedDropped = LineEnvelope.extend({
   target: z.string().min(8).max(64),
 });
 
+/**
+ * A task's change found to go against a decision (24.1), in the author's
+ * file with the change, so the PR check shows it without a model. Its own
+ * kind: never read as a decision, never in a CLAUDE.md block. A later line
+ * for the same task and decision says what the person made of it.
+ */
+export const CommittedAgainst = LineEnvelope.extend({
+  kind: z.literal("against"),
+  /** The decision gone against. */
+  target: z.string().min(1).max(64),
+  /** The task report it was found in. */
+  task: z.string().min(1).max(200),
+  file: z.string().max(600).nullable(),
+  line: z.number().int().nullable(),
+  why: z.string().max(400),
+  confidence: z.number().min(0).max(1),
+  status: z.enum(["asserted", "asked", "confirmed", "dismissed"]),
+});
+
 export const CommittedLine = z.discriminatedUnion("kind", [
   CommittedDecision,
   CommittedFinding,
   CommittedDropped,
+  CommittedAgainst,
 ]);
 export type CommittedLine = z.infer<typeof CommittedLine>;
 export type CommittedEntry = Extract<CommittedLine, { kind: "decision" | "finding" }> & {
@@ -87,8 +107,20 @@ export function currentEntries(
   const all = mergeLines(...parsed);
   const dropped = new Set(all.flatMap((l) => (l.kind === "dropped" ? [l.target] : [])));
   return all.flatMap((l) =>
-    l.kind === "dropped" || dropped.has(l.id) ? [] : [{ ...l, person: owner.get(l.id) ?? "" }],
+    l.kind === "dropped" || l.kind === "against" || dropped.has(l.id)
+      ? []
+      : [{ ...l, person: owner.get(l.id) ?? "" }],
   );
+}
+
+/** Each task's "against" findings, as last said for each decision (24.1). */
+export function currentAgainst(
+  files: readonly { person: string; text: string }[],
+): Extract<CommittedLine, { kind: "against" }>[] {
+  const all = mergeLines(...files.map((f) => parseJsonl(f.text, CommittedLine).lines));
+  const last = new Map<string, Extract<CommittedLine, { kind: "against" }>>();
+  for (const l of all) if (l.kind === "against") last.set(`${l.task}\u0000${l.target}`, l);
+  return [...last.values()];
 }
 
 /** A GitHub login from a noreply commit email: "123+sam@users.noreply.github.com". */

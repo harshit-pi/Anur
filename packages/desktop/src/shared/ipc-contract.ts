@@ -89,6 +89,22 @@ export const TaskReportView = z.object({
     }),
   ),
   choices: z.array(z.string()),
+  /** Decisions the change goes against (24.1); absent until checked. */
+  against: z
+    .array(
+      z.object({
+        target: z.string(),
+        decision: z.string(),
+        who: z.string().nullable(),
+        at: z.string(),
+        why: z.string(),
+        confidence: z.number(),
+        file: z.string().nullable(),
+        line: z.number().nullable(),
+        status: z.enum(["asserted", "asked", "confirmed", "dismissed"]),
+      }),
+    )
+    .optional(),
 });
 
 export const AgentStatus = z.object({
@@ -1515,6 +1531,17 @@ export const ipcContract = {
     response: z.object({ reports: z.array(TaskReportView) }),
   },
   /** One task report, for its tab. */
+  /** The person's answer on a change that might go against a decision (24.1). */
+  "tasks:against": {
+    request: z
+      .object({
+        id: z.string().max(200),
+        target: z.string().max(64),
+        answer: z.enum(["does", "doesnt"]),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
   "tasks:get": {
     request: z.object({ id: z.string().max(200) }).strict(),
     response: z.object({ report: TaskReportView.nullable() }),

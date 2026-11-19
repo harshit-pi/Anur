@@ -1,4 +1,11 @@
-import { mkdirSync, readdirSync, readFileSync, watch, type FSWatcher } from "node:fs";
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  watch,
+  writeFileSync,
+  type FSWatcher,
+} from "node:fs";
 import path from "node:path";
 import { tasksDir, type TaskReport } from "@anur/system";
 
@@ -72,4 +79,10 @@ export class ReportWatch {
     for (const w of this.watchers.values()) w.close();
     this.watchers.clear();
   }
+}
+
+/** A report written back, as when "against" is filled in (24.1). */
+export function writeReport(folder: string, report: TaskReport): void {
+  if (!ID.test(report.id)) return;
+  writeFileSync(path.join(tasksDir(folder), `${report.id}.json`), JSON.stringify(report, null, 2));
 }

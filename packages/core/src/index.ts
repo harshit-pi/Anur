@@ -186,6 +186,7 @@ export { SETTLE_AT, isQuestion, quotedFrom, settleRule, type Settle } from "./de
 export {
   CommittedLine,
   DECISIONS_DIR,
+  currentAgainst,
   currentEntries,
   gitignoreKeepingDecisions,
   loginFromEmail,
