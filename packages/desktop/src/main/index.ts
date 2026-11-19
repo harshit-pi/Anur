@@ -482,6 +482,16 @@ const docWatcher = new DocWatcher((windowId, change) => {
   if (win) send(win, "doc:changed", change);
 });
 
+/** Plain .excalidraw files per folder, scanned at most every 30 s. */
+const plainScans = new Map<string, { at: number; files: Promise<string[]> }>();
+function plainDrawings(root: string): Promise<string[]> {
+  const kept = plainScans.get(root);
+  if (kept && Date.now() - kept.at < 30_000) return kept.files;
+  const files = listDocs(root, 5_000, ".excalidraw").then((r) => r.docs);
+  plainScans.set(root, { at: Date.now(), files });
+  return files;
+}
+
 /** Files added, moved or removed outside Anur, as in Finder: the files panel catches up. */
 const folderWatch = new FolderWatch((windowId) => {
   void (async () => {
@@ -714,9 +724,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
   "drawing:read": async ({ target, from }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
-    // Obsidian's drawings are .excalidraw.md docs; plain .excalidraw files are found on disk.
-    const plain = (await listDocs(folder.path, 5_000, ".excalidraw")).docs;
-    const found = findDrawing([...folder.docs, ...plain], target, from);
+    // Obsidian's drawings are .excalidraw.md docs, already listed. Only a plain
+    // .excalidraw file needs the disk, scanned once and kept a while: a scan per
+    // embed held up opening docs in a large iCloud folder.
+    const found =
+      findDrawing(folder.docs, target, from) ??
+      findDrawing(await plainDrawings(folder.path), target, from);
     if (!found) return { kind: "failed", reason: `There's no drawing called ${target} here.` };
     const full = path.resolve(folder.path, found);
     if (!full.startsWith(path.resolve(folder.path) + path.sep))
