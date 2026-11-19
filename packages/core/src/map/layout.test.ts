@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxSize, mapLayout, type MapNode } from "./layout.ts";
+import { boxSize, mapLayout, mindLayout, type MapNode } from "./layout.ts";
 
 const box = (id: string, parent: string | null, h = 40): MapNode => ({ id, parent, w: 160, h });
 
@@ -85,5 +85,31 @@ describe("wrapping", () => {
           Math.abs(a.x - b.x) >= (a.w + b.w) / 2 || Math.abs(a.y - b.y) >= (a.h + b.h) / 2;
         expect(apart, `${a.id} and ${b.id}`).toBe(true);
       }
+  });
+});
+
+describe("the mind map", () => {
+  it("puts the title in the middle and splits its sections right and left", () => {
+    const placed = mindLayout([
+      box("t", null),
+      box("a", "t"),
+      box("b", "t"),
+      box("c", "t"),
+      box("d", "t"),
+      box("a1", "a"),
+    ]);
+    expect(placed.get("t")).toMatchObject({ x: 0, y: 0, side: 0 });
+    expect(["a", "b"].map((id) => placed.get(id)?.side)).toEqual([1, 1]);
+    expect(["c", "d"].map((id) => placed.get(id)?.side)).toEqual([-1, -1]);
+    // Read top down on each side; a child sits further out than its parent.
+    expect(placed.get("a")?.y ?? 0).toBeLessThan(placed.get("b")?.y ?? 0);
+    expect(placed.get("c")?.y ?? 0).toBeLessThan(placed.get("d")?.y ?? 0);
+    expect(placed.get("a1")?.x ?? 0).toBeGreaterThan(placed.get("a")?.x ?? 0);
+    expect(placed.get("a1")?.y).toBe(placed.get("a")?.y);
+  });
+
+  it("keeps a lone section on the right", () => {
+    const placed = mindLayout([box("t", null), box("a", "t")]);
+    expect(placed.get("a")).toMatchObject({ side: 1, y: 0 });
   });
 });

@@ -145,6 +145,73 @@ export function mapLayout(nodes: readonly MapNode[]): Map<string, Placed> {
   return placed;
 }
 
+/** Between a box and the column of its children, in the mind map. */
+const GAP_DEPTH = 72;
+/** Between stacked siblings, in the mind map. */
+const GAP_STACK = 18;
+
+/**
+ * The mind map (mock 8): the title in the middle, its sections branching to
+ * the right and the left, each box's children stacked beside it, further
+ * out. The first half of the title's children, by height, go right and the
+ * rest left, each side read top down. Lines run from a box's side to its
+ * children's, so no parent records rails.
+ */
+export function mindLayout(nodes: readonly MapNode[]): Map<string, Placed> {
+  const children = new Map<string, MapNode[]>();
+  for (const n of nodes) {
+    if (n.parent === null) continue;
+    const list = children.get(n.parent) ?? [];
+    list.push(n);
+    children.set(n.parent, list);
+  }
+  const root = nodes.find((n) => n.parent === null);
+  const placed = new Map<string, Placed>();
+  if (!root) return placed;
+
+  // A subtree's height: its box, or its children stacked, whichever is taller.
+  const height = new Map<string, number>();
+  const stack = (kids: readonly MapNode[]) =>
+    kids.reduce((sum, k, i) => sum + (height.get(k.id) ?? k.h) + (i > 0 ? GAP_STACK : 0), 0);
+  const measure = (n: MapNode): void => {
+    const kids = children.get(n.id) ?? [];
+    for (const k of kids) measure(k);
+    height.set(n.id, Math.max(n.h, stack(kids)));
+  };
+  measure(root);
+
+  /** Place `n` beside its parent: its inner edge at `edge`, centred on `cy`. */
+  const place = (n: MapNode, side: -1 | 1, edge: number, cy: number) => {
+    const cx = edge + (side * n.w) / 2;
+    placed.set(n.id, { id: n.id, x: cx, y: cy, w: n.w, h: n.h, side });
+    column(children.get(n.id) ?? [], side, cx + (side * n.w) / 2 + side * GAP_DEPTH, cy);
+  };
+  const column = (kids: readonly MapNode[], side: -1 | 1, edge: number, cy: number) => {
+    let top = cy - stack(kids) / 2;
+    for (const k of kids) {
+      const h = height.get(k.id) ?? k.h;
+      place(k, side, edge, top + h / 2);
+      top += h + GAP_STACK;
+    }
+  };
+
+  placed.set(root.id, { id: root.id, x: 0, y: 0, w: root.w, h: root.h, side: 0 });
+  const kids = children.get(root.id) ?? [];
+  // Right takes children in order until it holds half the height; left the rest.
+  const total = stack(kids);
+  const right: MapNode[] = [];
+  let used = 0;
+  for (const k of kids) {
+    if (right.length > 0 && used >= total / 2) break;
+    right.push(k);
+    used += (height.get(k.id) ?? k.h) + GAP_STACK;
+  }
+  const left = kids.slice(right.length);
+  column(right, 1, root.w / 2 + GAP_DEPTH, 0);
+  column(left, -1, -root.w / 2 - GAP_DEPTH, 0);
+  return placed;
+}
+
 /**
  * `docs/<doc>/layout/<device>.json`: where a person put boxes, by section
  * ID, in map units. Across devices the newest file wins.

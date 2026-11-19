@@ -171,7 +171,14 @@ export {
   type BundlePart,
   type BundleRule,
 } from "./context/index.ts";
-export { MapLayoutFile, boxSize, mapLayout, type MapNode, type Placed } from "./map/index.ts";
+export {
+  MapLayoutFile,
+  boxSize,
+  mapLayout,
+  mindLayout,
+  type MapNode,
+  type Placed,
+} from "./map/index.ts";
 export {
   docsBefore,
   headingKey,

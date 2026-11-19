@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { boxSize, mapLayout, resolveWiki, type MapNode, type SectionTree } from "@anur/core";
+import {
+  boxSize,
+  mapLayout,
+  mindLayout,
+  resolveWiki,
+  type MapNode,
+  type SectionTree,
+} from "@anur/core";
 import type { InkStroke, PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { useFeatures } from "../features.ts";
@@ -7,6 +14,7 @@ import { boxStatus, type BoxStatus } from "../layout/box-status.ts";
 import { changeSummary } from "../layout/change-summary.ts";
 import { mapSkeleton } from "../layout/map-drawing.ts";
 import { BoxSketch, sketchLine } from "./MapSketch.tsx";
+import { useMapLayout } from "./map-layout-pref.ts";
 import { useMapStyle } from "./map-style-pref.ts";
 import "../editor/drawings/assets.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
@@ -172,6 +180,7 @@ export function MapView({
   const [makingDrawing, setMakingDrawing] = useState(false);
   /** Hand-drawn, as Excalidraw draws, when picked in Settings → Appearance. */
   const hand = useMapStyle() === "hand";
+  const [layout, setLayout] = useMapLayout();
   /** A line as the map style draws it: one path, or its sketched strokes. */
   const line = (key: string, className: string, d: string, marker?: string) =>
     hand
@@ -538,7 +547,7 @@ export function MapView({
           n.id.startsWith("l:"),
       );
     nodes.sort((a, b) => near(b) - near(a));
-    const placed = mapLayout(
+    const placed = (layout === "mind" ? mindLayout : mapLayout)(
       [nodes.find((n) => n.parent === null), ...nodes.filter((n) => n.parent !== null)].filter(
         (n): n is MapNode => Boolean(n),
       ),
@@ -596,7 +605,7 @@ export function MapView({
       }
     }
     return out;
-  }, [tree, threads, previews, idOf, moved, drag, docs, docPath, features.links]);
+  }, [tree, threads, previews, idOf, moved, drag, docs, docPath, features.links, layout]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
 
@@ -645,9 +654,13 @@ export function MapView({
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
     const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
     const title = boxes.find((b) => b.side === 0);
-    if (z > all && title) setView({ x: r.width / 2 - title.x * z, y: 60 - Math.min(...ys) * z, z });
+    // In the mind map the title is in the middle, so the view centres on it.
+    if (z > all && title && layout === "mind")
+      setView({ x: r.width / 2 - title.x * z, y: r.height / 2 - title.y * z, z });
+    else if (z > all && title)
+      setView({ x: r.width / 2 - title.x * z, y: 60 - Math.min(...ys) * z, z });
     else setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
-  }, [boxes, view, loaded, waited]);
+  }, [boxes, view, loaded, waited, layout]);
 
   // New boxes, such as a thread's options, come into view: the map fits
   // itself again, unless the person has panned or zoomed it.
@@ -1154,9 +1167,11 @@ export function MapView({
         pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" "),
       );
     }
-    // From the parent's bottom to the child's top, a soft S; sideways when a moved box sits beside.
-    const below = b.y - b.h / 2 >= p.y + p.h / 2;
-    const above = b.y + b.h / 2 <= p.y - p.h / 2;
+    // From the parent's bottom to the child's top, a soft S; sideways when a
+    // moved box sits beside, and always in the mind map, which branches sideways.
+    const beside = layout === "mind" && Math.abs(b.x - p.x) > (b.w + p.w) / 2;
+    const below = !beside && b.y - b.h / 2 >= p.y + p.h / 2;
+    const above = !beside && b.y + b.h / 2 <= p.y - p.h / 2;
     let d: string;
     if (below || above) {
       const dir = below ? 1 : -1;
@@ -1645,6 +1660,22 @@ export function MapView({
         </div>
       ) : null}
       <div className="map-tools">
+        <button
+          type="button"
+          className="map-tool"
+          title={
+            layout === "mind"
+              ? "Lay the map out as a tree, read top down"
+              : "Lay the map out as a mind map, the title in the middle"
+          }
+          onClick={() => {
+            setLayout(layout === "mind" ? "tree" : "mind");
+            userMoved.current = false;
+            setView(null);
+          }}
+        >
+          {layout === "mind" ? "Mind map" : "Tree"}
+        </button>
         <button
           type="button"
           className="map-tool"
