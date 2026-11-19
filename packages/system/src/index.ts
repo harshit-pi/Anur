@@ -96,3 +96,12 @@ export {
 } from "./claude-local.ts";
 export { writeUserClaudeMd } from "./claude-user.ts";
 export { aboutFiles, filesFrom, type About } from "./about.ts";
+export {
+  AGAINST_SURE,
+  againstPrompt,
+  decisionsInScope,
+  diffOf,
+  readAgainst,
+  type AgainstFound,
+  type InScope,
+} from "./against.ts";

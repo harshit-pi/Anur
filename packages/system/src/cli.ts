@@ -7,12 +7,19 @@
  *   anur-system hook [--folder <folder>]   (Claude Code's UserPromptSubmit and Stop, on stdin)
  *   anur-system claude-md <repo> [--staged | --stage]  (the CLAUDE.md block, 23.5; --stage writes it into the commit, 23.6)
  *   anur-system hooks <folder>  (JSON: each repo whose hook isn't rebuilding its CLAUDE.md block, and why, 23.8)
+ *   anur-system against-prompt <folder> <report-id>  (JSON: the decisions a task could go against, and the question for the agent, 24.1)
  *   anur-system edge-sides <folder>  (each repo's CLAUDE.local.md lists decisions on its calls kept at the other end, 23.10)
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { stageClaudeMd, writeClaudeMd } from "./claude-md.ts";
 import { writeEdgeSides } from "./claude-local.ts";
 import { hookTrouble } from "./pre-commit.ts";
+import { againstPrompt, decisionsInScope, diffOf } from "./against.ts";
+import { currentEntries } from "@anur/core";
+import { decisionFiles } from "./claude-md.ts";
+import { edgesIn } from "./edges.ts";
+import { repoIdsOf } from "./system.ts";
+import { tasksDir, type TaskReport } from "./tasks.ts";
 import path from "node:path";
 import { handleHook, type HookInput } from "./hook.ts";
 import { scanSystem } from "./system.ts";
@@ -58,6 +65,40 @@ if (cmd === "hooks" && folder) {
     return trouble ? [{ repo: r.dir, ...trouble }] : [];
   });
   process.stdout.write(`${JSON.stringify(out)}\n`);
+  process.exit(0);
+}
+if (cmd === "against-prompt" && folder && args[2]) {
+  const id = args[2];
+  let report: TaskReport | null = null;
+  try {
+    if (/^[\w.-]+$/.test(id))
+      report = JSON.parse(
+        readFileSync(path.join(tasksDir(folder), `${id}.json`), "utf8"),
+      ) as TaskReport;
+  } catch {
+    report = null;
+  }
+  if (!report) {
+    process.stdout.write(`${JSON.stringify({ inScope: [], prompt: null })}\n`);
+    process.exit(0);
+  }
+  const scan = scanSystem(folder);
+  const edges = edgesIn(
+    folder,
+    scan.repos.map((r) => r.dir),
+    scan.parts,
+    repoIdsOf(scan),
+  );
+  const entries = scan.repos.flatMap((r) =>
+    currentEntries(decisionFiles(path.join(folder, r.dir))).map((e) => ({
+      ...e,
+      home: r.dir === "." ? "" : r.dir,
+    })),
+  );
+  const inScope = decisionsInScope(report, entries, scan.parts, edges);
+  // None in scope: nothing to ask, and no one's agent is used.
+  const prompt = inScope.length ? againstPrompt(report, inScope, diffOf(folder, report)) : null;
+  process.stdout.write(`${JSON.stringify({ inScope, prompt })}\n`);
   process.exit(0);
 }
 if (cmd === "edge-sides" && folder) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  currentAgainst,
   currentEntries,
   gitignoreKeepingDecisions,
   loginFromEmail,
@@ -97,5 +98,51 @@ describe("a section scope read through the opened folder (18.14)", () => {
     });
     expect(sectionScope("section:plan.md#", "")).toEqual({ doc: "plan.md", path: [] });
     expect(sectionScope("part:abc", "api")).toBeNull();
+  });
+});
+
+describe("against lines (24.1)", () => {
+  it("are never read as decisions, and each task and decision folds to its last word", () => {
+    const line = (id: string, kind: string, more: object) =>
+      JSON.stringify({
+        id,
+        at: "2026-11-18T10:00:00.000Z",
+        dev: "m",
+        seq: Number(id.slice(-1)),
+        kind,
+        ...more,
+      });
+    const text = [
+      line("d-0000001", "decision", {
+        scope: "repo",
+        ref: null,
+        decision: "Three retries.",
+        quote: null,
+        instead: null,
+        until: null,
+        who: "Sam",
+      }),
+      line("a-0000002", "against", {
+        target: "d-0000001",
+        task: "t1",
+        file: "api/retry.ts",
+        line: 3,
+        why: "Forever.",
+        confidence: 0.5,
+        status: "asked",
+      }),
+      line("a-0000003", "against", {
+        target: "d-0000001",
+        task: "t1",
+        file: "api/retry.ts",
+        line: 3,
+        why: "Forever.",
+        confidence: 0.5,
+        status: "confirmed",
+      }),
+    ].join("\n");
+    const files = [{ person: "sam", text: `${text}\n` }];
+    expect(currentEntries(files).map((e) => e.id)).toEqual(["d-0000001"]);
+    expect(currentAgainst(files).map((a) => [a.task, a.status])).toEqual([["t1", "confirmed"]]);
   });
 });

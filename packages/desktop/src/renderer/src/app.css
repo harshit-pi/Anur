@@ -5571,3 +5571,31 @@ button.file-card-name:hover {
   margin: 0;
   font-size: 12px;
 }
+
+/* A change against a decision, first in a task's report (24.1). */
+.report-label.against {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.report-row.asked .report-label.against {
+  color: var(--amber);
+}
+
+.report-why {
+  display: block;
+  color: var(--graphite);
+  font-size: 12.5px;
+  margin-top: 2px;
+}
+
+.report-ask {
+  display: block;
+  font-size: 12.5px;
+  margin-top: 4px;
+}
+
+.task-checking {
+  font-size: 12.5px;
+  margin-top: 8px;
+}

@@ -296,6 +296,30 @@ export class CommittedDecisions {
   }
 
   /**
+   * A task's change found to go against a decision (24.1), in the author's
+   * file in the repo the change is in, so the PR check shows it without a
+   * model; a later one for the same task and decision says what the person
+   * made of it.
+   */
+  async noteAgainst(
+    dir: string,
+    body: {
+      target: string;
+      task: string;
+      file: string | null;
+      line: number | null;
+      why: string;
+      confidence: number;
+      status: "asserted" | "asked" | "confirmed" | "dismissed";
+    },
+  ): Promise<void> {
+    const at = await this.place(path.join(dir, ".anur-here"));
+    if (!at) return;
+    await this.openDecisions(at.home);
+    await this.append(at.file, { kind: "against", ...body });
+  }
+
+  /**
    * Taken back: a line not yet committed comes out of the file; one already
    * committed gets a "dropped" line, so history keeps both.
    */

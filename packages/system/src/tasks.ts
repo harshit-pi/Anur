@@ -50,6 +50,12 @@ export type TaskReport = {
   lines: ReportLine[];
   /** Claude's own choices, from its report at task end (filled by the caller). */
   choices: string[];
+  /**
+   * Decisions the change goes against (24.1), filled by the app after the
+   * report shows: absent until checked; empty when nothing was against, or
+   * no decisions were in scope.
+   */
+  against?: import("./against.ts").AgainstFound[];
 };
 
 const git = (cwd: string, args: string[], input?: string): string =>

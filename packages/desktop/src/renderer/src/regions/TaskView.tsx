@@ -63,6 +63,58 @@ function Item({ item }: { item: ReportItem }) {
   );
 }
 
+type Against = NonNullable<TaskReport["against"]>[number];
+
+/**
+ * A change that goes against a decision (24.1), first in the report: the
+ * decision in the people's words, who made it, why the change goes against
+ * it, and where. One the agent wasn't sure of is a question for the person.
+ */
+function AgainstRow({
+  a,
+  onAnswer,
+}: {
+  a: Against;
+  onAnswer: (answer: "does" | "doesnt") => void;
+}) {
+  const made = when(a.at).split(",")[0] ?? "";
+  const cite = a.file ? (a.line ? `${a.file}:${String(a.line)}` : a.file) : "";
+  const asked = a.status === "asked";
+  return (
+    <div className={`report-row against${asked ? " asked" : ""}`}>
+      <span className="report-label against">{asked ? "Against?" : "Against"}</span>
+      <span className="report-what">
+        “{a.decision}” <span className="quiet">{[a.who, made].filter(Boolean).join(", ")}</span>
+        {a.why ? <span className="report-why">{a.why}</span> : null}
+        {asked ? (
+          <span className="report-ask">
+            Does the change go against it?{" "}
+            <button
+              type="button"
+              className="system-inline"
+              onClick={() => {
+                onAnswer("does");
+              }}
+            >
+              It does
+            </button>{" "}
+            <button
+              type="button"
+              className="system-inline"
+              onClick={() => {
+                onAnswer("doesnt");
+              }}
+            >
+              It doesn't
+            </button>
+          </span>
+        ) : null}
+      </span>
+      <span className="report-cite">{cite}</span>
+    </div>
+  );
+}
+
 /**
  * A task's change report (21.3, 21.4): at most three lines before "more",
  * ranked data, auth, calls, Claude's choices, UI, other, each citing its
@@ -80,6 +132,8 @@ export function TaskView({ id, onSystem }: { id: string; onSystem: () => void })
     read();
     setMore(false);
   }, [read]);
+  // The check against decisions lands after the report shows (24.1).
+  useEffect(() => anur.on("tasks:changed", read), [read]);
 
   if (report === "reading") return <div className="task-view quiet">Reading the report…</div>;
   if (!report)
@@ -100,10 +154,24 @@ export function TaskView({ id, onSystem }: { id: string; onSystem: () => void })
         {plural(files, "file")}
       </p>
       <div className="report">
+        {(report.against ?? [])
+          .filter((a) => a.status !== "dismissed")
+          .map((a) => (
+            <AgainstRow
+              key={a.target}
+              a={a}
+              onAnswer={(answer) => {
+                void anur.call("tasks:against", { id, target: a.target, answer }).then(read);
+              }}
+            />
+          ))}
         {(more ? items : top).map((it, i) => (
           <Item key={i} item={it} />
         ))}
       </div>
+      {report.against === undefined && Date.now() - Date.parse(report.endedAt) < 2 * 3600_000 ? (
+        <p className="quiet task-checking">Checking the change against what people decided…</p>
+      ) : null}
       {rest.length ? (
         <button
           type="button"
