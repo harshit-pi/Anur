@@ -266,6 +266,8 @@ export function MapView({
     };
   }, []);
   const [threads, setThreads] = useState<ThreadView[]>([]);
+  /** The thread box last clicked: Delete or Backspace deletes that thread, as Think's Delete does. */
+  const picked = useRef<string | null>(null);
   const [previews, setPreviews] = useState<PreviewView[]>([]);
   const previewed = useMemo(() => new Set(previews.map((p) => p.thread)), [previews]);
   const [view, setView] = useState<View | null>(null);
@@ -463,6 +465,12 @@ export function MapView({
     const off = anur.on("thread:event", (e) => {
       if (e.kind === "thread" && e.path === docPath) load();
     });
+    // Deleted in Think, or here: its box goes.
+    const onDeleted = (e: Event) => {
+      const { thread } = (e as CustomEvent<{ thread: string }>).detail;
+      setThreads((ts) => ts.filter((t) => t.id !== thread));
+    };
+    window.addEventListener("anur:thread-deleted", onDeleted);
     const offPreviews = anur.on("preview:changed", ({ path }) => {
       if (path === docPath) load();
     });
@@ -470,6 +478,7 @@ export function MapView({
       current = false;
       off();
       offPreviews();
+      window.removeEventListener("anur:thread-deleted", onDeleted);
     };
   }, [docPath, headings]);
 
@@ -1250,6 +1259,7 @@ export function MapView({
       (b.kind === "thread" || b.kind === "option" || b.kind === "edit" || b.kind === "action") &&
       b.thread
     ) {
+      picked.current = b.kind === "thread" ? b.thread.id : null;
       onSelect(b.index);
       window.dispatchEvent(
         new CustomEvent("anur:open-thread", { detail: { thread: b.thread.id } }),
@@ -1262,6 +1272,7 @@ export function MapView({
         }, 250);
       return;
     }
+    picked.current = null;
     onSelect(b.index);
     const z = view?.z ?? 1;
     const start = { x: e.clientX, y: e.clientY };
@@ -1399,6 +1410,29 @@ export function MapView({
     }
     // Backspace or Delete: only an empty section goes from the map; one with
     // text or sections under it is removed on the page, where its words show.
+    if ((e.key === "Backspace" || e.key === "Delete") && picked.current) {
+      e.preventDefault();
+      const thread = threads.find((t) => t.id === picked.current);
+      if (!thread) return;
+      if (
+        !window.confirm(
+          `Delete “${thread.title}”? Its chat and the edits it proposes go at once. This can't be undone.`,
+        )
+      )
+        return;
+      void anur.call("thread:delete", { thread: thread.id }).then((r) => {
+        if (r.kind === "refused") {
+          setNote(r.reason);
+          return;
+        }
+        picked.current = null;
+        setThreads((ts) => ts.filter((t) => t.id !== thread.id));
+        window.dispatchEvent(
+          new CustomEvent("anur:thread-deleted", { detail: { thread: thread.id } }),
+        );
+      });
+      return;
+    }
     if ((e.key === "Backspace" || e.key === "Delete") && writable) {
       e.preventDefault();
       const s = tree.sections[selected];
@@ -1867,6 +1901,7 @@ export function MapView({
                       clickedAt.current = Date.now();
                       onSelect(b.index);
                       const only = b.chats?.length === 1 ? b.chats[0] : undefined;
+                      picked.current = only?.id ?? null;
                       if (only)
                         window.dispatchEvent(
                           new CustomEvent("anur:open-thread", { detail: { thread: only.id } }),

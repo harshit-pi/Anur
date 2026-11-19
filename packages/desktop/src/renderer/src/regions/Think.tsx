@@ -647,6 +647,18 @@ export function Think({
   /** Closed threads on this section, shown on a click (11.3). */
   const [showClosed, setShowClosed] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
+  // A thread deleted from the map: gone from the list, and closed if it was open here.
+  useEffect(() => {
+    const onDeleted = (e: Event) => {
+      const { thread } = (e as CustomEvent<{ thread: string }>).detail;
+      setThreads((ts) => ts.filter((t) => t.id !== thread));
+      setOpen((o) => (o === thread ? null : o));
+    };
+    window.addEventListener("anur:thread-deleted", onDeleted);
+    return () => {
+      window.removeEventListener("anur:thread-deleted", onDeleted);
+    };
+  }, [setThreads]);
   /** Each agent's connection, as main last reported it. */
   const [statuses, setStatuses] = useState<Partial<Record<AgentId, AgentStatus>>>({});
   const noteStatus = useCallback((s: AgentStatus) => {
@@ -1336,6 +1348,10 @@ export function Think({
                     }
                     setOpen(null);
                     setThreads((ts) => ts.filter((t) => t.id !== thread.id));
+                    // The map draws threads too: it drops this one.
+                    window.dispatchEvent(
+                      new CustomEvent("anur:thread-deleted", { detail: { thread: thread.id } }),
+                    );
                     reload();
                   });
                 }}
