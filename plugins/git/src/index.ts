@@ -315,9 +315,6 @@ export function activate(ctx: PluginContext): PluginInstance {
   async function createRepo(): Promise<string> {
     if (blockedByICloud())
       return "This folder is in iCloud Drive, which can damage a git repo. Move it out, or choose Continue anyway first.";
-    const signedIn = await ctx.run("gh", ["auth", "status"]);
-    if (signedIn.code !== 0)
-      return "Sign in to GitHub first: in Terminal, run `gh auth login`, then try again.";
     if (!(await ensureRepo()))
       return phase.kind === "holds"
         ? "This vault holds repos, so Git won't make it one: each repo syncs itself."
@@ -326,6 +323,10 @@ export function activate(ctx: PluginContext): PluginInstance {
           : "git couldn't start a repo here.";
     const already = await remote();
     if (already) return `This folder is already on GitHub: ${webOf(already) ?? already}`;
+    // Only now GitHub: a vault that can't be a repo never sends anyone to sign in.
+    const signedIn = await ctx.run("gh", ["auth", "status"]);
+    if (signedIn.code !== 0)
+      return "Sign in to GitHub first: in Terminal, run `gh auth login`, then try again.";
     await git("add", "-A");
     await git(...who(), "commit", "-q", "--allow-empty", "-m", "Anur: first version");
     const name = repoName(ctx.folder);
