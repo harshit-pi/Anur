@@ -89,6 +89,10 @@ try {
   stop("AWS isn't signed in. Run: aws sso login --profile aws-anur");
 }
 
+// Plugins first, quickly: a plugin changed without a new version stops the release here.
+step("Plugins");
+run("node", ["scripts/plugins.mjs", "check"]);
+
 // 3. Checks, then the app.
 step("Checks");
 run("pnpm", ["check"]);
@@ -208,6 +212,10 @@ run(
   ],
   { env: AWS, stdio: "ignore" },
 );
+
+// Plugins changed on main ship with the app: only the ones newer than the live feed go up.
+step("Publish plugins");
+run("node", ["scripts/plugins.mjs", "publish"]);
 
 // 6. Tag the commit and say what's in it.
 step("Tag and GitHub release");

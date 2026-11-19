@@ -25,6 +25,12 @@ xcrun notarytool store-credentials anur-notary --apple-id <Apple ID> --team-id D
 aws sso login --profile aws-anur
 ```
 
+## Plugins
+
+- `pnpm release` checks Anur's plugins first (`pnpm plugins:check`): a plugin whose code changed without a new `version` in its `manifest.json` stops the release before the long build. After the app is up, it publishes the plugins newer than the live feed (`pnpm plugins:publish`); the rest are left as they are.
+- The feed is `…/plugins/index.json`, signed with the plugin key (Keychain `anur-plugin-signing`, backed up in AWS Secrets Manager as `anur/plugin-signing-key`), beside each version's file, kept for good. Installed plugins update themselves from it.
+- Between releases, `pnpm plugins:publish` from main ships plugins alone.
+
 ## Where it goes
 
 - Bucket `anur-releases` in the aws-anur account (516737685507), private; CloudFront `EVKBSGJARHF1U` reads it.
