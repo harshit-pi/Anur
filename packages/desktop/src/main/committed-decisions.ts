@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { installPreCommit } from "@anur/system";
+import { loginPath } from "../agent/find-claude.ts";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -68,25 +69,36 @@ export async function decisionsHome(folder: string, rel: string): Promise<string
 
 const logins = new Map<string, Promise<string | null>>();
 
-/** The GitHub login behind `gh`, asked once per run; null without gh or a sign-in. */
-function ghLogin(): Promise<string | null> {
-  let p = logins.get("gh");
+/**
+ * The GitHub login behind `gh`, asked once per PATH; null without gh or a
+ * sign-in. Looked up on the login shell's PATH: an app opened from Finder
+ * runs with a bare one, without Homebrew's `gh`, and would file the same
+ * person's decisions under an email hash instead.
+ */
+function ghLogin(pathNow: string): Promise<string | null> {
+  let p = logins.get(pathNow);
   if (!p) {
-    p = run("gh", ["api", "user", "--jq", ".login"], { timeout: 5000 }).then(
+    p = run("gh", ["api", "user", "--jq", ".login"], {
+      timeout: 5000,
+      env: { ...process.env, PATH: pathNow },
+    }).then(
       (r) => r.stdout.trim() || null,
       () => null,
     );
-    logins.set("gh", p);
+    logins.set(pathNow, p);
   }
   return p;
 }
 
 /** Whose file in this place: the GitHub login when known, else a hash of the git email. */
-export async function personIn(dir: string): Promise<string | null> {
+export async function personIn(
+  dir: string,
+  pathOf: () => Promise<string> = loginPath,
+): Promise<string | null> {
   const email = await git(dir, "config", "user.email");
   let login = email ? loginFromEmail(email) : null;
   if (!login && /github\.com/.test((await git(dir, "remote", "get-url", "origin")) ?? ""))
-    login = await ghLogin();
+    login = await ghLogin(await pathOf());
   return personKey({ login, email: email || null }, (t) =>
     createHash("sha256").update(t).digest("hex"),
   );

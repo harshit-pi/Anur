@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { CommittedDecisions, decisionsHome } from "./committed-decisions.ts";
+import { CommittedDecisions, decisionsHome, personIn } from "./committed-decisions.ts";
 
 const git = (dir: string, ...args: string[]) =>
   execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
@@ -130,5 +130,26 @@ describe("the pre-commit hook comes with the first decision (23.6)", () => {
     );
     await store.keep("plan.md", "Plan", "fnd-00000011", decision);
     expect(existsSync(path.join(folder, ".git"))).toBe(false);
+  });
+});
+
+describe("whose file, in an app opened from Finder (23.2)", () => {
+  it("finds gh on the login shell's PATH, though the app's own PATH is bare", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "anur-gh-"));
+    repo(dir);
+    git(dir, "remote", "add", "origin", "https://github.com/acme/api.git");
+    const bin = mkdtempSync(path.join(tmpdir(), "anur-gh-bin-"));
+    writeFileSync(path.join(bin, "gh"), "#!/bin/sh\necho octocat\n", { mode: 0o755 });
+    const before = process.env.PATH;
+    process.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
+    try {
+      expect(await personIn(dir, () => Promise.resolve(`${bin}:/usr/bin:/bin`))).toBe("octocat");
+      // Where the login shell can't find gh either, the email hash, as before.
+      expect(await personIn(dir, () => Promise.resolve("/usr/bin:/bin"))).toMatch(
+        /^e-[0-9a-f]{12}$/,
+      );
+    } finally {
+      process.env.PATH = before;
+    }
   });
 });
