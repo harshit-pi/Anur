@@ -1,9 +1,16 @@
-import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { FeedPlugin, OpenFromItem, PluginContext, PluginStatus } from "@anur/core";
-import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { PluginStore, readFeed, type Installed } from "./store.ts";
+import {
+  keptOnMac,
+  readFolderPlugins,
+  setKeptOnMac,
+  writeEnabled,
+  writeValues,
+  type FolderPlugins,
+  type Value,
+} from "./folder-config.ts";
 import { PluginRuntime, loadModule, runWith } from "./runtime.ts";
 
 /**
@@ -13,13 +20,8 @@ import { PluginRuntime, loadModule, runWith } from "./runtime.ts";
  * themselves unless the person turned that off.
  */
 
-type Value = string | boolean;
-
 export type PluginsDeps = {
   dir: string;
-  /** Plugin IDs switched on in a folder, and saving them. */
-  onIn: (folder: string) => string[];
-  setOn: (folder: string, ids: string[]) => Promise<void>;
   /** Folders open now. */
   openFolders: () => string[];
   person: (folder: string) => Promise<{ name: string; handle: string | null }>;
@@ -29,6 +31,8 @@ export type PluginsDeps = {
   filesChanged: (folder: string) => void;
   autoUpdate: () => boolean;
   feed?: string;
+  /** The key the feed must be signed with; Anur's own unless a test brings one. */
+  key?: string;
 };
 
 export const inICloud = (folder: string) =>
@@ -37,63 +41,74 @@ export const inICloud = (folder: string) =>
 export class Plugins {
   readonly store: PluginStore;
   private readonly runtime = new PluginRuntime();
-  private values: Record<string, Record<string, Record<string, Value>>> = {};
-  private loaded = false;
+  /** Each open folder's plugin files, as last read. */
+  private readonly folders = new Map<string, FolderPlugins>();
   private feedCache: { at: number; plugins: FeedPlugin[] } | null = null;
 
   constructor(private readonly d: PluginsDeps) {
     this.store = new PluginStore(d.dir);
   }
 
-  private get settingsFile() {
-    return path.join(this.d.dir, "settings.json");
+  /** A folder's plugin files, read once, then kept as they're changed here. */
+  private async config(folder: string): Promise<FolderPlugins> {
+    let c = this.folders.get(folder);
+    if (!c) {
+      c = await readFolderPlugins(folder);
+      this.folders.set(folder, c);
+    }
+    return c;
   }
 
-  private async load() {
-    if (this.loaded) return;
-    await this.store.load();
-    try {
-      this.values = JSON.parse(await readFile(this.settingsFile, "utf8")) as typeof this.values;
-    } catch {
-      this.values = {};
-    }
-    this.loaded = true;
+  /** The plugins on for a folder, from its own `.anur/plugins/enabled.json`. */
+  async onIn(folder: string): Promise<string[]> {
+    return [...(await this.config(folder)).on];
   }
 
   /** The feed's plugins, read at most once a minute. */
   async feed(fresh = false): Promise<FeedPlugin[]> {
     if (!fresh && this.feedCache && Date.now() - this.feedCache.at < 60_000)
       return this.feedCache.plugins;
-    const plugins = await readFeed(this.d.feed);
+    const plugins = await readFeed(this.d.feed, this.d.key);
     this.feedCache = { at: Date.now(), plugins };
     return plugins;
   }
 
-  async installed(): Promise<Record<string, Installed>> {
-    await this.load();
+  installed(): Promise<Record<string, Installed>> {
     return this.store.load();
   }
 
   /** A folder's value of a plugin's setting, else its default. */
   value(folder: string, p: FeedPlugin, key: string): Value {
-    const set = this.values[folder]?.[p.id]?.[key];
+    const set = this.folders.get(folder)?.values[p.id]?.[key];
     if (set !== undefined) return set;
     const def = p.settings.find((s) => s.key === key);
     return def ? def.default : false;
   }
 
+  /** Saves a setting in the folder's `.anur/plugins/<id>.json`. */
   async setValue(folder: string, id: string, key: string, value: Value): Promise<void> {
-    await this.load();
-    const forFolder = (this.values[folder] ??= {});
-    (forFolder[id] ??= {})[key] = value;
-    await writeFileAtomic(this.settingsFile, JSON.stringify(this.values, null, 1));
+    const c = await this.config(folder);
+    const now = { ...(c.values[id] ?? {}), [key]: value };
+    c.values[id] = now;
+    await writeValues(folder, id, now);
     this.runtime.settingsChanged(folder, id);
   }
 
-  /** Starts every installed plugin switched on for `folder`. */
+  /**
+   * Starts every plugin the folder has on. One it names that this Mac doesn't
+   * have yet, as in a teammate's folder, is installed from the feed first.
+   */
   async startFolder(folder: string): Promise<void> {
-    const have = await this.installed();
-    for (const id of this.d.onIn(folder)) {
+    this.folders.delete(folder);
+    const c = await this.config(folder);
+    let have = await this.installed();
+    for (const id of c.on) {
+      if (!have[id]) {
+        const got = await this.installFromFeed(id).catch(() => null);
+        if (!got) continue;
+        have = await this.installed();
+        this.d.notify(folder, `Installed ${got.name}, which this folder uses.`, "info");
+      }
       const p = have[id];
       if (p)
         await this.start(folder, p).catch((e: unknown) => {
@@ -104,6 +119,38 @@ export class Plugins {
           );
         });
     }
+  }
+
+  /** The folder's plugin files changed, as after a pull: what's on and how follows them. */
+  async reloadFolder(folder: string): Promise<void> {
+    const was = this.folders.get(folder);
+    if (!was) return;
+    const now = await readFolderPlugins(folder);
+    this.folders.set(folder, now);
+    for (const id of was.on) if (!now.on.includes(id)) await this.runtime.stop(folder, id);
+    const have = await this.installed();
+    for (const id of now.on) {
+      const p = have[id];
+      if (!p) continue;
+      if (!this.runtime.isRunning(folder, id)) await this.start(folder, p).catch(() => undefined);
+      else if (JSON.stringify(was.values[id]) !== JSON.stringify(now.values[id]))
+        this.runtime.settingsChanged(folder, id);
+    }
+  }
+
+  /** Whether a plugin's settings stay on this Mac rather than going with the folder. */
+  keptOnMac(folder: string, id: string): Promise<boolean> {
+    return keptOnMac(folder, id);
+  }
+
+  setKeptOnMac(folder: string, id: string, onMac: boolean): Promise<void> {
+    return setKeptOnMac(folder, id, onMac);
+  }
+
+  private async installFromFeed(id: string): Promise<Installed> {
+    const p = (await this.feed(true)).find((x) => x.id === id);
+    if (!p) throw new Error(`The feed has no plugin "${id}".`);
+    return this.store.install(p, this.d.feed);
   }
 
   private async start(folder: string, p: Installed): Promise<void> {
@@ -138,10 +185,7 @@ export class Plugins {
 
   /** Installs from the feed, switches it on for `folder` and starts it, all at once. */
   async install(id: string, folder: string | null): Promise<Installed> {
-    await this.load();
-    const p = (await this.feed(true)).find((x) => x.id === id);
-    if (!p) throw new Error(`The feed has no plugin "${id}".`);
-    const got = await this.store.install(p, this.d.feed);
+    const got = await this.installFromFeed(id);
     if (folder) await this.setOn(folder, id, true);
     return got;
   }
@@ -149,18 +193,16 @@ export class Plugins {
   async uninstall(id: string): Promise<void> {
     for (const folder of this.d.openFolders()) {
       await this.runtime.stop(folder, id);
-      await this.d.setOn(
-        folder,
-        this.d.onIn(folder).filter((x) => x !== id),
-      );
+      this.d.status(folder, id, null);
     }
     await this.store.uninstall(id);
   }
 
+  /** Switches a plugin on or off in the folder's `.anur/plugins/enabled.json`. */
   async setOn(folder: string, id: string, on: boolean): Promise<void> {
-    const now = this.d.onIn(folder).filter((x) => x !== id);
-    if (on) now.push(id);
-    await this.d.setOn(folder, now);
+    const c = await this.config(folder);
+    c.on = [...c.on.filter((x) => x !== id), ...(on ? [id] : [])];
+    await writeEnabled(folder, c.on);
     if (!on) {
       await this.runtime.stop(folder, id);
       this.d.status(folder, id, null);

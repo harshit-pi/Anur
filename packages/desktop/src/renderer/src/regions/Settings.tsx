@@ -655,12 +655,14 @@ function InstalledPlugin({
 }) {
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState<Record<string, string | boolean>>({});
+  const [onMac, setOnMac] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   useEffect(() => {
     if (open && on)
       void anur.call("plugin:settings", { id: p.id }).then((r) => {
         setValues(r.values);
+        setOnMac(r.onMac);
       });
   }, [open, on, p.id, folder?.path]);
   const set = (key: string, value: string | boolean) => {
@@ -758,6 +760,19 @@ function InstalledPlugin({
               </Row>
             ),
           )}
+          <Row
+            title="Keep these settings on this Mac"
+            detail={`Off, they go with the folder in .anur/plugins/${p.id}.json, so teammates get them too.`}
+          >
+            <Switch
+              on={onMac}
+              label="Keep these settings on this Mac"
+              onChange={(v) => {
+                setOnMac(v);
+                void anur.call("plugin:keep-on-mac", { id: p.id, onMac: v });
+              }}
+            />
+          </Row>
           <div className="market-plugin-actions">
             {p.actions.map((a) => (
               <button

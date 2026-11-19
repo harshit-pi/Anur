@@ -896,7 +896,16 @@ export const ipcContract = {
   /** One plugin's settings for this folder, as values by key. */
   "plugin:settings": {
     request: z.object({ id: z.string() }).strict(),
-    response: z.object({ values: z.record(z.string(), z.union([z.string(), z.boolean()])) }),
+    response: z.object({
+      values: z.record(z.string(), z.union([z.string(), z.boolean()])),
+      /** Its settings stay on this Mac, out of git, rather than going with the folder. */
+      onMac: z.boolean(),
+    }),
+  },
+  /** Keeps a plugin's settings on this Mac (a line in .anur/.gitignore), or commits them again. */
+  "plugin:keep-on-mac": {
+    request: z.object({ id: z.string(), onMac: z.boolean() }).strict(),
+    response: z.object({}),
   },
   "plugin:set-setting": {
     request: z

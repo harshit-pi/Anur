@@ -1574,7 +1574,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return {
       feed,
       installed,
-      on: folder ? (appSettings.get().plugins[folder.path] ?? []) : [],
+      on: folder ? await plugins.onIn(folder.path) : [],
       autoUpdate: appSettings.get().autoUpdatePlugins,
       error,
       inICloud: folder ? inICloud(folder.path) : false,
@@ -1613,12 +1613,18 @@ const handlers: { [C in Channel]: Handler<C> } = {
   "plugin:settings": async ({ id }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const p = (await plugins.installed())[id];
-    if (!folder || !p) return { values: {} };
+    if (!folder || !p) return { values: {}, onMac: false };
     return {
       values: Object.fromEntries(
         p.settings.map((x) => [x.key, plugins.value(folder.path, p, x.key)]),
       ),
+      onMac: await plugins.keptOnMac(folder.path, id),
     };
+  },
+  "plugin:keep-on-mac": async ({ id, onMac }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (folder?.mode === "writable") await plugins.setKeptOnMac(folder.path, id, onMac);
+    return {};
   },
   "plugin:set-setting": async ({ id, key, value }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -2683,10 +2689,6 @@ void app.whenReady().then(async () => {
   });
   plugins = new Plugins({
     dir: path.join(app.getPath("userData"), "plugins"),
-    onIn: (f) => appSettings.get().plugins[f] ?? [],
-    setOn: async (f, ids) => {
-      await appSettings.set({ plugins: { ...appSettings.get().plugins, [f]: ids } });
-    },
     openFolders: () =>
       [...windows.keys()].flatMap((id) => {
         const f = folders.current(id);
@@ -2710,6 +2712,8 @@ void app.whenReady().then(async () => {
         if (folders.current(id)?.path === f) send(win, "plugin:notify", { plugin: "", text, tone });
     },
     filesChanged: (f) => {
+      // A pull may bring a teammate's plugin settings too.
+      void plugins.reloadFolder(f);
       for (const [id, win] of windows) {
         if (folders.current(id)?.path !== f) continue;
         void folders.refresh(id).then((now) => {
