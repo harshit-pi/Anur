@@ -975,9 +975,6 @@ export class Threads {
     this.picked.set(thread, agent ?? this.d.defaultAgent());
     // Picks made before the first message: the host sets them as the session opens.
     for (const o of options) this.setOption(thread, o.id, o.value);
-    // Build acts outside the doc, so it always shows its plan first, whatever
-    // mode was picked; once the person approves, the picked mode comes back.
-    if (purpose === "build") this.planFirst(thread, options);
     await this.send(thread, rel, text, message, at.doc, undefined, shown);
     void this.ensureSpare();
     const v = await this.view(at, rel, text, thread);
@@ -1495,40 +1492,6 @@ export class Threads {
     );
   }
 
-  /** Builds waiting on their plan's approval: the mode to go back to, and the plan's prompt once asked. */
-  private readonly planned = new Map<
-    string,
-    { id: string; value: string; request: string | null; allow: Set<string> }
-  >();
-
-  /** Start a Build in plan mode, keeping the picked mode to restore on approval. */
-  private planFirst(thread: string, picks: readonly { id: string; value: string }[]): void {
-    const known =
-      this.options.get(thread) ??
-      this.d.knownOptions?.(this.picked.get(thread) ?? this.d.defaultAgent());
-    const mode = known?.find((o) => o.choices.some((c) => c.value === "plan"));
-    if (!mode) return;
-    const picked = picks.find((p) => p.id === mode.id)?.value ?? mode.current;
-    if (picked === "plan") return;
-    this.planned.set(thread, { id: mode.id, value: picked, request: null, allow: new Set() });
-    this.setOption(thread, mode.id, "plan");
-  }
-
-  /**
-   * The person answered one of the agent's prompts. When it was a Build's
-   * plan and they approved, the mode they picked comes back for the build.
-   */
-  answered(request: string, option: string | null): void {
-    for (const [thread, p] of this.planned) {
-      if (p.request !== request) continue;
-      if (option !== null && p.allow.has(option)) {
-        this.planned.delete(thread);
-        this.setOption(thread, p.id, p.value);
-      }
-      return;
-    }
-  }
-
   setOption(thread: string, id: string, value: string): void {
     const now =
       this.options.get(thread) ??
@@ -1662,14 +1625,7 @@ export class Threads {
         }
         return;
       }
-      case "permission": {
-        const plan = this.planned.get(thread);
-        if (plan && m.plan)
-          this.planned.set(thread, {
-            ...plan,
-            request: m.request,
-            allow: new Set(m.options.filter((o) => o.kind.startsWith("allow")).map((o) => o.id)),
-          });
+      case "permission":
         this.d.emit({
           kind: "permission",
           thread,
@@ -1679,7 +1635,6 @@ export class Threads {
           plan: m.plan ?? null,
         });
         return;
-      }
       case "turn-end":
         await this.endTurn(thread, live, m.stopReason, m.usage);
         return;

@@ -652,6 +652,11 @@ export function Think({
   const [newAgent, setNewAgent] = useState<AgentId>("claude-code");
   /** A new thread's mode and model: the agent's choices, as last seen, with the person's picks. */
   const [newChoices, setNewChoices] = useState<SessionOption[]>([]);
+  /** The mode a Build started now runs in, named on its button: it acts as that mode does. */
+  const buildMode = (() => {
+    const mode = newChoices.find((o) => o.choices.some((c) => c.value === "plan"));
+    return mode?.choices.find((c) => c.value === mode.current)?.name ?? null;
+  })();
   /** Each agent's sign-in, as main last reported it (3.16). */
   const [signIns, setSignIns] = useState<Partial<Record<AgentId, AgentSignIn>>>({});
   useEffect(
@@ -2208,12 +2213,13 @@ export function Think({
           <button
             type="button"
             className="think-more"
-            title={`The agent does what this ${noun} describes, with its own tools`}
+            title={`The agent does what this ${noun} describes, with its own tools, in the mode picked below${buildMode ? ` (${buildMode})` : ""}: Plan shows its plan first, Auto acts at once`}
             onClick={() => {
               void start("-", "build");
             }}
           >
             Build this {noun}
+            {buildMode ? <span className="quiet"> · {buildMode}</span> : null}
           </button>
           <button
             type="button"
