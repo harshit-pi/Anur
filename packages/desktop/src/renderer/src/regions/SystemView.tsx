@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { anur } from "../bridge.ts";
+import { taskTitle, type TaskReport } from "../layout/task-report.ts";
 import {
   boxesAt,
   partIdsUnder,
@@ -24,7 +25,48 @@ type Shown =
  * accepts, renames or keeps the rule's name (20.6a); parts not yet seen say
  * so (20.6b).
  */
-export function SystemView({ onPlugins }: { onPlugins: () => void }) {
+/** Recent task reports atop the system (group 21); a click opens one in its tab. */
+function RecentTasks({ onOpen }: { onOpen: (id: string) => void }) {
+  const [reports, setReports] = useState<TaskReport[]>([]);
+  useEffect(() => {
+    const read = () => {
+      void anur.call("tasks:list", {}).then((r) => {
+        setReports(r.reports);
+      });
+    };
+    read();
+    return anur.on("tasks:changed", read);
+  }, []);
+  if (!reports.length) return null;
+  return (
+    <section className="system-tasks">
+      <h2>Recent tasks</h2>
+      {reports.slice(0, 5).map((r) => (
+        <button
+          key={r.id}
+          type="button"
+          className="system-task"
+          onClick={() => {
+            onOpen(r.id);
+          }}
+        >
+          <span>{taskTitle(r)}</span>
+          <span className="quiet">
+            {r.repos.map((x) => x.dir).join(", ")} · {String(r.lines.length)} files
+          </span>
+        </button>
+      ))}
+    </section>
+  );
+}
+
+export function SystemView({
+  onPlugins,
+  onOpenTask,
+}: {
+  onPlugins: () => void;
+  onOpenTask: (id: string) => void;
+}) {
   const [shown, setShown] = useState<Shown>({ kind: "reading" });
   const [at, setAt] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -136,6 +178,7 @@ export function SystemView({ onPlugins }: { onPlugins: () => void }) {
           </button>
         </span>
       </nav>
+      {level ? null : <RecentTasks onOpen={onOpenTask} />}
       {review.asking ? (
         <p className="system-note quiet" role="status">
           Claude is suggesting names for the groups…

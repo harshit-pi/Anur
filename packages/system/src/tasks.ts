@@ -111,7 +111,10 @@ export function markTask(folder: string, session: string, prompt: string): TaskM
   };
 }
 
-/** The first changed line of a diff between two blobs (or nothing), and its text. */
+/**
+ * The first changed line of a diff between two blobs (or nothing), and its
+ * text: the first added line that isn't blank, else where lines were removed.
+ */
 function firstChange(
   repo: string,
   from: string | null,
@@ -119,16 +122,20 @@ function firstChange(
 ): { line: number; text: string } {
   const empty = git(repo, ["hash-object", "-w", "--stdin"], "").trim();
   const diff = git(repo, ["diff", "-U0", "--no-color", "--no-ext-diff", from ?? empty, to]);
-  const lines = diff.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(lines[i] ?? "");
-    if (!m) continue;
-    const start = Number(m[1]);
-    const added = lines.slice(i + 1).find((l) => l.startsWith("+") && !l.startsWith("+++"));
-    if (m[2] === "0") return { line: Math.max(1, start), text: "" }; // Only removals here.
-    return { line: start, text: (added ?? "+").slice(1).trim() };
+  let first: { line: number; text: string } | null = null;
+  let at = 0;
+  for (const l of diff.split("\n")) {
+    const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(l);
+    if (m) {
+      at = Number(m[1]);
+      first ??= { line: Math.max(1, at), text: "" };
+      continue;
+    }
+    if (!l.startsWith("+") || l.startsWith("+++")) continue;
+    if (l.slice(1).trim()) return { line: at, text: l.slice(1).trim() };
+    at++;
   }
-  return { line: 1, text: "" };
+  return first ?? { line: 1, text: "" };
 }
 
 /** Added lines between two blobs, for categories that read the code. */

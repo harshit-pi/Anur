@@ -18,6 +18,8 @@ import {
 } from "./layout/file-history.ts";
 import { ImageView } from "./regions/ImageView.tsx";
 import { SystemView } from "./regions/SystemView.tsx";
+import { TaskView } from "./regions/TaskView.tsx";
+import { taskIdOf, taskTab } from "./layout/task-report.ts";
 import { SYSTEM_TAB } from "./layout/system-levels.ts";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import type { SaveStatus } from "./editor/autosave.ts";
@@ -179,7 +181,13 @@ export function App() {
     setSections(null);
     setDocError(null);
     // An image shows in its own view, not on the page.
-    if (!selected || isViewable(selected) || isDrawing(selected) || selected === SYSTEM_TAB) {
+    if (
+      !selected ||
+      isViewable(selected) ||
+      isDrawing(selected) ||
+      selected === SYSTEM_TAB ||
+      taskIdOf(selected)
+    ) {
       setOpening(null);
       return;
     }
@@ -1152,7 +1160,12 @@ export function App() {
               onPlugins={() => {
                 setSettings("core");
               }}
+              onOpenTask={(id) => {
+                setTabs((t) => openInTab(t, taskTab(id), true));
+              }}
             />
+          ) : taskIdOf(selected) ? (
+            <TaskView id={taskIdOf(selected) ?? ""} onSystem={openSystem} />
           ) : selected && isViewable(selected) ? (
             <ImageView path={selected} />
           ) : selected && isDrawing(selected) ? (

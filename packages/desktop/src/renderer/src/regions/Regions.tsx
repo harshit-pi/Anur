@@ -393,7 +393,7 @@ export function Center({
 }) {
   const [copied, setCopied] = useState<string | null>(null);
   // The system tab is no file: no path to walk, nothing to link or move.
-  const isSystem = selected === SYSTEM_TAB;
+  const isSystem = selected === SYSTEM_TAB || !!selected?.startsWith("anur:task/");
   return (
     <main className="center">
       <div className="path-row">
@@ -419,7 +419,7 @@ export function Center({
         </button>
         <nav className="path crumbs" aria-label="Path" title={selected ?? undefined}>
           {isSystem ? (
-            <span className="crumb">System</span>
+            <span className="crumb">{selected === SYSTEM_TAB ? "System" : "Task report"}</span>
           ) : selected ? (
             crumbs(selected).map((c, i) => (
               <Fragment key={`${String(i)}-${c.label}`}>

@@ -119,3 +119,48 @@ describe("the change report (group 21)", () => {
     expect(categoryOf("README.md", "words")).toBe("other");
   });
 });
+
+describe("Claude's choices at task end (21.3)", () => {
+  it("reads the Choices list from the transcript's last reply into the report", () => {
+    const dir = tmp();
+    twoRepoSystem(dir);
+    const start = handleHook({ hook_event_name: "UserPromptSubmit", session_id: "s5", cwd: dir });
+    expect(start.kind === "marked" && start.context).toContain("Choices:");
+    touch(dir, "web/src/styles.css", ".x {}");
+    const transcript = path.join(dir, "t.jsonl");
+    const line = (text: string) =>
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text }] },
+      });
+    writeFileSync(
+      transcript,
+      [
+        line("Choices:\n- an old one"),
+        JSON.stringify({ type: "user", message: { role: "user", content: "next" } }),
+        line(
+          "Done.\n\n**Choices:**\n- Run the job at 2am UTC\n- Skip cards marked **expired**\n\nThat's all.",
+        ),
+      ].join("\n"),
+    );
+    const end = handleHook({
+      hook_event_name: "Stop",
+      session_id: "s5",
+      cwd: dir,
+      transcript_path: transcript,
+    });
+    if (end.kind !== "reported") throw new Error(end.kind);
+    expect(end.report.choices).toEqual(["Run the job at 2am UTC", "Skip cards marked expired"]);
+  });
+});
+
+describe("each line points at what changed", () => {
+  it("skips blank added lines to the first one with words", () => {
+    const dir = tmp();
+    twoRepoSystem(dir);
+    const mark = markTask(dir, "s6", "");
+    touch(dir, "api/src/auth/session.ts", "\nexport function signOut() {}");
+    const report = reportSince(dir, mark, scanSystem(dir).parts);
+    expect(report?.lines[0]).toMatchObject({ line: 3, text: "export function signOut() {}" });
+  });
+});
