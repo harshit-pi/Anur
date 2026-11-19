@@ -3387,6 +3387,7 @@ body.resizing * {
 
 .think-inputs li {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   min-width: 0;
@@ -5471,4 +5472,18 @@ button.file-card-name:hover {
 /* The doc's threads are still being read (an offloaded iCloud file can take a while). */
 .think-loading {
   color: var(--graphite);
+}
+
+/* A decision that no longer carries until someone keeps it (18.2). */
+.think-lapsed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  width: 100%;
+  font-size: 12px;
+}
+
+.think-lapsed-why {
+  color: var(--amber);
 }

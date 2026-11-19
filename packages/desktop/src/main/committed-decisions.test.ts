@@ -273,3 +273,33 @@ describe("a decision on a call reaches the other end (23.10)", () => {
     expect(asked).toBe(2);
   });
 });
+
+describe("a decision that needs a look (18.2)", () => {
+  it("is kept again with no end date, moved to the doc, or dropped, and history keeps what was committed", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "anur-dec-"));
+    repo(dir);
+    const store = new CommittedDecisions(dir, "mac-a", () => Promise.resolve("sam"));
+    await store.keep("notes.md", "Checkout › Retries", "r-1", { ...decision, until: "2026-01-01" });
+    const file = path.join(dir, ".anur", "decisions", "sam.jsonl");
+    commitAll(dir);
+    const [first] = await store.current(dir);
+    await store.revise("", first?.id ?? "", { until: null });
+    // Committed already: a "dropped" line, and the decision again with no "until".
+    const now = await store.current(dir);
+    expect(now.map((e) => [e.kind === "decision" ? e.until : "", e.ref, e.scope])).toEqual([
+      [null, "r-1", "section:notes.md#Checkout › Retries"],
+    ]);
+    expect(read(file).map((l) => (JSON.parse(l) as { kind: string }).kind)).toEqual([
+      "decision",
+      "dropped",
+      "decision",
+    ]);
+    // Not yet committed: moved to the whole doc, the line replaced.
+    await store.revise("", now[0]?.id ?? "", { scope: "section:notes.md#" });
+    expect((await store.current(dir)).map((e) => e.scope)).toEqual(["section:notes.md#"]);
+    expect(read(file)).toHaveLength(3);
+    const [moved] = await store.current(dir);
+    await store.revise("", moved?.id ?? "", "drop");
+    expect(await store.current(dir)).toEqual([]);
+  });
+});

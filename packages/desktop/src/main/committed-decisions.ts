@@ -200,9 +200,12 @@ export class CommittedDecisions {
           : scope === "doc"
             ? `section:${doc}#`
             : `section:${doc}#${section}`;
-    // Already kept: as it is, or at another scope, which moves it.
+    // Already kept: as it is, or at another scope or with another "until"
+    // (kept again after it passed, 18.2), which replaces it.
     const here = (await this.current(target.home)).find((e) => e.ref === ref);
-    if (here?.scope === as) return here.id;
+    const sameUntil =
+      here?.kind !== "decision" || entry.kind !== "decision" || here.until === entry.until;
+    if (here?.scope === as && sameUntil) return here.id;
     if (
       (await this.current(at.home)).some((e) => e.ref === ref) ||
       (await this.personal()).some((e) => e.ref === ref)
@@ -297,27 +300,8 @@ export class CommittedDecisions {
   async drop(rel: string, ref: string): Promise<void> {
     const at = await this.place(rel);
     if (!at) return;
-    for (const e of (await this.current(at.home)).filter((x) => x.ref === ref)) {
-      if (e.scope.startsWith("edge:")) this.sidesFor();
-      const ownFile = path.join(at.home, ANUR_DIR, anurPaths.decisions(e.person));
-      const committed = await git(
-        at.home,
-        "show",
-        `HEAD:${path.relative(at.home, ownFile).split(path.sep).join("/")}`,
-      );
-      if (e.person === at.person && !committed?.includes(e.id)) {
-        const text = await readFile(ownFile, "utf8");
-        await writeFile(
-          ownFile,
-          text
-            .split("\n")
-            .filter((row) => !row.includes(`"id":"${e.id}"`))
-            .join("\n"),
-        );
-      } else {
-        await this.append(at.file, { kind: "dropped", target: e.id });
-      }
-    }
+    for (const e of (await this.current(at.home)).filter((x) => x.ref === ref))
+      await this.dropEntry(at, e);
     // Kept for everywhere: never committed, so it simply comes out.
     for (const e of (await this.personal()).filter((x) => x.ref === ref)) {
       const own = path.join(this.personalHome, ANUR_DIR, anurPaths.decisions(e.person));
@@ -332,6 +316,67 @@ export class CommittedDecisions {
       this.refreshEverywhere();
     }
     this.refreshLocal(at.home);
+  }
+
+  /**
+   * Taken back: a line of one's own not yet committed comes out of the
+   * file; anything else gets a "dropped" line in one's own file.
+   */
+  private async dropEntry(
+    at: { home: string; person: string; file: string },
+    e: CommittedEntry,
+  ): Promise<void> {
+    if (e.scope.startsWith("edge:")) this.sidesFor();
+    const ownFile = path.join(at.home, ANUR_DIR, anurPaths.decisions(e.person));
+    const committed = await git(
+      at.home,
+      "show",
+      `HEAD:${path.relative(at.home, ownFile).split(path.sep).join("/")}`,
+    );
+    if (e.person === at.person && !committed?.includes(e.id)) {
+      const text = await readFile(ownFile, "utf8");
+      await writeFile(
+        ownFile,
+        text
+          .split("\n")
+          .filter((row) => !row.includes(`"id":"${e.id}"`))
+          .join("\n"),
+      );
+    } else {
+      await mkdir(path.dirname(at.file), { recursive: true });
+      await this.append(at.file, { kind: "dropped", target: e.id });
+    }
+  }
+
+  /**
+   * One that needs a look (18.2), anyone's, by its home ("" the folder, "~"
+   * one's own everywhere) and ID: dropped, or kept again in one's own file,
+   * with no "until" or for the whole doc its section was in. The old line is
+   * taken back as a drop is, so history keeps both.
+   */
+  async revise(
+    home: string,
+    id: string,
+    change: { until?: null; scope?: string } | "drop",
+  ): Promise<void> {
+    const dir = home === "~" ? this.personalHome : path.join(this.folder, home);
+    const e = (await this.current(dir)).find((x) => x.id === id);
+    if (!e) return;
+    const person = await this.personOf(dir);
+    if (!person) return;
+    const at = { home: dir, person, file: path.join(dir, ANUR_DIR, anurPaths.decisions(person)) };
+    await this.dropEntry(at, e);
+    if (change !== "drop") {
+      const { id: _id, at: _at, seq: _seq, dev: _dev, person: _p, ...body } = e;
+      await this.openDecisions(dir);
+      await this.append(at.file, {
+        ...body,
+        ...(change.scope ? { scope: change.scope, within: null } : {}),
+        ...(change.until === null && body.kind === "decision" ? { until: null } : {}),
+      });
+    }
+    if (home === "~") this.refreshEverywhere();
+    else this.refreshLocal(dir);
   }
 
   /**

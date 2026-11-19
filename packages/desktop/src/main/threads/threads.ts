@@ -58,7 +58,7 @@ import { TurnWatch, type DocChange } from "./turn-watch.ts";
 import { readSection } from "./read-section.ts";
 import { readFile } from "../../vault/anur-copy.ts";
 import type { CommittedDecisions } from "../committed-decisions.ts";
-import { DecisionScope, sectionScope, type CommittedEntry } from "@anur/core";
+import { DecisionScope, sectionScope, untilPassed, type CommittedEntry } from "@anur/core";
 
 export { readSection } from "./read-section.ts";
 
@@ -131,6 +131,35 @@ export function appliesTo(
   }
   return null;
 }
+/**
+ * Where a decision was, when that place is gone (18.2): a section of this
+ * doc no longer in it, or a part the system no longer has. Null otherwise.
+ */
+export function goneFrom(
+  e: {
+    scope: string;
+    home: string;
+    on?: string | null | undefined;
+    within?: string | null | undefined;
+  },
+  rel: string,
+  at: { tree: { sections: readonly { path: readonly string[] }[] } },
+  parts: ReadonlySet<string> | null,
+): string | null {
+  const section = sectionScope(e.scope, e.home);
+  if (section) {
+    if (section.doc !== rel || !section.path.length) return null;
+    const want = section.path.join("\u0000");
+    return at.tree.sections.some((s) => s.path.join("\u0000") === want)
+      ? null
+      : `${section.path.join(" › ")}, which is gone`;
+  }
+  const part = /^part:(.+)$/.exec(e.scope)?.[1];
+  // Only on docs it reached while the part was there.
+  if (part && parts && !parts.has(part) && appliesTo(e.scope, e.home, rel, [], e) !== null)
+    return `${e.on ?? "a part"}, which is gone`;
+  return null;
+}
 const canonIn = (at: Located, id: SectionId) => at.canon?.get(id) ?? id;
 
 export type ThreadDeps = {
@@ -150,7 +179,15 @@ export type ThreadDeps = {
   committed?: Pick<CommittedDecisions, "keep" | "drop"> & {
     /** Every committed decision and finding the opened folder collects (18.14). */
     collected?: () => Promise<(CommittedEntry & { home: string })[]>;
+    /** Keep one again, as it is or for the whole doc, or drop it (18.2), by its home and ID. */
+    revise?: (
+      home: string,
+      id: string,
+      change: { until?: null; scope?: string } | "drop",
+    ) => Promise<void>;
   };
+  /** The parts the system tab last read, as IDs; null before any read. A part's decision whose part is gone needs a look. */
+  liveParts?: () => ReadonlySet<string> | null;
   /** Who uses each device, and this person's own name, to show who started others' threads. */
   people?: () => Promise<{ me: string | null; byDevice: ReadonlyMap<string, string> }>;
   /** Plugins switched on for this folder (group 19): their IDs, for the MCP server, and their context lines. */
@@ -282,6 +319,13 @@ export type KeptFinding = {
    * system it's in (23.1), 3 its folder or repo, 4 everywhere.
    */
   reach: number;
+  /**
+   * Why it needs a look and no longer carries (18.2): its "until" has
+   * passed, or the section or part it's on is gone. Null while it holds.
+   */
+  lapsed: "until" | "gone" | null;
+  /** For a committed one kept outside any thread here: the home it's in, to keep or drop it. */
+  home?: string;
 };
 
 export type Carried = {
@@ -964,7 +1008,8 @@ export class Threads {
     const gone = (live.proposed ?? []).filter((p) => !still.includes(p));
     live.waiting = live.proposed?.length ? { still, gone } : null;
     live.carried = await this.carriedFor(at, start.section, thread);
-    live.findings = await this.findingsFor(at, start.section, rel);
+    // One that needs a look doesn't carry until someone keeps it (18.2).
+    live.findings = (await this.findingsFor(at, start.section, rel)).filter((f) => !f.lapsed);
     live.pluginLines =
       (await this.d.plugins
         ?.context(rel, at.tree.sections[indexIn(at, start.section)]?.path ?? [])
@@ -1667,9 +1712,12 @@ export class Threads {
     const seen = new Set(local.map((f) => f.id));
     const me = (await this.d.people?.().catch(() => null))?.me ?? null;
     const out: KeptFinding[] = [];
+    const parts = this.d.liveParts?.() ?? null;
     for (const e of await collected().catch(() => [])) {
       if (e.ref && seen.has(e.ref)) continue;
-      const label = appliesTo(e.scope, e.home, rel, here, e);
+      // On a section of this doc, or a part, that is gone (18.2): shown, never silently lost.
+      const gone = goneFrom(e, rel, at, parts);
+      const label = gone ?? appliesTo(e.scope, e.home, rel, here, e);
       if (label === null) continue;
       const decision = e.kind === "decision";
       out.push({
@@ -1686,6 +1734,8 @@ export class Threads {
         instead: decision ? e.instead : null,
         until: decision ? e.until : null,
         reach: reachOf(e.scope, here),
+        lapsed: gone !== null ? "gone" : decision && untilPassed(e.until, e.at) ? "until" : null,
+        home: e.home,
       });
     }
     return out;
@@ -1704,12 +1754,8 @@ export class Threads {
       const id = at.ids[i];
       if (id) above.add(id);
     }
-    let names: string[];
-    try {
-      names = await readdir(this.threadsDir(at.doc));
-    } catch {
-      return [];
-    }
+    // A doc with no threads yet still gets the committed ones, a teammate's too.
+    const names = await readdir(this.threadsDir(at.doc)).catch(() => [] as string[]);
     const out: KeptFinding[] = [];
     for (const t of names) {
       const lines = await this.linesOf(at.doc, t);
@@ -1722,6 +1768,14 @@ export class Threads {
         const last = lines.findLast((d) => d.kind === "finding-decided" && d.finding === l.id);
         if (last?.kind !== "finding-decided" || last.status !== "kept") continue;
         const from = l.from ? lines.find((m) => m.id === l.from) : undefined;
+        // Kept again with a new "until" (18.2), counted from then.
+        const renewed = lines.findLast(
+          (d) => d.kind === "finding-decided" && d.finding === l.id && d.until !== undefined,
+        );
+        const until =
+          renewed?.kind === "finding-decided" && renewed.until !== undefined
+            ? renewed.until
+            : (l.until ?? null);
         out.push({
           id: l.id,
           thread: t,
@@ -1734,8 +1788,9 @@ export class Threads {
           who: l.by === "person" ? await this.nameOf(from?.dev ?? l.dev) : null,
           mine: l.by === "person" && (await this.whoIs())(from?.dev ?? l.dev) === null,
           instead: l.instead ?? null,
-          until: l.until ?? null,
+          until,
           reach: canonIn(at, start.section) === canonIn(at, section) ? 0 : 1,
+          lapsed: untilPassed(until, renewed?.at ?? l.at) ? "until" : null,
         });
       }
     }
@@ -1755,6 +1810,50 @@ export class Threads {
         : at.tree.sections.findIndex((s) => s.path.join("\u0000") === sectionPath.join("\u0000"));
     const section = at.ids[index];
     return section ? this.findingsFor(at, section, rel) : [];
+  }
+
+  /**
+   * A decision that needs a look (18.2): kept again with no "until", kept
+   * for the whole doc when its section is gone, or dropped. One kept in a
+   * thread here changes there and in the committed copy; one only committed,
+   * as a teammate's, changes in the committed files.
+   */
+  async reviseFinding(
+    where: { thread: string } | { home: string },
+    id: string,
+    action: "keep" | "doc" | "drop",
+  ): Promise<{ kind: "ok" } | { kind: "refused"; reason: string }> {
+    if ("home" in where) {
+      const revise = this.d.committed?.revise;
+      if (!revise) return { kind: "refused", reason: "Decisions aren't committed in this folder." };
+      if (action === "drop") await revise(where.home, id, "drop");
+      else if (action === "keep") await revise(where.home, id, { until: null });
+      else {
+        const e = (await this.d.committed?.collected?.().catch(() => []))?.find(
+          (x) => x.id === id && x.home === where.home,
+        );
+        const doc = e ? /^section:([^#]+)#/.exec(e.scope)?.[1] : undefined;
+        if (!doc) return { kind: "refused", reason: "It isn't on a doc's section." };
+        await revise(where.home, id, { scope: `section:${doc}#` });
+      }
+      return { kind: "ok" };
+    }
+    if (action === "drop")
+      return this.decideFinding(where.thread, { id, status: "dropped", claim: null });
+    if (action === "doc")
+      return this.decideFinding(where.thread, { id, status: "kept", claim: null, scope: "doc" });
+    const own = await this.docOfThread(where.thread);
+    if (!own) return { kind: "refused", reason: "That thread isn't in this folder." };
+    await this.append(own, where.thread, {
+      kind: "finding-decided",
+      finding: id,
+      status: "kept",
+      claim: null,
+      how: "person",
+      until: null,
+    });
+    await this.commitDecided(where.thread, id, "kept");
+    return { kind: "ok" };
   }
 
   /**
@@ -1839,6 +1938,13 @@ export class Threads {
           ? (at.tree.sections[indexIn(at, start.section)]?.path ?? []).join(" › ")
           : "";
       const from = f.from ? lines.find((m) => m.id === f.from) : undefined;
+      const renewed = lines.findLast(
+        (d) => d.kind === "finding-decided" && d.finding === finding && d.until !== undefined,
+      );
+      const until =
+        renewed?.kind === "finding-decided" && renewed.until !== undefined
+          ? renewed.until
+          : (f.until ?? null);
       await c.keep(
         rel,
         section,
@@ -1849,7 +1955,7 @@ export class Threads {
               decision: claim,
               quote: f.quote ?? null,
               instead: f.instead ?? null,
-              until: f.until ?? null,
+              until,
               who: await this.nameOf(from?.dev ?? f.dev),
             }
           : { kind: "finding", claim, source: f.source },
