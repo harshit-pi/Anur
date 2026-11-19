@@ -19,9 +19,20 @@ const BUILD = [
   "build.gradle",
   "Gemfile",
   "composer.json",
+  // Infrastructure as code: Amplify, SAM, Terraform, CloudFormation.
+  "amplify.yml",
+  "template.yaml",
+  "template.yml",
+  "samconfig.toml",
+  "main.tf",
+  // Python without pyproject, and .NET and Swift builds.
+  "requirements.txt",
+  "setup.py",
+  "Package.swift",
 ];
 
-function looksLikeCode(repo: string): boolean {
+/** A repo that holds code: a build file at its top or one folder down. A docs or notes repo doesn't. */
+export function looksLikeCode(repo: string): boolean {
   if (BUILD.some((b) => existsSync(path.join(repo, b)))) return true;
   let names: string[];
   try {

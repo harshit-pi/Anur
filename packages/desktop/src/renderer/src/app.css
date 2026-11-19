@@ -5262,8 +5262,10 @@ button.file-card-name:hover {
   columns: 1;
 }
 
+/* Lined up with the file tree's rows, which sit 8px out to the panel's edge. */
 .system-row {
-  margin: 2px 0 6px;
+  width: auto;
+  margin: 2px -8px 6px;
   padding-left: 8px;
   font-weight: 500;
 }
@@ -5272,6 +5274,55 @@ button.file-card-name:hover {
   flex: none;
   width: 15px;
   height: 15px;
+}
+
+/* Repos: a caret that shows the repos, and the name that opens the map. */
+.system-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.system-caret,
+.system-open-map {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.system-caret {
+  align-self: stretch;
+}
+
+.system-open-map {
+  flex: 1;
+  min-width: 0;
+}
+
+/* "copy of PiTrade" after a second clone's name. */
+.tree-note {
+  flex: none;
+  color: var(--graphite);
+  font-size: 11.5px;
+}
+
+.system-count {
+  margin-left: auto;
+  padding-right: 6px;
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+/* The repos, one step in from Repos, as a folder's children are. */
+.system-repos {
+  margin-bottom: 6px;
+  padding-left: 14px;
 }
 
 .system-side .edge-label,

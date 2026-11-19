@@ -134,7 +134,9 @@ export function LeftSidebar({
   system?: {
     open: boolean;
     onOpen: () => void;
-    /** Recent task reports, newest first, under the System row. */
+    /** The system's repos, folder-relative: gathered under Repos, closed until opened; a second clone names its original. */
+    repos: readonly { dir: string; copyOf: string | null }[];
+    /** Recent task reports, newest first, under the Repos row. */
     tasks: { id: string; title: string; open: boolean }[];
     onTask: (id: string) => void;
   } | null;
@@ -154,6 +156,24 @@ export function LeftSidebar({
   makeDoc?: number;
 }) {
   const [collapse, setCollapse] = useState(0);
+  // The repos a system found sit under Repos, closed until opened: code
+  // first, so the rest of the tree is the folder's docs.
+  const [reposOpen, setReposOpen] = useState(false);
+  const repoList = (system?.repos ?? []).map((r) => r.dir);
+  const repoCount = (system?.repos ?? []).filter((r) => !r.copyOf).length;
+  const copyNotes = Object.fromEntries(
+    (system?.repos ?? []).flatMap((r) => (r.copyOf ? [[r.dir, `copy of ${r.copyOf}`]] : [])),
+  );
+  const inRepo = (p: string) => repoList.some((r) => p === r || p.startsWith(`${r}/`));
+  /** The folders above a nested repo, so it shows at its own path under Repos. */
+  const repoAncestors = new Set(
+    repoList.flatMap((r) =>
+      r
+        .split("/")
+        .slice(0, -1)
+        .map((_, i, a) => a.slice(0, i + 1).join("/")),
+    ),
+  );
   const [request, setRequest] = useState<MakeRequest | null>(null);
   useEffect(() => {
     if (makeDoc > 0) setRequest((r) => ({ kind: "doc", n: (r?.n ?? 0) + 1 }));
@@ -247,15 +267,52 @@ export function LeftSidebar({
         </button>
       </div>
       {system ? (
-        <button
-          type="button"
-          className={`tree-row system-row${system.open ? " selected" : ""}`}
-          title="The folder's repos and the links between them"
-          onClick={system.onOpen}
-        >
-          <SystemIcon />
-          <span className="truncate">System</span>
-        </button>
+        <div className={`tree-row system-row${system.open ? " selected" : ""}`}>
+          {system.repos.length ? (
+            <button
+              type="button"
+              className="system-caret"
+              aria-label={reposOpen ? "Hide the repos" : "Show the repos"}
+              aria-expanded={reposOpen}
+              onClick={() => {
+                setReposOpen((o) => !o);
+              }}
+            >
+              <span className={`caret${reposOpen ? " open" : ""}`} aria-hidden="true" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="system-open-map"
+            title="The folder's repos and the links between them, as a map"
+            onClick={system.onOpen}
+          >
+            <SystemIcon />
+            <span className="truncate">Repos</span>
+            {system.repos.length ? <span className="quiet system-count">{repoCount}</span> : null}
+          </button>
+        </div>
+      ) : null}
+      {system && reposOpen && system.repos.length ? (
+        <div className="system-repos">
+          <FileTree
+            root={folder.path}
+            docs={folder.docs.filter(inRepo)}
+            folders={[...new Set([...repoAncestors, ...folder.folders.filter(inRepo)])]}
+            files={folder.files.filter(inRepo)}
+            times={folder.times}
+            sort={sort}
+            offloaded={folder.offloaded}
+            selected={selected}
+            onSelect={onSelect}
+            reveal={reveal}
+            collapse={collapse}
+            actions={actions}
+            editable={editable}
+            request={null}
+            notes={copyNotes}
+          />
+        </div>
       ) : null}
       {system?.tasks.length ? (
         <ul className="system-tasks-tree" aria-label="Recent tasks">
@@ -277,9 +334,9 @@ export function LeftSidebar({
       ) : null}
       <FileTree
         root={folder.path}
-        docs={folder.docs}
-        folders={folder.folders}
-        files={folder.files}
+        docs={folder.docs.filter((p) => !inRepo(p))}
+        folders={folder.folders.filter((p) => !inRepo(p))}
+        files={folder.files.filter((p) => !inRepo(p))}
         times={folder.times}
         sort={sort}
         offloaded={folder.offloaded}
@@ -440,7 +497,7 @@ export function Center({
         </button>
         <nav className="path crumbs" aria-label="Path" title={selected ?? undefined}>
           {isSystem ? (
-            <span className="crumb">{selected === SYSTEM_TAB ? "System" : "Task report"}</span>
+            <span className="crumb">{selected === SYSTEM_TAB ? "Repos" : "Task report"}</span>
           ) : selected ? (
             crumbs(selected).map((c, i) => (
               <Fragment key={`${String(i)}-${c.label}`}>

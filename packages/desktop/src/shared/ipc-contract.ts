@@ -604,7 +604,10 @@ export const ipcContract = {
           }),
         ),
         /** Every repo found in the folder, and whether it's in the system (the person's choice). */
-        repos: z.array(z.object({ dir: z.string(), included: z.boolean() })),
+        /** Every repo folder; a second clone of one names the folder the map reads instead. */
+        repos: z.array(
+          z.object({ dir: z.string(), included: z.boolean(), copyOf: z.string().nullable() }),
+        ),
         /** What each edge detector can't see. */
         misses: z.array(z.object({ detector: z.string(), misses: z.array(z.string()) })),
         /** Claude's proposals waiting on the person, and the parts they have seen (20.6). */
@@ -1461,6 +1464,13 @@ export const ipcContract = {
   "tasks:get": {
     request: z.object({ id: z.string().max(200) }).strict(),
     response: z.object({ report: TaskReportView.nullable() }),
+  },
+  /** The repos in this folder's system, as folder-relative dirs, for the files panel's Repos section. */
+  "system:repoDirs": {
+    request: z.object({}).strict(),
+    response: z.object({
+      repos: z.array(z.object({ dir: z.string(), copyOf: z.string().nullable() })),
+    }),
   },
   /** The public GitHub repo this folder's threads would be committed to, if any (18.13). */
   "anur:publicRepo": {

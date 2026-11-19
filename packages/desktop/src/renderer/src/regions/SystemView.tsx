@@ -58,7 +58,7 @@ type Shown =
       review: Review;
       edges: SystemEdge[];
       misses: { detector: string; misses: string[] }[];
-      repos: { dir: string; included: boolean }[];
+      repos: { dir: string; included: boolean; copyOf: string | null }[];
     };
 
 /**
@@ -381,12 +381,21 @@ export function SystemView({
  * Which repos are part of this folder's system: all by default; one left out
  * isn't scanned, watched, marked for tasks, or joined by edges.
  */
-function RepoChooser({ repos }: { repos: { dir: string; included: boolean }[] }) {
-  const inCount = repos.filter((r) => r.included).length;
+function RepoChooser({
+  repos,
+}: {
+  repos: { dir: string; included: boolean; copyOf: string | null }[];
+}) {
+  // Repos counted once: a second clone of one is marked, not counted again.
+  const own = repos.filter((r) => !r.copyOf);
+  const inCount = own.filter((r) => r.included).length;
+  const copies = repos.length - own.length;
   return (
     <section className="repo-chooser" aria-label="Repos in this folder's system">
       <p className="quiet">
-        {inCount} of {repos.length} repos are in this folder's system. Untick one to leave it out.
+        {inCount} of {own.length} repos are in this folder's system
+        {copies ? `, plus ${String(copies)} ${copies === 1 ? "copy" : "copies"} of them` : ""}.
+        Untick one to leave it out.
       </p>
       <ul>
         {repos.map((r) => (
@@ -400,6 +409,7 @@ function RepoChooser({ repos }: { repos: { dir: string; included: boolean }[] })
                 }}
               />{" "}
               {r.dir}
+              {r.copyOf ? <span className="quiet"> copy of {r.copyOf}</span> : null}
             </label>
           </li>
         ))}

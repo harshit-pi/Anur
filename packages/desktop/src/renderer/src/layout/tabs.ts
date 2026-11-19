@@ -68,7 +68,7 @@ export const currentDoc = (t: Tabs) => docOf(activeTab(t));
 export function titleOf(tab: Tab): string {
   const path = docOf(tab);
   if (!path) return "New tab";
-  if (path === SYSTEM_TAB) return "System";
+  if (path === SYSTEM_TAB) return "Repos";
   if (path.startsWith("anur:task/")) return "Task";
   return (path.split("/").pop() ?? path).replace(/\.md$/i, "");
 }

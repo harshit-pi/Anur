@@ -94,6 +94,7 @@ export function FileTree({
   editable = false,
   request = null,
   root = null,
+  notes = {},
 }: {
   docs: readonly string[];
   folders?: readonly string[];
@@ -117,6 +118,8 @@ export function FileTree({
   request?: MakeRequest | null;
   /** The folder's full path, so a drag can carry full paths to another window. */
   root?: string | null;
+  /** A quiet word after a row's name, such as "copy of PiTrade" for a second clone. */
+  notes?: Readonly<Record<string, string>>;
 }) {
   const tree = useMemo(
     () => buildTree(docs, folders, sort, times, files),
@@ -629,6 +632,7 @@ export function FileTree({
       >
         {caret}
         <span className="truncate">{n.name}</span>
+        {notes[n.path] ? <span className="tree-note">{notes[n.path]}</span> : null}
         {n.kind === "file" && n.ext ? <span className="file-ext">{n.ext}</span> : null}
         {inCloud.has(n.path) ? (
           <span className="cloud-mark" aria-label="in iCloud">

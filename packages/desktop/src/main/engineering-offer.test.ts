@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { codeRepos } from "./engineering-offer.ts";
+import { codeRepos, looksLikeCode } from "./engineering-offer.ts";
 
 const repo = (dir: string, files: Record<string, string>) => {
   mkdirSync(path.join(dir, ".git"), { recursive: true });
@@ -26,5 +26,15 @@ describe("the Engineering offer counts code repos", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "anur-offer-"));
     repo(dir, { "Ideas.md": "x", "raw/Plan.md": "y" });
     expect(codeRepos(dir)).toBe(0);
+  });
+
+  it("counts infrastructure as code, such as an Amplify or Terraform repo, and a notes vault as not", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "anur-offer-"));
+    repo(path.join(dir, "amplify"), { "amplify.yml": "version: 1", "amplify/cli.json": "{}" });
+    repo(path.join(dir, "infra"), { "envs/main.tf": "" });
+    repo(path.join(dir, "vault"), { "Home.md": "# Home", ".obsidian/app.json": "{}" });
+    expect(looksLikeCode(path.join(dir, "amplify"))).toBe(true);
+    expect(looksLikeCode(path.join(dir, "infra"))).toBe(true);
+    expect(looksLikeCode(path.join(dir, "vault"))).toBe(false);
   });
 });
