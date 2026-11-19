@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   mkdirSync,
   mkdtempSync,
@@ -86,6 +87,28 @@ describe("listing docs", () => {
       "notes/Plan 2.md",
       "notes/Plan 10.md",
     ]);
+  });
+
+  it("skips what git ignores, in the folder and in a repo inside it, but never a tracked file (18.16)", async () => {
+    const git = (dir: string, ...args: string[]) =>
+      execFileSync("git", ["-C", dir, ...args], { stdio: "ignore" });
+    // The folder is a repo that ignores build/; a repo inside ignores its own dist/ and one doc.
+    git(vault, "init", "-q");
+    touch(".gitignore", "build/\nkept.md\n");
+    touch("build/out.md");
+    touch("kept.md");
+    git(vault, "add", "-f", "kept.md");
+    touch("api/.gitignore", "dist/\nscratch.md\n");
+    mkdirSync(path.join(vault, "api"), { recursive: true });
+    git(path.join(vault, "api"), "init", "-q");
+    touch("api/dist/api.md");
+    touch("api/scratch.md");
+    touch("api/README.md");
+    touch("notes.md");
+    const listed = await listDocs(vault);
+    expect(listed.docs).toEqual(["api/README.md", "kept.md", "notes.md"]);
+    expect(listed.folders).not.toContain("build");
+    expect(listed.folders).not.toContain("api/dist");
   });
 
   it("stops at the cap and says so", async () => {
