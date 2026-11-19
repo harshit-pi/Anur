@@ -155,7 +155,7 @@ const TOOLS = [
   {
     name: "anur_offer_options",
     description:
-      "Offer the person two or more alternatives to pick from, instead of listing them in your reply: ways this thread's section could read, or a choice they have to make, such as a date, an approach or a fallback. One call per choice; call it again for another. Each option is a short title and its text in Markdown, without a heading. Anur shows them as cards in the thread and as boxes on the doc's map; the person picks one. Without `heading`, its text replaces the section's text; with `heading`, it goes under a subsection of that name, so a decision gets its own place in the doc. Don't also edit the doc for options you offer.",
+      "Offer the person two or more alternatives to pick from, instead of listing them in your reply: ways this thread's section could read, or a choice they have to make, such as a date, an approach or a fallback. One call per choice; call it again for another. Each option is a short title and its text in Markdown, without a heading. Anur shows them as cards in the thread and as boxes on the doc's map; the person picks one. Without `heading`, its text replaces the section's text; with `heading`, it goes under a subsection of that name, so a decision gets its own place in the doc. With `several`, they are parts that can all belong, and the person adds any of them as subsections. Don't also edit the doc for options you offer.",
     inputSchema: {
       type: "object",
       properties: {
@@ -163,6 +163,11 @@ const TOOLS = [
           type: "string",
           description:
             'The decision these choose between, as a short subsection name such as "Launch date", when it is not this section itself. Leave it out when the options are ways this section could read.',
+        },
+        several: {
+          type: "boolean",
+          description:
+            "True when these are parts that can all belong, such as workstreams, tasks or sections of a plan, not alternatives: the person adds any number of them, each as its own subsection under its title. Leave it out for a choice of one.",
         },
         options: {
           type: "array",

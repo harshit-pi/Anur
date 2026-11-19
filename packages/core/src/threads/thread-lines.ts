@@ -124,6 +124,8 @@ export const OptionsLine = LineEnvelope.extend({
    * the section itself: the picked option goes under a subsection of this name.
    */
   heading: z.string().min(1).nullable().optional(),
+  /** Parts that can all belong, such as workstreams: the person adds any number, not one. */
+  several: z.boolean().optional(),
 });
 
 /** The person picked an option: its text replaced the section's, or became a subsection. */

@@ -736,7 +736,6 @@ function threadsFor(folder: FolderState): Threads | null {
       rememberOptions: rememberChoices,
       knownOptions: (agent) => choices.get(agent),
       mcp: { socket: anurSocket, script: path.join(here, "mcp-server.js") },
-      autoApply: () => appSettings.get().autoApply,
       features: () => appSettings.get().features,
       plugins: {
         ids: () => pluginsOn(folder.path),

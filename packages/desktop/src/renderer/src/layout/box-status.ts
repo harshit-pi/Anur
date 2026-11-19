@@ -12,7 +12,8 @@ type Thread = Pick<ThreadView, "busy" | "closed" | "purpose" | "items">;
 export function boxStatus(threads: readonly Thread[], previewed: number): BoxStatus | null {
   const open = threads.filter((t) => !t.closed);
   const offers = open.flatMap((t) => t.items.flatMap((x) => (x.kind === "options" ? [x] : [])));
-  const waiting = offers.filter((x) => !x.used);
+  // A choice of one waits until picked; a set of parts, until any is added.
+  const waiting = offers.filter((x) => !x.used && !(x.several && x.added.length > 0));
   // Under way first: it changes in a moment, and what's waiting may change with it.
   const running = open.find((t) => t.busy);
   if (running)

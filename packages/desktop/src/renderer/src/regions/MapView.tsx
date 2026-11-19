@@ -47,6 +47,10 @@ type Box = {
   explored?: boolean;
   /** The agent is working on this option now. */
   exploring?: boolean;
+  /** An option passed over when another was picked: shown when its fold is open. */
+  notPicked?: boolean;
+  /** The chip folding a made choice's other options, and whether it's open. */
+  fold?: { open: boolean; count: number };
   /** The box's second line: what's under it, or what sets it apart. */
   sub?: string;
   /** What happened on a section's box, from its threads (mock 9). */
@@ -157,6 +161,8 @@ export function MapView({
   /** Section IDs by heading path, so a heading added above can't hand a box another's ID. */
   const [ids, setIds] = useState<Map<string, string>>(new Map());
   const [moved, setMoved] = useState<Record<string, Pos>>({});
+  /** Folds of made choices the person opened, to see the options passed over. */
+  const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(new Set());
   /** Saved positions have arrived: only then is the first fit right. */
   const [loaded, setLoaded] = useState(false);
   /** Saved positions are late: frame the map without them, and move boxes when they come. */
@@ -461,28 +467,35 @@ export function MapView({
         if (node)
           Object.assign(node, boxSize(`${heading}  → ${String(outLinks.length)}`, own.sub ?? ""));
       }
-      // Each thread's latest options, until one is picked: what the section could say.
+      // Each thread's option sets, one family per choice: a first set and the
+      // narrower sets found exploring it. A choice still open shows its
+      // options; a choice made folds the rest into a chip that opens again; a
+      // set of parts shows those not yet added.
       for (const t of threads.filter((t) => samePath(t.path, s.path))) {
-        // Until one is picked: the latest first set, any explored from earlier
-        // first sets, and the narrower sets found while exploring, each hanging
-        // off the option it was found within.
         const offers = t.items.flatMap((x) => (x.kind === "options" ? [x] : []));
-        if (offers.length === 0 || offers.some((x) => x.used)) continue;
-        const firsts = offers.filter((x) => !x.within);
-        const latestFirst = firsts.at(-1);
+        if (offers.length === 0) continue;
+        type Offer = (typeof offers)[number];
+        const familyOf = (x: Offer): Offer => {
+          let at = x;
+          for (let n = 0; at.within && n < 20; n++) {
+            const up = offers.find((y) => y.options.some((o) => o.id === at.within));
+            if (!up) break;
+            at = up;
+          }
+          return at;
+        };
+        const firsts = offers.filter((x) => familyOf(x) === x);
+        // A choice asked again replaces the earlier ask: by its heading, or the section's own.
+        const keyOf = (x: Offer) =>
+          x.several ? `s:${x.options[0]?.id ?? ""}` : `h:${(x.heading ?? "").toLowerCase()}`;
+        const latest = new Map(firsts.map((f) => [keyOf(f), f] as const));
         const exploredIds = new Set(offers.flatMap((x) => x.explored));
-        const shown = offers.flatMap((x) =>
-          x.within
-            ? x.options.map((o) => ({ o, under: x.within }))
-            : x === latestFirst
-              ? x.options.map((o) => ({ o, under: null }))
-              : x.options.filter((o) => exploredIds.has(o.id)).map((o) => ({ o, under: null })),
-        );
-        const shownIds = new Set(shown.map((x) => x.o.id));
-        for (const { o, under } of shown) {
+        const optionBox = (
+          o: Offer["options"][number],
+          parentId: string,
+          extra: { notPicked?: boolean } = {},
+        ) => {
           const oid = `o:${o.id}`;
-          // Under the thread that offered it, or the option it narrows.
-          const parentId = under && shownIds.has(under) ? `o:${under}` : `t:${t.id}`;
           const exploring =
             t.busy && exploredIds.has(o.id) && !offers.some((x) => x.within === o.id);
           const sub = exploring ? "Exploring…" : clip(o.why ?? plainLine(o.text), 46);
@@ -496,9 +509,59 @@ export function MapView({
             sub,
             exploring,
             explored: exploredIds.has(o.id),
+            ...(extra.notPicked ? { notPicked: true } : {}),
             heading: o.title,
             parent: parentId,
           });
+        };
+        for (const f of firsts) {
+          const family = offers.filter((x) => familyOf(x) === f);
+          const tid = `t:${t.id}`;
+          if (f.several) {
+            for (const o of f.options) if (!f.added.includes(o.id)) optionBox(o, tid);
+            continue;
+          }
+          const picked = family.some((x) => x.used);
+          if (picked) {
+            // The rest, folded: a chip that opens to them, still to explore or switch to.
+            const rest = family.flatMap((x) => x.options.filter((o) => o.id !== x.used));
+            const usedIds = new Set(family.flatMap((x) => (x.used ? [x.used] : [])));
+            const left = rest.filter((o) => !usedIds.has(o.id));
+            if (left.length === 0) continue;
+            const fid = `f:${f.options[0]?.id ?? t.id}`;
+            const label = `${String(left.length)} not picked`;
+            const open = unfolded.has(fid);
+            nodes.push({ id: fid, parent: tid, ...boxSize(label, "") });
+            info.set(fid, {
+              id: fid,
+              kind: "option",
+              index: s.index,
+              thread: t,
+              fold: { open, count: left.length },
+              sub: open ? "Hide" : "Show",
+              heading: label,
+              parent: tid,
+            });
+            if (open) for (const o of left) optionBox(o, fid, { notPicked: true });
+            continue;
+          }
+          const current = latest.get(keyOf(f)) === f;
+          const shownSets = family.filter((x) => x !== f || current);
+          const shown = shownSets.flatMap((x) =>
+            x === f
+              ? x.options.map((o) => ({ o, under: null as string | null }))
+              : x.within
+                ? x.options.map((o) => ({ o, under: x.within ?? null }))
+                : [],
+          );
+          // An earlier ask of the same choice: only what was explored stays.
+          if (!current)
+            shown.push(
+              ...f.options.filter((o) => exploredIds.has(o.id)).map((o) => ({ o, under: null })),
+            );
+          const shownIds = new Set(shown.map((x) => x.o.id));
+          for (const { o, under } of shown)
+            optionBox(o, under && shownIds.has(under) ? `o:${under}` : tid);
         }
       }
       // An edit a thread proposed to this section: a dashed box until it's used or set aside.
@@ -613,7 +676,7 @@ export function MapView({
       }
     }
     return out;
-  }, [tree, threads, previews, idOf, moved, drag, docs, docPath, features.links, layout]);
+  }, [tree, threads, previews, idOf, moved, drag, docs, docPath, features.links, layout, unfolded]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
 
@@ -1335,7 +1398,33 @@ export function MapView({
           {drawing}
         </svg>
         {boxes.map((b) =>
-          (b.kind === "option" || b.kind === "edit") && b.option ? (
+          b.fold ? (
+            <button
+              key={b.id}
+              type="button"
+              className={`map-fold${b.fold.open ? " open" : ""}`}
+              title={
+                b.fold.open
+                  ? "Fold the options not picked"
+                  : "The options not picked: open to explore one or switch to it"
+              }
+              style={{ left: b.x - b.w / 2, top: b.y, width: b.w, transform: "translateY(-50%)" }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+              }}
+              onClick={() => {
+                const key = b.id;
+                setUnfolded((u) => {
+                  const next = new Set(u);
+                  if (next.has(key)) next.delete(key);
+                  else next.add(key);
+                  return next;
+                });
+              }}
+            >
+              {b.heading} <span className="quiet">{b.fold.open ? "▾" : "▸"}</span>
+            </button>
+          ) : (b.kind === "option" || b.kind === "edit") && b.option ? (
             <div
               key={b.id}
               role="button"
@@ -1343,17 +1432,21 @@ export function MapView({
               className={
                 b.kind === "edit"
                   ? "map-option edit"
-                  : b.exploring
-                    ? "map-option explored exploring"
-                    : b.explored
-                      ? "map-option explored"
-                      : "map-option"
+                  : b.notPicked
+                    ? "map-option not-picked"
+                    : b.exploring
+                      ? "map-option explored exploring"
+                      : b.explored
+                        ? "map-option explored"
+                        : "map-option"
               }
               data-peek={b.id}
               title={
                 b.kind === "edit"
                   ? "An edit a thread proposed: Use puts it in the doc"
-                  : "An option from a thread: open it to pick"
+                  : b.notPicked
+                    ? "Not picked: open it to explore, or to use it instead"
+                    : "An option from a thread: open it to pick"
               }
               style={{ left: b.x - b.w / 2, top: b.y, width: b.w, transform: "translateY(-50%)" }}
               onPointerDown={(e) => {

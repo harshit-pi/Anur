@@ -21,6 +21,8 @@ const offers = (used: string | null) =>
     explored: [],
     within: null,
     heading: null,
+    several: false,
+    added: used ? [used] : [],
   }) as T["items"][number];
 
 describe("what a box says happened on it (mock 9)", () => {

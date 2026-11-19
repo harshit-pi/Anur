@@ -171,6 +171,10 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     within: z.string().nullable(),
     /** The decision these choose between, as a subsection's name; null when it's the section itself. */
     heading: z.string().nullable(),
+    /** Parts that can all belong: each is added on its own, and \`used\` stays null. */
+    several: z.boolean(),
+    /** Every option put into the doc from this set. */
+    added: z.array(z.string()),
   }),
   /** A check of the section (15.5): each claim, its verdict and source. */
   z.object({

@@ -747,18 +747,6 @@ export function Settings({
                 ))}
               </select>
             </Row>
-            <Row
-              title="Use agents' edits as they land"
-              detail="An agent's edit changes the doc at once, instead of waiting as a proposal for you to use. Each is noted in its thread, with Undo; edits that clash with your typing stay proposals. Options are always yours to pick."
-            >
-              <Switch
-                on={main?.autoApply ?? false}
-                label="Use agents' edits as they land"
-                onChange={(on) => {
-                  change({ autoApply: on });
-                }}
-              />
-            </Row>
             <SessionsRow />
             {/* Then each agent on its own: how it's connected, and what Anur adds to it. */}
             {AGENT_IDS.map((id) => (

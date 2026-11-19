@@ -1,3 +1,4 @@
+import { editsLand } from "../../../shared/edits-land.ts";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { diffLines, type SectionNode, type SectionTree } from "@anur/core";
 import type {
@@ -690,22 +691,8 @@ export function Think({
     };
   }, [newAgent]);
   const [error, setError] = useState<string | null>(null);
-  /** "Use agents' edits as they land", as set in Settings: the thread says when it is on. */
-  const [autoApply, setAutoApply] = useState(false);
   /** Earlier Use alls are folded to one link until it is pressed. */
   const [showEarlier, setShowEarlier] = useState(false);
-  useEffect(() => {
-    const read = () => {
-      void anur.call("settings:get", {}).then((s) => {
-        setAutoApply(s.autoApply);
-      });
-    };
-    read();
-    window.addEventListener("anur:settings-changed", read);
-    return () => {
-      window.removeEventListener("anur:settings-changed", read);
-    };
-  }, []);
   /** Branch (10.5): the next thread started here continues that thread up to that item. */
   const [branch, setBranch] = useState<{
     thread: string;
@@ -1360,7 +1347,26 @@ export function Think({
                 </div>
               ) : item.kind === "options" ? (
                 <div key={i} className="think-offers" role="group" aria-label="Options">
-                  {item.heading ? (
+                  {item.several ? (
+                    <p className="think-offers-within quiet">
+                      Parts that can all belong: add any of them, each as its own section
+                      {writable && item.added.length < item.options.length ? (
+                        <>
+                          {" · "}
+                          <button
+                            type="button"
+                            className="think-more"
+                            onClick={() => {
+                              for (const o of item.options)
+                                if (!item.added.includes(o.id)) useOption(thread, o, "subsection");
+                            }}
+                          >
+                            Add all
+                          </button>
+                        </>
+                      ) : null}
+                    </p>
+                  ) : item.heading ? (
                     <p className="think-offers-within quiet">
                       For <strong>{item.heading}</strong>, under this section
                     </p>
@@ -1377,11 +1383,11 @@ export function Think({
                     <div
                       key={o.id}
                       data-option={o.id}
-                      className={`think-offer${item.used === o.id ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
+                      className={`think-offer${item.used === o.id || item.added.includes(o.id) ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
                     >
                       <div className="think-offer-head">
                         <strong>{o.title}</strong>
-                        {item.used === o.id ? (
+                        {item.used === o.id || (item.several && item.added.includes(o.id)) ? (
                           <span className="quiet">In the doc</span>
                         ) : item.explored.includes(o.id) ? (
                           <span className="quiet">Explored</span>
@@ -1390,7 +1396,19 @@ export function Think({
                       <div className="think-offer-text">
                         <Markdown text={o.text} />
                       </div>
-                      {writable && item.used !== o.id ? (
+                      {writable && item.several && !item.added.includes(o.id) ? (
+                        <div className="think-offer-actions">
+                          <button
+                            type="button"
+                            className="think-button primary"
+                            onClick={() => {
+                              useOption(thread, o, "subsection");
+                            }}
+                          >
+                            Add
+                          </button>
+                        </div>
+                      ) : writable && !item.several && item.used !== o.id ? (
                         <div className="think-offer-actions">
                           <button
                             type="button"
@@ -1687,22 +1705,12 @@ export function Think({
           : null}
         {/* Last before the reply box, so Use all is on screen where the chat ends. */}
         {!thread.busy ? (
-          <ChangeSet thread={thread} writable={writable} autoApply={autoApply} />
+          <ChangeSet thread={thread} writable={writable} autoApply={editsLand(thread.options)} />
         ) : null}
-        {autoApply ? (
+        {editsLand(thread.options) ? (
           <p className="think-state">
-            Agents&apos; edits apply as they land ·{" "}
-            <button
-              type="button"
-              className="think-link"
-              onClick={() => {
-                window.dispatchEvent(
-                  new CustomEvent("anur:open-settings", { detail: { section: "agent" } }),
-                );
-              }}
-            >
-              Change
-            </button>
+            In this mode, edits apply as they land, each with Undo. Pick Ask in the mode menu to
+            review them first.
           </p>
         ) : null}
         {signedOut(thread.agent) ?? (
