@@ -2386,7 +2386,13 @@ export class Threads {
       instead: str(a.instead, 300),
       until: str(a.until, 200),
       ...(a.concerns === "work" ? { concerns: "work" as const } : {}),
-      ...(DecisionScope.safeParse(a.scope).success ? { scope: DecisionScope.parse(a.scope) } : {}),
+      // A product decision reaches its whole doc: a choice about the reward matters
+      // to the FAQ too. Boxes and the whole folder keep theirs.
+      ...(DecisionScope.safeParse(a.scope).success
+        ? { scope: DecisionScope.parse(a.scope) }
+        : isVirtualDoc(live.rel)
+          ? {}
+          : { scope: "doc" as const }),
       ...(against ? { against } : {}),
     });
     if (rule.kind === "settle")

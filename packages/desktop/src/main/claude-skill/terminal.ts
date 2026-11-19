@@ -379,7 +379,7 @@ async function decisionTool(
     scope === "everywhere"
       ? await store.keep(doc ? doc.rel : path.join(dir, ".anur-here"), "", ref, entry, "everywhere")
       : doc
-        ? await store.keep(doc.rel, doc.path.join(" › "), ref, entry, scope ?? "section")
+        ? await store.keep(doc.rel, doc.path.join(" › "), ref, entry, scope ?? "doc")
         : await store.keepFor(dir, ref, entry, about);
   if (!id)
     return {

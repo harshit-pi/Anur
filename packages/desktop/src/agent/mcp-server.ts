@@ -101,7 +101,7 @@ const TOOLS = [
   {
     name: "anur_note_decision",
     description:
-      "Record a decision the person made that should outlast this task: a choice about the work, or a correction of what you did or proposed. Give their exact words from this thread as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it settles with an Undo for the person; otherwise they're asked to keep it. Kept decisions reach every new thread on this section. Don't record one-off instructions for this task, or your own choices.",
+      "Record a decision the person made that should outlast this task: a choice about the work, or a correction of what you did or proposed. Give their exact words from this thread as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it settles with an Undo for the person; otherwise they're asked to keep it. Kept decisions reach every new thread on this doc. Don't record one-off instructions for this task, or your own choices.",
     inputSchema: {
       type: "object",
       properties: {
@@ -145,7 +145,7 @@ const TOOLS = [
           type: "string",
           enum: ["section", "doc", "folder", "everywhere"],
           description:
-            'How far it reaches, from the person\'s words: "section" (default), "doc" ("in this doc"), "folder" ("in this repo", "across the project"), or "everywhere" ("always", "in every project").',
+            'How far it reaches, only when the person says so: "doc" (the default), "section" ("just for this section"), "folder" ("across the project"), or "everywhere" ("always", "in every project").',
         },
       },
       required: ["quote", "decision", "confidence"],
@@ -531,7 +531,7 @@ const TERMINAL_TOOLS = [
           type: "string",
           enum: ["section", "doc", "folder", "everywhere"],
           description:
-            'How far it reaches, from the person\'s words: "folder" for this repo (the default without a doc), "doc" or "section" with a doc, or "everywhere" ("always", "in every project").',
+            'How far it reaches, from the person\'s words: "folder" for this repo (the default without a doc), "doc" (the default with a doc) or "section", or "everywhere" ("always", "in every project").',
         },
         about: {
           type: "array",
