@@ -2167,6 +2167,10 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!t) return { ok: false };
     return { ok: await t.useOption(rel, text, thread, option, how) };
   },
+  "thread:lands": ({ threads }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    return { lands: folder ? (threadsFor(folder)?.landing(threads) ?? []) : [] };
+  },
   "thread:stop": ({ thread }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (folder) threadsFor(folder)?.stop(thread);

@@ -1502,6 +1502,11 @@ export class Threads {
     return this.options.get(thread) ?? this.d.knownOptions?.(agent) ?? [];
   }
 
+  /** Of these threads, those whose mode lands edits as they come (the open page asks). */
+  landing(threads: readonly string[]): string[] {
+    return threads.filter((t) => this.editsLand(t));
+  }
+
   /** Edits land as they come in a mode that acts without asking; otherwise they're proposals. */
   private editsLand(thread: string): boolean {
     return editsLand(

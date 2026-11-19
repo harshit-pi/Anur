@@ -1611,6 +1611,11 @@ export const ipcContract = {
     ]),
   },
   /** Stop the thread's running turn. */
+  /** Which of these threads land their edits as they come: their mode acts without asking. */
+  "thread:lands": {
+    request: z.object({ threads: z.array(z.string().max(200)).max(50) }).strict(),
+    response: z.object({ lands: z.array(z.string()) }),
+  },
   "thread:stop": {
     request: z.object({ thread: z.string().max(200) }).strict(),
     response: z.object({}),

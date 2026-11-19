@@ -183,9 +183,10 @@ export function Page({
     /** Each edit the setting has already tried, so a clash isn't tried again and again. */
     const autoTried = new Set<string>();
     /**
-     * The setting "Use agents' edits as they land": an open doc's page uses
-     * each new edit itself, through Apply, and the thread notes it. Your own
-     * kept typing is never applied this way.
+     * Edits as they land: in a mode that acts without asking (Auto, accept
+     * edits), an open doc's page uses each new edit itself, through Apply,
+     * and the thread notes it with Undo. Your own kept typing is never
+     * applied this way.
      */
     const useAsTheyLand = async (previews: { thread: string; parts: PreviewPart[] }[]) => {
       if (editor.state.readOnly) return;
@@ -200,9 +201,11 @@ export function Page({
               .map((part) => ({ thread: p.thread, part })),
       );
       if (fresh.length === 0) return;
-      const settings = await anur.call("settings:get", {});
-      if (!settings.autoApply || closed) return;
-      for (const { thread, part } of fresh) {
+      const { lands } = await anur.call("thread:lands", {
+        threads: [...new Set(fresh.map((f) => f.thread))].filter((t) => t !== TERMINAL_EDIT),
+      });
+      if (closed) return;
+      for (const { thread, part } of fresh.filter((f) => lands.includes(f.thread))) {
         autoTried.add(`${thread}\u0000${sectionKey(part.path)}\u0000${part.proposed}`);
         const ok = await applyPreviewPart(thread, part, false, true);
         if (ok && thread !== TERMINAL_EDIT)
