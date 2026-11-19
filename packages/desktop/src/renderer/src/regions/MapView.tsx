@@ -1034,6 +1034,10 @@ export function MapView({
       if (!here) return;
       e.preventDefault();
       const parent = e.key === "Enter" && here.parent !== null ? here.parent : selected;
+      if (e.key === "Tab" && here.level >= 6) {
+        setNote("Markdown headings stop at six levels, so this one can't have sections under it");
+        return;
+      }
       const under = tree.sections[parent];
       const taken = new Set(
         tree.sections.filter((x) => x.parent === parent).map((x) => x.path.at(-1) ?? ""),
@@ -1137,7 +1141,8 @@ export function MapView({
     if (path) {
       record({ kind: "doc" });
       placeNew.current = { path, at };
-    }
+    } else if ((tree.sections[parent]?.level ?? 0) >= 6)
+      setNote("Markdown headings stop at six levels, so that box can't have sections under it");
   };
 
   const v = view ?? { x: 0, y: 0, z: 1 };

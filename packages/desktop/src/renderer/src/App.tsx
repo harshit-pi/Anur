@@ -839,7 +839,9 @@ export function App() {
       const p = sections?.sections[parent];
       if (!v || !p) return null;
       const sibling = p.children.map((c) => sections.sections[c]).find(Boolean);
-      const level = Math.min(6, sibling ? sibling.level : Math.max(2, p.level + 1));
+      const level = sibling ? sibling.level : Math.max(2, p.level + 1);
+      // Markdown has six heading levels: under a sixth, a heading would land beside it.
+      if (level > 6) return null;
       const at = p.subtreeRange.to;
       const before = v.state.doc.sliceString(Math.max(0, at - 2), at);
       const lead =
