@@ -17,6 +17,31 @@ Kept short on purpose: every decision reaches every later thread in its reach, s
 - **Reach**: never wider than the person said. Left out, a rule about the work holds for the doc and a subject decision for its section. "Folder" needs the folder, the repo or "all our docs" in their words, and "everywhere" needs "always", "everywhere" or "every project". `scopeFromWords` narrows anything else to the doc. Why: "for this launch or later" was once kept for the whole of `~/workspace`, and reached unrelated plans.
 - **One name per person**: a person's file is named by their GitHub login wherever `gh` knows it, not only in a GitHub repo. A file kept earlier under their email hash joins the login's file on their next decision there.
 
+## Decisions from Claude Code, outside Anur's window (2026-11-19)
+
+Decisions don't need Anur's window: any Claude Code session on the person's Mac records them.
+
+```
+Add in Anur (once per Mac)
+  ├─ /anur skill ─────────▶ ~/.claude/skills/anur/
+  └─ Anur's MCP server ───▶ Claude Code's user config
+        │
+any Claude Code session, any folder
+  └─ anur_note_decision ──▶ the Anur app (must be running)
+        │   same checks as a thread: quote typed by the person,
+        │   at most 7 words, scope never wider than said
+        ▼
+<repo>/.anur/decisions/<person>.jsonl   committed with the code
+        │   first decision in a repo also adds:
+        ├─ git pre-commit hook ─▶ the CLAUDE.md block, for people without Anur
+        └─ CLAUDE.local.md ─────▶ the person's own not-yet-merged decisions
+```
+
+- There is no Claude Code hook per repo. Capture is one user-level install, the skill and the MCP server, through `claude mcp add` (`main/claude-skill/install.ts`), and works in every folder.
+- Where it lands: the folder open in Anur when the session is inside it; otherwise the session's own repo. Left unscoped it holds for that repo, or for the part the touched files name (`about`). It holds everywhere only when the person's words say so.
+- `main/claude-skill/terminal.ts` runs `settleRule`, `decisionWordingProblem` and `scopeFromWords`, the same as a thread. The skill text in `skill-files.ts` carries the same "what counts" rule, so a session never records a pick, its own assumption or a one-off.
+- Gap: the tool talks to the running app. With Anur closed it answers "Anur isn't open", and nothing is recorded until the person opens it and the agent tries again.
+
 ## What a thread reads (2026-11-17)
 
 - A thread on a section gets: the own text of every section above it, its own section in full (subsections included), and **the rest of the doc in full**, every other section's heading and own text.

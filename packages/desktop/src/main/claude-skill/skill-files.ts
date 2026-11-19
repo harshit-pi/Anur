@@ -47,7 +47,7 @@ Whatever you're working on, record what should outlast this session, so the team
 - When the person makes a lasting decision, such as a choice about the work or a correction of what you did ("no, three retries, not infinite"), call \`anur_note_decision\` with their exact words as the quote, the decision as a statement of at most 7 words, in no one's voice, and how sure you are it's lasting. Leave out \`doc\` for the repo you're working in, and pass the files the work touched as \`about\`, so it lands on that part of the system. If it reverses a decision already in \`CLAUDE.md\`, pass that decision's words as \`against\`: both then stand until someone picks. If Anur says to check, ask the person in one line, and call again with \`confirmed: true\` only if they agree.
 - When you establish a fact later work here should know, ask the person whether to keep it, and if they agree, call \`anur_propose_finding\` with \`confirmed: true\` and its source.
 - Tell the person in one line what was recorded. If they want it gone, call \`anur_drop_decision\` with the id Anur gave.
-- Don't record one-off instructions for this task, questions you answered, or your own choices.
+- Don't record one-off instructions for this task, questions you answered, or your own choices or assumptions: a decision is what the person said should hold, or their correction of what you did.
 `;
 
 /** Each file, by its path under the skill's folder. */
