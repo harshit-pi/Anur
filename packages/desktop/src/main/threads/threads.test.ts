@@ -1006,7 +1006,11 @@ describe("inputs a person adds, and Branch (group 10)", () => {
     expect(text.trim().endsWith("Which word?")).toBe(true);
     // The thread shows only what the person typed, and where it came from.
     expect(b.thread.items.find((i) => i.kind === "message")).toMatchObject({ text: "Which word?" });
-    expect(b.thread.branchedFrom).toEqual({ thread: a.thread.id, title: "Remember PELICAN." });
+    expect(b.thread.branchedFrom).toEqual({
+      thread: a.thread.id,
+      title: "Remember PELICAN.",
+      upTo: 1,
+    });
     // A new session: the old thread's isn't resumed.
     expect(prompt?.type === "prompt" ? prompt.spec.resume : "x").toBe(null);
   });

@@ -4504,24 +4504,6 @@ body.resizing * {
   color: var(--blue);
 }
 
-.think-branched {
-  margin: 4px 0 8px;
-  font-size: 12.5px;
-}
-
-.think-branching {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 8px 0;
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--blue-wash);
-  color: var(--ink2);
-  font-size: 13px;
-  line-height: 1.45;
-}
-
 .think.think-drop {
   outline: 2px dashed var(--blue);
   outline-offset: -6px;

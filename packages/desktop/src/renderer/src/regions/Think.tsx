@@ -1035,8 +1035,26 @@ export function Think({
   );
   /** A new thread, shown the moment it's sent, while Anur gets it ready. */
   const [starting, setStarting] = useState<ThreadView | null>(null);
+  /** A branch not sent yet: the chat up to the reply it came from, saved on the first send. */
+  const [draft, setDraft] = useState<ThreadView | null>(null);
   const thread =
-    threads.find((t) => t.id === open) ?? (starting && starting.id === open ? starting : null);
+    threads.find((t) => t.id === open) ??
+    (starting && starting.id === open ? starting : null) ??
+    (draft && draft.id === open ? draft : null);
+  const isDraft = thread !== null && thread === draft;
+  // A branch opens ready to type in.
+  const draftId = draft?.id ?? null;
+  useEffect(() => {
+    if (draftId && open === draftId)
+      document.querySelector<HTMLTextAreaElement>(".think .think-input")?.focus();
+  }, [open, draftId]);
+  // Leaving a draft unsent leaves nothing behind.
+  useEffect(() => {
+    if (draft && open !== draft.id) {
+      setDraft(null);
+      setBranch(null);
+    }
+  }, [open, draft]);
   const shownAgent = thread?.agent ?? newAgent;
   useEffect(() => {
     checkSignIn(shownAgent);
@@ -1153,12 +1171,14 @@ export function Think({
   }, [sectionKey, section, thread]);
 
   const start = useCallback(
-    async (message: string, purpose?: "build" | "check") => {
+    async (message: string, purpose?: "build" | "check", from?: ThreadView) => {
       if (!docPath || !section) return false;
       setError(null);
       // An action runs in the mode the person picked, as any thread does:
       // Anur adds no approval Claude Code wouldn't ask for.
-      const options = newChoices.map((o) => ({ id: o.id, value: o.current }));
+      const choices = from?.options ?? newChoices;
+      const agent = from?.agent ?? newAgent;
+      const options = choices.map((o) => ({ id: o.id, value: o.current }));
       const shown =
         purpose === "build"
           ? `Build this ${noun}`
@@ -1167,6 +1187,7 @@ export function Think({
             : message;
       const placeholder: ThreadView = {
         id: `starting:${String(Date.now())}`,
+        branchedFrom: from?.branchedFrom ?? null,
         section: "",
         path: section.path,
         title: shown.split("\n")[0]?.slice(0, 80) ?? "",
@@ -1182,10 +1203,10 @@ export function Think({
           })),
           { kind: "message" as const, turn: "", role: "person" as const, text: shown },
         ],
-        options: newChoices,
+        options: choices,
         tokens: null,
         purpose: purpose ?? null,
-        agent: newAgent,
+        agent,
       };
       setStarting(placeholder);
       setOpen(placeholder.id);
@@ -1194,7 +1215,7 @@ export function Think({
         text: docText(),
         section: { index: section.index, path: section.path },
         message,
-        agent: newAgent,
+        agent,
         options,
         ...(purpose ? { purpose } : {}),
         ...(branch && !purpose ? { branch: { thread: branch.thread, upTo: branch.upTo } } : {}),
@@ -1207,6 +1228,7 @@ export function Think({
         return false;
       }
       setBranch(null);
+      setDraft(null);
       if (!purpose) setAttached([]);
       setThreads((ts) => [...ts.filter((t) => t.id !== r.thread.id), r.thread]);
       setOpen(r.thread.id);
@@ -1414,6 +1436,19 @@ export function Think({
     const earlierUsedAll = thread.items
       .flatMap((x, n) => (x.kind === "used-all" ? [n] : []))
       .slice(0, -1);
+    // A branch shows the chat it carries from its parent first, as in Claude chat.
+    const carried = (t: ThreadView, seen: Set<string>): ThreadItem[] => {
+      const from = t.branchedFrom;
+      const parent = from ? threads.find((x) => x.id === from.thread) : undefined;
+      if (!from || from.upTo === undefined || !parent || seen.has(parent.id)) return [];
+      return [
+        ...carried(parent, new Set([...seen, parent.id])),
+        ...parent.items.slice(0, from.upTo + 1),
+      ];
+    };
+    const inherited = carried(thread, new Set([thread.id])).flatMap((x) =>
+      x.kind === "message" ? [x] : [],
+    );
     const whoBefore = new Set<number>();
     let afterPerson = true;
     for (const { item, i } of folded) {
@@ -1441,7 +1476,7 @@ export function Think({
             <h2
               className="think-title"
               // Click to rename: the name shows here, in the list and on the map.
-              contentEditable={writable ? "plaintext-only" : false}
+              contentEditable={writable && !isDraft ? "plaintext-only" : false}
               suppressContentEditableWarning
               spellCheck={false}
               title={writable ? "Click to rename" : undefined}
@@ -1502,7 +1537,7 @@ export function Think({
               </span>
             ) : null}
           </div>
-          {writable && docPath ? (
+          {writable && docPath && !isDraft ? (
             <span className="think-top-actions">
               <button
                 type="button"
@@ -1582,20 +1617,6 @@ export function Think({
             </span>
           ) : null}
         </div>
-        {thread.branchedFrom ? (
-          <p className="quiet think-branched">
-            Branched from{" "}
-            <button
-              type="button"
-              className="think-link"
-              onClick={() => {
-                if (thread.branchedFrom) setOpen(thread.branchedFrom.thread);
-              }}
-            >
-              {thread.branchedFrom.title}
-            </button>
-          </p>
-        ) : null}
         {thread.tokens ? (
           <SizeMeter
             tokens={thread.tokens}
@@ -1613,6 +1634,23 @@ export function Think({
           />
         ) : null}
         <div className="think-chat" aria-live="polite">
+          {inherited.map((m, n) =>
+            m.role === "agent" ? (
+              <Fragment key={`from${String(n)}`}>
+                {inherited[n - 1]?.role !== "agent" ? (
+                  <div className="think-who" title={whoLabel(thread.agent, thread.options)}>
+                    <AgentMark agent={thread.agent} />
+                  </div>
+                ) : null}
+                <AgentReply text={m.text} who={null} onBranch={null} onUse={null} />
+              </Fragment>
+            ) : (
+              <div key={`from${String(n)}`} className="think-message-wrap person">
+                <div className="think-message person">{m.text}</div>
+                <MineActions text={m.text} at={m.at ?? null} />
+              </div>
+            ),
+          )}
           {folded.map(({ item, i, steps, leads }) => (
             <Fragment key={`e${String(i)}`}>
               {whoBefore.has(i) ? (
@@ -1633,7 +1671,7 @@ export function Think({
                     text={item.text}
                     who={null}
                     onBranch={
-                      writable && !thread.busy
+                      writable && !thread.busy && !isDraft
                         ? () => {
                             setBranch({
                               thread: thread.id,
@@ -1645,17 +1683,25 @@ export function Think({
                               (x) => thread.path && samePath(thread.path, x.path),
                             );
                             if (at >= 0) onJump(at);
-                            setOpen(null);
-                            requestAnimationFrame(() => {
-                              document
-                                .querySelector<HTMLTextAreaElement>(".think .think-input")
-                                ?.focus();
-                            });
+                            // Straight into the child, as in Claude chat: saved on its first send.
+                            const child: ThreadView = {
+                              ...thread,
+                              id: `draft:${thread.id}:${String(i)}`,
+                              items: [],
+                              branchedFrom: { thread: thread.id, title: thread.title, upTo: i },
+                              busy: false,
+                              closed: false,
+                              reads: [],
+                              tokens: null,
+                              purpose: null,
+                            };
+                            setDraft(child);
+                            setOpen(child.id);
                           }
                         : null
                     }
                     onUse={
-                      writable && !thread.busy && thread.path
+                      writable && !thread.busy && thread.path && !isDraft
                         ? () => {
                             addToSection(thread, item.text);
                           }
@@ -2119,6 +2165,10 @@ export function Think({
                   value={thread.agent}
                   disabled={thread.busy}
                   onChange={(next) => {
+                    if (isDraft) {
+                      setDraft((d) => (d ? { ...d, agent: next, options: [] } : d));
+                      return;
+                    }
                     setThreads((ts) =>
                       ts.map((t) => (t.id === thread.id ? { ...t, agent: next, options: [] } : t)),
                     );
@@ -2131,6 +2181,19 @@ export function Think({
                     option={o}
                     disabled={thread.busy}
                     onChange={(value) => {
+                      if (isDraft) {
+                        setDraft((d) =>
+                          d
+                            ? {
+                                ...d,
+                                options: d.options.map((x) =>
+                                  x.id === o.id ? { ...x, current: value } : x,
+                                ),
+                              }
+                            : d,
+                        );
+                        return;
+                      }
                       setThreads((ts) =>
                         ts.map((t) =>
                           t.id === thread.id
@@ -2175,6 +2238,7 @@ export function Think({
               }));
             }}
             onSend={async (message) => {
+              if (isDraft) return start(message, undefined, thread);
               const ok = await sendReply(thread.id, message, attached);
               if (ok) setAttached([]);
               return ok;
@@ -2517,24 +2581,6 @@ export function Think({
       </SectionFooter>
       {notConnected(newAgent)}
       {error ? <p className="think-error">{error}</p> : null}
-      {branch ? (
-        <div className="think-branching" role="status">
-          <span>
-            Branching from <strong>{branch.title}</strong> after “{branch.excerpt}
-            {branch.excerpt.length >= 60 ? "…" : ""}”. The new thread knows that chat up to there,
-            and nothing after.
-          </span>
-          <button
-            type="button"
-            className="think-more"
-            onClick={() => {
-              setBranch(null);
-            }}
-          >
-            Cancel
-          </button>
-        </div>
-      ) : null}
       {signedOut(newAgent) ?? (
         <Composer
           placeholder={
@@ -2547,7 +2593,7 @@ export function Think({
                   : `Ask about this ${noun}…`
           }
           chip={scope ? <ScopeChip scope={scope} section={section} disabled={!!branch} /> : null}
-          sendLabel={branch ? "Start branch" : "Start thread"}
+          sendLabel="Start thread"
           {...composerAttach}
           pickers={
             <>
