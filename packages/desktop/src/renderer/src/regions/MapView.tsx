@@ -29,7 +29,7 @@ import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
  * As on a whiteboard (Excalidraw, draw.io): drag the background or scroll to
  * pan, pinch or ⌘-scroll to zoom, drag a box anywhere and it stays there,
  * double-click empty space to add a section there, or drag from a box's
- * handle: onto empty space for a new box under it, onto a box to link them. A click on a box shows
+ * handle onto empty space for a new box under it. A click on a box shows
  * its section in Think. Arrow keys move between boxes; Shift+arrow nudges
  * the selected box. Moving a box never changes the file.
  */
@@ -100,6 +100,8 @@ type Box = {
 
 /** The smallest zoom a map opens at, where a box's name still reads. */
 const READABLE = 0.75;
+/** Fit never goes below this: past it, a box's name can't be read (30.27). */
+const FIT_MIN = 0.6;
 
 /** A thread's pill: as wide as its name needs, within bounds. */
 const pill = (title: string, marks = 0) => ({
@@ -210,7 +212,6 @@ export function MapView({
   selected,
   onSelect,
   onAddSection,
-  onLink,
   onDelete,
   onRename,
   onUndo,
@@ -226,8 +227,6 @@ export function MapView({
   onSelect: (index: number) => void;
   /** Add a section named `name` under the section at `parent`; returns its heading path. */
   onAddSection: (parent: number, name: string) => string[] | null;
-  /** Link the section at `from` to the one at `to`, in `from`'s text. */
-  onLink: (from: number, to: number) => void;
   /** Delete the section at `index` with everything under it; false when it can't be. */
   onDelete: (index: number) => boolean;
   /** Rename the section at `index`: its heading in the doc changes, so the page follows. */
@@ -293,11 +292,6 @@ export function MapView({
       : [<path key={key} className={className} d={d} {...(marker ? { markerEnd: marker } : {})} />];
   /** The map as an Excalidraw drawing beside the doc, opened in a tab. */
   const openAsDrawing = async (newTab: boolean) => {
-    const sameDocLinks = tree.sections.flatMap((s) =>
-      [...new Set(s.linksOut.filter((l) => l.sameDoc).map((l) => l.targetIndex))]
-        .filter((t): t is number => t !== null && t !== s.index)
-        .map((t) => ({ from: idOf(s.index), to: idOf(t) })),
-    );
     const skeleton = mapSkeleton(
       boxes.map((b) => ({
         id: b.id,
@@ -311,7 +305,7 @@ export function MapView({
         sub: b.act ? `${b.act.tag} · ${ACTION_STATE[b.act.state]}` : b.sub,
         parent: b.parent,
       })),
-      sameDocLinks,
+      [],
     );
     // Excalidraw's own types don't resolve here: the calls used, typed.
     const ex = (await import("@excalidraw/excalidraw")) as unknown as {
@@ -967,21 +961,40 @@ export function MapView({
     const el = host.current;
     if (!el || view || (!loaded && !waited) || boxes.length === 0) return;
     const r = el.getBoundingClientRect();
-    const xs = boxes.flatMap((b) => [b.x - b.w / 2, b.x + b.w / 2]);
-    const ys = boxes.flatMap((b) => [b.y - b.h / 2, b.y + b.h / 2]);
+    // Fit frames what matters (30.27): the sections, and the choices waiting
+    // on the person. Choices found exploring one, and the options passed
+    // over, stay out of the frame; panning still reaches them.
+    const byId = new Map(boxes.map((b) => [b.id, b] as const));
+    const underOption = (b: Box) => {
+      for (let p = b.parent; p; p = byId.get(p)?.parent ?? null)
+        if (p.startsWith("o:")) return true;
+      return false;
+    };
+    const framed = fitAll.current
+      ? boxes.filter(
+          (b) =>
+            b.kind === "section" ||
+            ((b.kind === "option" || b.kind === "edit") && !b.notPicked && !underOption(b)),
+        )
+      : boxes;
+    const xs = framed.flatMap((b) => [b.x - b.w / 2, b.x + b.w / 2]);
+    const ys = framed.flatMap((b) => [b.y - b.h / 2, b.y + b.h / 2]);
     const w = Math.max(...xs) - Math.min(...xs) + 120;
     const h = Math.max(...ys) - Math.min(...ys) + 120;
     const all = Math.min(1, r.width / w, r.height / h);
     // Never so small the names can't be read: a wide map opens on its title,
     // at the top, and Fit shows the whole of it.
     // Fit pressed shows all of it; opening, never so small the names can't be read.
-    const z = fitAll.current ? all : Math.max(READABLE, all);
+    const fitting = fitAll.current;
+    const z = fitting ? Math.max(FIT_MIN, all) : Math.max(READABLE, all);
     fitAll.current = false;
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
     const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
     const title = boxes.find((b) => b.side === 0);
     // In the mind map the title is in the middle, so the view centres on it.
-    if (z > all && title && layout === "mind")
+    // Fit centres on what it frames; opening centres on the title.
+    if (fitting) setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
+    else if (z > all && title && layout === "mind")
       setView({ x: r.width / 2 - title.x * z, y: r.height / 2 - title.y * z, z });
     else if (z > all && title)
       setView({ x: r.width / 2 - title.x * z, y: 60 - Math.min(...ys) * z, z });
@@ -1339,12 +1352,8 @@ export function MapView({
     };
     const up = (ev: PointerEvent) => {
       stop();
-      const over = target(ev);
-      if (over !== null) {
-        onLink(b.index, over);
-        record({ kind: "doc" });
-        return;
-      }
+      // Let go on another box: nothing. A link between sections is written in the text.
+      if (target(ev) !== null) return;
       const at = toWorld(ev.clientX, ev.clientY);
       if (Math.hypot(at.x - b.x, at.y - b.y) < Math.max(b.w, b.h) / 2 + 12) return;
       const r = host.current?.getBoundingClientRect();
@@ -1573,72 +1582,6 @@ export function MapView({
     return [...line(b.id, b.kind === "section" ? "map-edge" : "map-edge thread", d)];
   });
 
-  // Links between sections, drawn as arrows from the linking box to its target.
-  const edge = (a: { x: number; y: number; w: number; h: number }, to: Pos) => {
-    const dx = to.x - a.x;
-    const dy = to.y - a.y;
-    // Leave from the side facing the target.
-    const t = Math.min(
-      Math.abs(dx) > 0 ? a.w / 2 / Math.abs(dx) : Infinity,
-      Math.abs(dy) > 0 ? a.h / 2 / Math.abs(dy) : Infinity,
-    );
-    return { x: a.x + dx * Math.min(1, t), y: a.y + dy * Math.min(1, t) };
-  };
-  const inText = tree.sections.flatMap((s) =>
-    [...new Set(s.linksOut.filter((l) => l.sameDoc).map((l) => l.targetIndex))]
-      .filter((t): t is number => t !== null && t !== s.index)
-      .map((t) => ({ s, t })),
-  );
-  const links = inText.flatMap(({ s, t }) => {
-    const a = byId.get(idOf(s.index));
-    const b = byId.get(idOf(t));
-    if (!a || !b) return [];
-    const p = edge(a, b);
-    const q = edge(b, a);
-    // The words the link reads as in the text, when they aren't just the heading.
-    const heading = tree.sections[t]?.path.at(-1) ?? "";
-    const label = s.linksOut.find(
-      (l) => l.sameDoc && l.targetIndex === t && l.alias && l.alias !== heading,
-    )?.alias;
-    return [
-      ...line(
-        `${a.id}>${b.id}`,
-        "map-link",
-        `M ${String(p.x)} ${String(p.y)} L ${String(q.x)} ${String(q.y)}`,
-        "url(#map-arrow)",
-      ),
-      ...(label
-        ? [
-            <text
-              key={`${a.id}>${b.id}:label`}
-              className="map-link-label"
-              x={(p.x + q.x) / 2}
-              y={(p.y + q.y) / 2 - 6}
-              textAnchor="middle"
-            >
-              {label.length > 32 ? `${label.slice(0, 31)}…` : label}
-            </text>,
-          ]
-        : []),
-    ];
-  });
-  const drawing = (() => {
-    if (!linking) return null;
-    const a = byId.get(linking.from);
-    if (!a) return null;
-    const p = edge(a, linking.to);
-    return (
-      <line
-        className="map-link drawing"
-        x1={p.x}
-        y1={p.y}
-        x2={linking.to.x}
-        y2={linking.to.y}
-        markerEnd="url(#map-arrow)"
-      />
-    );
-  })();
-
   return (
     <div
       ref={host}
@@ -1666,22 +1609,21 @@ export function MapView({
         }}
       >
         <svg className="map-edges" aria-hidden="true">
-          <defs>
-            <marker
-              id="map-arrow"
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="7"
-              markerHeight="7"
-              orient="auto-start-reverse"
-            >
-              <path d="M 0 0 L 10 5 L 0 10 z" className="map-arrowhead" />
-            </marker>
-          </defs>
           {edges}
-          {links}
-          {drawing}
+          {linking
+            ? (() => {
+                const a = byId.get(linking.from);
+                return a ? (
+                  <line
+                    className="map-drag-line"
+                    x1={a.x}
+                    y1={a.y + a.h / 2}
+                    x2={linking.to.x}
+                    y2={linking.to.y}
+                  />
+                ) : null;
+              })()
+            : null}
         </svg>
         {boxes.map((b) =>
           b.fold ? (
@@ -1822,7 +1764,7 @@ export function MapView({
               aria-pressed={b.index === selected}
               data-section={b.index}
               data-peek={`s:${String(b.index)}`}
-              className={`map-box${b.side === 0 ? " title" : ""}${b.index === selected ? " selected" : ""}${drag?.id === b.id ? " dragging" : ""}${linking?.over === b.index ? " link-target" : ""}`}
+              className={`map-box${b.side === 0 ? " title" : ""}${b.index === selected ? " selected" : ""}${drag?.id === b.id ? " dragging" : ""}`}
               // Centred on its slot at its own height: the layout's height is an estimate.
               style={{ left: b.x - b.w / 2, top: b.y, width: b.w, transform: "translateY(-50%)" }}
               onPointerDown={(e) => {
@@ -1965,7 +1907,7 @@ export function MapView({
                     <span
                       key={h}
                       className={`map-handle ${h}`}
-                      title="Drag to a new box, or onto a box to link it"
+                      title="Drag to make a new box under this one"
                       onPointerDown={(e) => {
                         onHandleDown(e, b);
                       }}
@@ -2189,7 +2131,6 @@ export function MapView({
             label: "A thread",
             on: has("thread") || boxes.some((b) => b.chats?.length),
           },
-          { cls: "link", label: "Link in the text", on: inText.length > 0 },
         ].filter((k) => k.on);
         if (!has("thread") && !boxes.some((b) => b.chats?.length || b.lane?.length))
           return (
@@ -2233,7 +2174,7 @@ export function MapView({
         <button
           type="button"
           className="map-tool"
-          title="Fit the whole map in view"
+          title="Fit the sections and the choices waiting on you in view"
           onClick={() => {
             userMoved.current = false;
             fitAll.current = true;

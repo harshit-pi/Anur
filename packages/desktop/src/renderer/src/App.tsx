@@ -947,20 +947,6 @@ export function App() {
   const redoOnPage = useCallback(() => {
     if (view.current) redoEdit(view.current);
   }, []);
-  /** A link from one section to another, drawn on the map: `[[#Heading]]` at the end of its text. */
-  const addLink = useCallback(
-    (from: number, to: number) => {
-      const v = view.current;
-      const a = sections?.sections[from];
-      const b = sections?.sections[to];
-      const name = b?.headingRange ? b.path.at(-1) : undefined;
-      if (!v || !a || !name) return;
-      const text = v.state.doc.sliceString(a.ownRange.from, a.ownRange.to);
-      const at = a.ownRange.from + text.trimEnd().length;
-      v.dispatch({ changes: { from: at, insert: `\n\n[[#${name}]]` }, userEvent: "input.map" });
-    },
-    [sections],
-  );
   /** The open doc's threads and their tokens, for the status bar (4.10). */
   const [docThreads, setDocThreads] = useState<{ count: number; tokens: number } | null>(null);
   const docPathNow = doc && sections ? doc.path : null;
@@ -1360,7 +1346,6 @@ export function App() {
               selected={cursorSection}
               onSelect={pickOnMap}
               onAddSection={addSection}
-              onLink={addLink}
               onDelete={deleteSection}
               onRename={renameSection}
               onUndo={undoOnPage}

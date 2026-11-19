@@ -2871,18 +2871,17 @@ body.resizing * {
   background: var(--amber);
 }
 
+/* Typed in where the name sits: the box's own blue edge says it's being renamed. */
 .map-rename {
   flex: 1;
   min-width: 0;
-  margin: -2px -4px;
-  padding: 1px 4px;
-  border: 1px solid var(--blue);
-  border-radius: 4px;
-  background: var(--sheet);
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
   color: var(--ink);
   font: inherit;
   font-weight: 600;
-  box-shadow: 0 0 0 3px var(--blue-wash);
   outline: none;
 }
 
@@ -3019,37 +3018,11 @@ body.resizing * {
   background: var(--blue);
 }
 
-.map-box.link-target {
-  border-color: var(--blue);
-  box-shadow: 0 0 0 3px var(--blue-wash);
-}
-
-.map-link {
+/* Dragging a box's handle: a dashed line to where its new box will go. */
+.map-drag-line {
   stroke: var(--blue);
   stroke-width: 1.5;
-}
-
-.map-link.drawing {
   stroke-dasharray: 5 4;
-}
-
-.map-arrowhead {
-  fill: var(--blue);
-}
-
-.map-key.link {
-  width: 16px;
-  height: 1.5px;
-  border-radius: 0;
-  background: var(--blue);
-}
-
-.map-link-label {
-  fill: var(--blue);
-  font: 11.5px var(--font-ui);
-  paint-order: stroke;
-  stroke: var(--canvas, var(--sheet));
-  stroke-width: 4px;
 }
 
 /* What happened on a box (mock 9), beside its counts. */
