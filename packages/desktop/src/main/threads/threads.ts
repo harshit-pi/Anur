@@ -3848,8 +3848,16 @@ function actionOf(
   );
   if (open?.kind === "options")
     return { state: "needs", detail: `Pick: ${open.heading ?? "an option"}`, ask: null };
+  // It ended saying it couldn't do the work: a ✓ would claim what isn't there.
+  const last = [...items].reverse().find((i) => i.kind === "message" && i.role === "agent");
+  if (last?.kind === "message" && COULD_NOT.test(last.text))
+    return { state: "needs", detail: "Didn't finish", ask: null };
   return { state: "done", detail: did || `${String(tools.length)} steps`, ask: null };
 }
+
+/** An agent's closing reply that opens by saying the work wasn't done ("I couldn't build the funnel…"). */
+const COULD_NOT =
+  /^\W*(?:I\s+)?(?:couldn['’]t|could not|can['’]t|cannot|wasn['’]t able|was unable|haven['’]t|have not|didn['’]t|did not)\b/i;
 
 /** A step as a person reads it on a box: "PostHog: exec", not "mcp__claude_ai_PostHog__exec". */
 function stepName(title: string): string {

@@ -220,7 +220,7 @@ const TOOLS = [
         section: {
           type: "string",
           description:
-            "The heading of the section it acts on, when it isn't this thread's own section.",
+            "The heading of the section the work belongs to, such as the part of the plan it carries out, so it shows under that box on the map. Leave it out only when the work is about this thread's own section.",
         },
       },
       required: ["title", "what"],
