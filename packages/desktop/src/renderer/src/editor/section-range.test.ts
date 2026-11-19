@@ -96,6 +96,21 @@ describe("a picked option", () => {
       ),
     );
   });
+
+  it("goes under a doc's title as a named subsection when the doc has only its title", () => {
+    const only = "# Launch\n\n";
+    const p = page(only);
+    expect(
+      putOption(
+        p,
+        "doc.md",
+        section(only, "Launch"),
+        { title: "Launch scope", text: "Soft launch." },
+        "subsection",
+      ),
+    ).toBe(true);
+    expect(p.state.doc.toString()).toBe("# Launch\n\n## Launch scope\n\nSoft launch.\n");
+  });
 });
 
 describe("Use this keeps the cursor in the thread's section (17.4)", () => {

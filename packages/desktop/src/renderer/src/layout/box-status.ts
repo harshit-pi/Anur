@@ -2,8 +2,8 @@ import type { ThreadView } from "../../../shared/ipc-contract.ts";
 
 /**
  * What happened on a box, said on the box itself (mock 9): the one thing a
- * person would want to know first about the section's threads. Waiting on
- * them comes first, then work under way, then what was settled.
+ * person would want to know first about the section's threads. Work under
+ * way comes first, then what waits on them, then what was settled.
  */
 export type BoxStatus = { label: string; tone: "blue" | "green" | "amber" };
 
@@ -12,18 +12,9 @@ type Thread = Pick<ThreadView, "busy" | "closed" | "purpose" | "items">;
 export function boxStatus(threads: readonly Thread[], previewed: number): BoxStatus | null {
   const open = threads.filter((t) => !t.closed);
   const offers = open.flatMap((t) => t.items.flatMap((x) => (x.kind === "options" ? [x] : [])));
-  const waiting = offers.filter((x) => !x.used);
-  // Waiting on the person: options to pick, an edit to use.
-  if (waiting.length) {
-    const n = waiting.reduce((sum, x) => sum + x.options.length, 0);
-    return { label: `${String(n)} option${n === 1 ? "" : "s"}`, tone: "blue" };
-  }
-  if (previewed > 0)
-    return {
-      label: previewed === 1 ? "Edit to use" : `${String(previewed)} edits to use`,
-      tone: "blue",
-    };
-  // Under way.
+  // A choice of one waits until picked; a set of parts, until any is added.
+  const waiting = offers.filter((x) => !x.used && !(x.several && x.added.length > 0));
+  // Under way first: it changes in a moment, and what's waiting may change with it.
   const running = open.find((t) => t.busy);
   if (running)
     return {
@@ -33,6 +24,16 @@ export function boxStatus(threads: readonly Thread[], previewed: number): BoxSta
           : running.purpose === "check"
             ? "Checking…"
             : "Thinking…",
+      tone: "blue",
+    };
+  // Then waiting on the person: options to pick, an edit to use.
+  if (waiting.length) {
+    const n = waiting.reduce((sum, x) => sum + x.options.length, 0);
+    return { label: `${String(n)} option${n === 1 ? "" : "s"}`, tone: "blue" };
+  }
+  if (previewed > 0)
+    return {
+      label: previewed === 1 ? "Edit to use" : `${String(previewed)} edits to use`,
       tone: "blue",
     };
   // What a Check found, if it found anything.

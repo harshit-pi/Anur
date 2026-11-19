@@ -113,3 +113,18 @@ describe("the mind map", () => {
     expect(placed.get("a")).toMatchObject({ side: 1, y: 0 });
   });
 });
+
+describe("the mind map's sides", () => {
+  it("keeps each box on the side it had when another is added", () => {
+    const first = mindLayout([box("t", null), box("a", "t"), box("b", "t")]);
+    const kept = new Map(
+      ["a", "b"].map((id) => [id, (first.get(id)?.side ?? 1) as -1 | 1] as const),
+    );
+    const next = mindLayout([box("t", null), box("a", "t"), box("b", "t"), box("c", "t")], kept);
+    expect(["a", "b"].map((id) => next.get(id)?.side)).toEqual(
+      ["a", "b"].map((id) => kept.get(id)),
+    );
+    // The new box goes to the side holding less: here they're even, so right.
+    expect(next.get("c")?.side).toBe(1);
+  });
+});

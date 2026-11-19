@@ -119,6 +119,13 @@ export const OptionsLine = LineEnvelope.extend({
     .min(1),
   /** The option being explored when these were offered: they are narrower choices within it. */
   within: z.string().min(1).nullable().optional(),
+  /**
+   * The decision these choose between, such as "Launch date", when it isn't
+   * the section itself: the picked option goes under a subsection of this name.
+   */
+  heading: z.string().min(1).nullable().optional(),
+  /** Parts that can all belong, such as workstreams: the person adds any number, not one. */
+  several: z.boolean().optional(),
 });
 
 /** The person picked an option: its text replaced the section's, or became a subsection. */
@@ -239,6 +246,12 @@ export const FindingLine = LineEnvelope.extend({
   instead: z.string().nullable().optional(),
   /** When it stops holding, in the person's words ("until 4.8 ships"). */
   until: z.string().nullable().optional(),
+  /**
+   * What a decision is about: "work" for how the agent works (its tools,
+   * services, where work happens), which never shapes what the doc says;
+   * "subject" for the plan or product itself. Subject when left out.
+   */
+  concerns: z.enum(["work", "subject"]).optional(),
   /** How far the agent judged it reaches, from the person's words (18.3); the section when left out. */
   scope: DecisionScope.optional(),
   /** The kept decision this one goes against (18.4), by its ID: neither wins until someone picks. */

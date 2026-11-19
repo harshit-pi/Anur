@@ -323,6 +323,34 @@ describe("plugin context (group 19)", () => {
 });
 
 describe("decisions", () => {
+  it("keeps rules for how the agent works apart from decisions about the subject", () => {
+    const text = "# Launch\n\n## Date\n\nTwo weeks out.\n";
+    const b = buildBundle({
+      text,
+      tree: buildSectionTree(text, { fileName: "Launch.md" }),
+      index: 1,
+      docPath: "Launch.md",
+      findings: [
+        {
+          claim: "Launch work stays on this Mac; no Gmail or Linear.",
+          source: null,
+          section: "Launch",
+          by: "person",
+          who: "Sam",
+          concerns: "work",
+        },
+        { claim: "Soft launch first.", source: null, section: "Launch", by: "person", who: "Sam" },
+      ],
+    });
+    const work = b.markdown.indexOf("## How you work here");
+    const subject = b.markdown.indexOf("## Decided on this section");
+    expect(work).toBeGreaterThan(-1);
+    expect(b.markdown.slice(work, subject)).toContain("Launch work stays on this Mac");
+    expect(b.markdown.slice(work, subject)).toContain("never write them into the doc");
+    expect(b.markdown.slice(subject)).toContain("Soft launch first.");
+    expect(b.markdown.slice(subject)).not.toContain("stays on this Mac");
+  });
+
   it("lists people's decisions apart from findings, with who, what they replaced and until", () => {
     const text = "# Plan\n\n## Pricing\n\nSplitwise is £5.\n";
     const b = buildBundle({

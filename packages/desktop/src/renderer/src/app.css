@@ -3330,6 +3330,34 @@ body.resizing * {
   background: var(--sheet);
 }
 
+/* A made choice's other options, folded into a chip that opens to them. */
+.map-fold {
+  position: absolute;
+  padding: 4px 10px;
+  border: 1px dashed var(--rule);
+  border-radius: 999px;
+  background: var(--sheet);
+  color: var(--graphite);
+  font: 12px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.map-fold:hover,
+.map-fold.open {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.map-option.not-picked {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.map-option.not-picked:hover {
+  opacity: 1;
+}
+
 .map-key.edit {
   border: 1.5px dashed var(--amber);
 }
@@ -5711,4 +5739,28 @@ button.file-card-name:hover {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
   transition: outline-color 0.4s;
+}
+
+/* A service's mark beside a step the agent took in it (Linear, Gmail…). */
+.service-icon {
+  display: inline-block;
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.service-icon.action {
+  fill: var(--graphite);
+}
+
+/* A thread chip's service marks sit tight before its name. */
+.map-thread-mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.map-thread-mark .service-icon {
+  margin-right: 4px;
 }

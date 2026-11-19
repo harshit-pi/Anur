@@ -113,6 +113,8 @@ export type BundleInput = {
     when?: string | null;
     instead?: string | null;
     until?: string | null;
+    /** "work": how the agent works, never what the doc says. */
+    concerns?: "work" | "subject";
     /** Another decision here that goes against this one (18.4): neither holds until a person picks. */
     disputed?: { claim: string; who: string | null } | null;
   }[];
@@ -323,9 +325,9 @@ export function buildBundle({
     "",
     "When you establish a fact later threads on this section should know, such as a corrected price or a confirmed date, propose it with Anur's anur_propose_finding tool, with the file, doc or page it came from. The person decides whether to keep it; kept findings reach every new thread here.",
     "",
-    'When the person makes a decision that should outlast this task, such as a choice about the work or a correction of what you did or proposed ("no, three retries, not infinite"), record it with Anur\'s anur_note_decision tool: their exact words as the quote, the decision in under 15 words, what it replaces if they said or turned something down, any "until" or "for now", and how sure you are it is lasting rather than a one-off instruction for this task. Don\'t record one-off instructions, questions you answered, or your own choices.',
+    'When the person makes a decision that should outlast this task, such as a choice about the work or a correction of what you did or proposed ("no, three retries, not infinite"), record it with Anur\'s anur_note_decision tool: their exact words as the quote, the decision in under 15 words, what it replaces if they said or turned something down, any "until" or "for now", whether it concerns how you work (tools, services, where the work happens) or the subject itself, and how sure you are it is lasting rather than a one-off instruction for this task. Don\'t record one-off instructions, questions you answered, or your own choices.',
     "",
-    "When you have alternatives for this section, two or more ways it could read, offer them with Anur's anur_offer_options tool instead of listing them in your reply: each option is a short title and the section's whole new text, without its heading. The person sees them as cards and on the map, and picks one; its text replaces the section's. Your reply then says in a line or two how they differ; don't repeat their text.",
+    "Whenever the person has a choice to make, offer it with Anur's anur_offer_options tool instead of listing alternatives in your reply: two or more ways this section could read, or a decision such as a date, an approach or a fallback. One call per choice; several choices are several calls. Each option is a short title and its text, without a heading. For a decision that isn't this section itself, give the call a `heading` naming it, such as \"Launch date\": the picked option goes under a subsection of that name, a new branch on the map. When they aren't alternatives but parts that can all belong, such as workstreams or sections of a plan, set `several`: the person adds any of them, each as its own subsection. The person sees the options as cards and on the map, and picks one. Your reply then says in a line or two how they differ and which you'd pick; don't repeat their text.",
     "",
     "Notes in this folder link to each other, as in Obsidian: when you write a note, link the notes it relates to with [[Note name]], or [[Note name#Heading]] for one section, by file name without .md. When you make several notes together, also make an overview note that links each of them, and link each back to it. A CLAUDE.md in the folder that says otherwise wins.",
     "",
@@ -358,16 +360,28 @@ export function buildBundle({
   const allFound = findings.filter((f) => f.by !== "person");
   const decided = allDecided.slice(0, CARRY_CAP);
   const found = allFound.slice(0, CARRY_CAP);
-  if (decided.length > 0)
+  const decidedLine = (f: (typeof decided)[number]) =>
+    `- Decided by ${f.who ?? "a teammate"}${f.when ? ` (${f.when})` : ""}: ${f.claim}${f.instead ? ` Instead of: ${f.instead}.` : ""}${f.until ? ` Until: ${f.until}.` : ""}${f.section ? ` [on ${f.section}]` : ""}${f.disputed ? ` [Disagrees with ${f.disputed.who ?? "a teammate"}'s "${f.disputed.claim}": neither holds yet. Don't rely on either; ask the person which holds.]` : ""}`;
+  // How the agent works (its tools and services) apart from the subject, so a
+  // rule about the work never turns into a claim in the doc.
+  const work = decided.filter((f) => f.concerns === "work");
+  const subject = decided.filter((f) => f.concerns !== "work");
+  if (work.length > 0)
+    lines.push(
+      "## How you work here",
+      "",
+      "People set these rules for how you work: which tools and services you use and where the work happens. Follow them in what you do. They are not about the subject: never write them into the doc or anything you make as facts, plans or requirements.",
+      "",
+      ...work.map(decidedLine),
+      "",
+    );
+  if (subject.length > 0 || allDecided.length > decided.length)
     lines.push(
       "## Decided on this section",
       "",
       "People decided these. Follow them. When your work relies on one, say so in one line, such as \"Kept Sam's decision: three retries.\" If the task can't be done without going against one, don't: say which, and ask.",
       "",
-      ...decided.map(
-        (f) =>
-          `- Decided by ${f.who ?? "a teammate"}${f.when ? ` (${f.when})` : ""}: ${f.claim}${f.instead ? ` Instead of: ${f.instead}.` : ""}${f.until ? ` Until: ${f.until}.` : ""}${f.section ? ` [on ${f.section}]` : ""}${f.disputed ? ` [Disagrees with ${f.disputed.who ?? "a teammate"}'s "${f.disputed.claim}": neither holds yet. Don't rely on either; ask the person which holds.]` : ""}`,
-      ),
+      ...subject.map(decidedLine),
       ...(allDecided.length > decided.length
         ? [
             `- And ${String(allDecided.length - decided.length)} more decided further from here, not listed.`,

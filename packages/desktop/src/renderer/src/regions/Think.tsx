@@ -1,3 +1,5 @@
+import { ServiceIcon, serviceOf } from "../icons/services/index.tsx";
+import { editsLand } from "../../../shared/edits-land.ts";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { diffLines, type SectionNode, type SectionTree } from "@anur/core";
 import type {
@@ -610,15 +612,24 @@ export function Think({
   useEffect(() => {
     const onOption = (e: Event) => {
       const { option } = (e as CustomEvent<{ option: string }>).detail;
-      const card = document.querySelector<HTMLElement>(
-        `.think-offer[data-option="${CSS.escape(option)}"]`,
-      );
-      if (!card) return;
-      card.scrollIntoView({ block: "center", behavior: "smooth" });
-      card.classList.add("flash");
-      window.setTimeout(() => {
-        card.classList.remove("flash");
-      }, 1600);
+      // The thread may still be drawing when the map asks: look again a few
+      // times before giving up.
+      let tries = 0;
+      const find = () => {
+        const card = document.querySelector<HTMLElement>(
+          `.think-offer[data-option="${CSS.escape(option)}"]`,
+        );
+        if (!card) {
+          if (++tries < 12) window.setTimeout(find, 150);
+          return;
+        }
+        card.scrollIntoView({ block: "center", behavior: "smooth" });
+        card.classList.add("flash");
+        window.setTimeout(() => {
+          card.classList.remove("flash");
+        }, 1600);
+      };
+      find();
     };
     window.addEventListener("anur:show-option", onOption);
     return () => {
@@ -641,6 +652,11 @@ export function Think({
   const [newAgent, setNewAgent] = useState<AgentId>("claude-code");
   /** A new thread's mode and model: the agent's choices, as last seen, with the person's picks. */
   const [newChoices, setNewChoices] = useState<SessionOption[]>([]);
+  /** The mode a Build started now runs in, named on its button: it acts as that mode does. */
+  const buildMode = (() => {
+    const mode = newChoices.find((o) => o.choices.some((c) => c.value === "plan"));
+    return mode?.choices.find((c) => c.value === mode.current)?.name ?? null;
+  })();
   /** Each agent's sign-in, as main last reported it (3.16). */
   const [signIns, setSignIns] = useState<Partial<Record<AgentId, AgentSignIn>>>({});
   useEffect(
@@ -681,22 +697,8 @@ export function Think({
     };
   }, [newAgent]);
   const [error, setError] = useState<string | null>(null);
-  /** "Use agents' edits as they land", as set in Settings: the thread says when it is on. */
-  const [autoApply, setAutoApply] = useState(false);
   /** Earlier Use alls are folded to one link until it is pressed. */
   const [showEarlier, setShowEarlier] = useState(false);
-  useEffect(() => {
-    const read = () => {
-      void anur.call("settings:get", {}).then((s) => {
-        setAutoApply(s.autoApply);
-      });
-    };
-    read();
-    window.addEventListener("anur:settings-changed", read);
-    return () => {
-      window.removeEventListener("anur:settings-changed", read);
-    };
-  }, []);
   /** Branch (10.5): the next thread started here continues that thread up to that item. */
   const [branch, setBranch] = useState<{
     thread: string;
@@ -1023,14 +1025,32 @@ export function Think({
     t: ThreadView,
     option: { id: string; title: string; text: string },
     how: "replace" | "subsection",
+    heading: string | null = null,
   ) => {
     const main = page();
-    const node = tree?.sections.find((x) => t.path && samePath(t.path, x.path));
-    if (!main || !docPath || !node) {
+    const section = tree?.sections.find((x) => t.path && samePath(t.path, x.path));
+    if (!main || !docPath || !section) {
       setError("This thread's section is gone, so the option has nowhere to go.");
       return;
     }
-    if (!putOption(main, docPath.split("/").pop() ?? docPath, node, option, how)) {
+    // A decision with its own name goes under a subsection of that name:
+    // into the one already there, else a new one.
+    let node = section;
+    let put = option;
+    let mode = how;
+    if (heading) {
+      const own = tree?.sections.find(
+        (x) => x.parent === section.index && x.path.at(-1)?.toLowerCase() === heading.toLowerCase(),
+      );
+      if (own) {
+        node = own;
+        mode = "replace";
+      } else {
+        put = { ...option, title: heading };
+        mode = "subsection";
+      }
+    }
+    if (!putOption(main, docPath.split("/").pop() ?? docPath, node, put, mode)) {
       setError("This thread's section is gone, so the option has nowhere to go.");
       return;
     }
@@ -1039,7 +1059,7 @@ export function Think({
       path: docPath,
       text: main.state.doc.toString(),
       option: option.id,
-      how,
+      how: mode,
     });
   };
 
@@ -1328,11 +1348,36 @@ export function Think({
                   <span className="think-step-mark" aria-hidden="true">
                     {item.status === "failed" ? "×" : item.status === "completed" ? "✓" : "●"}
                   </span>
+                  {serviceOf(item.title) ? <ServiceIcon service={serviceOf(item.title)} /> : null}
                   {toolLabel(item.title)}
                   {item.status === "completed" || item.status === "failed" ? "" : "…"}
                 </div>
               ) : item.kind === "options" ? (
                 <div key={i} className="think-offers" role="group" aria-label="Options">
+                  {item.several ? (
+                    <p className="think-offers-within quiet">
+                      Parts that can all belong: add any of them, each as its own section
+                      {writable && item.added.length < item.options.length ? (
+                        <>
+                          {" · "}
+                          <button
+                            type="button"
+                            className="think-more"
+                            onClick={() => {
+                              for (const o of item.options)
+                                if (!item.added.includes(o.id)) useOption(thread, o, "subsection");
+                            }}
+                          >
+                            Add all
+                          </button>
+                        </>
+                      ) : null}
+                    </p>
+                  ) : item.heading ? (
+                    <p className="think-offers-within quiet">
+                      For <strong>{item.heading}</strong>, under this section
+                    </p>
+                  ) : null}
                   {item.within ? (
                     <p className="think-offers-within quiet">
                       Within{" "}
@@ -1345,11 +1390,11 @@ export function Think({
                     <div
                       key={o.id}
                       data-option={o.id}
-                      className={`think-offer${item.used === o.id ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
+                      className={`think-offer${item.used === o.id || item.added.includes(o.id) ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
                     >
                       <div className="think-offer-head">
                         <strong>{o.title}</strong>
-                        {item.used === o.id ? (
+                        {item.used === o.id || (item.several && item.added.includes(o.id)) ? (
                           <span className="quiet">In the doc</span>
                         ) : item.explored.includes(o.id) ? (
                           <span className="quiet">Explored</span>
@@ -1358,26 +1403,40 @@ export function Think({
                       <div className="think-offer-text">
                         <Markdown text={o.text} />
                       </div>
-                      {writable && item.used !== o.id ? (
+                      {writable && item.several && !item.added.includes(o.id) ? (
                         <div className="think-offer-actions">
                           <button
                             type="button"
                             className="think-button primary"
                             onClick={() => {
-                              useOption(thread, o, "replace");
+                              useOption(thread, o, "subsection");
+                            }}
+                          >
+                            Add
+                          </button>
+                        </div>
+                      ) : writable && !item.several && item.used !== o.id ? (
+                        <div className="think-offer-actions">
+                          <button
+                            type="button"
+                            className="think-button primary"
+                            onClick={() => {
+                              useOption(thread, o, "replace", item.heading);
                             }}
                           >
                             Use this
                           </button>
-                          <button
-                            type="button"
-                            className="think-more"
-                            onClick={() => {
-                              useOption(thread, o, "subsection");
-                            }}
-                          >
-                            Add as subsection
-                          </button>
+                          {item.heading ? null : (
+                            <button
+                              type="button"
+                              className="think-more"
+                              onClick={() => {
+                                useOption(thread, o, "subsection");
+                              }}
+                            >
+                              Add as subsection
+                            </button>
+                          )}
                           {item.explored.includes(o.id) ? null : (
                             <button
                               type="button"
@@ -1653,22 +1712,12 @@ export function Think({
           : null}
         {/* Last before the reply box, so Use all is on screen where the chat ends. */}
         {!thread.busy ? (
-          <ChangeSet thread={thread} writable={writable} autoApply={autoApply} />
+          <ChangeSet thread={thread} writable={writable} autoApply={editsLand(thread.options)} />
         ) : null}
-        {autoApply ? (
+        {editsLand(thread.options) ? (
           <p className="think-state">
-            Agents&apos; edits apply as they land ·{" "}
-            <button
-              type="button"
-              className="think-link"
-              onClick={() => {
-                window.dispatchEvent(
-                  new CustomEvent("anur:open-settings", { detail: { section: "agent" } }),
-                );
-              }}
-            >
-              Change
-            </button>
+            In this mode, edits apply as they land, each with Undo. Pick Ask in the mode menu to
+            review them first.
           </p>
         ) : null}
         {signedOut(thread.agent) ?? (
@@ -2164,12 +2213,13 @@ export function Think({
           <button
             type="button"
             className="think-more"
-            title={`The agent does what this ${noun} describes, with its own tools`}
+            title={`The agent does what this ${noun} describes, with its own tools, in the mode picked below${buildMode ? ` (${buildMode})` : ""}: Plan shows its plan first, Auto acts at once`}
             onClick={() => {
               void start("-", "build");
             }}
           >
             Build this {noun}
+            {buildMode ? <span className="quiet"> · {buildMode}</span> : null}
           </button>
           <button
             type="button"
@@ -2710,6 +2760,7 @@ function StepsFold({ steps, running }: { steps: ToolItem[]; running: boolean }) 
           redirected(t) ? null : (
             <div key={t.toolUse} className={`think-tool ${t.status}`} title={t.title}>
               {t.status === "failed" ? "× " : ""}
+              {serviceOf(t.title) ? <ServiceIcon service={serviceOf(t.title)} /> : null}
               {toolLabel(t.title)}
             </div>
           ),
@@ -3233,6 +3284,9 @@ function toolLabel(title: string): string {
   if (/^Write \S*\/\.claude\/plans\//.test(title)) return "Wrote the plan";
   const own = /^mcp__anur__(\w+)/.exec(title)?.[1];
   if (own) return OWN_TOOLS[own] ?? own.replace(/^anur_/, "").replace(/_/g, " ");
+  // A service the agent acted in: "Linear: save issue", shown with its mark.
+  const service = serviceOf(title);
+  if (service) return `${service.name}: ${service.action}`;
   return stepOf(title).label;
 }
 

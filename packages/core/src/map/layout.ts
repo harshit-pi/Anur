@@ -157,7 +157,11 @@ const GAP_STACK = 18;
  * rest left, each side read top down. Lines run from a box's side to its
  * children's, so no parent records rails.
  */
-export function mindLayout(nodes: readonly MapNode[]): Map<string, Placed> {
+export function mindLayout(
+  nodes: readonly MapNode[],
+  /** Sides the title's children had before: they keep them, so adding a box moves no other. */
+  kept: ReadonlyMap<string, -1 | 1> = new Map(),
+): Map<string, Placed> {
   const children = new Map<string, MapNode[]>();
   for (const n of nodes) {
     if (n.parent === null) continue;
@@ -197,16 +201,39 @@ export function mindLayout(nodes: readonly MapNode[]): Map<string, Placed> {
 
   placed.set(root.id, { id: root.id, x: 0, y: 0, w: root.w, h: root.h, side: 0 });
   const kids = children.get(root.id) ?? [];
-  // Right takes children in order until it holds half the height; left the rest.
-  const total = stack(kids);
-  const right: MapNode[] = [];
-  let used = 0;
-  for (const k of kids) {
-    if (right.length > 0 && used >= total / 2) break;
-    right.push(k);
-    used += (height.get(k.id) ?? k.h) + GAP_STACK;
+  // A child keeps the side it had. With none kept, right takes children in
+  // order until it holds half the height, left the rest; a new child joins
+  // the side holding less.
+  const sideOf = new Map<string, -1 | 1>();
+  if (kids.every((k) => !kept.has(k.id))) {
+    const total = stack(kids);
+    let used = 0;
+    let onRight = 0;
+    for (const k of kids) {
+      const side = onRight > 0 && used >= total / 2 ? -1 : 1;
+      if (side === 1) {
+        onRight++;
+        used += (height.get(k.id) ?? k.h) + GAP_STACK;
+      }
+      sideOf.set(k.id, side);
+    }
+  } else {
+    const load = { [-1]: 0, [1]: 0 } as Record<-1 | 1, number>;
+    for (const k of kids) {
+      const side = kept.get(k.id);
+      if (side) load[side] += (height.get(k.id) ?? k.h) + GAP_STACK;
+    }
+    for (const k of kids) {
+      let side = kept.get(k.id);
+      if (!side) {
+        side = load[1] <= load[-1] ? 1 : -1;
+        load[side] += (height.get(k.id) ?? k.h) + GAP_STACK;
+      }
+      sideOf.set(k.id, side);
+    }
   }
-  const left = kids.slice(right.length);
+  const right = kids.filter((k) => sideOf.get(k.id) === 1);
+  const left = kids.filter((k) => sideOf.get(k.id) === -1);
   column(right, 1, root.w / 2 + GAP_DEPTH, 0);
   column(left, -1, -root.w / 2 - GAP_DEPTH, 0);
   return placed;

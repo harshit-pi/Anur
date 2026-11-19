@@ -1,8 +1,9 @@
 /**
  * What Anur asks the person's agent for an action on a section (group 15;
- * Actions, "Build this section" and "Check this section"). The agent runs in
- * the mode the person picked; plan mode, when they pick it, shows its plan
- * as a card to approve.
+ * Actions, "Build this section" and "Check this section"). Both run in the
+ * mode the person picked, as any reply does: in plan mode the plan shows as a
+ * card to approve, and Auto acts at once, as it would in Claude Code. The
+ * Build button names the mode it will run in.
  */
 
 export type Purpose = "build" | "check";
@@ -18,7 +19,7 @@ export function actionPrompt(purpose: Purpose, section: string, note: string): s
       [
         `Build what the section "${section}" decides, with your own tools, as the person would by hand: files, drafts, tickets, code, whatever the section asks for.`,
         "",
-        "If the section lays out several steps or phases, build the first one that fits one sitting, not all of them.",
+        "If the section lays out several steps or phases, build the first one that fits one sitting, not all of them. If the section has no text of its own, build from what the doc under it decides, and say which part.",
         "",
         'Before your first tool call, write one line saying what you will build and what you are relying on, such as "Building: the launch email and FAQ. Relying on: beta.csv; no list of addresses in the folder." The person can stop you there if it is wrong.',
         "",

@@ -46,6 +46,8 @@ export const CommittedDecision = Common.extend({
   quote: z.string().max(600).nullable(),
   instead: z.string().max(300).nullable(),
   until: z.string().max(200).nullable(),
+  /** "work" for how the agent works, never what the doc says; the subject when left out. */
+  concerns: z.enum(["work", "subject"]).optional(),
   /** Who made it, by name, as people know them; the file name says whose file it is. */
   who: z.string().max(200).nullable(),
 });

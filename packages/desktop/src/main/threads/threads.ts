@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { SnapshotStore } from "../../vault/snapshot-store.ts";
 import { classify } from "./inputs.ts";
 import { LinkIndex } from "../folder/link-index.ts";
+import { editsLand } from "../../shared/edits-land.ts";
 import { actionPrompt, actionTitle, type Purpose } from "./actions.ts";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { watch, type FSWatcher } from "node:fs";
@@ -172,8 +173,6 @@ const canonIn = (at: Located, id: SectionId) => at.canon?.get(id) ?? id;
 export type ThreadDeps = {
   /** The folder's files changed: a doc an agent made, or one taken back. */
   filesChanged?: () => void;
-  /** Whether agents' edits are used as they land (Settings, Agent). */
-  autoApply?: () => boolean;
   /** Which switchable Core features are on (group 12); all on when not given. */
   features?: () => FeatureFlags;
   /** A doc's `.anur/`, in its home (18.15.2); the opened folder's when not given. */
@@ -324,6 +323,8 @@ export type KeptFinding = {
   mine: boolean;
   instead: string | null;
   until: string | null;
+  /** "work": how the agent works, never what the doc says (kept apart in the bundle). */
+  concerns?: "work" | "subject";
   /**
    * How near it is (18.3), for carrying nearest first within the budget:
    * 0 this section, 1 a section above, 2 the doc, 2.5 the part of the
@@ -509,7 +510,7 @@ export class Threads {
     const at = await this.d.locate(change.rel, change.before);
     if (!at) return false;
     const touched = previewParts(change.before, change.after, Threads.spans(at)).map((p) => p.path);
-    if (this.d.autoApply?.()) {
+    if (this.editsLand(thread)) {
       const undo = `u${randomBytes(6).toString("hex")}`;
       this.autoUndo.set(undo, { rel: change.rel, before: change.before, after: change.after });
       await this.append(live.doc, thread, {
@@ -808,10 +809,21 @@ export class Threads {
           kind: "options",
           turn: l.turn,
           options: l.options,
-          used: l.options.find((o) => used.has(o.id))?.id ?? null,
+          used: l.several ? null : (l.options.find((o) => used.has(o.id))?.id ?? null),
           explored: l.options.filter((o) => explored.has(o.id)).map((o) => o.id),
           within: l.within ?? null,
+          heading: l.heading ?? null,
+          several: l.several ?? false,
+          added: l.options.filter((o) => used.has(o.id)).map((o) => o.id),
         });
+    }
+    // A narrower option picked settles the set it was explored from too.
+    for (const item of items) {
+      if (item.kind !== "options" || item.used !== null) continue;
+      const settled = item.explored.find((id) =>
+        items.some((x) => x.kind === "options" && x.within === id && x.used !== null),
+      );
+      if (settled) item.used = settled;
     }
     const live = this.live.get(thread);
     if (live?.turn) {
@@ -1148,6 +1160,7 @@ export class Threads {
         when: new Date(f.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
         instead: f.instead,
         until: f.until,
+        ...(f.concerns ? { concerns: f.concerns } : {}),
         disputed: f.disputed ? { claim: f.disputed.claim, who: f.disputed.who } : null,
       })),
       embeds: live.embeds ?? new Map(),
@@ -1430,7 +1443,7 @@ export class Threads {
       }
       // The setting: edits are used as they land. An open doc's page applies
       // them itself, as the only writer of an open doc's file; here, the rest.
-      if (this.d.autoApply?.() && !this.d.isOpen?.(rel)) await this.applyToFile(rel, thread);
+      if (this.editsLand(thread) && !this.d.isOpen?.(rel)) await this.applyToFile(rel, thread);
     }
   }
 
@@ -1469,6 +1482,14 @@ export class Threads {
   /** A thread's mode and model: its session's, else the agent's last known, so a reopened thread can pick. */
   private optionsOf(thread: string, agent: AgentId): SessionOption[] {
     return this.options.get(thread) ?? this.d.knownOptions?.(agent) ?? [];
+  }
+
+  /** Edits land as they come in a mode that acts without asking; otherwise they're proposals. */
+  private editsLand(thread: string): boolean {
+    return editsLand(
+      this.options.get(thread) ??
+        this.d.knownOptions?.(this.picked.get(thread) ?? this.d.defaultAgent()),
+    );
   }
 
   setOption(thread: string, id: string, value: string): void {
@@ -1790,6 +1811,8 @@ export class Threads {
           mine: decision && !!me && e.who === me,
           instead: decision ? e.instead : null,
           until: decision ? e.until : null,
+          ...(decision && e.concerns ? { concerns: e.concerns } : {}),
+          ...(decision && e.concerns ? { concerns: e.concerns } : {}),
           reach: r.reach,
           lapsed: decision && untilPassed(e.until, e.at) ? "until" : null,
           home: e.home,
@@ -1816,6 +1839,7 @@ export class Threads {
         mine: decision && !!me && e.who === me,
         instead: decision ? e.instead : null,
         until: decision ? e.until : null,
+        ...(decision && e.concerns ? { concerns: e.concerns } : {}),
         reach: reachOf(e.scope, here),
         lapsed: gone !== null ? "gone" : decision && untilPassed(e.until, e.at) ? "until" : null,
         home: e.home,
@@ -1874,6 +1898,7 @@ export class Threads {
           mine: l.by === "person" && (await this.whoIs())(from?.dev ?? l.dev) === null,
           instead: l.instead ?? null,
           until,
+          ...(l.by === "person" && l.concerns ? { concerns: l.concerns } : {}),
           reach: canonIn(at, start.section) === canonIn(at, section) ? 0 : 1,
           lapsed: untilPassed(until, renewed?.at ?? l.at) ? "until" : null,
           against: l.against ?? null,
@@ -2048,6 +2073,7 @@ export class Threads {
               instead: f.instead ?? null,
               until,
               who: await this.nameOf(from?.dev ?? f.dev),
+              ...(f.concerns ? { concerns: f.concerns } : {}),
               ...(f.against ? { against: f.against } : {}),
             }
           : { kind: "finding", claim, source: f.source },
@@ -2108,6 +2134,7 @@ export class Threads {
             instead: f.instead ?? null,
             until,
             who: await this.nameOf(from?.dev ?? f.dev),
+            ...(f.concerns ? { concerns: f.concerns } : {}),
             ...(f.against ? { against: f.against } : {}),
           }
         : { kind: "finding", claim, source: f.source };
@@ -2176,6 +2203,7 @@ export class Threads {
       from: rule.from,
       instead: str(a.instead, 300),
       until: str(a.until, 200),
+      ...(a.concerns === "work" ? { concerns: "work" as const } : {}),
       ...(DecisionScope.safeParse(a.scope).success ? { scope: DecisionScope.parse(a.scope) } : {}),
       ...(against ? { against } : {}),
     });
@@ -2601,7 +2629,15 @@ export class Threads {
   private async offerOptions(thread: string, args: unknown): Promise<ToolAnswer> {
     const live = this.live.get(thread);
     if (!live?.turn) return { error: "Options can only be offered during a turn." };
-    const raw = (args ?? {}) as { options?: unknown };
+    const raw = (args ?? {}) as { options?: unknown; heading?: unknown; several?: unknown };
+    const heading =
+      typeof raw.heading === "string" && raw.heading.trim()
+        ? raw.heading
+            .trim()
+            .replace(/^#+\s*/, "")
+            .replace(/\s+/g, " ")
+            .slice(0, 80)
+        : null;
     const list = Array.isArray(raw.options) ? (raw.options as unknown[]) : [];
     const options = list
       .map((o) => (o ?? {}) as { title?: unknown; text?: unknown; why?: unknown })
@@ -2624,10 +2660,17 @@ export class Threads {
       turn: live.turn,
       options,
       within: this.exploring.get(thread) ?? null,
+      heading,
+      ...(raw.several === true ? { several: true } : {}),
     });
     await this.refresh(live.rel, live.docText, thread);
     return {
-      text: `Shown to the person as ${String(options.length)} options. They pick one, and its text replaces the section's. Don't also edit the doc for these.`,
+      text:
+        raw.several === true
+          ? `Shown to the person as ${String(options.length)} parts. They add any of them, each as its own subsection under its title. Don't also edit the doc for these.`
+          : heading
+            ? `Shown to the person as ${String(options.length)} options for "${heading}". They pick one, and its text goes under a subsection "${heading}". Don't also edit the doc for these.`
+            : `Shown to the person as ${String(options.length)} options. They pick one, and its text replaces the section's. Don't also edit the doc for these.`,
     };
   }
 
@@ -2786,7 +2829,7 @@ export class Threads {
     await this.previews.write(at.doc, thread, [...keep, ...parts], summary);
     this.d.previewsChanged(rel);
     // The setting uses an agent's edit as it lands.
-    if (this.d.autoApply?.() && !this.d.isOpen?.(rel)) await this.applyToFile(rel, thread);
+    if (this.editsLand(thread) && !this.d.isOpen?.(rel)) await this.applyToFile(rel, thread);
     return s.path.join(" > ");
   }
 
