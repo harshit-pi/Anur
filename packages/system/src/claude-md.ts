@@ -77,3 +77,43 @@ export function writeClaudeMd(repo: string, opts: { staged?: boolean } = {}): bo
   writeFileSync(file, next);
   return true;
 }
+
+/**
+ * For the pre-commit hook (23.6): the block from the staged decisions,
+ * written into git's index as `CLAUDE.md` with the rest of the staged file
+ * as it was, so only the block is staged and none of the person's own
+ * unstaged edits; then the same block in the working file, so it matches.
+ * Whether the commit's `CLAUDE.md` changed.
+ */
+export function stageClaudeMd(repo: string): boolean {
+  const block = renderBlock(currentEntries(decisionFiles(repo, true)));
+  const staged =
+    git(repo, "cat-file", "-e", ":CLAUDE.md") === null ? null : git(repo, "show", ":CLAUDE.md");
+  const next = withBlock(staged, block);
+  let changed = false;
+  if (next !== null && next !== staged) {
+    const sha = execFileSync("git", ["-C", repo, "hash-object", "-w", "--stdin"], {
+      input: next,
+      encoding: "utf8",
+    }).trim();
+    execFileSync("git", [
+      "-C",
+      repo,
+      "update-index",
+      "--add",
+      "--cacheinfo",
+      `100644,${sha},CLAUDE.md`,
+    ]);
+    changed = true;
+  }
+  const file = path.join(repo, "CLAUDE.md");
+  let now: string | null;
+  try {
+    now = readFileSync(file, "utf8");
+  } catch {
+    now = null;
+  }
+  const working = withBlock(now, block);
+  if (working !== null && working !== now) writeFileSync(file, working);
+  return changed;
+}

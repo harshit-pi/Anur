@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
+import { installPreCommit } from "@anur/system";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -95,6 +97,10 @@ export class CommittedDecisions {
     private readonly folder: string,
     private readonly device: string,
     private readonly personOf: (dir: string) => Promise<string | null> = personIn,
+    /** A repo's pre-commit hook gets Anur's lines when a decision first lands there (23.6). */
+    private readonly hookFor: (home: string) => void = (home) => {
+      if (existsSync(path.join(home, ".git"))) installPreCommit(home);
+    },
   ) {}
 
   private async place(rel: string) {
@@ -165,7 +171,13 @@ export class CommittedDecisions {
     // Kept again after an Undo: one line, not two.
     const already = (await this.current(at.home)).find((e) => e.ref === ref);
     if (already) return already.id;
-    return this.append(at.file, { ...entry, scope, ref });
+    const id = await this.append(at.file, { ...entry, scope, ref });
+    try {
+      this.hookFor(at.home);
+    } catch {
+      // A hook that can't be written leaves the decision kept; 23.8 shows it isn't active.
+    }
+    return id;
   }
 
   /**

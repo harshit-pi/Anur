@@ -75,4 +75,13 @@ export {
   type AwsResource,
   type AwsUse,
 } from "./aws.ts";
-export { claudeMdFor, decisionFiles, writeClaudeMd } from "./claude-md.ts";
+export { claudeMdFor, decisionFiles, stageClaudeMd, writeClaudeMd } from "./claude-md.ts";
+export {
+  HOOK_BEGIN,
+  HOOK_LINES,
+  SHIM,
+  hookFileFor,
+  installPreCommit,
+  preCommitInstalled,
+  withHookLines,
+} from "./pre-commit.ts";
