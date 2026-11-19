@@ -34,6 +34,6 @@ aws sso login --profile aws-anur
 ## Where it goes
 
 - Bucket `anur-releases` in the aws-anur account (516737685507), private; CloudFront `EVKBSGJARHF1U` reads it and serves it at `spaces.hianur.com` (DNS for hianur.com is at Hostinger: `spaces` is a CNAME to `do7t8q39ulre5.cloudfront.net`; the certificate is in ACM us-east-1). Older installs use the CloudFront address, which still works.
-- `https://spaces.hianur.com/Anur.dmg`: always the newest; the link to share.
+- `https://spaces.hianur.com/apps/Anur.dmg`: always the newest; the link to share. `…/Anur.dmg` at the root is the same file, kept for links sent before.
 - `…/Anur-<version>-universal.dmg`: that version, kept.
 - `…/latest-mac.yml`: the feed Anur checks on launch, every 4 hours, and on Anur → Check for Updates…. With Install updates automatically on (the default, in Settings → General), updates download quietly, a card offers Restart, and an update not restarted for installs on quit; off, Anur says one is available and downloads when asked. Anur never restarts by itself.
