@@ -54,7 +54,7 @@ export function defaultRef(repo: string): string | null {
 }
 
 /** The decisions and findings on a branch, as committed there. */
-function entriesAt(repo: string, ref: string): CommittedEntry[] {
+export function entriesAt(repo: string, ref: string): CommittedEntry[] {
   const files = (git(repo, "ls-tree", "--name-only", ref, ".anur/decisions/") ?? "")
     .split("\n")
     .filter((f) => f.endsWith(".jsonl"));

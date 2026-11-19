@@ -621,6 +621,8 @@ export const ipcContract = {
         repos: z.array(
           z.object({ dir: z.string(), included: z.boolean(), copyOf: z.string().nullable() }),
         ),
+        /** Repos whose pre-commit hook isn't rebuilding their CLAUDE.md block, and why (23.8). */
+        hooks: z.array(z.object({ repo: z.string(), why: z.string(), fix: z.boolean() })),
         /** What each edge detector can't see. */
         misses: z.array(z.object({ detector: z.string(), misses: z.array(z.string()) })),
         /** Claude's proposals waiting on the person, and the parts they have seen (20.6). */
@@ -647,6 +649,11 @@ export const ipcContract = {
     request: z
       .object({ edge: z.string().max(1000), action: z.enum(["hide", "show", "confirm"]) })
       .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Put Anur's lines back in a repo's pre-commit hook (23.8). */
+  "system:hook": {
+    request: z.object({ repo: z.string().max(4096) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
   /** Ask Claude again for group names, after a failed ask (20.6). */

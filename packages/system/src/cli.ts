@@ -6,11 +6,14 @@
  *   anur-system scan <folder> [--json] [--pin] [--known <file>]
  *   anur-system hook [--folder <folder>]   (Claude Code's UserPromptSubmit and Stop, on stdin)
  *   anur-system claude-md <repo> [--staged | --stage]  (the CLAUDE.md block, 23.5; --stage writes it into the commit, 23.6)
+ *   anur-system hooks <folder>  (JSON: each repo whose hook isn't rebuilding its CLAUDE.md block, and why, 23.8)
  *   anur-system edge-sides <folder>  (each repo's CLAUDE.local.md lists decisions on its calls kept at the other end, 23.10)
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { stageClaudeMd, writeClaudeMd } from "./claude-md.ts";
 import { writeEdgeSides } from "./claude-local.ts";
+import { hookTrouble } from "./pre-commit.ts";
+import path from "node:path";
 import { handleHook, type HookInput } from "./hook.ts";
 import { scanSystem } from "./system.ts";
 import type { KnownPart } from "./parts.ts";
@@ -48,6 +51,15 @@ if (cmd === "claude-md") {
   process.stdout.write(changed ? "anur: CLAUDE.md block updated\n" : "");
   process.exit(0);
 }
+if (cmd === "hooks" && folder) {
+  const scan = scanSystem(folder);
+  const out = scan.repos.flatMap((r) => {
+    const trouble = hookTrouble(path.join(folder, r.dir));
+    return trouble ? [{ repo: r.dir, ...trouble }] : [];
+  });
+  process.stdout.write(`${JSON.stringify(out)}\n`);
+  process.exit(0);
+}
 if (cmd === "edge-sides" && folder) {
   const written = writeEdgeSides(folder);
   if (written.length)
@@ -56,7 +68,7 @@ if (cmd === "edge-sides" && folder) {
 }
 if (cmd !== "scan" || !folder) {
   process.stderr.write(
-    "Usage: anur-system scan <folder> [--json] [--pin] [--known <file>]\n       anur-system hook [--folder <folder>]\n       anur-system claude-md <repo> [--staged | --stage]\n       anur-system edge-sides <folder>\n",
+    "Usage: anur-system scan <folder> [--json] [--pin] [--known <file>]\n       anur-system hook [--folder <folder>]\n       anur-system claude-md <repo> [--staged | --stage]\n       anur-system hooks <folder>\n       anur-system edge-sides <folder>\n",
   );
   process.exit(2);
 }

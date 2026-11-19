@@ -58,6 +58,7 @@ type Shown =
       review: Review;
       edges: SystemEdge[];
       misses: { detector: string; misses: string[] }[];
+      hooks: { repo: string; why: string; fix: boolean }[];
       repos: { dir: string; included: boolean; copyOf: string | null }[];
     };
 
@@ -253,6 +254,22 @@ export function SystemView({
         </span>
       </nav>
       {choosing ? <RepoChooser repos={shown.repos} /> : null}
+      {shown.hooks.map((h) => (
+        <p key={h.repo} className="system-note system-hook" role="status">
+          Hook not active in {h.repo}: {h.why}.{" "}
+          {h.fix ? (
+            <button
+              type="button"
+              className="system-inline"
+              onClick={() => {
+                void anur.call("system:hook", { repo: h.repo });
+              }}
+            >
+              Fix
+            </button>
+          ) : null}
+        </p>
+      ))}
       {review.asking ? (
         <Asking since={review.askingSince} />
       ) : review.failed ? (

@@ -1,6 +1,17 @@
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  accessSync,
+  chmodSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
+import { renderBlock, withBlock } from "@anur/core";
+import { entriesAt } from "./claude-local.ts";
 
 /**
  * Anur's pre-commit step (23.6, 23.7): a few marked lines in a repo's
@@ -94,4 +105,59 @@ export function installPreCommit(repo: string): { file: string; changed: boolean
 export function preCommitInstalled(repo: string): boolean {
   const { file } = hookFileFor(repo);
   return existsSync(file) && readFileSync(file, "utf8").includes(HOOK_BEGIN);
+}
+
+/**
+ * Why a repo's hook isn't rebuilding its `CLAUDE.md` block (23.8), or null
+ * when it is, or when the repo keeps no decisions and needs none. `fix` says
+ * whether putting Anur's lines back in mends it.
+ */
+export type HookTrouble = { why: string; fix: boolean };
+
+export function hookTrouble(
+  repo: string,
+  shim: string = path.join(process.env.HOME ?? "", ".anur", "bin", "anur-pre-commit"),
+): HookTrouble | null {
+  const decisions = path.join(repo, ".anur", "decisions");
+  let kept: boolean;
+  try {
+    kept = readdirSync(decisions).some((n) => n.endsWith(".jsonl"));
+  } catch {
+    kept = false;
+  }
+  if (!kept) return null;
+  const { file, kind } = hookFileFor(repo);
+  if (!preCommitInstalled(repo)) return { why: "its pre-commit hook doesn't call Anur", fix: true };
+  // husky runs its hooks with sh; a plain git hook must be executable to run.
+  if (kind !== "husky" && !executable(file))
+    return { why: "its pre-commit hook isn't executable, so git skips it", fix: true };
+  if (!executable(shim))
+    return { why: "Anur's pre-commit script is missing on this Mac; reopen Anur", fix: false };
+  if (blockBehind(repo))
+    return {
+      why: "the last commit's CLAUDE.md doesn't list its decisions: it was made without the hook (--no-verify, or a tool that skips hooks). The next commit puts them back",
+      fix: false,
+    };
+  return null;
+}
+
+function executable(file: string): boolean {
+  try {
+    accessSync(file, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether `CLAUDE.md` at HEAD lacks the block its committed decisions make. */
+function blockBehind(repo: string): boolean {
+  if (git(repo, "rev-parse", "--verify", "--quiet", "HEAD") === null) return false;
+  const entries = entriesAt(repo, "HEAD");
+  if (!entries.length) return false;
+  const now = git(repo, "show", "HEAD:CLAUDE.md");
+  const text = now === null ? null : `${now}\n`;
+  const want = withBlock(text, renderBlock(entries, "team"));
+  // git trims nothing but the final newline here; compare without it.
+  return (want ?? "").trimEnd() !== (text ?? "").trimEnd();
 }
