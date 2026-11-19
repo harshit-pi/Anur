@@ -196,6 +196,8 @@ put(zip, zip, "application/zip", forever);
 for (const f of files.filter((f) => f.endsWith(".blockmap")))
   put(f, f, "application/octet-stream", forever);
 put(dmg, dmg, "application/x-apple-diskimage", forever);
+// The link to share is apps/Anur.dmg; Anur.dmg at the root stays for links already sent.
+put(dmg, "apps/Anur.dmg", "application/x-apple-diskimage", "public, max-age=300");
 put(dmg, "Anur.dmg", "application/x-apple-diskimage", "public, max-age=300");
 // The feed last, so no app hears of a version before its files are there.
 put("latest-mac.yml", "latest-mac.yml", "text/yaml", "public, max-age=60");
@@ -207,6 +209,7 @@ run(
     "--distribution-id",
     DISTRIBUTION,
     "--paths",
+    "/apps/Anur.dmg",
     "/Anur.dmg",
     "/latest-mac.yml",
   ],
@@ -227,7 +230,7 @@ const log = read("git", [
 ]);
 const body = [
   ...(notes.length ? ["## What's new", "", ...notes.map((n) => `- ${n}`), ""] : []),
-  `**Download:** ${SITE}/Anur.dmg (this version: ${SITE}/${dmg})`,
+  `**Download:** ${SITE}/apps/Anur.dmg (this version: ${SITE}/${dmg})`,
   "",
   "<details><summary>Every change" + (previous ? ` since ${previous}` : "") + "</summary>",
   "",
@@ -239,4 +242,4 @@ run("git", ["tag", "-a", tag, "-m", `Anur ${version}`]);
 run("git", ["push", "origin", tag]);
 run("gh", ["release", "create", tag, "--title", `Anur ${version}`, "--notes", body]);
 
-console.log(`\n✓ Anur ${version} is out.\n  Share: ${SITE}/Anur.dmg\n`);
+console.log(`\n✓ Anur ${version} is out.\n  Share: ${SITE}/apps/Anur.dmg\n`);
