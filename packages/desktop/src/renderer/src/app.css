@@ -2032,6 +2032,13 @@ body.resizing * {
   font-style: normal;
 }
 
+.report-calls {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 13px;
+}
+
 .report-how {
   color: var(--graphite);
 }
@@ -2072,6 +2079,109 @@ body.resizing * {
 .task-foot {
   margin-top: 28px;
   font-size: 13px;
+}
+
+/* Lines between repos (group 22). */
+.system-edges {
+  margin-top: 28px;
+}
+
+.system-edges h2 {
+  margin: 0 0 8px;
+  color: var(--graphite);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.edge-group {
+  margin-bottom: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+}
+
+.edge-head {
+  display: flex;
+  width: 100%;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border: none;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.edge-arrow {
+  color: var(--graphite);
+}
+
+.edge-stub {
+  color: var(--graphite);
+  font-size: 12px;
+}
+
+.edge-rows {
+  margin: 0;
+  padding: 0 12px 8px;
+  list-style: none;
+}
+
+.edge-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) 2fr auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-top: 1px solid var(--rule);
+  font-size: 12px;
+}
+
+.edge-row.hidden {
+  opacity: 0.55;
+}
+
+.edge-label {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.edge-where {
+  overflow-wrap: anywhere;
+  color: var(--slate);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+.edge-acts {
+  display: flex;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.edge-acts button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  cursor: pointer;
+}
+
+.edge-guessed {
+  color: var(--amber);
+}
+
+.edge-ok {
+  color: var(--green);
+}
+
+.system-misses {
+  margin-top: 8px;
+  font-size: 12px;
 }
 
 /* Recent tasks atop the system tab. */

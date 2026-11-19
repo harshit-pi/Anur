@@ -309,3 +309,15 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - Switching Engineering on in Settings also closes Settings and opens the System tab, and a folder that opens with Engineering on starts on its System tab.
 - "Task reports in Claude Code" is labelled as for this Mac, since it isn't per folder like the switch above it.
 - "Mark all N reviewed" shows on the top level too.
+
+## Edges between repos (group 22)
+
+- One detector first: HTTP. Routes come from Express-style routers, Flask and FastAPI decorators, CDK `addResource` chains, and nested route trees of `base_path="x"` with `children=[…]` (how the team's PiAuthService declares its API). Calls come from fetch, axios, got, `requests`, `httpx`, and Amplify's `get/post/put/del({ path })` in files importing `aws-amplify/api` (how the team's app calls it). Both are read with `git grep` over tracked source, so ignored output never counts, and test files and harnesses are left out.
+- A call matches a route segment by segment, a parameter matching any one segment. It resolves only to another repo. One repo declaring the route makes the edge "found", with the call's file and line and the route's; several make each "guessed".
+- An edge's ID is consumer, provider, kind and route, so hiding or confirming it holds across rescans; those choices are lines in `.anur/system/review.jsonl`.
+- A host no repo serves is an outside service, such as Stripe or Google; "not cloned" only when it shares a domain with a host one of our repos serves by a CDK domain. A `.env.example` names hosts a repo calls, not ones it serves, so it isn't read for that.
+- The plugin API's edge detector now returns the whole folder's edges, with what it misses, since a call is only resolved across repos.
+- The System tab lists "Lines between repos" by repo pair, with Confirm and Hide, hidden ones folded away, and what the detector misses.
+- The report's calls come from edges: a changed file holding a call says what it calls. It names every call in the file, not only the changed lines, for now.
+- Anur's own questions to the agent, such as naming groups, carry a mark, and the hook skips them: they aren't tasks.
+- On the team's `~/workspace`: 67 found edges from PiTrade to PiAuthService and 5 outside services, none guessed, in 1.7 s.

@@ -5,7 +5,9 @@ import {
   boxesAt,
   partIdsUnder,
   trailTo,
+  edgeGroups,
   type SystemBox,
+  type SystemEdge,
   type SystemSection,
 } from "../layout/system-levels.ts";
 
@@ -48,7 +50,13 @@ type Shown =
   | { kind: "reading" }
   | { kind: "off" }
   | { kind: "failed"; reason: string }
-  | { kind: "ok"; sections: SystemSection[]; review: Review };
+  | {
+      kind: "ok";
+      sections: SystemSection[];
+      review: Review;
+      edges: SystemEdge[];
+      misses: { detector: string; misses: string[] }[];
+    };
 
 /**
  * The system tab (group 20): the folder's repos, read by the engineering
@@ -349,6 +357,118 @@ export function SystemView({
           })}
         </div>
       )}
+      <EdgeList
+        sections={all}
+        edges={shown.edges}
+        misses={shown.misses.flatMap((m) => m.misses)}
+        within={level}
+      />
     </div>
+  );
+}
+
+/**
+ * The lines between repos (group 22): edges found in code, grouped by the
+ * repos they join, each with the call's file and line and where the route
+ * is declared. A person confirms or hides each; hidden ones fold away.
+ */
+function EdgeList({
+  sections,
+  edges,
+  misses,
+  within,
+}: {
+  sections: SystemSection[];
+  edges: SystemEdge[];
+  misses: string[];
+  within: string | null;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const [showHidden, setShowHidden] = useState(false);
+  const live = edges.filter((e) => e.state !== "hidden");
+  const hidden = edges.filter((e) => e.state === "hidden");
+  const groups = edgeGroups(sections, showHidden ? edges : live, within);
+  if (!edges.length) return null;
+  const act = (edge: string, action: "hide" | "show" | "confirm") => {
+    void anur.call("system:edge", { edge, action });
+  };
+  return (
+    <section className="system-edges">
+      <h2>Lines between repos</h2>
+      {groups.length === 0 ? <p className="quiet">None touch this level.</p> : null}
+      {groups.map((g) => (
+        <div key={g.key} className="edge-group">
+          <button
+            type="button"
+            className="edge-head"
+            aria-expanded={open === g.key}
+            onClick={() => {
+              setOpen((o) => (o === g.key ? null : g.key));
+            }}
+          >
+            <span>
+              {g.from} <span className="edge-arrow">─▶</span> {g.to}
+              {g.stub ? <span className="edge-stub"> {g.stub}</span> : null}
+            </span>
+            <span className="quiet">
+              {g.edges.length} {g.edges.length === 1 ? "call" : "calls"}
+              {g.edges.some((e) => e.how === "guessed") ? ", some guessed" : ""}{" "}
+              {open === g.key ? "▴" : "▾"}
+            </span>
+          </button>
+          {open === g.key ? (
+            <ul className="edge-rows">
+              {g.edges.map((e) => (
+                <li key={e.id} className={`edge-row ${e.state}`}>
+                  <code className="edge-label">{e.label}</code>
+                  <span className="edge-where">
+                    {e.evidence}
+                    {e.declared ? <span className="quiet"> → {e.declared}</span> : null}
+                  </span>
+                  <span className="edge-acts">
+                    {e.how === "guessed" ? <span className="edge-guessed">guessed</span> : null}
+                    {e.state === "confirmed" ? (
+                      <span className="edge-ok">✓ confirmed</span>
+                    ) : e.state === "shown" ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          act(e.id, "confirm");
+                        }}
+                      >
+                        Confirm
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        act(e.id, e.state === "hidden" ? "show" : "hide");
+                      }}
+                    >
+                      {e.state === "hidden" ? "Show" : "Hide"}
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ))}
+      <p className="system-misses quiet">
+        {hidden.length ? (
+          <button
+            type="button"
+            className="system-inline"
+            onClick={() => {
+              setShowHidden((h) => !h);
+            }}
+          >
+            {showHidden ? "Leave out hidden lines" : `${String(hidden.length)} hidden`}
+          </button>
+        ) : null}
+        {hidden.length ? " · " : null}
+        Found from HTTP calls in code. Misses {misses.join("; ")}.
+      </p>
+    </section>
   );
 }

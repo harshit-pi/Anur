@@ -53,3 +53,12 @@ export {
 } from "./tasks.ts";
 export { CHOICES_ASK, choicesIn, lastReply } from "./choices.ts";
 export { markTaskAsync } from "./tasks.ts";
+export {
+  HTTP_MISSES,
+  edgesIn,
+  matches,
+  normalise,
+  routeTree,
+  type Edge as SystemEdge,
+} from "./edges.ts";
+export { INTERNAL_MARK } from "./choices.ts";

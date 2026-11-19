@@ -168,3 +168,41 @@ describe("each line points at what changed", () => {
     expect(report?.lines[0]).toMatchObject({ line: 3, text: "export function signOut() {}" });
   });
 });
+
+describe("the report's calls come from edges (22.5)", () => {
+  it("says what a changed file calls in another repo", async () => {
+    const dir = tmp();
+    twoRepoSystem(dir);
+    await handleHook({ hook_event_name: "UserPromptSubmit", session_id: "s7", cwd: dir });
+    touch(
+      dir,
+      "web/src/api.ts",
+      "export const login = () => fetch(`${process.env.API_URL}/v1/session`);",
+    );
+    touch(dir, "web/src/components/Users.tsx", "export const Y = 2;");
+    const end = await handleHook({ hook_event_name: "Stop", session_id: "s7", cwd: dir });
+    if (end.kind !== "reported") throw new Error(end.kind);
+    expect(end.report.lines.map((l) => [l.file, l.category, l.calls])).toEqual([
+      ["web/src/api.ts", "calls", ["api /v1/session", "api /v1/users"]],
+      ["web/src/components/Users.tsx", "ui", undefined],
+    ]);
+  });
+});
+
+describe("Anur's own questions aren't tasks", () => {
+  it("skips a prompt carrying the internal mark, so its Stop writes nothing", async () => {
+    const dir = tmp();
+    twoRepoSystem(dir);
+    const start = await handleHook({
+      hook_event_name: "UserPromptSubmit",
+      session_id: "s8",
+      cwd: dir,
+      prompt: "[anur:internal] You are naming groups",
+    });
+    expect(start.kind).toBe("skipped");
+    touch(dir, "web/src/styles.css", ".z {}");
+    expect((await handleHook({ hook_event_name: "Stop", session_id: "s8", cwd: dir })).kind).toBe(
+      "skipped",
+    );
+  });
+});

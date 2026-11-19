@@ -7,6 +7,7 @@
  */
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { INTERNAL_MARK } from "./choices.ts";
 import type { PartGroup } from "./groups.ts";
 
 export type ReviewLine =
@@ -14,7 +15,11 @@ export type ReviewLine =
   | { kind: "accepted"; group: string; at: string }
   | { kind: "renamed"; group: string; name: string; at: string }
   | { kind: "dismissed"; group: string; at: string }
-  | { kind: "reviewed"; parts: string[]; at: string };
+  | { kind: "reviewed"; parts: string[]; at: string }
+  /** An edge a person hid, showed again, or confirmed (22.3), by its stable ID. */
+  | { kind: "edge-hidden"; edge: string; at: string }
+  | { kind: "edge-shown"; edge: string; at: string }
+  | { kind: "edge-confirmed"; edge: string; at: string };
 
 export const reviewFile = (folder: string) => path.join(folder, ".anur", "system", "review.jsonl");
 
@@ -57,6 +62,9 @@ export type ReviewState = {
   asked: Set<string>;
   /** Parts the person has seen. */
   reviewed: Set<string>;
+  /** Edges hidden, and confirmed, by ID; they stay so across rescans. */
+  hiddenEdges: Set<string>;
+  confirmedEdges: Set<string>;
 };
 
 /** The review as it stands: the last word on each group wins. */
@@ -65,7 +73,15 @@ export function reviewState(lines: readonly ReviewLine[]): ReviewState {
   const settled = new Map<string, "accepted" | "renamed" | "dismissed">();
   const names = new Map<string, string>();
   const reviewed = new Set<string>();
+  const hiddenEdges = new Set<string>();
+  const confirmedEdges = new Set<string>();
   for (const l of lines) {
+    if (l.kind === "edge-hidden" || l.kind === "edge-shown" || l.kind === "edge-confirmed") {
+      if (l.kind === "edge-hidden") hiddenEdges.add(l.edge);
+      else hiddenEdges.delete(l.edge);
+      if (l.kind === "edge-confirmed") confirmedEdges.add(l.edge);
+      continue;
+    }
     if (l.kind === "proposed") {
       proposals.set(l.group, { group: l.group, name: l.name, merge: l.merge ?? [] });
       settled.delete(l.group);
@@ -85,7 +101,15 @@ export function reviewState(lines: readonly ReviewLine[]): ReviewState {
     if (how === "accepted" && merge.length) merges.set(g, merge);
   }
   const pending = [...proposals.values()].filter((p) => !settled.has(p.group));
-  return { names, merges, pending, asked: new Set(proposals.keys()), reviewed };
+  return {
+    names,
+    merges,
+    pending,
+    asked: new Set(proposals.keys()),
+    reviewed,
+    hiddenEdges,
+    confirmedEdges,
+  };
 }
 
 /**
@@ -139,7 +163,7 @@ export type GroupBrief = {
 /** The question for the person's agent: names and merges, as JSON, nothing else. */
 export function proposalPrompt(groups: readonly GroupBrief[]): string {
   return [
-    "You are naming groups of parts in a software system, so a person can find their way around a map of it.",
+    `${INTERNAL_MARK} You are naming groups of parts in a software system, so a person can find their way around a map of it.`,
     "Each group was made by a rule from the parts' names. Propose a better name only where it clearly helps, especially for groups called Other or Services.",
     "A name is one to three plain words a developer on this team would use, such as Copy trading or Brokerage webhooks. Give the group's own name only, never the groups it sits in.",
     "You may also propose merging small groups in the same repo and level into one, by listing the others' ids in merge.",

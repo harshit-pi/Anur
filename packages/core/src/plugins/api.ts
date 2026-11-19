@@ -63,19 +63,29 @@ export type SectionSource = {
 };
 
 export type Edge = {
+  /** Provider, consumer, kind and contract key (Internals §1); stable across rescans. */
   id: string;
+  /** The consumer's section id. */
   from: string;
+  /** The provider's section id, or a stub's: "stub:outside:<name>", "stub:not-cloned:<name>". */
   to: string;
   kind: string;
-  /** Where it was found, as "file:line", or null when guessed. */
+  /** The contract, as a person reads it: "GET /user/portfolios". */
+  label: string;
+  /** "found" when the code shows it; "guessed" when several providers might be the one. */
+  how: "found" | "guessed";
+  /** Where it was found, as "file:line" relative to the folder. */
   evidence: string | null;
+  /** Where the provider declares it, when known. */
+  declared: string | null;
 };
 
 export type EdgeDetector = {
   id: string;
-  /** File paths it reads, as tests on a path relative to the folder. */
-  reads(file: string): boolean;
-  detect(file: { path: string; text: string }): Edge[];
+  /** What it can't see, said to the person beside its edges. */
+  misses: string[];
+  /** Every edge it finds in the folder: a call is resolved across repos, so it reads them all. */
+  edges(folder: string): Promise<Edge[]>;
 };
 
 /** Labelled lines a thread's bundle carries for its section. */

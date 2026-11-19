@@ -50,6 +50,12 @@ function Item({ item }: { item: ReportItem }) {
       <span className="report-what">
         {placeOf(l)}
         <span className="report-how">{how}</span>
+        {l.calls?.length ? (
+          <span className="report-calls">
+            ─▶ {l.calls.slice(0, 2).join(", ")}
+            {l.calls.length > 2 ? ` and ${String(l.calls.length - 2)} more` : ""}
+          </span>
+        ) : null}
         {l.text ? <code className="report-text">{l.text}</code> : null}
       </span>
       <span className="report-cite">{citeOf(l)}</span>

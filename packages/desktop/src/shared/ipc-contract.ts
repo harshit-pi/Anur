@@ -85,6 +85,7 @@ export const TaskReportView = z.object({
       line: z.number().nullable(),
       text: z.string(),
       how: z.enum(["added", "changed", "deleted"]),
+      calls: z.array(z.string()).optional(),
     }),
   ),
   choices: z.array(z.string()),
@@ -548,6 +549,22 @@ export const ipcContract = {
             parent: z.string().nullable(),
           }),
         ),
+        /** Edges between parts and repos (group 22), each with the person's choice on it. */
+        edges: z.array(
+          z.object({
+            id: z.string(),
+            from: z.string(),
+            to: z.string(),
+            kind: z.string(),
+            label: z.string(),
+            how: z.enum(["found", "guessed"]),
+            evidence: z.string().nullable(),
+            declared: z.string().nullable(),
+            state: z.enum(["shown", "hidden", "confirmed"]),
+          }),
+        ),
+        /** What each edge detector can't see. */
+        misses: z.array(z.object({ detector: z.string(), misses: z.array(z.string()) })),
         /** Claude's proposals waiting on the person, and the parts they have seen (20.6). */
         review: z.object({
           pending: z.array(
@@ -561,6 +578,13 @@ export const ipcContract = {
       }),
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
+  },
+  /** Hide an edge, show it again, or confirm it (22.3); kept across rescans. */
+  "system:edge": {
+    request: z
+      .object({ edge: z.string().max(1000), action: z.enum(["hide", "show", "confirm"]) })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
   },
   /** Ask Claude again for group names, after a failed ask (20.6). */
   "system:propose": {

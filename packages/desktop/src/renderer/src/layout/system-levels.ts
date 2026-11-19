@@ -84,3 +84,75 @@ export function trailTo(all: readonly SystemSection[], id: string | null): Syste
     out.unshift(at);
   return out;
 }
+
+export type SystemEdge = {
+  id: string;
+  from: string;
+  to: string;
+  kind: string;
+  label: string;
+  how: "found" | "guessed";
+  evidence: string | null;
+  declared: string | null;
+  state: "shown" | "hidden" | "confirmed";
+};
+
+/** The repo a section sits in, as its top-level section. */
+export function repoOf(all: readonly SystemSection[], id: string): SystemSection | null {
+  const byId = new Map(all.map((s) => [s.id, s]));
+  let at = byId.get(id);
+  while (at?.parent) at = byId.get(at.parent);
+  return at ?? null;
+}
+
+/** A side's name: its repo's, or a stub's ("outside" or "not cloned"). */
+export function endName(
+  all: readonly SystemSection[],
+  id: string,
+): { name: string; stub: string | null } {
+  const stub = /^stub:(outside|not-cloned):(.+)$/.exec(id);
+  if (stub) return { name: stub[2] ?? id, stub: stub[1] === "outside" ? "outside" : "not cloned" };
+  return { name: repoOf(all, id)?.path[0] ?? id, stub: null };
+}
+
+export type EdgeGroup = {
+  key: string;
+  from: string;
+  to: string;
+  stub: string | null;
+  edges: SystemEdge[];
+};
+
+/**
+ * Edges grouped by the pair of repos they join, those touching `within`
+ * (a section and everything under it) when given; most edges first.
+ */
+export function edgeGroups(
+  all: readonly SystemSection[],
+  edges: readonly SystemEdge[],
+  within: string | null,
+): EdgeGroup[] {
+  const under = (id: string) => {
+    if (!within) return true;
+    const byId = new Map(all.map((s) => [s.id, s]));
+    for (let at = byId.get(id); at; at = at.parent ? byId.get(at.parent) : undefined)
+      if (at.id === within) return true;
+    return false;
+  };
+  const groups = new Map<string, EdgeGroup>();
+  for (const e of edges) {
+    if (!under(e.from) && !under(e.to)) continue;
+    const from = endName(all, e.from).name;
+    const to = endName(all, e.to);
+    const key = `${from}→${to.stub ?? ""}${to.name}`;
+    const g = groups.get(key) ?? { key, from, to: to.name, stub: to.stub, edges: [] };
+    g.edges.push(e);
+    groups.set(key, g);
+  }
+  return [...groups.values()].sort(
+    (a, b) =>
+      Number(!!a.stub) - Number(!!b.stub) ||
+      b.edges.length - a.edges.length ||
+      a.key.localeCompare(b.key),
+  );
+}
