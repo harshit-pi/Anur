@@ -579,6 +579,8 @@ export const ipcContract = {
         kind: z.literal("ok"),
         /** The folder this read is of, so a tab can keep it for that folder only. */
         folder: z.string(),
+        /** The last saved read, shown while a fresh one runs; it follows as system:changed. */
+        updating: z.boolean(),
         sections: z.array(
           z.object({
             id: z.string(),
