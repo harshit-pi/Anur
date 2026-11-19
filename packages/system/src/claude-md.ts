@@ -25,6 +25,17 @@ function git(repo: string, ...args: string[]): string | null {
   }
 }
 
+/**
+ * The day the commit is made, for an "until" that has passed (23.3): git's
+ * own GIT_COMMITTER_DATE when it's set, as in a rebase or a scripted commit,
+ * else now.
+ */
+function commitDay(): Date {
+  const given = process.env.GIT_COMMITTER_DATE;
+  const at = given ? new Date(given) : new Date();
+  return Number.isNaN(at.getTime()) ? new Date() : at;
+}
+
 /** Each person's decisions file, by whose it is. */
 export function decisionFiles(repo: string, staged = false): { person: string; text: string }[] {
   const person = (f: string) => path.basename(f, ".jsonl");
@@ -67,7 +78,10 @@ export function claudeMdFor(
   } catch {
     now = null;
   }
-  const next = withBlock(now, renderBlock(currentEntries(decisionFiles(repo, opts.staged))));
+  const next = withBlock(
+    now,
+    renderBlock(currentEntries(decisionFiles(repo, opts.staged)), "team", commitDay()),
+  );
   return { file, next, changed: next !== now };
 }
 
@@ -87,7 +101,7 @@ export function writeClaudeMd(repo: string, opts: { staged?: boolean } = {}): bo
  * Whether the commit's `CLAUDE.md` changed.
  */
 export function stageClaudeMd(repo: string): boolean {
-  const block = renderBlock(currentEntries(decisionFiles(repo, true)));
+  const block = renderBlock(currentEntries(decisionFiles(repo, true)), "team", commitDay());
   const staged =
     git(repo, "cat-file", "-e", ":CLAUDE.md") === null ? null : git(repo, "show", ":CLAUDE.md");
   const next = withBlock(staged, block);
