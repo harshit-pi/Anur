@@ -301,3 +301,11 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - The System tab lists the five newest reports; one opens in its own tab, `anur:task/<id>`, titled "Task report" in the path row. The tab shows at most three items before "more", ranked data, auth, calls, Claude's choices, UI, other, each with its file and line. With no decisions, it shows the same.
 - Tried on the team's own `~/workspace` (24 repos) before adding the plugin there. Two fixes came of it. A dirty path that isn't a regular file, such as a linked `node_modules`, is no longer hashed, and a repo git can't read is marked by HEAD alone instead of failing the others. And repos are marked eight at a time, asynchronously: a mark took 2.4 s one repo after another, and 0.42 s in parallel, which matters because Claude Code waits for the prompt hook.
 - While Claude names the groups, the tab shows a thin bar that moves without a percentage, since the answer arrives whole, and the seconds since the ask began, sent from main so a tab opened mid-ask counts right. Reduced motion shows a still bar.
+
+## Offering Engineering (group 20)
+
+- A folder that opens with Engineering off and holds code repos gets a card, once: "This folder holds N code repos", Turn on or Not now, remembered per folder on this device. A repo counts as code when a build file sits at its root or one folder down, so a vault that is a git repo of notes never gets the card; the count stops at depth 3 and 400 ms (3 ms on the team's 24 repos).
+- Turn on switches Engineering on for the folder and opens the System tab. When task reports aren't in Claude Code yet, a second step asks for that on its own, since it changes the person's Claude Code for the whole Mac.
+- Switching Engineering on in Settings also closes Settings and opens the System tab, and a folder that opens with Engineering on starts on its System tab.
+- "Task reports in Claude Code" is labelled as for this Mac, since it isn't per folder like the switch above it.
+- "Mark all N reviewed" shows on the top level too.

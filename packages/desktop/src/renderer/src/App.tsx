@@ -251,11 +251,20 @@ export function App() {
   }, [tabs, folderPath]);
   // The system tab shows while Engineering is on for the folder (group 20).
   const [engineeringOn, setEngineeringOn] = useState(false);
+  /** The folder the System tab was last brought forward for on opening; once per opening. */
+  const systemShownFor = useRef<string | null>(null);
   useEffect(() => {
     if (!folderPath || settings) return;
     let current = true;
     void anur.call("plugins:list", {}).then((r) => {
-      if (current) setEngineeringOn(r.plugins.some((p) => p.id === "engineering" && p.on));
+      if (!current) return;
+      const on = r.plugins.some((p) => p.id === "engineering" && p.on);
+      setEngineeringOn(on);
+      // A folder opened with Engineering on starts on its System tab.
+      if (on && systemShownFor.current !== folderPath) {
+        systemShownFor.current = folderPath;
+        setTabs((t) => showSystem(t));
+      }
     });
     return () => {
       current = false;

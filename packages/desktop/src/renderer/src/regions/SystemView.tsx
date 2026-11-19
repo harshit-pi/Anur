@@ -194,15 +194,21 @@ export function SystemView({
           </span>
         ))}
         <span className="system-actions">
-          {level && unseen.length ? (
+          {unseen.length ? (
             <button
               type="button"
-              title="Count every part on this level as seen"
+              title={
+                level
+                  ? "Count every part on this level as seen"
+                  : "Count every part in every repo as seen"
+              }
               onClick={() => {
                 void anur.call("system:reviewed", { parts: unseen });
               }}
             >
-              Mark {unseen.length} reviewed
+              {level
+                ? `Mark ${String(unseen.length)} reviewed`
+                : `Mark all ${String(unseen.length)} reviewed`}
             </button>
           ) : null}
           <button type="button" title="Read the repos again" onClick={read}>
