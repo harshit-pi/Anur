@@ -9,6 +9,11 @@ import { isSpace, markSpace, spaceAbove } from "./spaces.ts";
 
 const temp = (p: string) => realpathSync(mkdtempSync(path.join(tmpdir(), p)));
 const spaceFile = (d: string) => path.join(d, ".anur", "space.json");
+/** Waits until `ok` holds: the walk for spaces inside runs after a folder opens. */
+async function until(ok: () => Promise<boolean>) {
+  for (let waited = 0; !(await ok()) && waited < 10_000; waited += 50)
+    await new Promise((r) => setTimeout(r, 50));
+}
 
 describe("spaces (docs/anur-folder.md)", () => {
   it("are marked by space.json, never by a .anur/ alone, as every repo has one", async () => {
@@ -50,6 +55,15 @@ describe("spaces (docs/anur-folder.md)", () => {
     await folders.close(2);
   });
 
+  it("open an existing space without walking it again", async () => {
+    const root = temp("anur-space-again-");
+    expect(await markSpace(root)).toEqual([]);
+    // A marker planted inside after the fact isn't looked for: opening it would open the parent.
+    mkdirSync(path.join(root, "inner", ".anur"), { recursive: true });
+    writeFileSync(spaceFile(path.join(root, "inner")), "{}\n");
+    expect(await markSpace(root)).toEqual([]);
+  });
+
   it("make the opened parent the space over child spaces, with no question asked", async () => {
     const root = temp("anur-space-parent-");
     const child = path.join(root, "Launch");
@@ -62,6 +76,7 @@ describe("spaces (docs/anur-folder.md)", () => {
     const parent = await folders.open(2, root);
     expect(parent.kind === "opened" && parent.folder.path).toBe(root);
     expect(await isSpace(root)).toBe(true);
+    await until(async () => !(await isSpace(child)));
     expect(await isSpace(child)).toBe(false);
     await folders.close(2);
   });
