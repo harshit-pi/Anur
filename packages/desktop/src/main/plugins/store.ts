@@ -17,7 +17,7 @@ import { writeFileAtomic } from "../../vault/anur-folder.ts";
 export const PLUGIN_KEY = "MCowBQYDK2VwAyEAFyfpiI5b0M2rXlaRc7vg4E0N/f7gtCeMhKWYCbUh+S0=";
 
 /** Where the feed lives; ANUR_PLUGIN_FEED points elsewhere, as a folder for a test. */
-export const FEED = process.env.ANUR_PLUGIN_FEED ?? "https://do7t8q39ulre5.cloudfront.net/plugins/";
+export const FEED = process.env.ANUR_PLUGIN_FEED ?? "https://spaces.hianur.com/plugins/";
 
 const join = (base: string, name: string) => (base.endsWith("/") ? base : `${base}/`) + name;
 

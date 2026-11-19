@@ -84,7 +84,7 @@ export async function buildFeed(out) {
   return plugins;
 }
 
-const SITE = "https://do7t8q39ulre5.cloudfront.net/plugins/";
+const SITE = "https://spaces.hianur.com/plugins/";
 
 const newer = (a, b) => {
   const pa = a.split(".").map(Number);
