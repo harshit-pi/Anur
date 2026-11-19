@@ -329,3 +329,11 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - One system per GitHub owner: when a folder holds repos of several owners, the top level is a box per owner (pitrade-official, HiAnur…), "No remote" last; a map will be drawn per owner.
 - "Choose repos" lists every repo found; one left out isn't scanned, watched, marked for tasks or joined by edges, saved per folder in `.anur/system/review.jsonl`.
 - Main keeps each folder's last read until a watcher or the review changes it, and the tab draws its last read at once, so switching back to System no longer shows "Reading the repos…".
+
+## The system as a map (24.4)
+
+- The System tab draws each system as a map: repos as frames, joined by the edges found in code, one line per pair of boxes with its count ("67 calls") or its one route. With several GitHub owners, the top level is the owners and each owner's system is its own map.
+- Callers sit left of what they call, by the longest chain of calls; an outside service sits in the column right of its caller, under that column's repos, so no line runs behind a box; repos with no lines sit in a row underneath.
+- A click on a repo or group opens it in place: its groups and parts inside the frame, lines moving to the part that calls or serves when the code says which, and everything not joined to it grey. A click on a line opens its calls in the list below.
+- The layout is a pure function of the sections, the edges and what's open, so the same code always draws the same map. It scales down to fit the pane's width, never up.
+- Known limit: when a repo's CDK stacks share one `cdk.json`, a route can't yet be tied to one stack, so the line ends on the repo; reading CDK (22.6) fixes it.
