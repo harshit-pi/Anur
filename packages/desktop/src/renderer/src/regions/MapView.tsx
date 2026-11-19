@@ -81,6 +81,23 @@ const pill = (title: string, marks = 0) => ({
   w: Math.max(150, Math.min(320, Math.round(title.length * 7.8 + 44 + marks * 18))),
   h: 36,
 });
+/**
+ * A section box's size: room for its name beside the links badge, and for
+ * the status chip beside the thread count on one line, so neither wraps a
+ * word in two. The layout's height is an estimate; the box draws at its own.
+ */
+const sectionSize = (heading: string, status: BoxStatus | null, sub: string, links: number) => {
+  const base = boxSize(heading, sub);
+  const name = Math.round(heading.length * 8.4 + 40 + (links > 0 ? 52 : 0));
+  const line = Math.round(
+    40 + (status ? status.label.length * 6.6 + 24 : 0) + (sub ? sub.length * 6.8 + 8 : 0),
+  );
+  return {
+    w: Math.min(340, Math.max(base.w, Math.min(name, 300), line)),
+    h: base.h + (status ? 6 : 0),
+  };
+};
+
 /** At most this many service marks on a thread's chip. */
 const MARKS_SHOWN = 3;
 
@@ -408,7 +425,7 @@ export function MapView({
       nodes.push({
         id,
         parent: s.parent === null ? null : idOf(s.parent),
-        ...boxSize(heading, status ? `${status.label}   ${sub}` : sub),
+        ...sectionSize(heading, status, sub, 0),
       });
       info.set(id, {
         id,
@@ -472,7 +489,10 @@ export function MapView({
         // Room for the badge beside the name.
         const node = nodes.find((n) => n.id === id);
         if (node)
-          Object.assign(node, boxSize(`${heading}  → ${String(outLinks.length)}`, own.sub ?? ""));
+          Object.assign(
+            node,
+            sectionSize(heading, own.status ?? null, own.sub ?? "", outLinks.length),
+          );
       }
       // Each thread's option sets, one family per choice: a first set and the
       // narrower sets found exploring it. A choice still open shows its
@@ -1656,8 +1676,11 @@ export function MapView({
                 );
                 // A thread here needs you: options to pick, or an edit to use.
                 const needs = here.some((t) => {
-                  const offers = t.items.flatMap((x) => (x.kind === "options" ? [x] : []));
-                  return (offers.length > 0 && !offers.some((x) => x.used)) || previewed.has(t.id);
+                  // A choice still open, or a set of parts none of which is added yet.
+                  const open = t.items.some(
+                    (x) => x.kind === "options" && !x.used && !(x.several && x.added.length > 0),
+                  );
+                  return open || previewed.has(t.id);
                 });
                 return b.sub || needs || b.status ? (
                   <div
@@ -1668,7 +1691,7 @@ export function MapView({
                     {b.status ? (
                       <span className={`map-status ${b.status.tone}`}>{b.status.label}</span>
                     ) : null}
-                    {b.sub}
+                    {b.sub ? <span className="map-box-count">{b.sub}</span> : null}
                   </div>
                 ) : null;
               })()}

@@ -5764,3 +5764,14 @@ button.file-card-name:hover {
 .map-thread-mark .service-icon {
   margin-right: 4px;
 }
+
+/* The box's second line wraps between its parts, never inside one. */
+.map-box-sub {
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+
+.map-box-count,
+.map-box-sub .map-status {
+  white-space: nowrap;
+}
