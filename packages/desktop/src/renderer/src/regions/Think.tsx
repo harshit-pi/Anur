@@ -2408,7 +2408,6 @@ export function Think({
             }}
           >
             Build this {noun}
-            {buildMode ? <span className="quiet"> · {buildMode}</span> : null}
           </button>
           <button
             type="button"
