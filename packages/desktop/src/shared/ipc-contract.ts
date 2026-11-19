@@ -232,6 +232,15 @@ export const SessionOption = z.object({
 export type SessionOption = z.infer<typeof SessionOption>;
 
 /** A thread on one section: what it is about, what it read, and what was said. */
+/** A pen stroke on the map: points relative to the box it's anchored to. */
+export const InkStrokeSchema = z.object({
+  id: z.string().max(64),
+  anchor: z.string().max(200).nullable(),
+  pts: z.array(z.tuple([z.number(), z.number()])).max(5000),
+  color: z.string().max(32),
+});
+export type InkStroke = z.infer<typeof InkStrokeSchema>;
+
 export const ThreadView = z.object({
   id: z.string(),
   /** The section's ID, and its heading path now; null when its section is gone. */
@@ -416,6 +425,20 @@ export const ipcContract = {
         scene: z.string(),
         editable: z.boolean(),
       }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
+  /** A new drawing beside a doc, named as given (a number added if taken), holding this scene. */
+  "drawing:create": {
+    request: z
+      .object({
+        near: z.string().max(4096),
+        name: z.string().max(200),
+        scene: z.string().max(50_000_000),
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("created"), path: z.string() }),
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
@@ -1019,6 +1042,23 @@ export const ipcContract = {
       ids: z.array(z.string()),
       positions: z.record(z.string(), z.object({ x: z.number(), y: z.number() })),
     }),
+  },
+  /** Pen strokes on a doc's map, every device's, less any erased. */
+  "map:ink": {
+    request: z.object({ path: z.string().max(4096), text: z.string() }).strict(),
+    response: z.object({ strokes: z.array(InkStrokeSchema) }),
+  },
+  /** Strokes drawn here, and strokes erased here. */
+  "map:ink-change": {
+    request: z
+      .object({
+        path: z.string().max(4096),
+        text: z.string(),
+        add: z.array(InkStrokeSchema).max(200),
+        erase: z.array(z.string().max(64)).max(2000),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
   },
   /** Boxes a person moved on the map; null puts a box back in the layout. */
   "map:save": {

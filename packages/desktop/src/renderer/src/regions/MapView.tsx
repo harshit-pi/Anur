@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { boxSize, mapLayout, resolveWiki, type MapNode, type SectionTree } from "@anur/core";
-import type { PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
+import type { InkStroke, PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { useFeatures } from "../features.ts";
 import { changeSummary } from "../layout/change-summary.ts";
+import { mapSkeleton } from "../layout/map-drawing.ts";
+import { BoxSketch, sketchLine } from "./MapSketch.tsx";
+import { useMapStyle } from "./map-style-pref.ts";
+import "../editor/drawings/assets.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
 
 /**
@@ -162,6 +166,69 @@ export function MapView({
   const userMoved = useRef(false);
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
   /** Naming a new box: where it goes, and its parent when it was drawn from a box. */
+  const [makingDrawing, setMakingDrawing] = useState(false);
+  /** Hand-drawn, as Excalidraw draws, when picked in Settings → Appearance. */
+  const hand = useMapStyle() === "hand";
+  /** A line as the map style draws it: one path, or its sketched strokes. */
+  const line = (key: string, className: string, d: string, marker?: string) =>
+    hand
+      ? sketchLine(key, d, className.includes("thread")).map((sd, i, all) => (
+          <path
+            key={`${key}:${String(i)}`}
+            className={className}
+            d={sd}
+            {...(marker && i === all.length - 1 ? { markerEnd: marker } : {})}
+          />
+        ))
+      : [<path key={key} className={className} d={d} {...(marker ? { markerEnd: marker } : {})} />];
+  /** The map as an Excalidraw drawing beside the doc, opened in a tab. */
+  const openAsDrawing = async (newTab: boolean) => {
+    const sameDocLinks = tree.sections.flatMap((s) =>
+      [...new Set(s.linksOut.filter((l) => l.sameDoc).map((l) => l.targetIndex))]
+        .filter((t): t is number => t !== null && t !== s.index)
+        .map((t) => ({ from: idOf(s.index), to: idOf(t) })),
+    );
+    const skeleton = mapSkeleton(
+      boxes.map((b) => ({
+        id: b.id,
+        kind: b.kind,
+        x: b.x,
+        y: b.y,
+        w: b.w,
+        h: b.h,
+        heading: b.kind === "link" ? `→ ${b.heading}` : b.heading,
+        sub: b.sub,
+        parent: b.parent,
+      })),
+      sameDocLinks,
+    );
+    // Excalidraw's own types don't resolve here: the calls used, typed.
+    const ex = (await import("@excalidraw/excalidraw")) as unknown as {
+      convertToExcalidrawElements: (s: unknown[], o: { regenerateIds: boolean }) => unknown[];
+      serializeAsJSON: (e: unknown[], a: Record<string, unknown>, f: unknown, t: "local") => string;
+      exportToSvg: (o: Record<string, unknown>) => Promise<SVGSVGElement>;
+    };
+    // Labels are sized as they're made: draw them once first, so Excalidraw has
+    // its hand-drawn font loaded and measures with it, not a narrower stand-in.
+    // The picture carries Excalifont as a data URL: in the page a moment, the
+    // window has the font, and the labels below are measured with it.
+    const probe = await ex.exportToSvg({
+      elements: ex.convertToExcalidrawElements(skeleton, { regenerateIds: false }),
+      appState: {},
+      files: {},
+    });
+    probe.style.cssText = "position:absolute;left:-10000px;top:0;visibility:hidden";
+    document.body.appendChild(probe);
+    await document.fonts.load('18px "Excalifont"').catch(() => undefined);
+    await document.fonts.ready;
+    probe.remove();
+    const elements = ex.convertToExcalidrawElements(skeleton, { regenerateIds: false });
+    const scene = ex.serializeAsJSON(elements, { viewBackgroundColor: "#ffffff" }, {}, "local");
+    const name = `${(docPath.split("/").pop() ?? docPath).replace(/\.md$/i, "")} - Map`;
+    const r = await anur.call("drawing:create", { near: docPath, name, scene });
+    if (r.kind === "created")
+      window.dispatchEvent(new CustomEvent("anur:open-path", { detail: { path: r.path, newTab } }));
+  };
   /** The section being renamed in its box, by index. */
   const [renaming, setRenaming] = useState<number | null>(null);
   const [adding, setAdding] = useState<{ at: Pos; screen: Pos; parent?: number } | null>(null);
@@ -217,6 +284,21 @@ export function MapView({
   const placeNew = useRef<{ path: string[]; at: Pos } | null>(null);
   const textNow = useRef(docText);
   textNow.current = docText;
+
+  /** Pen strokes on this map (every device's), and what the pen is doing. */
+  const [ink, setInk] = useState<InkStroke[]>([]);
+  const [pen, setPen] = useState<"off" | "draw" | "erase">("off");
+  const [inkNow, setInkNow] = useState<[number, number][] | null>(null);
+  useEffect(() => {
+    let current = true;
+    setInk([]);
+    void anur.call("map:ink", { path: docPath, text: textNow.current() }).then((r) => {
+      if (current) setInk(r.strokes);
+    });
+    return () => {
+      current = false;
+    };
+  }, [docPath]);
 
   // Section IDs and saved positions, read again when the headings change.
   const headings = tree.sections.map((s) => s.path.join("\u0000")).join("\u0001");
@@ -577,6 +659,82 @@ export function MapView({
     [view],
   );
 
+  /** A stroke's points on the map now: with its box, wherever that box has moved. */
+  const inkPoints = (st: InkStroke): [number, number][] | null => {
+    const at = st.anchor ? byId.get(st.anchor) : undefined;
+    if (st.anchor && !at) return null;
+    const ox = at?.x ?? 0;
+    const oy = at?.y ?? 0;
+    return st.pts.map(([x, y]) => [x + ox, y + oy]);
+  };
+  const inkPath = (pts: [number, number][]) =>
+    pts.map(([x, y], i) => `${i ? "L" : "M"} ${x.toFixed(1)} ${y.toFixed(1)}`).join(" ");
+  /** A stroke drawn on the map: anchored to the box nearest its middle, then kept. */
+  const onPenDown = (e: React.PointerEvent) => {
+    if (e.button !== 0 || pen !== "draw") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const el = e.currentTarget as HTMLElement;
+    try {
+      el.setPointerCapture(e.pointerId);
+    } catch {
+      // A pointer that is already gone.
+    }
+    const z = view?.z ?? 1;
+    const first = toWorld(e.clientX, e.clientY);
+    const pts: [number, number][] = [[first.x, first.y]];
+    setInkNow([...pts]);
+    const move = (ev: PointerEvent) => {
+      const p = toWorld(ev.clientX, ev.clientY);
+      const last = pts[pts.length - 1];
+      if (last && Math.hypot(p.x - last[0], p.y - last[1]) < 1.5 / z) return;
+      pts.push([p.x, p.y]);
+      setInkNow([...pts]);
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      setInkNow(null);
+      if (pts.length < 2) return;
+      const cx = pts.reduce((a, [x]) => a + x, 0) / pts.length;
+      const cy = pts.reduce((a, [, y]) => a + y, 0) / pts.length;
+      let near: Box | null = null;
+      let best = Infinity;
+      for (const b of byId.values()) {
+        if (b.kind !== "section" && b.kind !== "thread") continue;
+        const d = Math.hypot(b.x - cx, b.y - cy);
+        if (d < best) {
+          best = d;
+          near = b;
+        }
+      }
+      const stroke: InkStroke = {
+        id: `k${Math.random().toString(36).slice(2, 12)}`,
+        anchor: near?.id ?? null,
+        pts: pts.map(([x, y]) => [x - (near?.x ?? 0), y - (near?.y ?? 0)]),
+        color: "red",
+      };
+      setInk((all) => [...all, stroke]);
+      void anur.call("map:ink-change", {
+        path: docPath,
+        text: textNow.current(),
+        add: [stroke],
+        erase: [],
+      });
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  };
+  const eraseInk = (id: string) => {
+    setInk((all) => all.filter((s) => s.id !== id));
+    void anur.call("map:ink-change", {
+      path: docPath,
+      text: textNow.current(),
+      add: [],
+      erase: [id],
+    });
+  };
+
   const save = useCallback(
     (positions: Record<string, Pos | null>) => {
       void anur.call("map:save", { path: docPath, text: textNow.current(), positions });
@@ -772,6 +930,11 @@ export function MapView({
 
   // Arrow keys move between boxes; Shift+arrow nudges the selected one.
   const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape" && pen !== "off") {
+      e.preventDefault();
+      setPen("off");
+      return;
+    }
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === "z") {
       e.preventDefault();
@@ -890,13 +1053,11 @@ export function MapView({
               [b.x, rail],
               [b.x, top],
             ];
-      return [
-        <path
-          key={b.id}
-          className={b.kind === "section" ? "map-edge rail" : "map-edge rail thread"}
-          d={pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" ")}
-        />,
-      ];
+      return line(
+        b.id,
+        b.kind === "section" ? "map-edge rail" : "map-edge rail thread",
+        pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" "),
+      );
     }
     // From the parent's bottom to the child's top, a soft S; sideways when a moved box sits beside.
     const below = b.y - b.h / 2 >= p.y + p.h / 2;
@@ -915,9 +1076,7 @@ export function MapView({
       const mid = (x1 + x2) / 2;
       d = `M ${String(x1)} ${String(p.y)} C ${String(mid)} ${String(p.y)}, ${String(mid)} ${String(b.y)}, ${String(x2)} ${String(b.y)}`;
     }
-    return [
-      <path key={b.id} className={b.kind === "section" ? "map-edge" : "map-edge thread"} d={d} />,
-    ];
+    return [...line(b.id, b.kind === "section" ? "map-edge" : "map-edge thread", d)];
   });
 
   // Links between sections, drawn as arrows from the linking box to its target.
@@ -940,17 +1099,12 @@ export function MapView({
         if (!a || !b) return [];
         const p = edge(a, b);
         const q = edge(b, a);
-        return [
-          <line
-            key={`${a.id}>${b.id}`}
-            className="map-link"
-            x1={p.x}
-            y1={p.y}
-            x2={q.x}
-            y2={q.y}
-            markerEnd="url(#map-arrow)"
-          />,
-        ];
+        return line(
+          `${a.id}>${b.id}`,
+          "map-link",
+          `M ${String(p.x)} ${String(p.y)} L ${String(q.x)} ${String(q.y)}`,
+          "url(#map-arrow)",
+        );
       }),
   );
   const drawing = (() => {
@@ -974,6 +1128,7 @@ export function MapView({
     <div
       ref={host}
       className="map"
+      data-style={hand ? "hand" : "clean"}
       tabIndex={0}
       role="application"
       aria-label="Map of the doc's sections"
@@ -1039,6 +1194,7 @@ export function MapView({
                 onBoxDown(e, b);
               }}
             >
+              {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed={b.kind === "edit"} /> : null}
               <div className="map-box-head">
                 <span className="map-box-name">{b.option.title}</span>
                 {b.kind === "edit" && writable && b.thread ? (
@@ -1080,6 +1236,7 @@ export function MapView({
                 onBoxDown(e, b);
               }}
             >
+              {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed={false} /> : null}
               <span className="truncate">→ {b.heading}</span>
             </button>
           ) : b.kind === "thread" && b.thread ? (
@@ -1093,6 +1250,7 @@ export function MapView({
                 onBoxDown(e, b);
               }}
             >
+              {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed /> : null}
               <span className="truncate">
                 <ThreadName thread={b.thread} />
               </span>
@@ -1118,6 +1276,7 @@ export function MapView({
                 if (writable) setRenaming(b.index);
               }}
             >
+              {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed={b.kind === "edit"} /> : null}
               <div className="map-box-head">
                 {renaming === b.index ? (
                   <input
@@ -1234,7 +1393,33 @@ export function MapView({
             </div>
           ),
         )}
+        <svg className={`map-ink${pen === "erase" ? " erasing" : ""}`} aria-hidden="true">
+          {ink.map((st) => {
+            const pts = inkPoints(st);
+            if (!pts) return null;
+            const d = inkPath(pts);
+            return (
+              <g key={st.id}>
+                <path className="map-ink-stroke" d={d} />
+                {pen === "erase" ? (
+                  <path
+                    className="map-ink-hit"
+                    d={d}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                      eraseInk(st.id);
+                    }}
+                  />
+                ) : null}
+              </g>
+            );
+          })}
+          {inkNow ? <path className="map-ink-stroke" d={inkPath(inkNow)} /> : null}
+        </svg>
       </div>
+      {pen === "draw" ? (
+        <div className="map-pen-catch" aria-label="Draw on the map" onPointerDown={onPenDown} />
+      ) : null}
       {adding ? (
         <input
           className="map-add"
@@ -1339,6 +1524,47 @@ export function MapView({
         >
           Tidy
         </button>
+        <button
+          type="button"
+          className="map-tool"
+          title="Make an Excalidraw drawing of this map, to sketch on (⌘-click: open it in a new tab)"
+          disabled={!writable || makingDrawing}
+          onClick={(e) => {
+            const newTab = e.metaKey || e.ctrlKey;
+            setMakingDrawing(true);
+            void openAsDrawing(newTab).finally(() => {
+              setMakingDrawing(false);
+            });
+          }}
+        >
+          Drawing
+        </button>
+        <button
+          type="button"
+          className={`map-tool${pen === "draw" ? " on" : ""}`}
+          title="Draw on the map; strokes stay with the box they're nearest (Esc to stop)"
+          aria-pressed={pen === "draw"}
+          disabled={!writable}
+          onClick={() => {
+            setPen((p) => (p === "draw" ? "off" : "draw"));
+          }}
+        >
+          Pen
+        </button>
+        {ink.length > 0 ? (
+          <button
+            type="button"
+            className={`map-tool${pen === "erase" ? " on" : ""}`}
+            title="Click a stroke to erase it (Esc to stop)"
+            aria-pressed={pen === "erase"}
+            disabled={!writable}
+            onClick={() => {
+              setPen((p) => (p === "erase" ? "off" : "erase"));
+            }}
+          >
+            Erase
+          </button>
+        ) : null}
         <span className="map-zoom quiet">{Math.round(v.z * 100)}%</span>
       </div>
     </div>
