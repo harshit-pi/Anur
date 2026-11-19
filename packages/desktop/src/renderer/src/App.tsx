@@ -19,7 +19,7 @@ import {
 import { ImageView } from "./regions/ImageView.tsx";
 import { SystemView } from "./regions/SystemView.tsx";
 import { TaskView } from "./regions/TaskView.tsx";
-import { taskIdOf, taskTab } from "./layout/task-report.ts";
+import { taskIdOf, taskTab, taskTitle, type TaskReport } from "./layout/task-report.ts";
 import { SYSTEM_TAB } from "./layout/system-levels.ts";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 import type { SaveStatus } from "./editor/autosave.ts";
@@ -286,6 +286,21 @@ export function App() {
       current = false;
     };
   }, [folderPath, settings]);
+  // Recent task reports, listed under System in the files panel (group 21).
+  const [recentTasks, setRecentTasks] = useState<TaskReport[]>([]);
+  useEffect(() => {
+    if (!engineeringOn) {
+      setRecentTasks([]);
+      return;
+    }
+    const read = () => {
+      void anur.call("tasks:list", {}).then((r) => {
+        setRecentTasks(r.reports.slice(0, 5));
+      });
+    };
+    read();
+    return anur.on("tasks:changed", read);
+  }, [engineeringOn, folderPath]);
   const openSystem = useCallback(() => {
     setTabs((t) => showSystem(t));
   }, []);
@@ -296,9 +311,15 @@ export function App() {
       setEngineeringOn(true);
       openSystem();
     };
+    // Undo on the notice: the System row goes at once.
+    const off = () => {
+      setEngineeringOn(false);
+    };
     window.addEventListener("anur:engineering-on", on);
+    window.addEventListener("anur:engineering-off", off);
     return () => {
       window.removeEventListener("anur:engineering-on", on);
+      window.removeEventListener("anur:engineering-off", off);
     };
   }, [openSystem]);
   const openDocNow = useRef<(path: string, inNewTab: boolean) => void>(() => undefined);
@@ -1155,7 +1176,8 @@ export function App() {
           setTabs((t) => newTab(t));
         }}
         onListTabs={listTabs}
-        view={doc && sections ? centerView : null}
+        view={selected === SYSTEM_TAB ? "map" : doc && sections ? centerView : null}
+        mapOnly={selected === SYSTEM_TAB}
         onView={setCenterView}
         onAsk={doc && sections ? ask : null}
       />
@@ -1174,11 +1196,25 @@ export function App() {
         onPlugins={() => {
           setSettings("core");
         }}
-        onSystem={engineeringOn ? openSystem : null}
-        systemOpen={selected === SYSTEM_TAB}
       />
       <LeftSidebar
         folder={shown}
+        system={
+          engineeringOn
+            ? {
+                open: selected === SYSTEM_TAB,
+                onOpen: openSystem,
+                tasks: recentTasks.map((r) => ({
+                  id: r.id,
+                  title: taskTitle(r),
+                  open: taskIdOf(selected) === r.id,
+                })),
+                onTask: (id) => {
+                  setTabs((t) => openInTab(t, taskTab(id), false));
+                },
+              }
+            : null
+        }
         selected={selected}
         onSelect={openDoc}
         hidden={!open.left}
@@ -1198,9 +1234,6 @@ export function App() {
               folder={folderPath}
               onPlugins={() => {
                 setSettings("core");
-              }}
-              onOpenTask={(id) => {
-                setTabs((t) => openInTab(t, taskTab(id), true));
               }}
             />
           ) : taskIdOf(selected) ? (
@@ -1282,16 +1315,21 @@ export function App() {
       <RightSidebar
         hidden={!open.right}
         think={
-          <Think
-            docPath={doc && sections ? doc.path : null}
-            docText={docText}
-            tree={sections}
-            section={sections?.sections[cursorSection] ?? sections?.sections[0] ?? null}
-            writable={folder?.mode === "writable" && doc?.mode === "editable"}
-            request={threadRequest}
-            onJump={jumpTo}
-            page={pageView}
-          />
+          selected === SYSTEM_TAB ? (
+            // The system's map fills this with recent tasks, a line's calls and its repos.
+            <div id="system-panel" className="system-panel" />
+          ) : (
+            <Think
+              docPath={doc && sections ? doc.path : null}
+              docText={docText}
+              tree={sections}
+              section={sections?.sections[cursorSection] ?? sections?.sections[0] ?? null}
+              writable={folder?.mode === "writable" && doc?.mode === "editable"}
+              request={threadRequest}
+              onJump={jumpTo}
+              page={pageView}
+            />
+          )
         }
       />
       <StatusBar

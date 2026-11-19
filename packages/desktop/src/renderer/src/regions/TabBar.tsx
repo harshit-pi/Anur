@@ -69,6 +69,7 @@ export function TabBar({
   onListTabs,
   view,
   onView,
+  mapOnly = false,
   onAsk,
 }: {
   open: Record<"left" | "right", boolean>;
@@ -80,6 +81,8 @@ export function TabBar({
   onListTabs: () => void;
   /** Page or Map; null while no doc is open. */
   view: "page" | "map" | null;
+  /** A tab that is only a map, such as the system: Page is shown but can't be picked. */
+  mapOnly?: boolean;
   onView: (view: "page" | "map") => void;
   /** Ask, the whole-doc thread (4.8); null with no doc open. */
   onAsk: (() => void) | null;
@@ -374,8 +377,14 @@ export function TabBar({
             role="radio"
             aria-checked={view === v}
             className={view === v ? "segment selected" : "segment"}
-            disabled={view === null}
-            title={v === "page" ? "Page (⇧⌘M)" : "Map (⇧⌘M)"}
+            disabled={view === null || (v === "page" && mapOnly)}
+            title={
+              v === "page" && mapOnly
+                ? "The system has no page: it's a map"
+                : v === "page"
+                  ? "Page (⇧⌘M)"
+                  : "Map (⇧⌘M)"
+            }
             onClick={() => {
               onView(v);
             }}

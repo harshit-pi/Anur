@@ -5159,3 +5159,140 @@ button.file-card-name:hover {
   border-color: var(--slate);
   border-radius: 8px;
 }
+
+/* The system's details in the right sidebar: tasks, a line's calls, its repos. */
+.system-panel {
+  height: 100%;
+  overflow: auto;
+}
+
+.system-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 2px 16px;
+  font-family: var(--font-ui);
+}
+
+.system-side .system-edges {
+  margin-top: 12px;
+}
+
+.system-side .edge-row {
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+}
+
+.system-side .edge-where {
+  grid-column: 1 / -1;
+}
+
+.system-side .edge-head {
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  font-size: 12.5px;
+}
+
+.system-side .repo-chooser ul {
+  columns: 1;
+}
+
+.system-row {
+  margin: 2px 0 6px;
+  padding-left: 8px;
+  font-weight: 500;
+}
+
+.system-row svg {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+
+.system-side .edge-label,
+.system-side .edge-where {
+  font-size: 11.5px;
+}
+
+/* Recent task reports under System in the files panel. */
+.system-tasks-tree {
+  margin: -4px 0 6px;
+  padding: 0;
+  list-style: none;
+}
+
+.task-row {
+  padding-left: 30px;
+  color: var(--slate);
+  font-size: 12.5px;
+}
+
+.system-side-note {
+  margin: 4px 2px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* A line's calls, in a card beside it on the map. */
+.line-card {
+  position: absolute;
+  z-index: 5;
+  width: 380px;
+  max-height: 320px;
+  overflow: auto;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: 0 10px 30px var(--shadow);
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+}
+
+.line-card-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--sheet);
+  font-weight: 600;
+}
+
+.line-card-close,
+.line-card-hide {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--graphite);
+  font: inherit;
+  cursor: pointer;
+}
+
+.line-card ul {
+  margin: 0;
+  padding: 4px 12px 8px;
+  list-style: none;
+}
+
+.line-card li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 6px 0;
+  border-top: 1px solid var(--rule);
+}
+
+.line-card li:first-child {
+  border-top: none;
+}
+
+.line-card .edge-where {
+  grid-column: 1 / -1;
+  font-size: 11px;
+}
+
+.line-card-hide {
+  color: var(--blue);
+}
