@@ -585,9 +585,15 @@ export function Think({
   request,
   onJump,
   page,
+  noun = "section",
+  extra = null,
 }: {
   /** The page's own view: the section's text is edited here through it. */
   page: () => EditorView | null;
+  /** What a section is called here: a doc's section, or a repo or part on the system map (29.1). */
+  noun?: string;
+  /** More of this section's context, under Context and history, such as a box's calls (29.8). */
+  extra?: React.ReactNode;
   docPath: string | null;
   docText: () => string;
   tree: SectionTree | null;
@@ -893,9 +899,9 @@ export function Think({
       const options = newChoices.map((o) => ({ id: o.id, value: o.current }));
       const shown =
         purpose === "build"
-          ? "Build this section"
+          ? `Build this ${noun}`
           : purpose === "check"
-            ? "Check this section"
+            ? `Check this ${noun}`
             : message;
       const placeholder: ThreadView = {
         id: `starting:${String(Date.now())}`,
@@ -2055,11 +2061,12 @@ export function Think({
             </ul>
           </details>
         ) : null}
+        {extra}
       </SectionFooter>
       {here.length === 0 && loading ? (
         <h3 className="think-subhead think-loading">Loading threads…</h3>
       ) : here.length === 0 ? (
-        <h3 className="think-subhead">No threads on this section yet</h3>
+        <h3 className="think-subhead">No threads on this {noun} yet</h3>
       ) : (
         <GroupedThreads threads={here} stateOf={stateOf} onOpen={setOpen} />
       )}
@@ -2105,7 +2112,7 @@ export function Think({
               ? "Threads need a folder Anur can write to"
               : section.index === 0
                 ? "What should we do with this doc?"
-                : "What should we do with this section?"
+                : `What should we do with this ${noun}?`
           }
           sendLabel={branch ? "Start branch" : "Start thread"}
           {...composerAttach}
@@ -2136,12 +2143,12 @@ export function Think({
           <button
             type="button"
             className="think-more"
-            title="The agent does what this section describes, with its own tools"
+            title={`The agent does what this ${noun} describes, with its own tools`}
             onClick={() => {
               void start("-", "build");
             }}
           >
-            Build this section
+            Build this {noun}
           </button>
           <button
             type="button"
@@ -2151,7 +2158,7 @@ export function Think({
               void start("-", "check");
             }}
           >
-            Check this section
+            Check this {noun}
           </button>
         </div>
       ) : null}

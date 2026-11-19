@@ -9,6 +9,9 @@ import { HomeVersions } from "../folder/home-versions.ts";
 import { execFileSync } from "node:child_process";
 import type { AgentHub } from "./hub.ts";
 import { Threads, appliesTo, linksIn, markDisputes, reachOf } from "./threads.ts";
+import { SYSTEM_DOC_ID, systemLocated } from "./system-doc.ts";
+import { shape as sysShape, boxes as sysBoxes } from "./system-doc.fixture.ts";
+import { SYSTEM_DOC, buildSectionTree, systemDocText, systemIndexOf } from "@anur/core";
 
 const DOC = `# Plan
 
@@ -1274,5 +1277,77 @@ describe("a thread that isn't open still reaches the committed copy", () => {
     });
     await again.t.decideFinding(r.thread.id, { id: f.id, status: "dropped", claim: null });
     expect(calls).toEqual(["keep plan.md section", "keep plan.md doc", "drop plan.md"]);
+  });
+});
+
+describe("a thread on a box of the system map (29.1)", () => {
+  it("starts a thread on a box, carrying what was decided there, and keeps a decision on the box's part", async () => {
+    const kept: unknown[] = [];
+    const {
+      threads: t,
+      sent,
+      reply,
+    } = await setup({
+      locate: (rel, text) => Promise.resolve(rel === SYSTEM_DOC ? systemLocated(text) : null),
+      relOf: (doc) => Promise.resolve(doc === SYSTEM_DOC_ID ? SYSTEM_DOC : null),
+      systemShape: () => sysShape,
+      committed: {
+        keep: () => Promise.resolve(null),
+        drop: () => Promise.resolve(),
+        keepFor: (dir, ref, entry, about) => {
+          kept.push({ dir, ref, kind: entry.kind, about });
+          return Promise.resolve("id");
+        },
+        collected: () =>
+          Promise.resolve([
+            {
+              id: "d-1",
+              at: "2026-11-18T10:00:00.000Z",
+              dev: "m",
+              seq: 0,
+              kind: "decision" as const,
+              scope: "edge:web/|api/|http|/v1/checkout",
+              ref: null,
+              on: "web → Checkout: /v1/checkout",
+              decision: "The API computes the total.",
+              quote: "x",
+              instead: null,
+              until: null,
+              who: "Priya",
+              person: "priya",
+              home: "web",
+            },
+          ]),
+      },
+    });
+    const text = systemDocText(sysBoxes);
+    const tree = buildSectionTree(text, { fileName: "System" });
+    const index = systemIndexOf(tree, text, "part:chk");
+    const section = { index, path: tree.sections[index]?.path ?? [] };
+    const r = await t.start(SYSTEM_DOC, text, section, "No, three retries, not infinite.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const prompt = sent.find((m) => m.type === "prompt");
+    const sentText = prompt?.type === "prompt" ? prompt.text : "";
+    expect(sentText).toContain("Checkout");
+    expect(sentText).toContain("The API computes the total.");
+    // Never a working copy of a doc that isn't a file.
+    expect(sentText).not.toContain("Your working copy");
+    const tool = (
+      t as unknown as {
+        tool: (th: string, n: string, args: unknown) => Promise<{ error?: string }>;
+      }
+    ).tool.bind(t);
+    await tool(r.thread.id, "anur_note_decision", {
+      quote: "No, three retries, not infinite.",
+      decision: "Three retries, not infinite.",
+      confidence: 0.9,
+    });
+    await reply(r.thread.id, "Noted.");
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({
+      dir: "api",
+      kind: "decision",
+      about: { kind: "part", scope: "part:chk", on: "Checkout", repo: "api", dir: "api/bin" },
+    });
   });
 });

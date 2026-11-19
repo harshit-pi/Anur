@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { anur } from "../bridge.ts";
 import { SystemMap } from "./SystemMap.tsx";
+import { SystemThink } from "./SystemThink.tsx";
 import {
   boxesAt,
   trailTo,
@@ -90,6 +91,8 @@ export function SystemView({
     lastRead && lastRead.folder === folder ? lastRead : { kind: "reading" },
   );
   const [at, setAt] = useState<string | null>(null);
+  /** The box picked on the map, which Think beside it follows (29.1). */
+  const [picked, setPicked] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   /** Frames opened on the map, and the line whose calls the list shows. */
@@ -369,6 +372,8 @@ export function SystemView({
               return next;
             });
           }}
+          selected={picked}
+          onSelect={setPicked}
           onCollapseAll={() => {
             setOpenFrames(new Set());
           }}
@@ -383,10 +388,14 @@ export function SystemView({
       {/* The right sidebar is for the agent on the map, which comes next. */}
       {slot
         ? createPortal(
-            <p className="quiet system-side-note">
-              The agent on the map will work here: ask about a repo or part, and it answers with
-              what the code shows.
-            </p>,
+            picked && all.some((x) => x.id === picked) ? (
+              <SystemThink sections={all} edges={shown.edges} selected={picked} writable />
+            ) : (
+              <p className="quiet system-side-note">
+                Pick a repo or part on the map to start a thread on it, and to see what people
+                decided there.
+              </p>
+            ),
             slot,
           )
         : null}

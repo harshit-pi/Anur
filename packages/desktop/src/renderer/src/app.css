@@ -5487,3 +5487,17 @@ button.file-card-name:hover {
 .think-lapsed-why {
   color: var(--amber);
 }
+
+/* The box Think follows, picked on the map (29.1). */
+.map-node.selected {
+  box-shadow:
+    0 0 0 3px var(--blue-wash, #e8eefc),
+    0 0 0 5px var(--blue);
+}
+
+.system-call-decided {
+  margin-left: auto;
+  color: var(--blue);
+  font-size: 12px;
+  white-space: nowrap;
+}
