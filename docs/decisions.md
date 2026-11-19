@@ -321,3 +321,11 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - The report's calls come from edges: a changed file holding a call says what it calls. It names every call in the file, not only the changed lines, for now.
 - Anur's own questions to the agent, such as naming groups, carry a mark, and the hook skips them: they aren't tasks.
 - On the team's `~/workspace`: 67 found edges from PiTrade to PiAuthService and 5 outside services, none guessed, in 1.7 s.
+
+## Less by hand in the System tab
+
+- Ask only when unsure. A found edge needs nothing from the person: no Confirm; Hide sits behind a "⋯" for the rare wrong line. A guessed edge, where several repos declare the route, asks one question, "Is it X?"; Yes keeps it and hides the other candidates.
+- Claude's group names and merges apply on their own: a group name is only a view, never an ID, and any group can be renamed on hover. Accept, Keep, "unreviewed" counts and Mark reviewed are gone.
+- One system per GitHub owner: when a folder holds repos of several owners, the top level is a box per owner (pitrade-official, HiAnur…), "No remote" last; a map will be drawn per owner.
+- "Choose repos" lists every repo found; one left out isn't scanned, watched, marked for tasks or joined by edges, saved per folder in `.anur/system/review.jsonl`.
+- Main keeps each folder's last read until a watcher or the review changes it, and the tab draws its last read at once, so switching back to System no longer shows "Reading the repos…".

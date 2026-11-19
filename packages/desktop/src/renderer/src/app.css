@@ -2081,6 +2081,32 @@ body.resizing * {
   font-size: 13px;
 }
 
+/* Choosing the repos in a folder's system. */
+.repo-chooser {
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  font-size: 13px;
+}
+
+.repo-chooser p {
+  margin: 0 0 8px;
+}
+
+.repo-chooser ul {
+  columns: 3 180px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.repo-chooser li {
+  padding: 2px 0;
+  break-inside: avoid;
+}
+
 /* Lines between repos (group 22). */
 .system-edges {
   margin-top: 28px;
@@ -2171,8 +2197,18 @@ body.resizing * {
   cursor: pointer;
 }
 
-.edge-guessed {
+.edge-ask {
   color: var(--amber);
+}
+
+.edge-acts .edge-more {
+  color: var(--graphite);
+  opacity: 0;
+}
+
+.edge-row:hover .edge-more,
+.edge-more:focus-visible {
+  opacity: 1;
 }
 
 .edge-ok {

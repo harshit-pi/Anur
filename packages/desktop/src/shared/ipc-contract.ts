@@ -577,6 +577,8 @@ export const ipcContract = {
       z.object({ kind: z.literal("off") }),
       z.object({
         kind: z.literal("ok"),
+        /** The folder this read is of, so a tab can keep it for that folder only. */
+        folder: z.string(),
         sections: z.array(
           z.object({
             id: z.string(),
@@ -599,6 +601,8 @@ export const ipcContract = {
             state: z.enum(["shown", "hidden", "confirmed"]),
           }),
         ),
+        /** Every repo found in the folder, and whether it's in the system (the person's choice). */
+        repos: z.array(z.object({ dir: z.string(), included: z.boolean() })),
         /** What each edge detector can't see. */
         misses: z.array(z.object({ detector: z.string(), misses: z.array(z.string()) })),
         /** Claude's proposals waiting on the person, and the parts they have seen (20.6). */
@@ -614,6 +618,11 @@ export const ipcContract = {
       }),
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
+  },
+  /** Leave a repo out of this folder's system, or put it back; nothing reads a left-out repo. */
+  "system:repo": {
+    request: z.object({ repo: z.string().max(4096), include: z.boolean() }).strict(),
+    response: z.object({ ok: z.boolean() }),
   },
   /** Hide an edge, show it again, or confirm it (22.3); kept across rescans. */
   "system:edge": {

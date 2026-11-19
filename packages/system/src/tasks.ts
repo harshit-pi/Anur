@@ -10,7 +10,7 @@ import { execFile, execFileSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { findRepoDirs } from "./repos.ts";
+import { includedRepoDirs } from "./review.ts";
 import type { Part } from "./parts.ts";
 
 export type Category = "data" | "auth" | "calls" | "ui" | "other";
@@ -113,7 +113,7 @@ export async function markTaskAsync(
   session: string,
   prompt: string,
 ): Promise<TaskMark> {
-  const dirs = findRepoDirs(folder);
+  const dirs = includedRepoDirs(folder);
   const repos: RepoMark[] = new Array<RepoMark>(dirs.length);
   let next = 0;
   // Eight at a time: enough to hide git's start-up, few enough not to flood the Mac.
@@ -199,7 +199,7 @@ export function markTask(folder: string, session: string, prompt: string): TaskM
     at: new Date().toISOString(),
     session,
     prompt: prompt.slice(0, 300),
-    repos: findRepoDirs(folder).map((dir) => markRepo(folder, dir)),
+    repos: includedRepoDirs(folder).map((dir) => markRepo(folder, dir)),
   };
 }
 
@@ -307,7 +307,7 @@ export function reportSince(
 ): TaskReport | null {
   const lines: ReportLine[] = [];
   const repos: TaskReport["repos"] = [];
-  for (const dir of findRepoDirs(folder)) {
+  for (const dir of includedRepoDirs(folder)) {
     const repo = path.join(folder, dir);
     const before = mark.repos.find((r) => r.dir === dir) ?? { dir, head: null, dirty: {} };
     const now = nowMarks?.find((m) => m.dir === dir) ?? markRepo(folder, dir);

@@ -8,6 +8,7 @@
 import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { INTERNAL_MARK } from "./choices.ts";
+import { findRepoDirs } from "./repos.ts";
 import type { PartGroup } from "./groups.ts";
 
 export type ReviewLine =
@@ -19,7 +20,10 @@ export type ReviewLine =
   /** An edge a person hid, showed again, or confirmed (22.3), by its stable ID. */
   | { kind: "edge-hidden"; edge: string; at: string }
   | { kind: "edge-shown"; edge: string; at: string }
-  | { kind: "edge-confirmed"; edge: string; at: string };
+  | { kind: "edge-confirmed"; edge: string; at: string }
+  /** A repo left out of this folder's system, or put back (by its folder, relative). */
+  | { kind: "repo-excluded"; repo: string; at: string }
+  | { kind: "repo-included"; repo: string; at: string };
 
 export const reviewFile = (folder: string) => path.join(folder, ".anur", "system", "review.jsonl");
 
@@ -76,6 +80,7 @@ export function reviewState(lines: readonly ReviewLine[]): ReviewState {
   const hiddenEdges = new Set<string>();
   const confirmedEdges = new Set<string>();
   for (const l of lines) {
+    if (l.kind === "repo-excluded" || l.kind === "repo-included") continue;
     if (l.kind === "edge-hidden" || l.kind === "edge-shown" || l.kind === "edge-confirmed") {
       if (l.kind === "edge-hidden") hiddenEdges.add(l.edge);
       else hiddenEdges.delete(l.edge);
@@ -101,6 +106,12 @@ export function reviewState(lines: readonly ReviewLine[]): ReviewState {
     if (how === "accepted" && merge.length) merges.set(g, merge);
   }
   const pending = [...proposals.values()].filter((p) => !settled.has(p.group));
+  // Claude's names apply on their own: a group name is only a view, never an ID,
+  // and any can be renamed. A person's rename or "keep" is the last word.
+  for (const p of pending) {
+    names.set(p.group, p.name);
+    if (p.merge.length) merges.set(p.group, p.merge);
+  }
   return {
     names,
     merges,
@@ -199,4 +210,19 @@ export function parseProposals(reply: string, known: ReadonlySet<string>): Propo
     out.push({ group: id, name: clean, merge: others });
   }
   return out;
+}
+
+/** Repos the person left out of this folder's system; the last word on each wins. */
+export function excludedRepos(folder: string): Set<string> {
+  const out = new Set<string>();
+  for (const l of readReview(folder))
+    if (l.kind === "repo-excluded") out.add(l.repo);
+    else if (l.kind === "repo-included") out.delete(l.repo);
+  return out;
+}
+
+/** The repos in the folder's system: every repo found, less those left out. */
+export function includedRepoDirs(folder: string): string[] {
+  const out = excludedRepos(folder);
+  return findRepoDirs(folder).filter((d) => !out.has(d));
 }

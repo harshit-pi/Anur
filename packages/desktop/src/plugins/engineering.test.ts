@@ -66,3 +66,30 @@ describe("a repo with many parts opens one level at a time (group 20)", () => {
     expect(parts.every((s) => s.path.length === 2)).toBe(true);
   });
 });
+
+describe("one system per GitHub owner", () => {
+  it("puts repos under their owner when the folder holds several", async () => {
+    const { makeRepo } = await import("../../../system/src/fixtures.ts");
+    const dir = mkdtempSync(path.join(tmpdir(), "anur-eng-"));
+    makeRepo(
+      path.join(dir, "app"),
+      { "package.json": '{"name":"app"}' },
+      "git@github.com:pitrade-official/app.git",
+    );
+    makeRepo(
+      path.join(dir, "anur"),
+      { "package.json": '{"name":"anur"}' },
+      "https://github.com/HiAnur/anur.git",
+    );
+    makeRepo(path.join(dir, "scratch"), { "package.json": '{"name":"scratch"}' }, null);
+    const s = systemSections(dir);
+    expect(s.filter((x) => x.parent === null).map((x) => x.path[0])).toEqual([
+      "HiAnur",
+      "pitrade-official",
+      "No remote",
+    ]);
+    expect(s.find((x) => x.path[0] === "app" && x.id.startsWith("repo:"))?.parent).toBe(
+      "org:pitrade-official",
+    );
+  });
+});

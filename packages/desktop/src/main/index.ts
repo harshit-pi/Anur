@@ -104,11 +104,12 @@ import { folderFor } from "./open-file.ts";
 import { offerMoveToApplications } from "./move-to-applications.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
 import { IndexProcess, indexEntry } from "./index-process/client.ts";
+import type { FolderRead } from "./index-process/protocol.ts";
 import { TaskHooks } from "./claude-plugin/task-hooks.ts";
 import { ReportWatch, listReports, readReport } from "./task-reports.ts";
 import { codeRepos } from "./engineering-offer.ts";
 import { SystemReview } from "./system-review.ts";
-import { appendReview, readReview, reviewState } from "@anur/system";
+import { appendReview, excludedRepos, findRepoDirs, readReview, reviewState } from "@anur/system";
 import { AgentChoices } from "./threads/agent-choices.ts";
 import { AnurSocket } from "./threads/anur-socket.ts";
 import { Threads } from "./threads/threads.ts";
@@ -175,7 +176,13 @@ function versionsFor(folder: FolderState): SectionVersions | null {
   return v;
 }
 /** The index process, where plugins read folders; started when first asked (group 20). */
+/**
+ * The last read of each folder's system, so the System tab opens at once:
+ * kept until a watcher sees a change or the person's review changes.
+ */
+const systemReads = new Map<string, { plugins: string; read: Promise<FolderRead> }>();
 const systemChanged = (changed: string) => {
+  systemReads.delete(changed);
   for (const win of windows.values())
     if (folders.current(win.webContents.id)?.path === changed) send(win, "system:changed", {});
 };
@@ -898,11 +905,20 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const on = folder ? pluginsOn(folder.path) : [];
     if (!folder || !on.includes("engineering")) return { kind: "off" };
     try {
-      const read = await indexProcess.sections(folder.path, on);
+      const key = on.join(",");
+      let cached = systemReads.get(folder.path);
+      if (cached?.plugins !== key) {
+        cached = { plugins: key, read: indexProcess.sections(folder.path, on) };
+        systemReads.set(folder.path, cached);
+        // A failed read is read again next time, not kept.
+        cached.read.catch(() => systemReads.delete(folder.path));
+      }
+      const read = await cached.read;
       const sections = read.sources.flatMap((s) => s.sections);
       const edgeState = reviewState(readReview(folder.path));
       return {
         kind: "ok",
+        folder: folder.path,
         sections,
         edges: read.edges.map((e) => ({
           ...e,
@@ -913,6 +929,10 @@ const handlers: { [C in Channel]: Handler<C> } = {
               : ("shown" as const),
         })),
         misses: read.misses,
+        repos: (() => {
+          const out = excludedRepos(folder.path);
+          return findRepoDirs(folder.path).map((dir) => ({ dir, included: !out.has(dir) }));
+        })(),
         review: systemReview.view(folder.path, sections, (prompt) => {
           const t = threadsFor(folder);
           return t ? t.askOnce(prompt) : null;
@@ -921,6 +941,15 @@ const handlers: { [C in Channel]: Handler<C> } = {
     } catch (e) {
       return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
     }
+  },
+  "system:repo": ({ repo, include }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || !pluginsOn(folder.path).includes("engineering")) return { ok: false };
+    appendReview(folder.path, [
+      { kind: include ? "repo-included" : "repo-excluded", repo, at: new Date().toISOString() },
+    ]);
+    systemChanged(folder.path);
+    return { ok: true };
   },
   "system:edge": ({ edge, action }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

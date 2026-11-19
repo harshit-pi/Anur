@@ -23,6 +23,8 @@ export { MAX, groupParts, wordsOf, type PartGroup } from "./groups.ts";
 export { mattersForParts, watchSystem } from "./watch.ts";
 export {
   appendReview,
+  excludedRepos,
+  includedRepoDirs,
   applyReview,
   parseProposals,
   proposalPrompt,

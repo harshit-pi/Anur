@@ -3,9 +3,9 @@ import { anur } from "../bridge.ts";
 import { taskTitle, type TaskReport } from "../layout/task-report.ts";
 import {
   boxesAt,
-  partIdsUnder,
   trailTo,
   edgeGroups,
+  endName,
   type SystemBox,
   type SystemEdge,
   type SystemSection,
@@ -52,10 +52,12 @@ type Shown =
   | { kind: "failed"; reason: string }
   | {
       kind: "ok";
+      folder: string;
       sections: SystemSection[];
       review: Review;
       edges: SystemEdge[];
       misses: { detector: string; misses: string[] }[];
+      repos: { dir: string; included: boolean }[];
     };
 
 /**
@@ -100,19 +102,28 @@ function RecentTasks({ onOpen }: { onOpen: (id: string) => void }) {
   );
 }
 
+/** The last read, kept while the tab is closed, so coming back draws it at once. */
+let lastRead: Extract<Shown, { kind: "ok" }> | null = null;
+
 export function SystemView({
+  folder,
   onPlugins,
   onOpenTask,
 }: {
+  folder: string | null;
   onPlugins: () => void;
   onOpenTask: (id: string) => void;
 }) {
-  const [shown, setShown] = useState<Shown>({ kind: "reading" });
+  const [shown, setShown] = useState<Shown>(() =>
+    lastRead && lastRead.folder === folder ? lastRead : { kind: "reading" },
+  );
   const [at, setAt] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [choosing, setChoosing] = useState(false);
   const read = useCallback(() => {
     setShown((s) => (s.kind === "ok" ? s : { kind: "reading" }));
     void anur.call("system:sections", {}).then((r) => {
+      if (r.kind === "ok") lastRead = r;
       setShown(r);
     });
   }, []);
@@ -144,27 +155,13 @@ export function SystemView({
 
   const all = shown.sections;
   const { review } = shown;
-  const reviewed = new Set(review.reviewed);
   // A level that vanished on a rescan or a merge goes back to the top.
   const level = at && all.some((s) => s.id === at) ? at : null;
   const trail = trailTo(all, level);
-  const boxes = boxesAt(all, level, reviewed);
-  const nameOf = (id: string) => all.find((s) => s.id === id)?.path.at(-1) ?? id;
-  const unseen = [...new Set(boxes.flatMap((b) => b.parts))].filter((p) => !reviewed.has(p));
-  const decide = (
-    b: SystemBox,
-    action: "accept" | "rename" | "dismiss",
-    name?: string,
-    merge: string[] = [],
-  ) => {
-    // Accepting or renaming counts the group's parts as seen, a merge's too.
-    const parts = [...b.parts, ...merge.flatMap((m) => partIdsUnder(all, m))];
-    void anur.call("system:decide", {
-      group: b.id,
-      action,
-      ...(name ? { name } : {}),
-      parts: action === "dismiss" ? [] : parts,
-    });
+  const boxes = boxesAt(all, level);
+  // Group names apply on their own, Claude's or the rule's; a rename is the person's last word.
+  const rename = (b: SystemBox, name: string) => {
+    void anur.call("system:decide", { group: b.id, action: "rename", name, parts: [] });
   };
 
   return (
@@ -202,28 +199,24 @@ export function SystemView({
           </span>
         ))}
         <span className="system-actions">
-          {unseen.length ? (
+          {level ? null : (
             <button
               type="button"
-              title={
-                level
-                  ? "Count every part on this level as seen"
-                  : "Count every part in every repo as seen"
-              }
+              aria-expanded={choosing}
+              title="Choose which repos are part of this folder's system"
               onClick={() => {
-                void anur.call("system:reviewed", { parts: unseen });
+                setChoosing((c) => !c);
               }}
             >
-              {level
-                ? `Mark ${String(unseen.length)} reviewed`
-                : `Mark all ${String(unseen.length)} reviewed`}
+              Choose repos
             </button>
-          ) : null}
+          )}
           <button type="button" title="Read the repos again" onClick={read}>
             Rescan
           </button>
         </span>
       </nav>
+      {choosing && !level ? <RepoChooser repos={shown.repos} /> : null}
       {level ? null : <RecentTasks onOpen={onOpenTask} />}
       {review.asking ? (
         <Asking since={review.askingSince} />
@@ -246,27 +239,13 @@ export function SystemView({
       ) : (
         <div className="system-grid">
           {boxes.map((b) => {
-            const proposal = review.pending.find((p) => p.group === b.id);
-            const line =
-              b.kind === "part" ? (
-                <span className="system-line">
-                  {b.line}
-                  {b.unreviewed ? <span className="system-tag">unreviewed</span> : null}
-                </span>
-              ) : (
-                <span className="system-line">
-                  {b.line}
-                  {b.unreviewed ? (
-                    <span className="system-unseen"> · {b.unreviewed} unreviewed</span>
-                  ) : null}
-                </span>
-              );
+            const line = <span className="system-line">{b.line}</span>;
             const name =
               renaming === b.id ? (
                 <input
                   className="system-rename"
                   aria-label={`New name for ${b.name}`}
-                  defaultValue={proposal?.name ?? b.name}
+                  defaultValue={b.name}
                   autoFocus
                   maxLength={60}
                   onKeyDown={(e) => {
@@ -274,7 +253,7 @@ export function SystemView({
                     if (e.key !== "Enter") return;
                     const next = e.currentTarget.value.trim();
                     setRenaming(null);
-                    if (next && next !== b.name) decide(b, "rename", next);
+                    if (next && next !== b.name) rename(b, next);
                   }}
                   onBlur={() => {
                     setRenaming(null);
@@ -305,43 +284,7 @@ export function SystemView({
                     {line}
                   </>
                 )}
-                {proposal ? (
-                  <div className="system-proposal">
-                    <span>
-                      Claude: “{proposal.name}”
-                      {proposal.merge.length
-                        ? `, with ${proposal.merge.map(nameOf).join(", ")}`
-                        : ""}
-                    </span>
-                    <span className="system-proposal-actions">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          decide(b, "accept", undefined, proposal.merge);
-                        }}
-                      >
-                        Accept
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRenaming(b.id);
-                        }}
-                      >
-                        Rename
-                      </button>
-                      <button
-                        type="button"
-                        title={`Keep the name ${b.name}`}
-                        onClick={() => {
-                          decide(b, "dismiss");
-                        }}
-                      >
-                        Keep
-                      </button>
-                    </span>
-                  </div>
-                ) : b.kind === "group" && renaming !== b.id ? (
+                {b.kind === "group" && renaming !== b.id ? (
                   <button
                     type="button"
                     className="system-rename-link"
@@ -385,6 +328,7 @@ function EdgeList({
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
+  const [menu, setMenu] = useState<string | null>(null);
   const live = edges.filter((e) => e.state !== "hidden");
   const hidden = edges.filter((e) => e.state === "hidden");
   const groups = edgeGroups(sections, showHidden ? edges : live, within);
@@ -426,27 +370,66 @@ function EdgeList({
                     {e.declared ? <span className="quiet"> → {e.declared}</span> : null}
                   </span>
                   <span className="edge-acts">
-                    {e.how === "guessed" ? <span className="edge-guessed">guessed</span> : null}
-                    {e.state === "confirmed" ? (
-                      <span className="edge-ok">✓ confirmed</span>
-                    ) : e.state === "shown" ? (
+                    {e.how === "guessed" && e.state === "shown" ? (
+                      // Several repos declare this route: the one thing worth asking.
+                      <span className="edge-ask">
+                        Is it {endName(sections, e.to).name}?{" "}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            act(e.id, "confirm");
+                            for (const o of edges)
+                              if (
+                                o.id !== e.id &&
+                                o.from === e.from &&
+                                o.evidence === e.evidence &&
+                                o.how === "guessed"
+                              )
+                                act(o.id, "hide");
+                          }}
+                        >
+                          Yes
+                        </button>{" "}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            act(e.id, "hide");
+                          }}
+                        >
+                          No
+                        </button>
+                      </span>
+                    ) : e.state === "hidden" ? (
                       <button
                         type="button"
                         onClick={() => {
-                          act(e.id, "confirm");
+                          act(e.id, "show");
                         }}
                       >
-                        Confirm
+                        Show
                       </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        act(e.id, e.state === "hidden" ? "show" : "hide");
-                      }}
-                    >
-                      {e.state === "hidden" ? "Show" : "Hide"}
-                    </button>
+                    ) : menu === e.id ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenu(null);
+                          act(e.id, "hide");
+                        }}
+                      >
+                        Hide this line
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="edge-more"
+                        aria-label="More for this line"
+                        onClick={() => {
+                          setMenu(e.id);
+                        }}
+                      >
+                        ⋯
+                      </button>
+                    )}
                   </span>
                 </li>
               ))}
@@ -469,6 +452,37 @@ function EdgeList({
         {hidden.length ? " · " : null}
         Found from HTTP calls in code. Misses {misses.join("; ")}.
       </p>
+    </section>
+  );
+}
+
+/**
+ * Which repos are part of this folder's system: all by default; one left out
+ * isn't scanned, watched, marked for tasks, or joined by edges.
+ */
+function RepoChooser({ repos }: { repos: { dir: string; included: boolean }[] }) {
+  const inCount = repos.filter((r) => r.included).length;
+  return (
+    <section className="repo-chooser" aria-label="Repos in this folder's system">
+      <p className="quiet">
+        {inCount} of {repos.length} repos are in this folder's system. Untick one to leave it out.
+      </p>
+      <ul>
+        {repos.map((r) => (
+          <li key={r.dir}>
+            <label>
+              <input
+                type="checkbox"
+                checked={r.included}
+                onChange={(e) => {
+                  void anur.call("system:repo", { repo: r.dir, include: e.currentTarget.checked });
+                }}
+              />{" "}
+              {r.dir}
+            </label>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
