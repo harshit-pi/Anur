@@ -110,6 +110,84 @@ describe("AWS resources from CDK source (22.6)", () => {
     ]);
   });
 
+  it("puts each resource in its stack when the app doesn't name it, through constructs, nested stacks and base classes", () => {
+    const dir = tmp();
+    makeRepo(
+      path.join(dir, "pay"),
+      {
+        "package.json": '{"name":"pay"}',
+        "cdk.json": '{"app":"npx ts-node bin/app.ts"}',
+        "bin/app.ts": [
+          "const app = new cdk.App();",
+          'new PaymentsStack(app, "Payments", { env });',
+        ].join("\n"),
+        "lib/payments.ts": [
+          'import * as lambda from "aws-cdk-lib/aws-lambda";',
+          "export class PaymentsStack extends Stack {",
+          "  constructor(scope: Construct, id: string) {",
+          "    super(scope, id);",
+          '    new lambda.Function(this, "Charge", { functionName: "Charge" });',
+          '    new Refunds(this, "Refunds");',
+          "  }",
+          "}",
+        ].join("\n"),
+        "lib/refunds.ts": [
+          'import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";',
+          "export class Refunds extends Construct {",
+          "  constructor(scope: Construct, id: string) {",
+          "    super(scope, id);",
+          '    const fn = new NodejsFunction(this, "Refund", { functionName: "Refund" });',
+          "  }",
+          "}",
+        ].join("\n"),
+      },
+      null,
+    );
+    makeRepo(
+      path.join(dir, "auth"),
+      {
+        "cdk.json": '{"app":"python3 app.py"}',
+        "app.py": ["app = cdk.App()", 'AuthStack(app, "Auth")', "app.synth()"].join("\n"),
+        "lib/auth.py": [
+          "from aws_cdk import Stack",
+          "class AuthStack(Stack):",
+          "    def __init__(self, scope, id, **kwargs):",
+          "        super().__init__(scope, id, **kwargs)",
+          '        PublicApi(self, "PublicApi")',
+          '        UserApi(self, "UserApi")',
+        ].join("\n"),
+        "lib/public_api.py": [
+          "from aws_cdk import NestedStack, aws_lambda as _lambda",
+          "class PublicApi(NestedStack):",
+          "    def __init__(self, scope, id):",
+          "        super().__init__(scope, id)",
+          '        _lambda.Function(self, "SignIn", function_name="SignIn")',
+        ].join("\n"),
+        "lib/base.py": [
+          "from aws_cdk import NestedStack, aws_lambda as _lambda",
+          "class ApiBase(NestedStack):",
+          "    def add_health(self):",
+          '        _lambda.Function(self, "Health", function_name="Health")',
+          "class UserApi(ApiBase):",
+          "    pass",
+        ].join("\n"),
+      },
+      null,
+    );
+    expect(awsIn(dir, "pay").resources.map((r) => [r.key, r.stacks])).toEqual([
+      ["function:Charge", ["Payments"]],
+      ["function:Refund", ["Payments"]],
+    ]);
+    expect(
+      awsIn(dir, "auth")
+        .resources.map((r) => [r.key, r.stacks])
+        .sort(),
+    ).toEqual([
+      ["function:Health", ["Auth"]],
+      ["function:SignIn", ["Auth"]],
+    ]);
+  });
+
   it("joins a Python repo's import to the table another repo creates, and drops a bare use beside a grant", () => {
     const dir = tmp();
     shop(dir);

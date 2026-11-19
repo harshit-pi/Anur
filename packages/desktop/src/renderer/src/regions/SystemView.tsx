@@ -173,7 +173,7 @@ export function SystemView({
   };
 
   return (
-    <div className="system-view">
+    <div className={`system-view${showOwners ? "" : " whole"}`}>
       <nav className="system-trail" aria-label="Where you are">
         {level || frameTrail.length ? (
           <button
@@ -352,8 +352,14 @@ export function SystemView({
               return next;
             });
           }}
+          onCollapseAll={() => {
+            setOpenFrames(new Set());
+          }}
           onHide={(edge) => {
             void anur.call("system:edge", { edge, action: "hide" });
+          }}
+          onShow={(edge) => {
+            void anur.call("system:edge", { edge, action: "show" });
           }}
         />
       )}

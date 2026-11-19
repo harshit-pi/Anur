@@ -17,6 +17,7 @@ export const AWS_MISSES = [
   "resource names built at run time",
   "resources made by a team's own helper functions",
   "stacks wired outside the CDK app file",
+  "a class made by a factory function rather than `new`",
 ];
 
 export type AwsKind = "function" | "table" | "queue" | "topic" | "bucket";
@@ -152,6 +153,15 @@ export function awsIn(folder: string, dir: string): { resources: AwsResource[]; 
   const uses: AwsUse[] = [];
   const reads: FileRead[] = [];
   const rel = (f: string) => path.posix.join(dir, f);
+  /** The classes each resource is created in. */
+  const madeIn = new Map<string, Set<string>>();
+  /** Inside which classes each class is used: created there, or extended by it. */
+  const usedIn = new Map<string, Set<string>>();
+  const note = (m: Map<string, Set<string>>, k: string, v: string) => {
+    let set = m.get(k);
+    if (!set) m.set(k, (set = new Set()));
+    set.add(v);
+  };
 
   const add = (r: Omit<AwsResource, "stacks">): string => {
     const existing = resources.get(r.key);
@@ -181,11 +191,18 @@ export function awsIn(folder: string, dir: string): { resources: AwsResource[]; 
     };
     for (const m of text.matchAll(
       py ? /^class\s+(\w+)\s*\(([^)]*)\)/gm : /\bclass\s+(\w+)\s+extends\s+([\w.]+)/g,
-    ))
-      if (m[1] && /Stack|Construct/.test(m[2] ?? "")) {
+    )) {
+      if (!m[1]) continue;
+      // A subclass holds what its base class creates, whatever the base is called.
+      for (const base of (m[2] ?? "").split(",")) {
+        const b = base.trim().split(".").at(-1) ?? "";
+        if (b && b !== m[1]) note(usedIn, b, m[1]);
+      }
+      if (/Stack|Construct/.test(m[2] ?? "")) {
         read.classAt.push({ name: m[1], at: m.index });
         read.classes.set(m[1], new Map());
       }
+    }
     const classOf = (i: number) => read.classAt.filter((c) => c.at <= i).at(-1)?.name ?? "";
     const varsOf = (cls: string) => {
       let v = read.vars.get(cls);
@@ -232,6 +249,7 @@ export function awsIn(folder: string, dir: string): { resources: AwsResource[]; 
       const physical = NAME_PROP[kind].exec(args)?.[1] ?? null;
       const cls = classOf(m.index);
       const key = physical ? `${kind}:${physical}` : `${kind}:${dir}/${cls}/${m[2] ?? ""}`;
+      if (cls) note(madeIn, key, cls);
       add({
         key,
         repo: dir,
@@ -363,6 +381,15 @@ export function awsIn(folder: string, dir: string): { resources: AwsResource[]; 
         },
       });
     }
+    // A class created inside another, as a nested stack or a construct, is part of it.
+    for (const m of text.matchAll(
+      py
+        ? /(?<![\w.])([A-Z]\w*)\(\s*[\w.]+\s*,\s*f?["']/g
+        : /\bnew\s+(?:\w+\.)?([A-Z]\w*)\s*\(\s*[\w.]+\s*,\s*["'\x60]/g,
+    )) {
+      const parent = classOf(m.index);
+      if (m[1] && parent && m[1] !== parent) note(usedIn, m[1], parent);
+    }
     reads.push(read);
   }
 
@@ -370,24 +397,22 @@ export function awsIn(folder: string, dir: string): { resources: AwsResource[]; 
   const instances = appWiring(repo);
   const classIndex = new Map<string, FileRead>();
   for (const r of reads) for (const c of r.classes.keys()) classIndex.set(c, r);
-  for (const inst of instances) {
-    const r = classIndex.get(inst.cls);
-    const fields = r?.classes.get(inst.cls);
-    for (const key of fields?.values() ?? []) {
-      const res = resources.get(key);
-      if (res && res.created && !res.stacks.includes(inst.id)) res.stacks.push(inst.id);
-    }
+  // A resource is in every stack its class ends up in: created by the app
+  // file as a stack, or used inside a class that is, through nested stacks,
+  // constructs and subclasses.
+  const stacksOf = (cls: string, seen = new Set<string>()): string[] => {
+    if (seen.has(cls)) return [];
+    seen.add(cls);
+    const out = instances.filter((i) => i.cls === cls).map((i) => i.id);
+    for (const outer of usedIn.get(cls) ?? []) out.push(...stacksOf(outer, seen));
+    return out;
+  };
+  for (const [key, classes] of madeIn) {
+    const res = resources.get(key);
+    if (!res?.created) continue;
+    for (const cls of classes)
+      for (const id of stacksOf(cls)) if (!res.stacks.includes(id)) res.stacks.push(id);
   }
-  // Resources made in a class's own file but not held in a field still belong to its stacks.
-  for (const r of reads)
-    for (const v of r.vars.values())
-      for (const { key } of v.values()) {
-        const res = resources.get(key);
-        if (!res || !res.created || res.stacks.length || res.file !== rel(r.file)) continue;
-        const cls = r.classAt.at(0)?.name;
-        for (const inst of instances)
-          if (inst.cls === cls && !res.stacks.includes(inst.id)) res.stacks.push(inst.id);
-      }
 
   const resolve = (r: FileRead, cls: string, expr: string): string[] => {
     const e = expr.replace(/\?/g, "").replace(/!$/, "");
@@ -447,15 +472,16 @@ export function appWiring(repo: string): Instance[] {
     return [];
   }
   const out: Instance[] = [];
+  // `const v = new C(app, "Id")`, or with no variable: `new C(app, "Id")`.
   for (const m of text.matchAll(
-    /(?:(?:const|let|var)\s+)?(\w+)\s*=\s*(?:new\s+)?(\w+)\s*\(\s*\w+\s*,\s*f?["'`]([^"'`]+)["'`]/g,
+    /(?:(?:(?:const|let|var)\s+)?(\w+)\s*=\s*)?(?:new\s+)?(?<![\w.])([A-Z]\w*)\s*\(\s*\w+\s*,\s*f?["'`]([^"'`]+)["'`]/g,
   )) {
-    if (!m[1] || !m[2] || !m[3]) continue;
+    if (!m[2] || !m[3]) continue;
     const args = callArgs(text, text.indexOf("(", m.index + m[0].indexOf(m[2])));
     const props = new Map<string, { v: string; field: string }>();
     for (const p of args.matchAll(/\b(\w+)\s*[:=]\s*(\w+)\.(\w+)\b(?!\s*\()/g))
       if (p[1] && p[2] && p[3]) props.set(p[1], { v: p[2], field: p[3] });
-    out.push({ v: m[1], cls: m[2], id: m[3], props });
+    out.push({ v: m[1] ?? "", cls: m[2], id: m[3], props });
   }
   return out;
 }
