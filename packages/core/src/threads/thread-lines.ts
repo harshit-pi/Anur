@@ -29,6 +29,14 @@ export const ThreadStartLine = LineEnvelope.extend({
   branchedFrom: z.object({ thread: ThreadId, line: z.string() }).nullable(),
   /** An action thread (group 15): build the section, or check it; absent for thinking. */
   purpose: z.enum(["build", "check"]).optional(),
+  /**
+   * A thread exploring one option another thread offered: it starts clean,
+   * with that option and the options it narrows, never the ones passed over.
+   */
+  explores: z
+    .object({ thread: ThreadId, option: z.string().min(1) })
+    .nullable()
+    .optional(),
 });
 
 /** An agent session this thread runs in; a new line each time one starts, resumes or is rebuilt. */

@@ -320,6 +320,8 @@ export const ThreadView = z.object({
     .nullable(),
   /** An action thread (group 15), or null for thinking. */
   purpose: z.enum(["build", "check"]).nullable(),
+  /** The option this thread explores: another thread's, which it hangs off on the map. */
+  explores: z.object({ thread: z.string(), option: z.string() }).nullable().optional(),
   /**
    * An action's state on the map (Mock 10), for a Build or Check: running,
    * waiting on the person (with the prompt to answer), or how it ended.
@@ -1316,7 +1318,7 @@ export const ipcContract = {
       })
       .strict(),
     response: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("sent") }),
+      z.object({ kind: z.literal("started"), thread: ThreadView }),
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
   },

@@ -889,6 +889,7 @@ export class Threads {
       agent: this.agentOf(thread, lines),
       tokens: tokensOf(lines),
       purpose: start.purpose ?? null,
+      explores: start.explores ?? null,
       action: start.purpose
         ? actionOf(lines, Boolean(live?.turn), this.asking.get(thread), items)
         : null,
@@ -917,6 +918,8 @@ export class Threads {
     branch?: { thread: string; upTo: number },
     /** Files and folders attached in the composer: the thread's own inputs (10.4). */
     files: readonly string[] = [],
+    /** Exploring another thread's option: the thread and option, and what the person sees sent. */
+    explore?: { thread: string; option: string; shown: string },
   ): Promise<{ kind: "started"; thread: ThreadView } | { kind: "refused"; reason: string }> {
     if (purpose && this.d.features?.().actions === false)
       return { kind: "refused", reason: "Build and check is off in Settings → Core plugins." };
@@ -947,10 +950,13 @@ export class Threads {
       section,
       title: purpose
         ? actionTitle(purpose, name)
-        : (message.split("\n")[0]?.trim().slice(0, 140) ?? ""),
+        : explore
+          ? explore.shown.slice(0, 140)
+          : (message.split("\n")[0]?.trim().slice(0, 140) ?? ""),
       start: branch ? "branch" : "new",
       branchedFrom: branch ? { thread: branch.thread, line: String(branch.upTo) } : null,
       ...(purpose ? { purpose } : {}),
+      ...(explore ? { explores: { thread: explore.thread, option: explore.option } } : {}),
     });
     if (files.length) await this.addTo(at, rel, section, thread, files, []);
     // A branch's agent starts from the bundle and the chat up to the branch point, quoted (10.5).
@@ -987,7 +993,7 @@ export class Threads {
     const note = message === "-" ? "" : message.trim();
     const shown = purpose
       ? `${purpose === "build" ? "Build" : "Check"} this section${note ? `: ${note}` : ""}`
-      : undefined;
+      : explore?.shown;
     if (purpose) message = actionPrompt(purpose, name, note);
     this.picked.set(thread, agent ?? this.d.defaultAgent());
     // Picks made before the first message: the host sets them as the session opens.
@@ -2788,24 +2794,65 @@ export class Threads {
     text: string,
     thread: string,
     option: string,
-  ): Promise<{ kind: "sent" } | { kind: "refused"; reason: string }> {
+  ): Promise<{ kind: "started"; thread: ThreadView } | { kind: "refused"; reason: string }> {
     const at = await this.d.locate(rel, text);
     if (!at) return { kind: "refused", reason: "Resolve the doc's merge conflict first." };
     const lines = await this.linesOf(at.doc, thread);
-    const o = lines
-      .flatMap((l) => (l.kind === "options" ? l.options : []))
-      .find((x) => x.id === option);
-    if (!o) return { kind: "refused", reason: "That option isn't in this thread." };
-    if (this.live.get(thread)?.turn)
-      return { kind: "refused", reason: "Wait for the reply, or stop it first." };
+    const set = lines.find(
+      (l): l is Extract<ThreadLine, { kind: "options" }> =>
+        l.kind === "options" && l.options.some((x) => x.id === option),
+    );
+    const o = set?.options.find((x) => x.id === option);
+    const start = lines.find((l) => l.kind === "thread");
+    if (!set || !o || start?.kind !== "thread")
+      return { kind: "refused", reason: "That option isn't in this thread." };
     await this.append(at.doc, thread, { kind: "option-explored", option });
-    return this.send(
-      thread,
+    // The options this one narrows, nearest first: the chain chosen, never the siblings.
+    const chain: { title: string; text: string }[] = [];
+    let up = start.explores ?? null;
+    for (let n = 0; up && n < 6; n++) {
+      const upLines = await this.linesOf(at.doc, up.thread);
+      const upOption = upLines
+        .flatMap((l) => (l.kind === "options" ? l.options : []))
+        .find((x) => x.id === up?.option);
+      if (upOption) chain.push({ title: upOption.title, text: upOption.text });
+      const upStart = upLines.find((l) => l.kind === "thread");
+      up = upStart?.kind === "thread" ? (upStart.explores ?? null) : null;
+    }
+    const index = indexIn(at, start.section);
+    const path = at.tree.sections[index]?.path;
+    if (index < 0 || !path) return { kind: "refused", reason: "That option's section is gone." };
+    const heading = set.heading ?? null;
+    const message = [
+      `You're exploring one option for this section, picked among ${String(set.options.length)} to look into. The others are left out on purpose, so this stays about this one.`,
+      "",
+      `The option: **${o.title}**`,
+      "",
+      o.text,
+      ...chain.flatMap((c) => [
+        "",
+        `It narrows an option picked earlier, **${c.title}**:`,
+        "",
+        c.text,
+      ]),
+      "",
+      `Work it through: what it would take, what could go wrong, and what it costs. If it splits into narrower choices, offer those as options${heading ? ` with the heading "${heading}"` : "; each is still the section's whole text"}.`,
+    ].join("\n");
+    return this.start(
       rel,
       text,
-      `Let's explore the option "${o.title}" before picking anything: what it would take, what could go wrong, and what it costs. If it splits into narrower choices, offer those as options; each is still the section's whole text.`,
+      { index, path },
+      message,
       undefined,
-      option,
+      [],
+      undefined,
+      undefined,
+      [],
+      {
+        thread,
+        option,
+        shown: `Explore: ${o.title}`,
+      },
     );
   }
 
@@ -3800,6 +3847,12 @@ function actionOf(
 
 /** A step as a person reads it on a box: "PostHog: exec", not "mcp__claude_ai_PostHog__exec". */
 function stepName(title: string): string {
+  // Anur's own tools read as what they did.
+  const own = /^mcp__anur__anur_(\w+)/.exec(title)?.[1];
+  if (own) {
+    const words = own.replace(/_/g, " ");
+    return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+  }
   const m = /^mcp__(?:claude_ai_)?([A-Za-z0-9-]+?)__([A-Za-z0-9_-]+)/.exec(title);
   const name = m ? `${(m[1] ?? "").replace(/_/g, " ")}: ${(m[2] ?? "").replace(/_/g, " ")}` : title;
   return name.slice(0, 40);
