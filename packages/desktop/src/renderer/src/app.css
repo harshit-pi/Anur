@@ -2128,8 +2128,13 @@ body.resizing * {
 }
 
 .map-line.guessed .map-line-path {
-  stroke: var(--amber);
+  stroke: var(--pencil);
   stroke-dasharray: 3 4;
+}
+
+.map-line.guessed .map-line-label {
+  fill: var(--graphite);
+  font-weight: 400;
 }
 
 .map-line:hover .map-line-path {
@@ -2338,8 +2343,8 @@ body.resizing * {
   cursor: pointer;
 }
 
-.edge-ask {
-  color: var(--amber);
+.edge-guessed {
+  color: var(--graphite);
 }
 
 .edge-acts .edge-more {
@@ -5142,4 +5147,10 @@ button.file-card-name:hover {
 
 .whats-new li + li {
   margin-top: 3px;
+}
+
+.map-node.resource {
+  border-width: 1px;
+  border-color: var(--slate);
+  border-radius: 8px;
 }
