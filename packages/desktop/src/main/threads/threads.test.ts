@@ -64,7 +64,7 @@ afterEach(async () => {
   threads = null;
 });
 
-async function setup() {
+async function setup(extra: Partial<ConstructorParameters<typeof Threads>[0]> = {}) {
   const folder = await mkdtemp(path.join(tmpdir(), "anur-threads-"));
   const versions = new SectionVersions(folder, "dev1");
   const { hub, sent, reply, tell } = fakeHub();
@@ -80,6 +80,7 @@ async function setup() {
     emit: (e) => events.push(e),
     previewsChanged: () => undefined,
     defaultAgent: () => "claude-code",
+    ...extra,
   });
   const support = path.join(folder, "..", `${path.basename(folder)}-support`);
   return { folder, support, threads, sent, reply, tell, events };
@@ -389,6 +390,48 @@ describe("Threads", () => {
     // Dropped, it stops carrying.
     await t.decideFinding(a.thread.id, { id: first.id, status: "dropped", claim: null });
     expect(await t.listFindings("plan.md", DOC, risks.index, risks.path)).toEqual([]);
+  });
+
+  it("carries a teammate's committed decision from above the section, as the folder collects it (18.14)", async () => {
+    const teammate = {
+      id: "d0000000-0000-4000-8000-000000000001",
+      at: "2026-11-18T10:00:00.000Z",
+      dev: "mac-b",
+      seq: 0,
+      kind: "decision" as const,
+      scope: "section:plan.md#Plan",
+      ref: null,
+      decision: "Three retries, not infinite",
+      quote: "three retries, not infinite",
+      instead: "infinite",
+      until: null,
+      who: "Priya",
+      person: "priya",
+      home: "",
+    };
+    const elsewhere = {
+      ...teammate,
+      id: "d0000000-0000-4000-8000-000000000002",
+      scope: "section:other.md#Plan",
+      decision: "Use Stripe",
+    };
+    const { threads: t, sent } = await setup({
+      committed: {
+        keep: () => Promise.resolve(),
+        drop: () => Promise.resolve(),
+        collected: () => Promise.resolve([teammate, elsewhere]),
+      },
+    });
+    const r = await t.start("plan.md", DOC, risks, "Plan the retries.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const asked = sent.find((m) => m.type === "prompt");
+    const text = asked?.type === "prompt" ? asked.text : "";
+    expect(text).toMatch(
+      /- Decided by Priya \(\d+ \w+\): Three retries, not infinite Instead of: infinite\. \[on Plan\]/,
+    );
+    expect(text).not.toContain("Use Stripe");
+    const listed = await t.listFindings("plan.md", DOC, risks.index, risks.path);
+    expect(listed.map((f) => [f.claim, f.who])).toEqual([["Three retries, not infinite", "Priya"]]);
   });
 
   it("settles a confident decision in the person's own words, and carries it with their name", async () => {

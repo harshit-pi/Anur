@@ -1,6 +1,6 @@
 /**
  * The plugin API (group 19; Design - Engineering Plugin Internals, §2).
- * Six points a plugin may register, each run in one process. The engineering
+ * Seven points a plugin may register, each run in one process. The engineering
  * plugin is the first user; Core's own features move behind it in group 27.
  * Headless: no Electron or DOM, so the app, the hook and CI share it.
  */
@@ -9,7 +9,13 @@
 export const API_VERSION = 1;
 
 export type PointKind =
-  "section-source" | "edge-detector" | "context-provider" | "map-layer" | "surface" | "mcp-tools";
+  | "section-source"
+  | "edge-detector"
+  | "context-provider"
+  | "map-layer"
+  | "surface"
+  | "mcp-tools"
+  | "decision-homes";
 
 /** Where each point runs. A plugin loads in each process; only that process's points take effect there. */
 export type PluginProcess = "index" | "main" | "renderer" | "mcp";
@@ -21,6 +27,7 @@ export const RUNS_IN: Record<PointKind, PluginProcess> = {
   "map-layer": "renderer",
   surface: "main",
   "mcp-tools": "mcp",
+  "decision-homes": "main",
 };
 
 /**
@@ -118,6 +125,16 @@ export type McpTool = {
   call(args: unknown, at: { folder: string }): Promise<{ text: string } | { error: string }>;
 };
 
+/**
+ * Places beyond the folder's own `.anur/` that hold committed decisions
+ * (18.14): folder-relative dirs, each with its own `.anur/decisions/`. The
+ * opened folder collects them all, so readers never ask a repo directly.
+ */
+export type DecisionHomes = {
+  id: string;
+  homes(folder: string): Promise<string[]>;
+};
+
 /** What a plugin gets in `onload`: one call per point it declared. */
 export type PluginApi = {
   registerSectionSource(s: SectionSource): void;
@@ -126,6 +143,7 @@ export type PluginApi = {
   registerMapLayer(m: MapLayer): void;
   registerSurface(s: Surface): void;
   registerMcpTool(t: McpTool): void;
+  registerDecisionHomes(h: DecisionHomes): void;
 };
 
 export type Plugin = {

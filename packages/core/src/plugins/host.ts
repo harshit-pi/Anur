@@ -2,6 +2,7 @@ import {
   API_VERSION,
   RUNS_IN,
   type ContextProvider,
+  type DecisionHomes,
   type EdgeDetector,
   type MapLayer,
   type McpTool,
@@ -20,6 +21,7 @@ type Registered = {
   "map-layer": MapLayer;
   surface: Surface;
   "mcp-tools": McpTool;
+  "decision-homes": DecisionHomes;
 };
 
 /** Why a plugin, or one of its registrations, was refused. */
@@ -117,6 +119,9 @@ export class PluginHost {
       registerMcpTool: (t) => {
         add("mcp-tools", t);
       },
+      registerDecisionHomes: (h) => {
+        add("decision-homes", h);
+      },
     };
   }
 
@@ -137,6 +142,9 @@ export class PluginHost {
   }
   mapLayers(): MapLayer[] {
     return this.all("map-layer");
+  }
+  decisionHomes(): DecisionHomes[] {
+    return this.all("decision-homes");
   }
   surfaces(): Surface[] {
     return this.all("surface");

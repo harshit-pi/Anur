@@ -235,7 +235,7 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 
 ## The plugin API (group 19)
 
-- Six points, in `packages/core/src/plugins`, headless so the app, the pre-commit hook and CI share them: section source, edge detector, context provider, map layer, surface, MCP tools under a prefix.
+- Seven points, in `packages/core/src/plugins`, headless so the app, the pre-commit hook and CI share them: section source, edge detector, context provider, map layer, surface, MCP tools under a prefix, and decision homes: places beyond the folder's own `.anur/` whose committed decisions the opened folder collects (18.14).
 - Each point runs in one process: detectors and section sources in the index process, context providers and surfaces in main, map layers in the renderer, MCP tools in the MCP server. A plugin loads in each process, and each host keeps only its own points.
 - A manifest declares `apiVersion`, the points, the MCP prefix, the surfaces and the folders. Every registration is checked against it, and an undeclared one fails the load and leaves nothing behind. Network and file access aren't enforced until a sandbox exists (Design - Extensions).
 - Plugins Anur ships are switched on per folder, remembered on this Mac, in Settings → Plugins. Context providers add labelled lines to a thread's bundle; MCP tools reach the agent through the session's MCP server.

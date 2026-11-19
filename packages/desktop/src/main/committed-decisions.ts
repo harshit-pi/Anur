@@ -7,6 +7,7 @@ import {
   ANUR_DIR,
   CommittedLine,
   DECISIONS_DIR,
+  type CommittedEntry,
   anurPaths,
   currentEntries,
   gitignoreKeepingDecisions,
@@ -171,6 +172,21 @@ export class CommittedDecisions {
         await this.append(at.file, { kind: "dropped", target: e.id });
       }
     }
+  }
+
+  /**
+   * The opened folder's one reader (18.14): its own decisions and every
+   * home a plugin names, such as each repo in a system. Each entry says
+   * which home it came from, folder-relative ("" for the folder's own).
+   */
+  async all(homes: readonly string[]): Promise<(CommittedEntry & { home: string })[]> {
+    const places = ["", ...new Set(homes.filter((h) => h && h !== "."))];
+    const found = await Promise.all(
+      places.map(async (home) =>
+        (await this.current(path.join(this.folder, home))).map((e) => ({ ...e, home })),
+      ),
+    );
+    return found.flat();
   }
 
   /** Every person's decisions and findings here, less what anyone dropped. */
