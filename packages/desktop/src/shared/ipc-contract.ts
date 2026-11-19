@@ -148,6 +148,8 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     text: z.string(),
     /** Who wrote a person's message, when it isn't the one reading. */
     by: z.string().nullable().optional(),
+    /** When it was written, shown on hover under a person's message. */
+    at: z.string().optional(),
   }),
   z.object({
     kind: z.literal("tool"),

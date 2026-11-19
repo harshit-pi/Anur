@@ -6762,3 +6762,39 @@ button.file-card-name:hover {
   background: var(--hover);
   color: var(--ink);
 }
+
+/* Under my message, on hover: when, and Copy (as in Claude chat). */
+.think-mine-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 2px;
+  color: var(--graphite);
+  font: 12px var(--font-ui);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.think-message-wrap.person:hover .think-mine-actions,
+.think-mine-actions:focus-within {
+  opacity: 1;
+}
+
+.think-mine-actions button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--slate);
+  cursor: pointer;
+}
+
+.think-mine-actions button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}

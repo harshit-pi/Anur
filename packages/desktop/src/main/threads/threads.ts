@@ -850,6 +850,7 @@ export class Threads {
           turn: l.turn,
           role: l.role,
           text: l.text,
+          at: l.at,
           ...(l.role === "person" && who(l.dev) ? { by: who(l.dev) } : {}),
         });
       else if (l.kind === "tool")

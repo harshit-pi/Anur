@@ -6,6 +6,7 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 
 - [`docs/decisions.md`](docs/decisions.md): the engineering decisions made so far, each with why.
 - [`docs/patterns.md`](docs/patterns.md): how things are done here: IPC channels, changing the doc, widgets, the agent layer, checking a change in the real app, tests, and gotchas.
+- [`docs/ux.md`](docs/ux.md): how Anur should feel to use; read it before mocking or changing anything a person sees.
 - [`docs/thread-context.md`](docs/thread-context.md): what a thread's agent sees and must never see (`.anur/`, other threads' working copies), and how the hook holds it; read it before changing the bundle, the hook, working copies or MCP tools.
 - [`docs/anur-folder.md`](docs/anur-folder.md): spaces, homes and `.anur/`, which are three different things; what each file in `.anur/` is and whether it's committed. Read it before changing how folders open, what's committed, or what a plugin acts on. A `.anur/` never by itself means a space.
 - [`docs/maps.md`](docs/maps.md): what the doc map and the system map draw, what each mark means, and what they leave out; read it before changing either map.
@@ -55,14 +56,6 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 
 - A change to a plugin under `plugins/` bumps its `version` in `plugins/<id>/manifest.json`. `pnpm plugins:check` fails without the bump: the site keeps each version's file for good, so new code under an old version would be refused on people's Macs.
 - `pnpm release` publishes plugins too, only those newer than the live feed. Publishing a plugin alone, between releases, is `pnpm plugins:publish`, from main.
-
-## Experience
-
-- Never make the experience worse than what people already use: a doc editor like Google Docs or Quip, or an agent like Claude Code. Anur works behind the scenes; the page reads and types as people expect.
-- Not supporting something yet is fine. Removing or blocking something those tools already let people do is not.
-- Get the core working and strong before adding features. Prefer fixing what exists to adding a new button, mark or panel.
-- It should feel intuitive at first use. Mock a screen before building it, and drop anything a person would have to learn.
-- No words explaining what people already know from those tools: no caption on a queued message, no banner saying what just happened, no mark saying a thing is done. If Claude Code or Google Docs shows it without words, so does Anur. Check every mock for such text before showing it.
 
 ## Brand
 
