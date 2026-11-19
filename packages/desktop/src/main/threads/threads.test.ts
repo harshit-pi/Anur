@@ -9,9 +9,16 @@ import { HomeVersions } from "../folder/home-versions.ts";
 import { execFileSync } from "node:child_process";
 import type { AgentHub } from "./hub.ts";
 import { Threads, appliesTo, linksIn, markDisputes, reachOf } from "./threads.ts";
-import { SYSTEM_DOC_ID, systemLocated } from "./system-doc.ts";
+import { FOLDER_DOC_ID, SYSTEM_DOC_ID, folderLocated, systemLocated } from "./system-doc.ts";
 import { shape as sysShape, boxes as sysBoxes } from "./system-doc.fixture.ts";
-import { SYSTEM_DOC, buildSectionTree, systemDocText, systemIndexOf } from "@anur/core";
+import {
+  FOLDER_DOC,
+  SYSTEM_DOC,
+  buildSectionTree,
+  folderDocText,
+  systemDocText,
+  systemIndexOf,
+} from "@anur/core";
 
 const DOC = `# Plan
 
@@ -1402,5 +1409,105 @@ describe("a thread on a box of the system map (29.1)", () => {
       kind: "decision",
       about: { kind: "part", scope: "part:chk", on: "Checkout", repo: "api", dir: "api/bin" },
     });
+  });
+});
+
+describe("a thread on the whole folder, and every thread newest first", () => {
+  /** A folder with plan.md, where the whole folder's virtual doc is found as the app finds it. */
+  async function folderSetup(extra: Partial<ConstructorParameters<typeof Threads>[0]> = {}) {
+    const folder = await mkdtemp(path.join(tmpdir(), "anur-whole-"));
+    await writeFile(path.join(folder, "plan.md"), DOC);
+    const versions = new HomeVersions(folder, "dev1");
+    const { hub, sent, reply } = fakeHub();
+    threads = new Threads({
+      folder,
+      device: "dev1",
+      appSupport: path.join(folder, "..", `${path.basename(folder)}-support`),
+      hub,
+      hookScript: "/x/hook.js",
+      node: "/x/node",
+      anurDirOf: (doc) => versions.anurDirOf(doc),
+      anurDirs: () => versions.anurDirs(),
+      locate: (rel, text) =>
+        rel === FOLDER_DOC ? Promise.resolve(folderLocated(text)) : versions.locate(rel, text),
+      relOf: (doc) => (doc === FOLDER_DOC_ID ? Promise.resolve(FOLDER_DOC) : versions.relOf(doc)),
+      emit: () => undefined,
+      previewsChanged: () => undefined,
+      defaultAgent: () => "claude-code",
+      ...extra,
+    });
+    return { folder, t: threads, sent, reply };
+  }
+  const WHOLE = folderDocText("notes", ["plan.md", "ideas/later.md"]);
+  const top = { index: 0, path: ["notes"] };
+
+  it("runs in the folder, told its docs, with no working copy of a doc that isn't one", async () => {
+    const { folder, t, sent } = await folderSetup();
+    const r = await t.start(FOLDER_DOC, WHOLE, top, "What's in here?");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const p = sent.filter((m) => m.type === "prompt").at(-1);
+    if (p?.type !== "prompt") throw new Error("nothing asked");
+    expect(p.spec.cwd).toBe(folder);
+    expect(p.text).toContain("- ideas/later.md");
+    expect(p.text).not.toContain("Your working copy of");
+  });
+
+  it("lists every thread in the folder newest first, saying where each lives, closed ones left out", async () => {
+    const { t, reply } = await folderSetup();
+    const a = await t.start("plan.md", DOC, { index: 1, path: ["Plan", "Risks"] }, "Risky?");
+    if (a.kind !== "started") throw new Error(a.reason);
+    await reply(a.thread.id, "Somewhat.");
+    const b = await t.start(FOLDER_DOC, WHOLE, top, "What's in here?");
+    if (b.kind !== "started") throw new Error(b.reason);
+    await reply(b.thread.id, "Two docs.");
+    const c = await t.start("plan.md", DOC, { index: 2, path: ["Plan", "Budget"] }, "Enough?");
+    if (c.kind !== "started") throw new Error(c.reason);
+    await reply(c.thread.id, "No.");
+    await t.setClosed("plan.md", DOC, c.thread.id, true);
+    const recent = await t.recent();
+    expect(recent.map((x) => x.id)).toEqual([b.thread.id, a.thread.id]);
+    expect(recent[0]).toMatchObject({
+      path: FOLDER_DOC,
+      where: { kind: "folder" },
+      last: "Two docs.",
+    });
+    expect(recent[1]).toMatchObject({
+      path: "plan.md",
+      title: "Risky?",
+      where: { kind: "section", path: ["Plan", "Risks"] },
+    });
+  });
+
+  it("keeps a decision made in a folder thread for the whole folder", async () => {
+    const kept: string[] = [];
+    const { t, reply } = await folderSetup({
+      committed: {
+        keep: () => {
+          kept.push("section");
+          return Promise.resolve(null);
+        },
+        keepFor: (dir: string) => {
+          kept.push(`folder:${dir}`);
+          return Promise.resolve(null);
+        },
+        drop: () => Promise.resolve(),
+      },
+    });
+    const r = await t.start(FOLDER_DOC, WHOLE, top, "Use British spelling everywhere.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    await tool(r.thread.id, "anur_propose_finding", {
+      claim: "Docs use British spelling.",
+      source: "style.md",
+    });
+    await reply(r.thread.id, "Proposed.");
+    const view = (await t.list(FOLDER_DOC, WHOLE)).find((x) => x.id === r.thread.id);
+    const f = (view?.items ?? []).find((i) => i.kind === "finding");
+    if (f?.kind !== "finding") throw new Error("no finding");
+    await t.decideFinding(r.thread.id, { id: f.id, status: "kept", claim: null });
+    await t.settled();
+    expect(kept).toEqual(["folder:"]);
   });
 });

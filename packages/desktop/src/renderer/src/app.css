@@ -6197,3 +6197,101 @@ button.file-card-name:hover {
 .map-chevron.side.open {
   transform: none;
 }
+
+/* What a new thread is about: a chip above the box, and its menu (Mock: Think scope). */
+.think-composer:has(.think-scope) {
+  position: relative;
+}
+
+.think-scope-row {
+  display: flex;
+  margin: 0 0 4px;
+}
+
+.think-scope {
+  min-width: 0;
+}
+
+.think-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 999px;
+  background: var(--blue-wash);
+  color: var(--blue);
+  font: 500 12.5px/1.5 var(--font-ui);
+  cursor: pointer;
+}
+
+.think-scope-chip.open,
+.think-scope-chip:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+.think-scope-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Under the chip, as wide as the box, so it never runs off a narrow panel. */
+.think-scope-menu {
+  position: absolute;
+  top: 36px;
+  right: 8px;
+  left: 8px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: 0 10px 28px var(--shadow);
+}
+
+.think-scope-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: 13.5px/1.4 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.think-scope-item:hover:not(:disabled),
+.think-scope-item.on {
+  background: var(--hover);
+}
+
+.think-scope-item.on {
+  font-weight: 600;
+}
+
+.think-scope-item:disabled {
+  color: var(--pencil);
+  cursor: default;
+}
+
+.think-scope-detail {
+  min-width: 0;
+  color: var(--graphite);
+  font-weight: 400;
+}
+
+/* Every thread in the folder, newest first, under the section's own. */
+.think-recent {
+  margin-top: 18px;
+}
+
+.think-recent-where {
+  color: var(--blue);
+}

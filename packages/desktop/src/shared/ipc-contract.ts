@@ -1211,6 +1211,26 @@ export const ipcContract = {
     request: z.object({ path: z.string().max(4096), text: z.string() }).strict(),
     response: z.object({ threads: z.array(ThreadView) }),
   },
+  /** Every thread in the folder, newest first, for Think's Recent list. */
+  "thread:recent": {
+    request: z.object({}).strict(),
+    response: z.object({
+      threads: z.array(
+        z.object({
+          id: z.string(),
+          path: z.string(),
+          title: z.string(),
+          where: z.discriminatedUnion("kind", [
+            z.object({ kind: z.literal("folder") }),
+            z.object({ kind: z.literal("doc") }),
+            z.object({ kind: z.literal("section"), path: z.array(z.string()) }),
+          ]),
+          at: z.string(),
+          last: z.string().nullable(),
+        }),
+      ),
+    }),
+  },
   /** Start a thread on a section with its first message (3.5). */
   "thread:start": {
     request: z

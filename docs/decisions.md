@@ -233,6 +233,12 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - Kept decisions reach every new thread on the section and below, listed apart from findings as "Decided by Sam (3 Nov): … Instead of: …". The agent is told to follow them, to say in a line when it relied on one, and to ask rather than go against one.
 - Names show only on someone else's decisions. In a real run, a new thread asked to cut the price below a competitor answered "No. On 18 November Harshit decided…".
 
+## What a thread is about, and Recent (Think scope)
+
+- The box in Think has a chip saying what a new thread is about: this section (the default), this doc, or the whole folder, as Claude's own context chip does. With no doc open it starts on the whole folder. It replaces having no way to ask about the folder, and a whole-doc ask is the doc's title section, as before.
+- A thread on the whole folder hangs on a virtual doc, as the system map's do (29.1): one section, the folder, whose text lists the folder's docs. It runs in the folder, has no working copy of its own, edits other docs through the same working copies any thread uses, and a decision kept in it is kept for the whole folder.
+- Under the section's own threads, Recent lists every thread in the folder newest first, each with where it lives, so a thread never seems to vanish when the cursor moves. A click opens it where it lives: this doc, another doc, or the folder. Page/Home tabs were mocked and passed over: a second place to learn, and threads would still hide by where they live.
+
 ## The carry eval (18.7)
 
 - `pnpm eval:carry [runs] [--no-model]` (`evals/carry/`): a workspace with two repos and 200 committed decisions and findings, and a thread on `docs/plan.md › Pricing`. 100 reach that section; the other 100 are on other sections, docs, folders and repos, lapsed, dropped, replaced, on a section that's gone, or lines that aren't decisions. It runs Anur's own reader and bundle, then twelve questions through Claude Code, scored by script.

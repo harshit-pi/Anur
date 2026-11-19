@@ -1,5 +1,6 @@
 import {
   DocId,
+  FOLDER_DOC,
   SYSTEM_DOC,
   SectionId,
   buildSectionTree,
@@ -25,6 +26,22 @@ export function systemLocated(text: string): {
 }
 
 export { SYSTEM_DOC };
+
+/** The whole folder's virtual doc: one section, the folder, with a fixed ID. */
+export const FOLDER_DOC_ID = DocId.parse("anur-folder");
+
+export function folderLocated(text: string) {
+  const tree = buildSectionTree(text, { fileName: "Folder" });
+  const ids = tree.sections.map((_, i) =>
+    SectionId.parse(i === 0 ? "folder" : `folder-${String(i)}`),
+  );
+  return { doc: FOLDER_DOC_ID, tree, ids, canon: new Map<SectionId, SectionId>() };
+}
+
+export { FOLDER_DOC };
+
+/** A doc no file holds: the system map's, or the whole folder's. */
+export const isVirtualDoc = (rel: string) => rel === SYSTEM_DOC || rel === FOLDER_DOC;
 
 /** The map as main last read it: each box's parent, and each line's two ends, as box IDs. */
 export type SystemShape = {

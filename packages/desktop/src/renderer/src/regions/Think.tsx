@@ -1,7 +1,8 @@
 import { ServiceIcon, serviceOf } from "../icons/services/index.tsx";
 import { editsLand } from "../../../shared/edits-land.ts";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { diffLines, type SectionNode, type SectionTree } from "@anur/core";
+import { FOLDER_DOC, diffLines, type SectionNode, type SectionTree } from "@anur/core";
+import { RecentThreads, ScopeChip, type ScopeChoice } from "./ThinkScope.tsx";
 import type {
   AgentSignIn,
   SessionOption,
@@ -440,7 +441,10 @@ function Composer({
   onAttach,
   onUnattach,
   inserted = null,
+  chip = null,
 }: {
+  /** What a new thread is about, as a chip above the box (Mock: Think scope). */
+  chip?: React.ReactNode;
   placeholder: string;
   busy: boolean;
   disabled: boolean;
@@ -472,6 +476,7 @@ function Composer({
   };
   return (
     <div className="think-composer">
+      {chip ? <div className="think-scope-row">{chip}</div> : null}
       {attached.length > 0 ? (
         <ul className="think-attachments" aria-label="Attached">
           {attached.map((a) => (
@@ -589,7 +594,14 @@ export function Think({
   page,
   noun = "section",
   extra = null,
+  scope = null,
 }: {
+  /**
+   * What a new thread is about: this section, this doc or the whole folder,
+   * shown as a chip in the box; with it, the list ends in Recent, every
+   * thread in the folder. The system map's Think has none.
+   */
+  scope?: ScopeChoice | null;
   /** The page's own view: the section's text is edited here through it. */
   page: () => EditorView | null;
   /** What a section is called here: a doc's section, or a repo or part on the system map (29.1). */
@@ -1286,7 +1298,7 @@ export function Think({
                   if (i >= 0) onJump(i);
                 }}
               >
-                on {thread.path.at(-1)}
+                {docPath === FOLDER_DOC ? "on the whole folder" : `on ${thread.path.at(-1) ?? ""}`}
               </button>
             ) : (
               <span className="think-where quiet">its section is gone</span>
@@ -1977,7 +1989,9 @@ export function Think({
       <h2
         className="think-section"
         // The heading is the section's name: edit it here as on the page.
-        contentEditable={writable && section.headingRange ? "plaintext-only" : false}
+        contentEditable={
+          writable && section.headingRange && docPath !== FOLDER_DOC ? "plaintext-only" : false
+        }
         suppressContentEditableWarning
         spellCheck={false}
         onKeyDown={(e) => {
@@ -2100,7 +2114,7 @@ export function Think({
             ) : null}
           </div>
         ) : null}
-        {docPath && features.history ? (
+        {docPath && docPath !== FOLDER_DOC && features.history ? (
           <SectionHistory
             key={sectionKey}
             docPath={docPath}
@@ -2299,28 +2313,6 @@ export function Think({
         ) : null}
         {extra}
       </SectionFooter>
-      {here.length === 0 && loading ? (
-        <h3 className="think-subhead think-loading">Loading threads…</h3>
-      ) : here.length === 0 ? (
-        <h3 className="think-subhead">No threads on this {noun} yet</h3>
-      ) : (
-        <GroupedThreads threads={here} stateOf={stateOf} onOpen={setOpen} />
-      )}
-      {closedHere.length > 0 ? (
-        <>
-          <button
-            type="button"
-            className="think-more think-closed-toggle"
-            aria-expanded={showClosed}
-            onClick={() => {
-              setShowClosed((v) => !v);
-            }}
-          >
-            {showClosed ? "Hide closed" : `Show closed (${String(closedHere.length)})`}
-          </button>
-          {showClosed ? <ThreadList threads={closedHere} onOpen={setOpen} /> : null}
-        </>
-      ) : null}
       {notConnected(newAgent)}
       {error ? <p className="think-error">{error}</p> : null}
       {branch ? (
@@ -2346,10 +2338,13 @@ export function Think({
           placeholder={
             !writable
               ? "Threads need a folder Anur can write to"
-              : section.index === 0
-                ? "What should we do with this doc?"
-                : `What should we do with this ${noun}?`
+              : scope?.value === "folder"
+                ? `Ask about everything in ${scope.folderName}…`
+                : scope?.value === "doc" || section.index === 0
+                  ? "Ask about this doc…"
+                  : `Ask about this ${noun}…`
           }
+          chip={scope ? <ScopeChip scope={scope} section={section} disabled={!!branch} /> : null}
           sendLabel={branch ? "Start branch" : "Start thread"}
           {...composerAttach}
           pickers={
@@ -2374,7 +2369,11 @@ export function Think({
           onSend={(m) => start(m)}
         />
       )}
-      {features.actions && writable && AGENTS[newAgent].runsThreads && !signedOut(newAgent) ? (
+      {features.actions &&
+      writable &&
+      docPath !== FOLDER_DOC &&
+      AGENTS[newAgent].runsThreads &&
+      !signedOut(newAgent) ? (
         <div className="think-actions" role="group" aria-label="Actions">
           <button
             type="button"
@@ -2399,6 +2398,28 @@ export function Think({
           </button>
         </div>
       ) : null}
+      {here.length === 0 && loading ? (
+        <h3 className="think-subhead think-loading">Loading threads…</h3>
+      ) : here.length === 0 ? (
+        <h3 className="think-subhead">No threads on this {noun} yet</h3>
+      ) : (
+        <GroupedThreads threads={here} stateOf={stateOf} onOpen={setOpen} />
+      )}
+      {closedHere.length > 0 ? (
+        <>
+          <button
+            type="button"
+            className="think-more think-closed-toggle"
+            aria-expanded={showClosed}
+            onClick={() => {
+              setShowClosed((v) => !v);
+            }}
+          >
+            {showClosed ? "Hide closed" : `Show closed (${String(closedHere.length)})`}
+          </button>
+          {showClosed ? <ThreadList threads={closedHere} onOpen={setOpen} /> : null}
+        </>
+      ) : null}
       <Disagreements
         findings={findings}
         writable={writable}
@@ -2418,7 +2439,12 @@ export function Think({
               }));
         }}
       />
-      {elsewhere.length > 0 ? (
+      {scope ? (
+        <RecentThreads
+          hide={new Set([...here, ...closedHere].map((t) => t.id))}
+          docPath={docPath}
+        />
+      ) : elsewhere.length > 0 ? (
         <details className="think-elsewhere">
           <summary className="think-subhead">
             Other threads in this doc ({String(elsewhere.length)})
