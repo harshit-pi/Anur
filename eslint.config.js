@@ -16,7 +16,7 @@ const coreForbidden = [
 ];
 
 export default defineConfig(
-  { ignores: ["**/node_modules/**", "**/dist/**", "**/out/**", "**/coverage/**"] },
+  { ignores: ["**/node_modules/**", "**/dist/**", "**/out/**", "**/coverage/**", "**/.build/**"] },
   js.configs.recommended,
   tseslint.configs.strictTypeChecked,
   {
