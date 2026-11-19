@@ -14,8 +14,20 @@ const isDark = () => {
   return forced ? forced === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
 };
 
+/**
+ * Pictures already drawn, while Anur runs: by the page and the embed, the
+ * last picture (shown at once when the page comes back) and the scene it
+ * drew, so an unchanged drawing is never drawn again.
+ */
+const drawn = new Map<string, { scene: string; dark: boolean; svg: string }>();
+
 /** Each drawn picture's focus listener, removed when it leaves the page. */
 const listeners = new WeakMap<HTMLElement, () => void>();
+
+/** Excalidraw loaded ahead, while Anur is idle, so the first drawing doesn't wait for it. */
+export function loadAhead() {
+  void import("@excalidraw/excalidraw").catch(() => undefined);
+}
 
 export class DrawingWidget extends WidgetType {
   constructor(readonly target: string) {
@@ -35,6 +47,9 @@ export class DrawingWidget extends WidgetType {
     wrap.title = "Open the drawing to edit it (⌘-click: in a new tab)";
     wrap.textContent = `Drawing ${this.target}…`;
     let path: string | null = null;
+    const key = `${view.state.facet(pagePath)}\0${this.target}`;
+    const kept = drawn.get(key);
+    if (kept) wrap.innerHTML = kept.svg;
     wrap.addEventListener("mousedown", (e) => {
       e.preventDefault();
       if (path)
@@ -55,6 +70,13 @@ export class DrawingWidget extends WidgetType {
           return;
         }
         path = r.path;
+        const dark = isDark();
+        const before = drawn.get(key);
+        // Unchanged since it was last drawn: the picture already shown stands.
+        if (before && before.scene === r.scene && before.dark === dark) {
+          if (!wrap.firstElementChild) wrap.innerHTML = before.svg;
+          return;
+        }
         const scene = JSON.parse(r.scene) as {
           elements?: unknown[];
           appState?: Record<string, unknown>;
@@ -69,7 +91,7 @@ export class DrawingWidget extends WidgetType {
           appState: {
             ...(scene.appState ?? {}),
             exportBackground: false,
-            exportWithDarkMode: isDark(),
+            exportWithDarkMode: dark,
           },
           files: scene.files ?? {},
           exportPadding: 16,
@@ -77,6 +99,7 @@ export class DrawingWidget extends WidgetType {
         svg.removeAttribute("width");
         svg.removeAttribute("height");
         wrap.replaceChildren(svg);
+        drawn.set(key, { scene: r.scene, dark, svg: svg.outerHTML });
         wrap.classList.remove("missing");
         view.requestMeasure();
       })().catch(() => {
