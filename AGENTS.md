@@ -51,6 +51,11 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 - Every line Anur writes in `.anur/` has its own ID, and every file that changes often has one writer.
 - A thread runs the person's own agent at full power. Anur blocks only where other threads live, and redirects doc edits to a working copy.
 
+## Plugins
+
+- A change to a plugin under `plugins/` bumps its `version` in `plugins/<id>/manifest.json`. `pnpm plugins:check` fails without the bump: the site keeps each version's file for good, so new code under an old version would be refused on people's Macs.
+- `pnpm release` publishes plugins too, only those newer than the live feed. Publishing a plugin alone, between releases, is `pnpm plugins:publish`, from main.
+
 ## Experience
 
 - Never make the experience worse than what people already use: a doc editor like Google Docs or Quip, or an agent like Claude Code. Anur works behind the scenes; the page reads and types as people expect.

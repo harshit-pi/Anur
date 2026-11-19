@@ -18,6 +18,7 @@
     "eval:context": "node evals/context/run.ts",
     "eval:carry": "node evals/carry/start.mjs",
     "plugins:feed": "node scripts/plugins.mjs feed",
+    "plugins:check": "node scripts/plugins.mjs check",
     "plugins:publish": "node scripts/plugins.mjs publish",
     "upgrade:list": "pnpm outdated --recursive || true",
     "upgrade:latest": "pnpm update --recursive --latest",
