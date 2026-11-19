@@ -3779,8 +3779,7 @@ function actionOf(
     const step = tools.at(-1);
     return {
       state: "running",
-      detail:
-        step && !/^(completed|failed)$/.test(step.status) ? step.title.slice(0, 40) : "Working…",
+      detail: step && !/^(completed|failed)$/.test(step.status) ? stepName(step.title) : "Working…",
       ask: null,
     };
   }
@@ -3792,4 +3791,11 @@ function actionOf(
   if (why.startsWith("error:"))
     return { state: "failed", detail: why.slice(6).trim().slice(0, 40) || "It failed", ask: null };
   return { state: "done", detail: did || `${String(tools.length)} steps`, ask: null };
+}
+
+/** A step as a person reads it on a box: "PostHog: exec", not "mcp__claude_ai_PostHog__exec". */
+function stepName(title: string): string {
+  const m = /^mcp__(?:claude_ai_)?([A-Za-z0-9-]+?)__([A-Za-z0-9_-]+)/.exec(title);
+  const name = m ? `${(m[1] ?? "").replace(/_/g, " ")}: ${(m[2] ?? "").replace(/_/g, " ")}` : title;
+  return name.slice(0, 40);
 }

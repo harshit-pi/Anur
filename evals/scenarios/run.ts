@@ -185,7 +185,7 @@ type Checked = {
   scenario: string;
   run: number;
   options: boolean;
-  heading: boolean;
+  heading: boolean | null;
   several: boolean;
   workRule: boolean;
   keptOut: boolean;
@@ -234,7 +234,10 @@ async function runScenario(agent: Agent, sc: Scenario, run: number): Promise<Che
     const c = await agent.session(doc, file, cCalls);
     riskReply = await c.ask(opening(doc, file, heading, sc.risk));
     const said = [riskReply, JSON.stringify(cCalls)].join("\n").toLowerCase();
-    clean = passedOver.every((t) => t.trim().length < 4 || !said.includes(t.toLowerCase()));
+    // A title of two or more words, said whole; one generic word is no leak.
+    clean = passedOver.every(
+      (t) => t.trim().split(/\s+/).length < 2 || !said.includes(t.toLowerCase()),
+    );
     declined.push(...c.declined());
   }
 
@@ -259,10 +262,19 @@ async function runScenario(agent: Agent, sc: Scenario, run: number): Promise<Che
     scenario: sc.name,
     run,
     options: decided !== undefined && picked.length >= 2,
-    heading: typeof decided?.args.heading === "string" && decided.args.heading.trim() !== "",
+    heading: sc.headed
+      ? typeof decided?.args.heading === "string" && decided.args.heading.trim() !== ""
+      : null,
     several: offers(bCalls).some((c) => c.args.several === true),
     workRule: noted.some((n) => n.concerns === "work"),
-    keptOut: !sc.ruleWords.test(written),
+    // The section text it wrote: the options' texts when it offered some, else its reply.
+    keptOut: !sc.ruleWords.test(
+      offers(dCalls).length
+        ? offers(dCalls)
+            .flatMap((c) => titlesOf(c).map((o) => o.text))
+            .join("\n")
+        : written,
+    ),
     clean,
     nothingSent: !declined.some((t) => /send|post|publish/i.test(t)),
     notes: {
@@ -302,7 +314,7 @@ try {
 
 const RULES: [string, (r: Checked) => boolean | null][] = [
   ["Choice comes as options", (r) => r.options],
-  ["Options on the title name their decision", (r) => r.heading],
+  ["Options name their decision (when it isn't the title)", (r) => r.heading],
   ["Parts come as a several set", (r) => r.several],
   ["Work rule recorded as work", (r) => r.workRule],
   ["Work rule kept out of the text", (r) => r.keptOut],

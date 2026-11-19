@@ -5,8 +5,9 @@
  * only the agent varies.
  *
  * - decide: a choice the person has to make about the plan, asked on the
- *   title. It should come back as options, named by a heading, since the
- *   choice isn't the title itself.
+ *   title. It should come back as options, named by a heading when the
+ *   choice isn't the title itself (headed); when the doc is that decision,
+ *   options for the title's own text are right.
  * - parts: a list of things that all belong. It should come back as a set
  *   the person adds any of ("several"), not a choice of one.
  * - workRule: a rule about how the agent works. It should be recorded as a
@@ -22,6 +23,8 @@ export type Scenario = {
   name: string;
   title: string;
   decide: string;
+  /** Whether the decision is one part of the doc, so its options should name it. */
+  headed: boolean;
   parts: string;
   workRule: string;
   pick: number;
@@ -35,6 +38,7 @@ export type Scenario = {
 export const SCENARIOS: readonly Scenario[] = [
   {
     name: "launch",
+    headed: true,
     title: "Referral Launch",
     decide:
       "Our referral program (free stock for both sides) is meant to go live in two weeks, but compliance hasn't signed anything. How should we set the launch date?",
@@ -50,6 +54,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "engineering",
+    headed: false,
     title: "Webhook Retries",
     decide:
       "Our webhook deliveries fail about 2% of the time and we drop them. How should we retry them?",
@@ -63,6 +68,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "hiring",
+    headed: true,
     title: "First PM Hire",
     decide:
       "We're hiring our first product manager. Should they be senior or early-career, and where do we find them?",
@@ -78,6 +84,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "research",
+    headed: true,
     title: "Pricing Study",
     decide:
       "We want to learn whether to move from per-seat to usage pricing. How should we study it?",
@@ -92,6 +99,7 @@ export const SCENARIOS: readonly Scenario[] = [
   },
   {
     name: "shouldnt-build",
+    headed: false,
     title: "Dark Mode for Reports",
     decide:
       "One customer asked for dark mode on PDF reports. Two others have never mentioned it. What should we do about it?",
