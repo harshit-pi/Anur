@@ -5932,3 +5932,191 @@ button.file-card-name:hover {
 .map-action.done .map-action-foot {
   display: none;
 }
+
+/*
+ * Mock 11: three kinds on the map, one look each.
+ * Section, in the doc: a rectangle with a solid border.
+ * Choice, not in the doc yet: a rounded blue card with a dashed edge.
+ * Action, work: a pill in a lane under its section.
+ * A thread is italic text on the line to its choices.
+ */
+.map-box {
+  padding: 10px 16px;
+  border: 1.5px solid var(--graphite);
+  border-radius: 4px;
+  box-shadow: none;
+}
+
+.map-box:hover {
+  border-color: var(--ink);
+}
+
+.map-box.title {
+  border: 2px solid var(--ink);
+}
+
+.map-thread {
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--paper);
+  color: var(--graphite);
+  font: italic 13px var(--font-doc);
+}
+
+.map-thread:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.map-option,
+.map-option.edit {
+  border: 1.5px dashed var(--blue);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--blue-wash) 55%, var(--sheet));
+  color: var(--ink);
+}
+
+.map-option.explored {
+  border-style: solid;
+  background: var(--blue-wash);
+}
+
+.map-option.not-picked {
+  opacity: 0.55;
+}
+
+.map-fold,
+.map-fold.open {
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--graphite);
+}
+
+.map-fold:hover {
+  color: var(--blue);
+  text-decoration: underline;
+}
+
+.map-chats {
+  flex: none;
+  margin-left: 8px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--graphite);
+  font: 600 11px/18px var(--font-ui);
+  cursor: pointer;
+}
+
+.map-chats:hover {
+  color: var(--ink);
+}
+
+.map-lane {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  z-index: 1;
+}
+
+.map-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 0 10px 0 9px;
+  border: 0;
+  border-radius: 999px;
+  font: 600 12px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.map-pill.indent {
+  margin-left: 16px;
+}
+
+.map-pill-name {
+  min-width: 0;
+}
+
+.map-pill .service-icon {
+  margin-right: 0;
+}
+
+.map-pill .map-action-go {
+  margin-left: 4px;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.map-pill .map-action-go.primary {
+  background: transparent;
+  color: inherit;
+}
+
+.map-pill.planned,
+.map-pill.stopped {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.map-pill.running {
+  background: var(--blue-wash);
+  color: var(--blue);
+}
+
+.map-pill.needs {
+  background: var(--amber-wash);
+  color: var(--amber);
+}
+
+.map-pill.failed {
+  background: #fdecec;
+  color: #b42318;
+}
+
+.map-pill.done {
+  background: var(--green-wash);
+  color: var(--green);
+}
+
+.map-peek-use {
+  margin: 2px 0 6px;
+  font-size: 12px;
+}
+
+.map-key.choice {
+  border: 1.5px dashed var(--blue);
+  border-radius: 5px;
+  background: var(--blue-wash);
+}
+
+.map-key.action {
+  width: 18px;
+  border-radius: 999px;
+  background: var(--hover);
+}
+
+.map-key.thread {
+  width: auto;
+  height: auto;
+  border: 0;
+  font: italic 12px var(--font-doc);
+}
+
+.map-key.thread::before {
+  content: "Italic";
+}

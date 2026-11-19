@@ -64,6 +64,11 @@ type Box = {
     /** For a planned one: what it will do, shown on hover. */
     what?: string;
   };
+  /** For a section: its lane of work, and the lane's height under the box. */
+  lane?: LanePill[];
+  laneH?: number;
+  /** For a section: threads with nothing drawn off them yet, shown as a 💬 count. */
+  chats?: ThreadView[];
   /** The chip folding a made choice's other options, and whether it's open. */
   fold?: { open: boolean; count: number };
   /** The box's second line: what's under it, or what sets it apart. */
@@ -112,9 +117,49 @@ const sectionSize = (heading: string, status: BoxStatus | null, sub: string, lin
   };
 };
 
-/** An action box's size (Mock 10): the same for every state. */
-const ACTION_W = 236;
-const ACTION_H = 58;
+/** One row of a section's lane (Mock 11): a pill. */
+const LANE_ROW = 30;
+
+type ActionState = "planned" | "running" | "needs" | "done" | "failed" | "stopped";
+
+/** A piece of work under a section: a Build or Check thread, or an action a thread proposed. */
+type LaneItem = {
+  key: string;
+  state: ActionState;
+  title: string;
+  thread: ThreadView;
+  detail: string;
+  ask: { request: string; option: string } | null;
+  proposal?: { thread: string; action: string };
+};
+
+/** What the lane draws: one pill per item, or a folded group of planned or done ones. */
+type LanePill =
+  | { kind: "item"; item: LaneItem; indent: boolean }
+  | { kind: "group"; state: "planned" | "done"; count: number; key: string; open: boolean };
+
+/**
+ * The lane's pills: what's under way, waiting or failed, each on its own;
+ * planned and done ones folded into "▶ N planned" and "✓ N done" when more
+ * than one, opening on a click to each by name.
+ */
+function lanePills(lane: readonly LaneItem[], section: string, open: ReadonlySet<string>) {
+  const out: LanePill[] = [];
+  for (const it of lane)
+    if (it.state !== "planned" && it.state !== "done")
+      out.push({ kind: "item", item: it, indent: false });
+  for (const state of ["planned", "done"] as const) {
+    const these = lane.filter((it) => it.state === state);
+    if (these.length === 1 && these[0]) out.push({ kind: "item", item: these[0], indent: false });
+    else if (these.length > 1) {
+      const key = `${section}:${state}`;
+      const isOpen = open.has(key);
+      out.push({ kind: "group", state, count: these.length, key, open: isOpen });
+      if (isOpen) for (const it of these) out.push({ kind: "item", item: it, indent: true });
+    }
+  }
+  return out;
+}
 
 /** At most this many service marks on a thread's chip. */
 const MARKS_SHOWN = 3;
@@ -200,6 +245,8 @@ export function MapView({
   const [moved, setMoved] = useState<Record<string, Pos>>({});
   /** Folds of made choices the person opened, to see the options passed over. */
   const [unfolded, setUnfolded] = useState<ReadonlySet<string>>(new Set());
+  /** Lane groups ("▶ 3 planned", "✓ 2 done") the person opened. */
+  const [laneOpen, setLaneOpen] = useState<ReadonlySet<string>>(new Set());
   /** Saved positions have arrived: only then is the first fit right. */
   const [loaded, setLoaded] = useState(false);
   /** Saved positions are late: frame the map without them, and move boxes when they come. */
@@ -458,32 +505,37 @@ export function MapView({
         const source = here.find((x) => x.id === from);
         return source ? 1 + depth(source, new Set([...seen, t.id])) : 0;
       };
-      // Actions a thread proposed and nobody has run hang off that thread, planned, with ▶ Run.
-      const planned = (t: ThreadView, tid: string) => {
+      // Work goes in a lane under its section (Mock 11): Build and Check threads,
+      // and actions any thread here proposed and nobody has run.
+      const lane: LaneItem[] = [];
+      for (const t of threads)
         for (const it of t.items) {
           if (it.kind !== "proposed-action" || it.run) continue;
-          const aid = `a:${it.id}`;
-          nodes.push({ id: aid, parent: tid, w: ACTION_W, h: ACTION_H });
-          info.set(aid, {
-            id: aid,
-            kind: "action",
-            index: s.index,
+          const on = it.path ?? t.path;
+          if (!on || !samePath(on, s.path)) continue;
+          lane.push({
+            key: `a:${it.id}`,
+            state: "planned",
+            title: it.title,
             thread: t,
-            heading: it.title,
-            act: {
-              state: "planned",
-              tag: "BUILD",
-              detail: "Proposed",
-              ask: null,
-              proposal: { thread: t.id, action: it.id },
-              what: it.what,
-            },
-            parent: tid,
+            detail: it.what,
+            ask: null,
+            proposal: { thread: t.id, action: it.id },
           });
         }
-      };
       for (const t of [...here].sort((a, b) => depth(a) - depth(b))) {
         const tid = `t:${t.id}`;
+        if (t.purpose && t.action) {
+          lane.push({
+            key: tid,
+            state: t.action.state,
+            title: t.title.replace(/^(Build|Check)( this section)?:?\s*/i, "") || t.title,
+            thread: t,
+            detail: t.action.detail,
+            ask: t.action.ask,
+          });
+          continue;
+        }
         const from = t.branchedFrom?.thread;
         // A thread exploring an option hangs off that option's box (fixed up below if it isn't drawn).
         const parent = t.explores
@@ -491,31 +543,8 @@ export function MapView({
           : from && onSection.has(from)
             ? `t:${from}`
             : id;
-        // A Build or Check is an action box; any other thread, a chip.
-        if (t.purpose && t.action) {
-          nodes.push({ id: tid, parent, w: ACTION_W, h: ACTION_H });
-          info.set(tid, {
-            id: tid,
-            kind: "action",
-            index: s.index,
-            thread: t,
-            heading: t.title.replace(/^(Build|Check)( this section)?:?\s*/i, "") || t.title,
-            act: {
-              state: t.action.state,
-              tag: t.purpose === "check" ? "CHECK" : "BUILD",
-              detail: t.action.detail,
-              ask: t.action.ask,
-            },
-            parent,
-          });
-          planned(t, tid);
-          continue;
-        }
-        nodes.push({
-          id: tid,
-          parent,
-          ...pill(t.title, Math.min(MARKS_SHOWN, servicesUsed(t.items).length)),
-        });
+        // A thread is a label on the line to its choices; one with none is counted on its section below.
+        nodes.push({ id: tid, parent, ...pill(t.title, 0) });
         info.set(tid, {
           id: tid,
           kind: "thread",
@@ -524,7 +553,6 @@ export function MapView({
           heading: t.title,
           parent,
         });
-        planned(t, tid);
       }
       // Links to other docs' sections (8.6): one badge on the section, with the list on a click.
       const seen = new Set<string>();
@@ -553,6 +581,17 @@ export function MapView({
         // Room for the badge beside the name.
         const node = nodes.find((n) => n.id === id);
         if (node) Object.assign(node, sectionSize(heading, null, "", outLinks.length));
+      }
+      // The lane's rows add to the section's height, so the layout leaves room under it.
+      {
+        const pills = lanePills(lane, id, laneOpen);
+        const own = info.get(id);
+        if (own && pills.length) {
+          own.lane = pills;
+          own.laneH = pills.length * LANE_ROW + 6;
+          const node = nodes.find((n) => n.id === id);
+          if (node) node.h += own.laneH;
+        }
       }
       // Each thread's option sets, one family per choice: a first set and the
       // narrower sets found exploring it. A choice still open shows its
@@ -706,6 +745,17 @@ export function MapView({
     nodes.sort((a, b) => near(b) - near(a));
     // A box whose parent isn't drawn, such as a thread exploring an option now folded away,
     // hangs off its section instead.
+    // A thread with nothing drawn off it isn't a box: it's counted on its section as 💬.
+    const hasChild = new Set(nodes.flatMap((n) => (n.parent ? [n.parent] : [])));
+    for (let k = nodes.length - 1; k >= 0; k--) {
+      const n = nodes[k];
+      if (!n?.id.startsWith("t:") || hasChild.has(n.id)) continue;
+      const i = info.get(n.id);
+      const sec = i ? info.get(idOf(i.index)) : undefined;
+      if (i?.thread && sec) sec.chats = [...(sec.chats ?? []), i.thread];
+      nodes.splice(k, 1);
+      info.delete(n.id);
+    }
     const drawn = new Set(nodes.map((n) => n.id));
     for (const n of nodes) {
       if (n.parent === null || drawn.has(n.parent)) continue;
@@ -733,12 +783,14 @@ export function MapView({
     for (const [id, p] of placed) {
       const i = info.get(id);
       if (!i) continue;
+      // A section with a lane: its box sits at the top of its slot, the lane below it.
+      const lane = i.laneH ?? 0;
       out.push({
         ...i,
         x: p.x,
-        y: p.y,
+        y: p.y - lane / 2,
         w: p.w,
-        h: p.h,
+        h: p.h - lane,
         side: p.side,
         ...(p.row !== undefined ? { row: p.row } : {}),
         ...(p.rails ? { rails: p.rails } : {}),
@@ -782,7 +834,20 @@ export function MapView({
       }
     }
     return out;
-  }, [tree, threads, previews, idOf, moved, drag, docs, docPath, features.links, layout, unfolded]);
+  }, [
+    tree,
+    threads,
+    previews,
+    idOf,
+    moved,
+    drag,
+    docs,
+    docPath,
+    features.links,
+    layout,
+    unfolded,
+    laneOpen,
+  ]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
 
@@ -1612,47 +1677,6 @@ export function MapView({
               {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed={false} /> : null}
               <span className="truncate">→ {b.heading}</span>
             </button>
-          ) : b.kind === "action" && b.act && b.thread ? (
-            <div
-              key={b.id}
-              role="button"
-              tabIndex={-1}
-              className={`map-action ${b.act.state}`}
-              data-peek={b.id}
-              style={{ left: b.x - b.w / 2, top: b.y, width: b.w, transform: "translateY(-50%)" }}
-              onPointerDown={(e) => {
-                onBoxDown(e, b);
-              }}
-            >
-              <div className="map-action-head">
-                {servicesUsed(b.thread.items)
-                  .slice(0, 2)
-                  .map((sv) => (
-                    <ServiceIcon key={sv.name} service={sv} />
-                  ))}
-                <span className="map-action-name truncate">{b.heading}</span>
-              </div>
-              <div className="map-action-foot">
-                {/* The bar's colour says the state; a word only where it's under way or needs you. */}
-                {b.act.state === "planned" || b.act.state === "done" ? null : (
-                  <span className={`map-action-state ${b.act.state}`}>
-                    {ACTION_STATE[b.act.state]}
-                  </span>
-                )}
-                {/* A few words only where they tell something new: the step under way, why it failed. */}
-                <span className="map-action-detail truncate">
-                  {b.act.state === "running" || b.act.state === "failed" ? b.act.detail : ""}
-                </span>
-                {writable ? (
-                  <ActionControl
-                    act={b.act}
-                    thread={b.thread}
-                    docPath={docPath}
-                    docText={docText}
-                  />
-                ) : null}
-              </div>
-            </div>
           ) : b.kind === "thread" && b.thread ? (
             <button
               key={b.id}
@@ -1750,6 +1774,32 @@ export function MapView({
                 ) : (
                   <span className="map-box-name">{b.heading}</span>
                 )}
+                {b.chats?.length ? (
+                  <button
+                    type="button"
+                    className="map-chats"
+                    title={
+                      b.chats.length === 1
+                        ? `A thread here: ${b.chats[0]?.title ?? ""}`
+                        : `${String(b.chats.length)} threads here`
+                    }
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clickedAt.current = Date.now();
+                      onSelect(b.index);
+                      const only = b.chats?.length === 1 ? b.chats[0] : undefined;
+                      if (only)
+                        window.dispatchEvent(
+                          new CustomEvent("anur:open-thread", { detail: { thread: only.id } }),
+                        );
+                    }}
+                  >
+                    💬 {b.chats.length}
+                  </button>
+                ) : null}
                 {b.outLinks ? (
                   <button
                     type="button"
@@ -1813,6 +1863,89 @@ export function MapView({
                 : null}
             </div>
           ),
+        )}
+        {/* Each section's work, in a lane under its box (Mock 11). */}
+        {boxes.map((b) =>
+          b.lane ? (
+            <div
+              key={`lane:${b.id}`}
+              className="map-lane"
+              style={{ left: b.x - b.w / 2 + 10, top: b.y + b.h / 2 + 6 }}
+            >
+              {b.lane.map((pl) =>
+                pl.kind === "group" ? (
+                  <button
+                    key={pl.key}
+                    type="button"
+                    className={`map-pill ${pl.state}`}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    onClick={() => {
+                      clickedAt.current = Date.now();
+                      setLaneOpen((o) => {
+                        const next = new Set(o);
+                        if (next.has(pl.key)) next.delete(pl.key);
+                        else next.add(pl.key);
+                        return next;
+                      });
+                    }}
+                  >
+                    <span className="map-pill-icon">{PILL_ICON[pl.state]}</span>
+                    {String(pl.count)} {pl.state}
+                    <span className="quiet">{pl.open ? " ▴" : " ▾"}</span>
+                  </button>
+                ) : (
+                  <div
+                    key={pl.item.key}
+                    role="button"
+                    tabIndex={-1}
+                    className={`map-pill ${pl.item.state}${pl.indent ? " indent" : ""}`}
+                    title={pl.item.detail}
+                    onPointerDown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    onClick={() => {
+                      clickedAt.current = Date.now();
+                      onSelect(b.index);
+                      const t = pl.item.proposal?.thread ?? pl.item.thread.id;
+                      window.dispatchEvent(
+                        new CustomEvent("anur:open-thread", { detail: { thread: t } }),
+                      );
+                    }}
+                  >
+                    <span className="map-pill-icon">{PILL_ICON[pl.item.state]}</span>
+                    {servicesUsed(pl.item.thread.items)
+                      .slice(0, 2)
+                      .map((sv) =>
+                        pl.item.state === "planned" ? null : (
+                          <ServiceIcon key={sv.name} service={sv} />
+                        ),
+                      )}
+                    <span className="map-pill-name truncate">
+                      {pl.item.state === "running" || pl.item.state === "failed"
+                        ? `${pl.item.title}: ${pl.item.detail}`
+                        : pl.item.title}
+                    </span>
+                    {writable ? (
+                      <ActionControl
+                        act={{
+                          state: pl.item.state,
+                          tag: "BUILD",
+                          detail: pl.item.detail,
+                          ask: pl.item.ask,
+                          ...(pl.item.proposal ? { proposal: pl.item.proposal } : {}),
+                        }}
+                        thread={pl.item.thread}
+                        docPath={docPath}
+                        docText={docText}
+                      />
+                    ) : null}
+                  </div>
+                ),
+              )}
+            </div>
+          ) : null,
         )}
         <svg className={`map-ink${pen === "erase" ? " erasing" : ""}`} aria-hidden="true">
           {ink.map((st) => {
@@ -1917,6 +2050,7 @@ export function MapView({
                   ? `Option: ${name}`
                   : name}
             </div>
+            {opt ? <p className="map-peek-use quiet">{useSays(opt)}</p> : null}
             {body ? <Markdown text={body} /> : <p className="quiet">No text yet.</p>}
           </div>
         );
@@ -1924,23 +2058,18 @@ export function MapView({
       {(() => {
         // Only the marks on this map (17.1); before any thread, what will appear.
         const has = (k: Box["kind"]) => boxes.some((b) => b.kind === k);
-        const withPreview = boxes.some(
-          (b) => b.kind === "thread" && b.thread && previewed.has(b.thread.id),
-        );
         const keys = [
-          { cls: "section", label: "Section", on: true },
+          { cls: "section", label: "Section · in the doc", on: true },
+          { cls: "choice", label: "Choice · not in the doc yet", on: has("option") || has("edit") },
+          { cls: "action", label: "Action · work", on: boxes.some((b) => b.lane?.length) },
           {
             cls: "thread",
-            label: "Thread",
-            on: boxes.some((b) => b.kind === "thread" && !(b.thread && previewed.has(b.thread.id))),
+            label: "A thread",
+            on: has("thread") || boxes.some((b) => b.chats?.length),
           },
-          { cls: "preview", label: "Thread with a preview", on: withPreview },
-          { cls: "option", label: "Option", on: has("option") },
-          { cls: "edit", label: "Proposed edit", on: has("edit") },
-          { cls: "link", label: "Link", on: has("link") },
           { cls: "link", label: "Link in the text", on: inText.length > 0 },
         ].filter((k) => k.on);
-        if (!has("thread"))
+        if (!has("thread") && !boxes.some((b) => b.chats?.length || b.lane?.length))
           return (
             <div className="map-legend map-hint">
               Ask on a section and its thread appears here, under it.
@@ -2089,6 +2218,16 @@ function KeyBar() {
   );
 }
 
+/** Each state's mark on a lane pill (Mock 11). */
+const PILL_ICON: Record<ActionState, string> = {
+  planned: "▶",
+  running: "⟳",
+  needs: "!",
+  done: "✓",
+  failed: "×",
+  stopped: "■",
+};
+
 const ACTION_STATE: Record<NonNullable<Box["act"]>["state"], string> = {
   planned: "Planned",
   running: "Running",
@@ -2173,4 +2312,19 @@ function ActionControl({
       // Done: no control. Clicking the box opens its thread; running again is there, asked first.
       return null;
   }
+}
+
+/** What Use does with a choice, said before it's pressed (the PM review, 2026-11-19). */
+function useSays(b: Box): string {
+  const section = b.thread?.path?.at(-1) ?? "this section";
+  if (b.kind === "edit") return `Use changes § ${section}'s text to this.`;
+  const set = b.thread?.items.find(
+    (x) => x.kind === "options" && x.options.some((o) => o.id === b.option?.id),
+  );
+  const heading = set?.kind === "options" ? set.heading : null;
+  if (set?.kind === "options" && set.several)
+    return `Add puts this under § ${section} as its own section.`;
+  return heading
+    ? `Use puts this under § ${heading}, in § ${section}.`
+    : `Use replaces § ${section}'s text with this.`;
 }
