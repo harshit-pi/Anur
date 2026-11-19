@@ -6175,3 +6175,25 @@ button.file-card-name:hover {
   background: transparent;
   color: var(--graphite);
 }
+
+/* The chevron on a folded lane group or a "not picked" chip: down when shut, up when open. */
+.map-chevron {
+  display: inline-flex;
+  vertical-align: middle;
+  color: var(--graphite);
+  transition: transform 0.15s;
+}
+.map-chevron .icon {
+  width: 12px;
+  height: 12px;
+}
+.map-chevron.open {
+  transform: rotate(180deg);
+}
+/* A "not picked" chip opens sideways: right when shut, down when open. */
+.map-chevron.side {
+  transform: rotate(-90deg);
+}
+.map-chevron.side.open {
+  transform: none;
+}

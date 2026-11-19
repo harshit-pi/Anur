@@ -1,4 +1,5 @@
-import { ServiceIcon, servicesUsed } from "../icons/services/index.tsx";
+import { ServiceIcon, servicesNamed, servicesUsed } from "../icons/services/index.tsx";
+import { ChevronDownIcon } from "./Icons.tsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   boxSize,
@@ -1672,7 +1673,10 @@ export function MapView({
                 });
               }}
             >
-              {b.heading} <span className="quiet">{b.fold.open ? "▾" : "▸"}</span>
+              {b.heading}{" "}
+              <span className={`map-chevron side${b.fold.open ? " open" : ""}`}>
+                <ChevronDownIcon />
+              </span>
             </button>
           ) : (b.kind === "option" || b.kind === "edit") && b.option ? (
             <div
@@ -1962,7 +1966,9 @@ export function MapView({
                   >
                     <span className="map-pill-icon">{PILL_ICON[pl.state]}</span>
                     {String(pl.count)} {pl.state}
-                    <span className="quiet">{pl.open ? " ▴" : " ▾"}</span>
+                    <span className={`map-chevron${pl.open ? " open" : ""}`}>
+                      <ChevronDownIcon />
+                    </span>
                   </button>
                 ) : (
                   <div
@@ -1992,13 +1998,14 @@ export function MapView({
                     }}
                   >
                     <span className="map-pill-icon">{PILL_ICON[pl.item.state]}</span>
-                    {servicesUsed(pl.item.thread.items)
+                    {(pl.item.state === "planned"
+                      ? servicesNamed(pl.item.title)
+                      : servicesUsed(pl.item.thread.items)
+                    )
                       .slice(0, 2)
-                      .map((sv) =>
-                        pl.item.state === "planned" ? null : (
-                          <ServiceIcon key={sv.name} service={sv} />
-                        ),
-                      )}
+                      .map((sv) => (
+                        <ServiceIcon key={sv.name} service={sv} />
+                      ))}
                     <span className="map-pill-name truncate">
                       {pl.item.state === "running" || pl.item.state === "failed"
                         ? `${pl.item.title}: ${pl.item.detail}`

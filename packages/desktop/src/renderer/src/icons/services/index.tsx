@@ -96,6 +96,23 @@ export function serviceOf(title: string): (Service & { action: string }) | null 
   return { key, name, mark, action };
 }
 
+/**
+ * The services a planned action names, such as "File Linear issues per week":
+ * it hasn't acted yet, so its title says where it will.
+ */
+export function servicesNamed(text: string): Service[] {
+  const out = new Map<string, Service>();
+  const names: [string, Mark | null, string][] = [
+    ...Object.entries(MARKS).map(([key, m]) => [key, m, m.title] as [string, Mark | null, string]),
+    ...Object.entries(NAMES).map(([key, n]) => [key, null, n] as [string, Mark | null, string]),
+  ];
+  for (const [key, mark, name] of names) {
+    const word = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+    if (!out.has(name) && word.test(text)) out.set(name, { key, name, mark });
+  }
+  return [...out.values()];
+}
+
 /** A service's mark, or the plain action mark when it has none. */
 export function ServiceIcon({ service }: { service: Service | null }) {
   const mark = service?.mark;
