@@ -35,7 +35,13 @@ export type SystemShape = {
   names: ReadonlyMap<string, string>;
   /** A part's folder, from the opened folder: where docs it covers live. */
   dirs: ReadonlyMap<string, string>;
-  edges: readonly { id: string; from: string; to: string; label: string }[];
+  edges: readonly {
+    id: string;
+    from: string;
+    to: string;
+    label: string;
+    aliases?: readonly string[];
+  }[];
 };
 
 /**
@@ -62,7 +68,8 @@ export function systemReach(
   }
   const edge = /^edge:(.+)$/.exec(e.scope)?.[1];
   if (edge) {
-    const l = shape.edges.find((x) => x.id === edge);
+    // By its ID, or one it had before lines were named by repo IDs.
+    const l = shape.edges.find((x) => x.id === edge || x.aliases?.includes(edge));
     if (!l) return null;
     const near = [l.from, l.to].some((end) => end === box || inside(end, box));
     // Or the box is inside the end, as a part of a repo the line reaches.

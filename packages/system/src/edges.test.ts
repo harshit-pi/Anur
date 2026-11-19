@@ -1,10 +1,10 @@
-import { mkdtempSync } from "node:fs";
+import { cpSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { edgesIn, matches, normalise, routeTree } from "./edges.ts";
 import { git, makeRepo, twoRepoSystem } from "./fixtures.ts";
-import { scanSystem } from "./system.ts";
+import { repoIdsOf, scanSystem } from "./system.ts";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "anur-edges-"));
 const edges = (dir: string) => {
@@ -109,5 +109,32 @@ describe("edges between repos (group 22)", () => {
         (r) => r.route,
       ),
     ).toEqual(["/a", "/a/b", "/c"]);
+  });
+});
+
+describe("a line's ID on every Mac (23.12)", () => {
+  it("is the same however the repos were cloned, and keeps its folder-named ID as an alias", () => {
+    const a = tmp();
+    twoRepoSystem(a);
+    // The same repos on a teammate's Mac, cloned under other folder names.
+    const b = tmp();
+    cpSync(path.join(a, "api"), path.join(b, "api-service"), { recursive: true });
+    cpSync(path.join(a, "web"), path.join(b, "site"), { recursive: true });
+    const lines = (dir: string) => {
+      const scan = scanSystem(dir);
+      return edgesIn(
+        dir,
+        scan.repos.map((r) => r.dir),
+        scan.parts,
+        repoIdsOf(scan),
+      );
+    };
+    const mine = lines(a);
+    const theirs = lines(b);
+    expect(mine.map((e) => e.id)).toEqual(theirs.map((e) => e.id));
+    expect(mine[0]?.id).not.toContain("web/");
+    // Decisions and hidden lines saved before still find it.
+    expect(mine[0]?.aliases).toEqual(["web/@acme/web|api/@acme/api|http|/v1/users"]);
+    expect(theirs[0]?.aliases).toEqual(["site/@acme/web|api-service/@acme/api|http|/v1/users"]);
   });
 });

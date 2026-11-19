@@ -56,6 +56,8 @@ export type Edge = {
   evidence: string;
   /** Where the route is declared, when found. */
   declared: string | null;
+  /** The line's earlier IDs, named by repo folders, that saved decisions and choices may use. */
+  aliases?: string[];
 };
 
 const SRC = ["*.ts", "*.tsx", "*.js", "*.jsx", "*.mjs", "*.cjs", "*.py"];
@@ -270,18 +272,43 @@ export function matches(call: string, route: string): boolean {
  * "guessed". A call to an outside service is a stub; one no repo declares
  * becomes "not cloned" only when its host is known and not ours.
  */
-export function edgesIn(folder: string, dirs: readonly string[], parts: readonly Part[]): Edge[] {
+export function edgesIn(
+  folder: string,
+  dirs: readonly string[],
+  parts: readonly Part[],
+  /**
+   * Each repo's ID by its folder (its oldest root commit): a line's ID names
+   * repos by these, so it's the same on every Mac however the repos were
+   * cloned. Without one, a repo is named by its folder, as before.
+   */
+  repoIds: ReadonlyMap<string, string> = new Map(),
+): Edge[] {
+  const rk = (d: string) => repoIds.get(d) ?? d;
   const routes = dirs.flatMap((d) => routesIn(folder, d));
   const own = new Map(dirs.map((d) => [d, hostsOf(folder, d)]));
   const edges = new Map<string, Edge>();
+  // The ID named by folders, as lines were before repo IDs: kept as an alias,
+  // so what was decided or hidden on a line still finds it.
   const put = (e: Edge) => {
-    if (!edges.has(e.id)) edges.set(e.id, e);
+    if (edges.has(e.id)) return;
+    const legacy = e.id
+      .split("|")
+      .map((seg, i) => (i < 2 ? unkey(seg) : seg))
+      .join("|");
+    edges.set(e.id, legacy === e.id ? e : { ...e, aliases: [legacy] });
+  };
+  const byKey = new Map(dirs.map((d) => [rk(d), d] as const));
+  const unkey = (seg: string) => {
+    const slash = seg.indexOf("/");
+    if (slash < 0) return seg;
+    const dir = byKey.get(seg.slice(0, slash));
+    return dir === undefined ? seg : `${dir}${seg.slice(slash)}`;
   };
   for (const d of dirs)
     for (const c of callsIn(folder, d)) {
       const from = { repo: c.repo, part: partOf(parts, c.repo, c.file) };
       const evidence = `${c.file}:${String(c.line)}`;
-      const fromKey = `${from.repo}/${from.part ?? ""}`;
+      const fromKey = `${rk(from.repo)}/${from.part ?? ""}`;
       const servedBy = c.host ? dirs.filter((x) => own.get(x)?.includes(c.host ?? "")) : null;
       // A host no repo here serves is an outside service, unless it shares a domain with ours.
       const ours = [...own.values()].flat().map(baseDomain);
@@ -322,7 +349,7 @@ export function edgesIn(folder: string, dirs: readonly string[], parts: readonly
           if (!r) continue;
           const to = { repo, part: partOf(parts, repo, r.file) };
           put({
-            id: `${fromKey}|${to.repo}/${to.part ?? ""}|http|${r.route}`,
+            id: `${fromKey}|${rk(to.repo)}/${to.part ?? ""}|http|${r.route}`,
             kind: "http",
             from,
             to,

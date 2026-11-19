@@ -17,7 +17,7 @@ import {
 } from "@anur/core";
 import { decisionFiles } from "./claude-md.ts";
 import { edgesIn } from "./edges.ts";
-import { scanSystem } from "./system.ts";
+import { repoIdsOf, scanSystem } from "./system.ts";
 
 /**
  * A person's own decisions not yet on the default branch, in their
@@ -140,6 +140,7 @@ export function writeEdgeSides(folder: string): string[] {
     folder,
     scan.repos.map((r) => r.dir),
     scan.parts,
+    repoIdsOf(scan),
   );
   const ends = new Map<string, string[]>();
   for (const e of edges) if ("repo" in e.to) ends.set(e.id, [e.from.repo, e.to.repo]);

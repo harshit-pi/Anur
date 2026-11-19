@@ -13,6 +13,7 @@ import {
   scanSystem,
   watchSystem,
   type PartGroup,
+  repoIdsOf,
 } from "@anur/system";
 
 /**
@@ -166,8 +167,10 @@ export function systemEdges(folder: string): Edge[] {
     folder,
     scan.repos.map((r) => r.dir),
     scan.parts,
+    repoIdsOf(scan),
   ).map((e) => ({
     id: e.id,
+    ...(e.aliases ? { aliases: e.aliases } : {}),
     from: end(e.from.repo, e.from.part),
     to:
       "repo" in e.to
