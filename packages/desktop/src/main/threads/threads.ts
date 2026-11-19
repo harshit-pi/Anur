@@ -92,6 +92,8 @@ export function reachOf(scope: string, here: readonly string[]): number {
     const at = section[1] ? section[1].split(" › ") : [];
     return at.length === 0 ? 2 : at.length === here.length ? 0 : 1;
   }
+  // A part's sits between the doc and its repo (23.1).
+  if (scope.startsWith("part:")) return 2.5;
   return scope === "everywhere" ? 4 : 3;
 }
 
@@ -106,6 +108,8 @@ export function appliesTo(
   home: string,
   rel: string,
   here: readonly string[],
+  /** For a part's decision, its name and the folder it covers; see `CommittedEntry.within`. */
+  part: { on?: string | null | undefined; within?: string | null | undefined } = {},
 ): string | null {
   const section = sectionScope(scope, home);
   if (section)
@@ -119,6 +123,11 @@ export function appliesTo(
   if (folder) {
     const dir = home ? `${home}/${folder}` : folder;
     return inside(dir) ? `all of ${dir}` : null;
+  }
+  // A part's reaches docs in the folder it covers (23.1); a line's waits for 23.10.
+  if (scope.startsWith("part:") && typeof part.within === "string") {
+    const dir = [home, part.within].filter(Boolean).join("/");
+    return inside(dir) ? (part.on ?? `all of ${dir || "the folder"}`) : null;
   }
   return null;
 }
@@ -269,8 +278,8 @@ export type KeptFinding = {
   until: string | null;
   /**
    * How near it is (18.3), for carrying nearest first within the budget:
-   * 0 this section, 1 a section above, 2 the doc, 3 its folder or repo,
-   * 4 everywhere.
+   * 0 this section, 1 a section above, 2 the doc, 2.5 the part of the
+   * system it's in (23.1), 3 its folder or repo, 4 everywhere.
    */
   reach: number;
 };
@@ -1660,7 +1669,7 @@ export class Threads {
     const out: KeptFinding[] = [];
     for (const e of await collected().catch(() => [])) {
       if (e.ref && seen.has(e.ref)) continue;
-      const label = appliesTo(e.scope, e.home, rel, here);
+      const label = appliesTo(e.scope, e.home, rel, here, e);
       if (label === null) continue;
       const decision = e.kind === "decision";
       out.push({

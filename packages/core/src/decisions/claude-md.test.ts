@@ -33,6 +33,21 @@ const finding = (id: string, claim: string, source: string | null): CommittedEnt
   person: "priya",
 });
 
+describe("a part's or line's decision in the block (23.1)", () => {
+  it("names the part or line it's on, as the map does", () => {
+    const block = renderBlock([
+      decision("d-1", "Paginate every list endpoint.", {
+        scope: "part:abc",
+        on: "@acme/api",
+        within: "src",
+      }),
+      decision("d-2", "Keep the v1 shape.", { scope: "edge:xyz", on: "web → api: /v1/users" }),
+    ]);
+    expect(block).toContain("- Paginate every list endpoint. (Sam, on @acme/api)");
+    expect(block).toContain("- Keep the v1 shape. (Sam, on web → api: /v1/users)");
+  });
+});
+
 describe("the CLAUDE.md block (23.5)", () => {
   it("lists decisions, then kept findings, each with who and where, between Anur's markers", () => {
     const block = renderBlock([

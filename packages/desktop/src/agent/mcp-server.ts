@@ -446,7 +446,7 @@ const TERMINAL_TOOLS = [
   {
     name: "anur_note_decision",
     description:
-      "Record a decision the person made in this session that should outlast the task: a choice about the work, or a correction of what you did or proposed. It's committed with the code in .anur/decisions/, so the team's agents follow it. Give their exact words from this session as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it's recorded; otherwise Anur tells you to ask them first. Leave out doc to record it for the repo this session works in. Don't record one-off instructions, or your own choices.",
+      "Record a decision the person made in this session that should outlast the task: a choice about the work, or a correction of what you did or proposed. It's committed with the code in .anur/decisions/, so the team's agents follow it. Give their exact words from this session as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it's recorded; otherwise Anur tells you to ask them first. Leave out doc to record it for the repo this session works in, and give the files the work touched as about, so it lands on that part of the system. Don't record one-off instructions, or your own choices.",
     inputSchema: {
       type: "object",
       properties: {
@@ -480,6 +480,12 @@ const TERMINAL_TOOLS = [
           description:
             'How far it reaches, from the person\'s words: "folder" for this repo (the default without a doc), "doc" or "section" with a doc, or "everywhere" ("always", "in every project").',
         },
+        about: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "The files the work this is about touched, as paths from this session's folder; add :line for a call or route it's about. Anur files it on the part of the system that holds them, or on the line between two parts, so it reaches work there.",
+        },
         doc: { ...docArg, description: "The doc it's about, if any; leave out for the repo." },
         section: sectionArg,
       },
@@ -503,6 +509,12 @@ const TERMINAL_TOOLS = [
           description: "Where it came from: a file and line, a doc, or a URL.",
         },
         confirmed: { type: "boolean", description: "True once the person agreed to keep it." },
+        about: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "The files the work this is about touched, as paths from this session's folder; add :line for a call or route it's about. Anur files it on the part of the system that holds them, or on the line between two parts, so it reaches work there.",
+        },
         doc: { ...docArg, description: "The doc it's about, if any; leave out for the repo." },
         section: sectionArg,
       },

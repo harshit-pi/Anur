@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { DecisionScope, settleRule } from "@anur/core";
+import { aboutFiles, filesFrom, type About } from "@anur/system";
 import type { ToolAnswer } from "../threads/anur-socket.ts";
 import type { CommittedDecisions, KeptEntry } from "../committed-decisions.ts";
 
@@ -13,6 +14,8 @@ import type { CommittedDecisions, KeptEntry } from "../committed-decisions.ts";
  */
 
 export type TerminalDeps = {
+  /** The part or line files are about (23.1); the system's own lookup by default. */
+  about?: (folder: string, files: string[]) => About | null;
   /** The folder open in the front window, and that window's id; null when none. */
   front: () => { folder: string; docs: string[]; webContentsId: number } | null;
   outline: (folder: string, rel: string, text: string) => Promise<string | null>;
@@ -299,11 +302,23 @@ async function decisionTool(
     if (at === null) return { error: `There's no section "${section ?? ""}" in ${rel}.` };
     doc = { rel, path: at };
   }
-  const where =
-    DecisionScope.safeParse(args.scope).data === "everywhere"
-      ? "every project"
-      : doc
-        ? `${doc.rel}${doc.path.length ? ` › ${doc.path.join(" › ")}` : ""}`
+  const everywhere = DecisionScope.safeParse(args.scope).data === "everywhere";
+  // The part or line the files are about (23.1); the repo when they name none.
+  const files = Array.isArray(args.about)
+    ? args.about.filter((f): f is string => typeof f === "string")
+    : [];
+  const about: About | null =
+    !doc && !everywhere && files.length
+      ? (d.about ?? aboutFiles)(base, filesFrom(base, cwd ?? base, files))
+      : null;
+  const where = everywhere
+    ? "every project"
+    : doc
+      ? `${doc.rel}${doc.path.length ? ` › ${doc.path.join(" › ")}` : ""}`
+      : about
+        ? about.kind === "part"
+          ? `the ${about.on} part`
+          : `the line ${about.on}`
         : "this repo";
 
   if (tool === "anur_drop_decision") {
@@ -351,7 +366,7 @@ async function decisionTool(
       ? await store.keep(doc ? doc.rel : path.join(dir, ".anur-here"), "", ref, entry, "everywhere")
       : doc
         ? await store.keep(doc.rel, doc.path.join(" › "), ref, entry, scope ?? "section")
-        : await store.keepFor(dir, ref, entry);
+        : await store.keepFor(dir, ref, entry, about);
   if (!id)
     return {
       error:

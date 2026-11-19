@@ -58,6 +58,43 @@ describe("decisions from a plain Claude Code session (23.4, 23.11)", () => {
     expect(readFileSync(path.join(api, ".anur/decisions/sam.jsonl"), "utf8").trim()).toBe("");
   });
 
+  it("files it on the part the work touched, named, and on the repo when the files name none (23.1)", async () => {
+    const { folder, api, call } = setup(said("always paginate list endpoints"));
+    const seen: string[][] = [];
+    const deps = {
+      front: () => ({ folder, docs: [], webContentsId: 1 }),
+      committed: (base: string) =>
+        new CommittedDecisions(base, "mac-a", () => Promise.resolve("sam")),
+      me: () => Promise.resolve("Sam"),
+      transcript: () => Promise.resolve(said("always paginate list endpoints")),
+      about: (_f: string, files: string[]) => {
+        seen.push(files);
+        return files[0]?.startsWith("api/src/")
+          ? { kind: "part", scope: "part:api-core", on: "@acme/api", repo: "api", dir: "api/src" }
+          : null;
+      },
+    } as unknown as TerminalDeps;
+    const onPart = await terminalHandler(deps)("anur_note_decision", {
+      quote: "always paginate list endpoints",
+      decision: "Paginate every list endpoint.",
+      confidence: 0.9,
+      about: ["src/routes.ts"],
+      _cwd: api,
+    });
+    expect(seen[0]).toEqual(["api/src/routes.ts"]);
+    expect("text" in onPart && onPart.text).toContain("Recorded on the @acme/api part");
+    const [line] = lines(path.join(api, ".anur/decisions/sam.jsonl"));
+    expect(line).toMatchObject({ scope: "part:api-core", on: "@acme/api", within: "src" });
+    const onRepo = await call("anur_note_decision", {
+      quote: "always paginate list endpoints",
+      decision: "Paginate.",
+      confidence: 0.9,
+      about: ["README.md"],
+      _cwd: api,
+    });
+    expect("text" in onRepo && onRepo.text).toContain("Recorded on this repo");
+  });
+
   it("refuses words the person never typed, and asks first when unsure or for a finding", async () => {
     const { api, call } = setup(said("should we retry three times?"));
     const made = await call("anur_note_decision", {

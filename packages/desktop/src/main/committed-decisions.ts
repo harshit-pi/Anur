@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { installPreCommit, writeLocalMd, writeUserClaudeMd } from "@anur/system";
+import { installPreCommit, writeLocalMd, writeUserClaudeMd, type About } from "@anur/system";
 import os from "node:os";
 import { loginPath } from "../agent/find-claude.ts";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
@@ -230,10 +230,26 @@ export class CommittedDecisions {
    * working in a repo (23.4): scoped "repo" at the repo's root, else
    * "folder:<dir>" from where the file lives.
    */
-  async keepFor(dir: string, ref: string, entry: KeptEntry): Promise<string | null> {
+  async keepFor(
+    dir: string,
+    ref: string,
+    entry: KeptEntry,
+    about: About | null = null,
+  ): Promise<string | null> {
     // A file name inside the dir, so the home is found from the dir itself.
     const at = await this.place(path.join(dir, ".anur-here"));
     if (!at) return null;
+    if (about) {
+      // On a part or a line (23.1), kept where the session works.
+      const within =
+        about.kind === "part"
+          ? path.relative(at.home, path.join(this.folder, about.dir)).split(path.sep).join("/")
+          : null;
+      return this.keepIn(at, about.scope, ref, entry, {
+        on: about.on,
+        within: within === null || within.startsWith("..") ? null : within,
+      });
+    }
     const rel = path.relative(at.home, path.join(this.folder, dir)).split(path.sep).join("/");
     return this.keepIn(at, rel ? `folder:${rel}` : "repo", ref, entry);
   }
@@ -243,12 +259,13 @@ export class CommittedDecisions {
     scope: string,
     ref: string,
     entry: KeptEntry,
+    extra: { on: string; within: string | null } | null = null,
   ): Promise<string | null> {
     await this.openDecisions(at.home);
     // Kept again after an Undo: one line, not two.
     const already = (await this.current(at.home)).find((e) => e.ref === ref);
     if (already) return already.id;
-    const id = await this.append(at.file, { ...entry, scope, ref });
+    const id = await this.append(at.file, { ...entry, scope, ref, ...extra });
     try {
       this.hookFor(at.home);
     } catch {
