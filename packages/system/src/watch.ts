@@ -5,7 +5,8 @@
  */
 import { watch, type FSWatcher } from "node:fs";
 import path from "node:path";
-import { findRepoDirs, SKIP_DIRS } from "./repos.ts";
+import { SKIP_DIRS } from "./repos.ts";
+import { includedRepoDirs } from "./review.ts";
 
 const BUILD_FILE =
   /^(package\.json|pyproject\.toml|go\.mod|Cargo\.toml|serverless\.ya?ml|cdk\.json)$/;
@@ -35,7 +36,7 @@ export function watchSystem(folder: string, onChange: () => void, quietMs = 300)
       onChange();
     }, quietMs);
   };
-  for (const rel of findRepoDirs(folder)) {
+  for (const rel of includedRepoDirs(folder)) {
     try {
       const w = watch(path.join(folder, rel), { recursive: true }, (_event, file) => {
         if (file && mattersForParts(file)) poke();

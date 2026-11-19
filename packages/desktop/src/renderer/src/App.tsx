@@ -1179,6 +1179,7 @@ export function App() {
           // Only the doc the tab shows: after a rename the old one mustn't mount for a moment.
           selected === SYSTEM_TAB ? (
             <SystemView
+              folder={folderPath}
               onPlugins={() => {
                 setSettings("core");
               }}

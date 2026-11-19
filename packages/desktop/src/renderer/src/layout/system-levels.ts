@@ -9,7 +9,7 @@ export const SYSTEM_TAB = "anur:system";
 
 export type SystemBox = {
   id: string;
-  kind: "repo" | "group" | "part";
+  kind: "org" | "repo" | "group" | "part";
   name: string;
   /** What it holds: "103 parts in 8 groups", "4 parts", or the part's own line. */
   line: string;
@@ -42,7 +42,13 @@ export function partsUnder(all: readonly SystemSection[], id: string): number {
 }
 
 const kindOf = (s: SystemSection): SystemBox["kind"] =>
-  s.id.startsWith("part:") ? "part" : s.id.startsWith("group:") ? "group" : "repo";
+  s.id.startsWith("part:")
+    ? "part"
+    : s.id.startsWith("group:")
+      ? "group"
+      : s.id.startsWith("org:")
+        ? "org"
+        : "repo";
 
 /**
  * The boxes on one level. Repos sort by name, ignoring case, with those that
@@ -62,6 +68,13 @@ export function boxesAt(
     if (kind === "part") return { ...base, line: s.text, opens: false, empty: false };
     const kids = childrenOf(all, s.id);
     if (kids.length === 0) return { ...base, line: "No build file", opens: false, empty: true };
+    if (kind === "org")
+      return {
+        ...base,
+        line: `${plural(kids.length, "repo")} · ${plural(parts.length, "part")}`,
+        opens: true,
+        empty: false,
+      };
     const groups = kids.filter((k) => !k.id.startsWith("part:")).length;
     const line = groups
       ? `${plural(parts.length, "part")} in ${plural(groups, "group")}`
@@ -72,6 +85,7 @@ export function boxesAt(
   return boxes.sort(
     (x, y) =>
       Number(x.empty) - Number(y.empty) ||
+      Number(x.name === "No remote") - Number(y.name === "No remote") ||
       x.name.localeCompare(y.name, undefined, { sensitivity: "base" }),
   );
 }
@@ -97,12 +111,12 @@ export type SystemEdge = {
   state: "shown" | "hidden" | "confirmed";
 };
 
-/** The repo a section sits in, as its top-level section. */
+/** The repo a section sits in: the nearest section above it, or itself, that is a repo. */
 export function repoOf(all: readonly SystemSection[], id: string): SystemSection | null {
   const byId = new Map(all.map((s) => [s.id, s]));
-  let at = byId.get(id);
-  while (at?.parent) at = byId.get(at.parent);
-  return at ?? null;
+  for (let at = byId.get(id); at; at = at.parent ? byId.get(at.parent) : undefined)
+    if (at.id.startsWith("repo:")) return at;
+  return null;
 }
 
 /** A side's name: its repo's, or a stub's ("outside" or "not cloned"). */

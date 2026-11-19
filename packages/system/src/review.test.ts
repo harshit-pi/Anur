@@ -92,3 +92,26 @@ describe("hidden and confirmed edges (22.3)", () => {
     expect([...s.confirmedEdges]).toEqual(["e3"]);
   });
 });
+
+describe("less to do by hand", () => {
+  it("applies Claude's names and merges without an Accept; a rename still wins", () => {
+    const s = reviewState([
+      { kind: "proposed", group: id("services/other"), name: "Jobs", at },
+      {
+        kind: "proposed",
+        group: id("services/copy"),
+        name: "Copy trading",
+        merge: [id("services/mirror")],
+        at,
+      },
+      { kind: "proposed", group: id("tables"), name: "Data", at },
+      { kind: "renamed", group: id("tables"), name: "Ledgers", at },
+    ]);
+    const g = applyReview(groups, id, s);
+    expect(g[0]?.name).toBe("Ledgers");
+    expect(g[1]?.groups?.map((x) => [x.name, x.parts.length])).toEqual([
+      ["Copy trading", 3],
+      ["Jobs", 2],
+    ]);
+  });
+});

@@ -206,3 +206,19 @@ describe("Anur's own questions aren't tasks", () => {
     );
   });
 });
+
+describe("a repo left out of the folder's system", () => {
+  it("isn't scanned or marked, and comes back when put back", async () => {
+    const { appendReview } = await import("./review.ts");
+    const dir = tmp();
+    twoRepoSystem(dir);
+    appendReview(dir, [{ kind: "repo-excluded", repo: "web", at: "" }]);
+    expect(scanSystem(dir).repos.map((r) => r.dir)).toEqual(["api"]);
+    const mark = markTask(dir, "s9", "");
+    expect(mark.repos.map((r) => r.dir)).toEqual(["api"]);
+    touch(dir, "web/src/styles.css", ".q {}");
+    expect(reportSince(dir, mark, scanSystem(dir).parts)).toBeNull();
+    appendReview(dir, [{ kind: "repo-included", repo: "web", at: "" }]);
+    expect(scanSystem(dir).repos.map((r) => r.dir)).toEqual(["api", "web"]);
+  });
+});

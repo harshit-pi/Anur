@@ -7,6 +7,7 @@ import {
   type KnownPart,
   type Part,
 } from "./parts.ts";
+import { excludedRepos } from "./review.ts";
 
 export type SystemScan = {
   repos: Repo[];
@@ -21,7 +22,11 @@ export function scanSystem(
   folder: string,
   opts: { pin?: boolean; known?: readonly KnownPart[] } = {},
 ): SystemScan {
-  const { repos, problems } = findRepos(folder, { pin: opts.pin ?? false });
+  const found0 = findRepos(folder, { pin: opts.pin ?? false });
+  // Repos the person left out aren't read at all.
+  const left = excludedRepos(folder);
+  const repos = found0.repos.filter((r) => !left.has(r.dir));
+  const problems = found0.problems;
   const order = { package: 0, stack: 1, service: 2 };
   // A fixed order: by repo, then packages, stacks and services, then name.
   const found = repos

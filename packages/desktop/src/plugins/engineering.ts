@@ -64,9 +64,29 @@ export function systemSections(folder: string): SourcedSection[] {
   // The person's names and merges for groups (20.6), applied over the rule's.
   const review = reviewState(readReview(folder));
   const out: SourcedSection[] = [];
+  // One system per GitHub owner when the folder holds several: each owner's
+  // repos sit under it, and a map is drawn per owner. Repos without a remote
+  // share "No remote".
+  const ownerOf = (github: string | null) => github?.split("/")[0] ?? "No remote";
+  const owners = [...new Set(scan.repos.map((r) => ownerOf(r.github)))];
+  const byOwner = owners.length > 1;
+  if (byOwner)
+    for (const o of owners.sort((a, b) =>
+      a === "No remote"
+        ? 1
+        : b === "No remote"
+          ? -1
+          : a.localeCompare(b, undefined, { sensitivity: "base" }),
+    ))
+      out.push({ id: `org:${o}`, path: [o], text: "", parent: null });
   for (const r of scan.repos) {
     const repoId = `repo:${r.id ?? r.dir}`;
-    out.push({ id: repoId, path: [r.dir], text: r.github ?? "", parent: null });
+    out.push({
+      id: repoId,
+      path: [r.dir],
+      text: r.github ?? "",
+      parent: byOwner ? `org:${ownerOf(r.github)}` : null,
+    });
     const parts = scan.parts.filter((x) => x.repo === r.dir);
     // Two parts may share a name; each is placed once, in order.
     const left = [...parts];
