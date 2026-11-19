@@ -4803,10 +4803,14 @@ button.file-card-name:hover {
   background: var(--blue);
 }
 
-.think-context {
-  color: var(--graphite);
-  font-size: 11.5px;
-  white-space: nowrap;
+/* Stop, while a reply runs: a square, as in Claude's apps. */
+.think-send.think-stop {
+  background: transparent;
+  color: var(--ink2);
+}
+
+.think-send.think-stop:hover {
+  background: var(--paper);
 }
 
 /* Steps as one quiet line, like a single step. */

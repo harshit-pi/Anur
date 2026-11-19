@@ -28,6 +28,7 @@ import {
   type MenuEntry,
 } from "../shared/ipc-contract.ts";
 import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts";
+import { fetchOffloaded } from "./folder/offloaded.ts";
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
@@ -192,6 +193,13 @@ const reportWatch = new ReportWatch((changed) => {
   for (const win of windows.values())
     if (folders.current(win.webContents.id)?.path === changed) send(win, "tasks:changed", {});
 });
+// A low disk makes macOS offload iCloud files again: fetch open folders' files back now and then.
+setInterval(() => {
+  for (const id of windows.keys()) {
+    const f = folders.current(id);
+    if (f) void fetchOffloaded(f.path).catch(() => undefined);
+  }
+}, 10 * 60_000).unref();
 /** Claude's names for the system's groups, asked on the person's own agent (20.6). */
 const systemReview = new SystemReview(systemChanged);
 /** The agent host, shared by every window; started when a thread first needs it (3.1). */
@@ -411,6 +419,7 @@ function threadsFor(folder: FolderState): Threads | null {
       },
       defaultAgent: () => appSettings.get().defaultAgent,
       rememberOptions: rememberChoices,
+      knownOptions: (agent) => choices.get(agent),
       mcp: { socket: anurSocket, script: path.join(here, "mcp-server.js") },
       autoApply: () => appSettings.get().autoApply,
       features: () => appSettings.get().features,
@@ -532,6 +541,8 @@ function send<E extends EventName>(win: BrowserWindow, event: E, payload: EventP
 
 /** Open a folder: in its own window if it is open already, in a new window if this one has a folder. */
 async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOutcome> {
+  // iCloud may have offloaded the folder's files; fetch them now, not one by one as they're read.
+  void fetchOffloaded(folder).catch(() => undefined);
   let target = win;
   if (folders.current(win.webContents.id)) target = createWindow();
   const outcome = await folders.open(target.webContents.id, folder);
