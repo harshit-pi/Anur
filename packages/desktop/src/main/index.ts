@@ -1725,6 +1725,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
         at: f.at,
         lapsed: f.lapsed,
         ...(f.thread === "" && f.home !== undefined ? { home: f.home } : {}),
+        disputed: f.disputed ?? null,
       })),
     };
   },

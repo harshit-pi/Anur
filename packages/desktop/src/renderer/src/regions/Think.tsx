@@ -806,6 +806,16 @@ export function Think({
       at?: string | undefined;
       lapsed?: "until" | "gone" | null | undefined;
       home?: string | undefined;
+      disputed?:
+        | {
+            id: string;
+            claim: string;
+            who: string | null;
+            thread: string;
+            home?: string | undefined;
+          }
+        | null
+        | undefined;
     }[]
   >([]);
   const [inputs, setInputs] = useState<
@@ -1892,6 +1902,45 @@ export function Think({
                         <span className="quiet"> · {f.who}</span>
                       ) : null}
                     </span>
+                    {f.disputed ? (
+                      <span className="think-lapsed" role="group" aria-label="Disagrees">
+                        <span className="think-lapsed-why">
+                          Disagrees with “{f.disputed.claim}”
+                          {f.disputed.who ? ` (${f.disputed.who})` : ""}: neither holds until
+                          someone picks
+                        </span>
+                        {writable ? (
+                          <button
+                            type="button"
+                            className="think-more"
+                            title="Keep this one; the other is dropped, and history keeps both"
+                            onClick={() => {
+                              const other = f.disputed;
+                              if (!other) return;
+                              setFindings((all) =>
+                                all
+                                  .filter((x) => x.id !== other.id)
+                                  .map((x) => (x.id === f.id ? { ...x, disputed: null } : x)),
+                              );
+                              void (other.thread
+                                ? anur.call("finding:decide", {
+                                    thread: other.thread,
+                                    id: other.id,
+                                    status: "dropped",
+                                  })
+                                : anur.call("decision:revise", {
+                                    thread: "",
+                                    home: other.home ?? "",
+                                    id: other.id,
+                                    action: "drop",
+                                  }));
+                            }}
+                          >
+                            Keep this one
+                          </button>
+                        ) : null}
+                      </span>
+                    ) : null}
                     {f.lapsed ? (
                       <span className="think-lapsed" role="group" aria-label="Needs a look">
                         <span className="think-lapsed-why">

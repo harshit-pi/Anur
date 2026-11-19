@@ -8,7 +8,7 @@ import { SectionVersions } from "../folder/versions.ts";
 import { HomeVersions } from "../folder/home-versions.ts";
 import { execFileSync } from "node:child_process";
 import type { AgentHub } from "./hub.ts";
-import { Threads, appliesTo, linksIn, reachOf } from "./threads.ts";
+import { Threads, appliesTo, linksIn, markDisputes, reachOf } from "./threads.ts";
 
 const DOC = `# Plan
 
@@ -508,6 +508,97 @@ describe("Threads", () => {
       ["", "d-gone-001", { scope: "section:plan.md#" }],
       ["", "d-holds-01", "drop"],
     ]);
+  });
+
+  it("never lets a later decision win: both show, flagged, until someone picks (18.4)", async () => {
+    const teammate = {
+      id: "d0000000-0000-4000-8000-0000000000aa",
+      at: "2026-11-18T10:00:00.000Z",
+      dev: "mac-b",
+      seq: 0,
+      kind: "decision" as const,
+      scope: "section:plan.md#Plan",
+      ref: null,
+      decision: "Three retries, not infinite.",
+      quote: "three retries",
+      instead: null,
+      until: null,
+      who: "Priya",
+      person: "priya",
+      home: "",
+    };
+    const {
+      threads: t,
+      sent,
+      reply,
+    } = await setup({
+      committed: {
+        keep: () => Promise.resolve(null),
+        drop: () => Promise.resolve(),
+        collected: () => Promise.resolve([teammate]),
+      },
+    });
+    const a = await t.start("plan.md", DOC, risks, "No, five retries. Stripe allows it now.");
+    if (a.kind !== "started") throw new Error(a.reason);
+    const tool = (
+      t as unknown as {
+        tool: (th: string, n: string, args: unknown) => Promise<{ error?: string; text?: string }>;
+      }
+    ).tool.bind(t);
+    const wrong = await tool(a.thread.id, "anur_note_decision", {
+      quote: "No, five retries.",
+      decision: "Five retries.",
+      against: "Two retries",
+      confidence: 0.9,
+    });
+    expect(wrong.error).toContain("No decision listed");
+    const noted = await tool(a.thread.id, "anur_note_decision", {
+      quote: "No, five retries.",
+      decision: "Five retries.",
+      against: "Three retries, not infinite",
+      confidence: 0.9,
+    });
+    expect(noted.text).toContain("neither holds");
+    await reply(a.thread.id, "Both stand until you pick.");
+    const listed = await t.listFindings("plan.md", DOC, risks.index, risks.path);
+    expect(listed.map((f) => [f.claim, f.disputed?.claim])).toEqual(
+      expect.arrayContaining([
+        ["Five retries.", "Three retries, not infinite."],
+        ["Three retries, not infinite.", "Five retries."],
+      ]),
+    );
+    const b = await t.start("plan.md", DOC, risks, "Plan the retries.");
+    if (b.kind !== "started") throw new Error(b.reason);
+    const asked = sent.filter((m) => m.type === "prompt").at(-1);
+    const text = asked?.type === "prompt" ? asked.text : "";
+    expect(text).toContain(
+      `[Disagrees with Priya's "Three retries, not infinite.": neither holds yet.`,
+    );
+  });
+
+  it("marks a pair only while both are kept", () => {
+    const f = (id: string, against: string | null) => ({
+      id,
+      thread: "",
+      claim: id,
+      source: null,
+      section: "",
+      at: "",
+      by: "person" as const,
+      quote: null,
+      who: null,
+      mine: false,
+      instead: null,
+      until: null,
+      reach: 0,
+      lapsed: null,
+      against,
+    });
+    expect(markDisputes([f("a", null), f("b", "a")]).map((x) => x.disputed?.id)).toEqual([
+      "b",
+      "a",
+    ]);
+    expect(markDisputes([f("b", "a")]).map((x) => x.disputed ?? null)).toEqual([null]);
   });
 
   it("keeps a thread's own decision again with no end date once its until passed (18.2)", async () => {

@@ -31,6 +31,11 @@ const Common = LineEnvelope.extend({
    * part in another repo.
    */
   within: z.string().max(600).nullable().optional(),
+  /**
+   * The decision this one goes against (18.4), by its ID, or its thread
+   * finding's: neither wins; both show until someone picks one.
+   */
+  against: z.string().max(64).nullable().optional(),
 });
 
 /** A decision a person stands behind, in their exact words. */

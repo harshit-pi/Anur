@@ -130,6 +130,11 @@ const TOOLS = [
           description:
             "0 to 1: how sure you are this is a lasting decision, not a one-off instruction for this task.",
         },
+        against: {
+          type: "string",
+          description:
+            "When this goes against a decision already kept (listed under Decided, or in CLAUDE.md), that decision's words as listed. Neither then wins: both show to the person until someone picks one.",
+        },
         scope: {
           type: "string",
           enum: ["section", "doc", "folder", "everywhere"],
@@ -473,6 +478,11 @@ const TERMINAL_TOOLS = [
           type: "boolean",
           description:
             "True only after the person said yes to keeping it, when Anur asked you to check.",
+        },
+        against: {
+          type: "string",
+          description:
+            "When this goes against a decision already kept (listed under Decided, or in CLAUDE.md), that decision's words as listed. Neither then wins: both show to the person until someone picks one.",
         },
         scope: {
           type: "string",

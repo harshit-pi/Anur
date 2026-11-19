@@ -58,7 +58,13 @@ import { TurnWatch, type DocChange } from "./turn-watch.ts";
 import { readSection } from "./read-section.ts";
 import { readFile } from "../../vault/anur-copy.ts";
 import type { CommittedDecisions } from "../committed-decisions.ts";
-import { DecisionScope, sectionScope, untilPassed, type CommittedEntry } from "@anur/core";
+import {
+  DecisionScope,
+  decisionNamed,
+  sectionScope,
+  untilPassed,
+  type CommittedEntry,
+} from "@anur/core";
 
 export { readSection } from "./read-section.ts";
 
@@ -326,7 +332,48 @@ export type KeptFinding = {
   lapsed: "until" | "gone" | null;
   /** For a committed one kept outside any thread here: the home it's in, to keep or drop it. */
   home?: string;
+  /** The decision this one goes against (18.4), by ID; and, for a committed one, the thread finding it came from. */
+  against?: string | null;
+  ref?: string | null;
+  /**
+   * Another decision here that disagrees with this one (18.4): neither
+   * holds until someone picks. Where it lives, so picking this one drops it.
+   */
+  disputed?: {
+    id: string;
+    claim: string;
+    who: string | null;
+    thread: string;
+    home?: string;
+  } | null;
 };
+
+/**
+ * Pairs that disagree (18.4): a decision naming another it goes against,
+ * while both are still kept, marks both. A pair where one is gone is no
+ * longer a disagreement: the one left holds.
+ */
+export function markDisputes(list: KeptFinding[]): KeptFinding[] {
+  const byId = new Map<string, KeptFinding>();
+  for (const f of list) {
+    byId.set(f.id, f);
+    if (f.ref) byId.set(f.ref, f);
+  }
+  const of = (f: KeptFinding) => ({
+    id: f.id,
+    claim: f.claim,
+    who: f.who,
+    thread: f.thread,
+    ...(f.home !== undefined ? { home: f.home } : {}),
+  });
+  for (const f of list) {
+    const other = f.against ? byId.get(f.against) : undefined;
+    if (!other || other === f || f.by !== "person" || other.by !== "person") continue;
+    f.disputed = of(other);
+    other.disputed = of(f);
+  }
+  return list;
+}
 
 export type Carried = {
   id: string;
@@ -1096,6 +1143,7 @@ export class Threads {
         when: new Date(f.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
         instead: f.instead,
         until: f.until,
+        disputed: f.disputed ? { claim: f.disputed.claim, who: f.disputed.who } : null,
       })),
       embeds: live.embeds ?? new Map(),
       extra: live.pluginLines ?? [],
@@ -1736,6 +1784,8 @@ export class Threads {
         reach: reachOf(e.scope, here),
         lapsed: gone !== null ? "gone" : decision && untilPassed(e.until, e.at) ? "until" : null,
         home: e.home,
+        against: e.against ?? null,
+        ref: e.ref,
       });
     }
     return out;
@@ -1791,12 +1841,13 @@ export class Threads {
           until,
           reach: canonIn(at, start.section) === canonIn(at, section) ? 0 : 1,
           lapsed: untilPassed(until, renewed?.at ?? l.at) ? "until" : null,
+          against: l.against ?? null,
         });
       }
     }
     if (rel) out.push(...(await this.committedFor(at, index, rel, out)));
-    // Nearest first, then oldest first (18.3).
-    return out.sort((a, b) => a.reach - b.reach || a.at.localeCompare(b.at));
+    // Nearest first, then oldest first (18.3); disagreeing pairs marked (18.4).
+    return markDisputes(out).sort((a, b) => a.reach - b.reach || a.at.localeCompare(b.at));
   }
 
   /** The kept findings on a section, for Think's list (16.1). */
@@ -1957,6 +2008,7 @@ export class Threads {
               instead: f.instead ?? null,
               until,
               who: await this.nameOf(from?.dev ?? f.dev),
+              ...(f.against ? { against: f.against } : {}),
             }
           : { kind: "finding", claim, source: f.source },
         scope,
@@ -1988,6 +2040,19 @@ export class Threads {
     );
     const rule = settleRule(quote, confidence, said);
     if (rule.kind === "refuse") return { error: rule.reason };
+    // Going against one already kept (18.4): named by its words as listed.
+    const againstWords = str(a.against, 600);
+    const decidedHere = (live.findings ?? []).filter((f) => f.by === "person");
+    const against = againstWords
+      ? decisionNamed(
+          againstWords,
+          decidedHere.map((f) => ({ id: f.id, claim: f.claim })),
+        )
+      : null;
+    if (againstWords && !against)
+      return {
+        error: `No decision listed under "Decided on this section" reads "${againstWords}" alone. Give its words as listed there.`,
+      };
     const line = await this.append(live.doc, thread, {
       kind: "finding",
       turn: live.turn,
@@ -1999,6 +2064,7 @@ export class Threads {
       instead: str(a.instead, 300),
       until: str(a.until, 200),
       ...(DecisionScope.safeParse(a.scope).success ? { scope: DecisionScope.parse(a.scope) } : {}),
+      ...(against ? { against } : {}),
     });
     if (rule.kind === "settle")
       await this.append(live.doc, thread, {
@@ -2011,8 +2077,9 @@ export class Threads {
     if (rule.kind === "settle") await this.commitDecided(thread, line.id, "kept");
     await this.refresh(live.rel, live.docText, thread);
     return {
-      text:
-        rule.kind === "settle"
+      text: against
+        ? "Recorded. It disagrees with the decision you named, so neither holds: both show to the person, who picks one. Until then, tell them both stand and don't rely on either."
+        : rule.kind === "settle"
           ? "Recorded as decided, shown to the person with Undo. It reaches every new thread on this section."
           : rule.why === "question"
             ? "Their words read as a question, so it's shown to them to keep; nothing settles until they do."

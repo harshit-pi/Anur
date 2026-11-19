@@ -1447,6 +1447,17 @@ export const ipcContract = {
           lapsed: z.enum(["until", "gone"]).nullable().optional(),
           /** For one only committed: the home it's in, to keep or drop it. */
           home: z.string().optional(),
+          /** Another decision here that disagrees with it (18.4), and where that one lives. */
+          disputed: z
+            .object({
+              id: z.string(),
+              claim: z.string(),
+              who: z.string().nullable(),
+              thread: z.string(),
+              home: z.string().optional(),
+            })
+            .nullable()
+            .optional(),
         }),
       ),
     }),
