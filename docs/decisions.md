@@ -282,3 +282,21 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - The person answers on the group's box: Accept, Rename or Keep (20.6a). Any group can be renamed. Answers are lines in `.anur/system/review.jsonl`, keyed by the group's section ID, applied over the rule's groups by the engineering plugin, so regrouping never mints IDs.
 - Parts the person hasn't seen say "unreviewed" (20.6b). Accepting or renaming a group counts its parts as seen; "Mark N reviewed" does so for a level.
 - A failed ask, such as no sign-in, says why with Try again, and isn't retried on its own.
+
+## The change report, headless (21.2, 21.3a)
+
+- Task boundaries come from Claude Code's own hooks: `anur-system hook` runs on `UserPromptSubmit` and `Stop`, reading the hook's JSON on stdin. It always exits 0, so a hook never fails the agent.
+- At a prompt, every repo in the opened folder is marked: its HEAD, and each dirty file kept as a blob. At Stop each repo is compared with the mark, so only what changed during the task counts: commits made during it, files left uncommitted, new and deleted files, in any repo, not just the session's own. A file already dirty and untouched is not the task's.
+- A Stop that changed nothing writes no report. Reports go to `.anur/tasks/<id>.json` in the opened folder: the outermost folder holding `.anur/` below the home folder, so a repo inside a folder of repos reports to that folder.
+- Categories by rule, the first that matches of data, auth, calls, UI, else other. Data: migrations, schema and model folders, `.sql`, `.prisma`, and added lines that create or alter tables or columns. Auth: paths naming auth, session, token, login, OAuth, JWT or permissions, and imports of them. Calls: added HTTP-client calls (fetch, axios, got, requests, httpx, http.request and the like), until edges arrive. UI: `.tsx`, `.jsx`, `.css` and the like.
+- Each line names its repo, its part (the nearest build file's folder; a package over the CDK stacks beside it), the file, and the first changed line and its text.
+- Still to come in group 21: the report in the app's task tab with at most three lines before "more", Claude's choices from its own report, and putting the hook into Claude Code.
+
+## The change report in the app (21.3, 21.4)
+
+- The hooks ship as Anur's own Claude Code plugin, `anur`, in a local marketplace (`anur-app`) that Anur keeps in its app folder; Claude Code reads it in place. Settings → Plugins → "Task reports in Claude Code" adds it at user scope through `claude plugin marketplace add` and `claude plugin install`, and Remove takes both away. Anur never edits Claude Code's settings itself, and a launch rewrites plugin files that no longer match the app.
+- A shell guard runs first: outside folders holding `.anur/` (below the home folder) it drains stdin and exits, so prompts elsewhere cost a few milliseconds.
+- The prompt hook adds one line of context asking Claude to end a task with "Choices:" and a bullet per choice nobody asked for; the Stop hook reads that list from the transcript's last reply. Nothing is inferred: no list, no choices. On a real `claude -p` task, Claude listed two.
+- A report's line points at the first added line with words, not a blank one.
+- The System tab lists the five newest reports; one opens in its own tab, `anur:task/<id>`, titled "Task report" in the path row. The tab shows at most three items before "more", ranked data, auth, calls, Claude's choices, UI, other, each with its file and line. With no decisions, it shows the same.
+- Tried on the team's own `~/workspace` (24 repos) before adding the plugin there. Two fixes came of it. A dirty path that isn't a regular file, such as a linked `node_modules`, is no longer hashed, and a repo git can't read is marked by HEAD alone instead of failing the others. And repos are marked eight at a time, asynchronously: a mark took 2.4 s one repo after another, and 0.42 s in parallel, which matters because Claude Code waits for the prompt hook.

@@ -104,6 +104,8 @@ import { folderFor } from "./open-file.ts";
 import { offerMoveToApplications } from "./move-to-applications.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
 import { IndexProcess, indexEntry } from "./index-process/client.ts";
+import { TaskHooks } from "./claude-plugin/task-hooks.ts";
+import { ReportWatch, listReports, readReport } from "./task-reports.ts";
 import { SystemReview } from "./system-review.ts";
 import { AgentChoices } from "./threads/agent-choices.ts";
 import { AnurSocket } from "./threads/anur-socket.ts";
@@ -176,6 +178,11 @@ const systemChanged = (changed: string) => {
     if (folders.current(win.webContents.id)?.path === changed) send(win, "system:changed", {});
 };
 const indexProcess = new IndexProcess(indexEntry(here), systemChanged);
+/** New task reports in a folder reach its windows (group 21). */
+const reportWatch = new ReportWatch((changed) => {
+  for (const win of windows.values())
+    if (folders.current(win.webContents.id)?.path === changed) send(win, "tasks:changed", {});
+});
 /** Claude's names for the system's groups, asked on the person's own agent (20.6). */
 const systemReview = new SystemReview(systemChanged);
 /** The agent host, shared by every window; started when a thread first needs it (3.1). */
@@ -205,6 +212,8 @@ void anurSocket.start().catch((e: unknown) => {
 });
 /** Anur in the person's Claude Code (group 6); set up once the app is ready. */
 let claudeSkill: ClaudeSkill | null = null;
+/** The `anur` Claude Code plugin with the task hooks (group 21). */
+let taskHooks: TaskHooks | null = null;
 /** Whether the person turned down making Anur the opener for Markdown files. */
 const openerOffer = () => new OpenerOffer(app.getPath("userData"));
 
@@ -233,6 +242,13 @@ async function startClaudeSkill(): Promise<void> {
       args: [path.join(here, "mcp-server.js")],
       env: { ELECTRON_RUN_AS_NODE: "1", ANUR_TERMINAL: terminalFile },
     },
+  });
+  taskHooks = new TaskHooks({
+    dir: path.join(support, "claude-plugin"),
+    stateFile: path.join(support, "task-hooks.json"),
+    claude: async () => findClaude(await loginPath()),
+    node: process.execPath,
+    cli: path.join(here, "system-cli.js"),
   });
   const t = (webContentsId: number) => {
     const folder = folders.current(webContentsId);
@@ -316,6 +332,9 @@ async function startClaudeSkill(): Promise<void> {
   } catch (e) {
     console.error("Anur couldn't open its tools to a terminal:", e);
   }
+  const hooksRepaired = await taskHooks.check().catch(() => []);
+  if (hooksRepaired.length > 0)
+    console.log(`Anur brought its task hooks up to date: ${hooksRepaired.join(", ")}.`);
   const repaired = await claudeSkill.check().catch(() => []);
   if (repaired.length > 0)
     console.log(`Anur brought its Claude Code skill up to date: ${repaired.join(", ")}.`);
@@ -463,6 +482,16 @@ const docWatcher = new DocWatcher((windowId, change) => {
   const win = windows.get(windowId);
   if (win) send(win, "doc:changed", change);
 });
+
+/** Plain .excalidraw files per folder, scanned at most every 30 s. */
+const plainScans = new Map<string, { at: number; files: Promise<string[]> }>();
+function plainDrawings(root: string): Promise<string[]> {
+  const kept = plainScans.get(root);
+  if (kept && Date.now() - kept.at < 30_000) return kept.files;
+  const files = listDocs(root, 5_000, ".excalidraw").then((r) => r.docs);
+  plainScans.set(root, { at: Date.now(), files });
+  return files;
+}
 
 /** Files added, moved or removed outside Anur, as in Finder: the files panel catches up. */
 const folderWatch = new FolderWatch((windowId) => {
@@ -696,9 +725,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
   "drawing:read": async ({ target, from }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
-    // Obsidian's drawings are .excalidraw.md docs; plain .excalidraw files are found on disk.
-    const plain = (await listDocs(folder.path, 5_000, ".excalidraw")).docs;
-    const found = findDrawing([...folder.docs, ...plain], target, from);
+    // Obsidian's drawings are .excalidraw.md docs, already listed. Only a plain
+    // .excalidraw file needs the disk, scanned once and kept a while: a scan per
+    // embed held up opening docs in a large iCloud folder.
+    const found =
+      findDrawing(folder.docs, target, from) ??
+      findDrawing(await plainDrawings(folder.path), target, from);
     if (!found) return { kind: "failed", reason: `There's no drawing called ${target} here.` };
     const full = path.resolve(folder.path, found);
     if (!full.startsWith(path.resolve(folder.path) + path.sep))
@@ -1541,6 +1573,28 @@ const handlers: { [C in Channel]: Handler<C> } = {
       return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
     }
   },
+  "tasks:list": (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { reports: [] };
+    reportWatch.ensure(folder.path);
+    return { reports: listReports(folder.path) };
+  },
+  "tasks:get": ({ id }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    return { report: folder ? readReport(folder.path, id) : null };
+  },
+  "taskHooks:status": async () =>
+    taskHooks ? taskHooks.status() : { claude: false, added: false, current: false },
+  "taskHooks:act": async ({ action }) => {
+    if (!taskHooks) return { kind: "failed", reason: "Anur is still starting." };
+    try {
+      if (action === "add") await taskHooks.add();
+      else await taskHooks.remove();
+      return { kind: "done" };
+    } catch (e) {
+      return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
+    }
+  },
   "thread:explore-option": async ({ thread, path: rel, text, option }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
@@ -1936,6 +1990,7 @@ app.on("will-quit", (event) => {
     docWatcher.stopAll();
     hub.stop();
     indexProcess.stop();
+    reportWatch.stop();
     anurSocket.close();
     await Promise.all([...threads.values()].map((t) => t.close()));
     // Windows close before will-quit: their notes are written by now or soon (11.4).

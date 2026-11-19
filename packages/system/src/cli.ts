@@ -4,15 +4,41 @@
  * CI and anyone at a terminal. No Electron.
  *
  *   anur-system scan <folder> [--json] [--pin] [--known <file>]
+ *   anur-system hook [--folder <folder>]   (Claude Code's UserPromptSubmit and Stop, on stdin)
  */
 import { readFileSync, writeFileSync } from "node:fs";
+import { handleHook, type HookInput } from "./hook.ts";
 import { scanSystem } from "./system.ts";
 import type { KnownPart } from "./parts.ts";
 
 const args = process.argv.slice(2);
 const [cmd, folder] = args;
+if (cmd === "hook") {
+  // A hook never fails the agent: exit 0 whatever happens.
+  try {
+    const input = JSON.parse(readFileSync(0, "utf8") || "{}") as HookInput;
+    const at = args.indexOf("--folder");
+    const result = await handleHook(input, at >= 0 ? args[at + 1] : undefined);
+    if (result.kind === "reported") process.stderr.write(`anur: task report ${result.file}\n`);
+    // Claude Code reads this from stdout and adds it to the prompt's context.
+    if (result.kind === "marked")
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "UserPromptSubmit",
+            additionalContext: result.context,
+          },
+        }),
+      );
+  } catch (e) {
+    process.stderr.write(`anur: ${e instanceof Error ? e.message : String(e)}\n`);
+  }
+  process.exit(0);
+}
 if (cmd !== "scan" || !folder) {
-  process.stderr.write("Usage: anur-system scan <folder> [--json] [--pin] [--known <file>]\n");
+  process.stderr.write(
+    "Usage: anur-system scan <folder> [--json] [--pin] [--known <file>]\n       anur-system hook [--folder <folder>]\n",
+  );
   process.exit(2);
 }
 const knownAt = args.indexOf("--known");

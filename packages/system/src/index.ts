@@ -34,3 +34,22 @@ export {
   type ReviewLine,
   type ReviewState,
 } from "./review.ts";
+export { handleHook, type HookInput, type HookResult } from "./hook.ts";
+export {
+  CATEGORY_ORDER,
+  categoryOf,
+  folderFor,
+  markTask,
+  partOf,
+  readMark,
+  reportSince,
+  saveMark,
+  saveReport,
+  tasksDir,
+  type Category,
+  type ReportLine,
+  type TaskMark,
+  type TaskReport,
+} from "./tasks.ts";
+export { CHOICES_ASK, choicesIn, lastReply } from "./choices.ts";
+export { markTaskAsync } from "./tasks.ts";

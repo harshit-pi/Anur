@@ -69,6 +69,7 @@ export function titleOf(tab: Tab): string {
   const path = docOf(tab);
   if (!path) return "New tab";
   if (path === SYSTEM_TAB) return "System";
+  if (path.startsWith("anur:task/")) return "Task";
   return (path.split("/").pop() ?? path).replace(/\.md$/i, "");
 }
 
@@ -319,8 +320,12 @@ export function renamePaths(t: Tabs, moves: readonly { from: string; to: string 
  * tab whose own doc is gone closes.
  */
 export function prune(t: Tabs, docs: readonly string[]): Tabs {
-  // The system tab is no file, and stays.
-  const has = new Set([...docs, SYSTEM_TAB]);
+  // The system tab and task tabs are no files, and stay.
+  const has = new Set([
+    ...docs,
+    SYSTEM_TAB,
+    ...t.tabs.flatMap((x) => x.history).filter((p) => p.startsWith("anur:task/")),
+  ]);
   let result = t;
   for (const tab of t.tabs) {
     const current = docOf(tab);
