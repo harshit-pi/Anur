@@ -98,3 +98,42 @@ describe("the hook and other tools", () => {
     expect(call("mcp__fs__read", { path: "notes/plan.md" })).toBeNull();
   });
 });
+
+describe("every home's .anur/ (18.15.2)", () => {
+  const homes: HookConfig = {
+    ...config,
+    anurDirs: [path.join(folder, ".anur"), path.join(folder, "api", ".anur")],
+  };
+  const at = (tool_name: string, tool_input: Record<string, unknown>, cwd = folder) =>
+    decide({ tool_name, tool_input, cwd }, homes, resolve)?.reason ?? null;
+
+  it("closes a repo's .anur/ to the file tools, the shell and other tools, as the folder's", () => {
+    expect(at("Read", { file_path: "api/.anur/docs/d/threads/x/dev.jsonl" })).toBe(MESSAGES.anur);
+    expect(at("Edit", { file_path: `${folder}/api/.anur/decisions/sam.jsonl` })).toBe(
+      MESSAGES.anur,
+    );
+    expect(at("Read", { file_path: ".anur/home-id" }, path.join(folder, "api"))).toBe(
+      MESSAGES.anur,
+    );
+    expect(at("Bash", { command: "cat api/.anur/docs/d/threads/t/dev.jsonl" })).toBe(MESSAGES.anur);
+    expect(at("mcp__x__read", { path: `${folder}/api/.anur/docs` })).toBe(MESSAGES.anur);
+    // The repo's own code stays open.
+    expect(at("Read", { file_path: "api/src/index.ts" })).toBeNull();
+    expect(at("Bash", { command: "cat api/src/index.ts" })).toBeNull();
+  });
+
+  it("refuses a recursive read from a folder holding a repo's .anur/, unless it leaves .anur out", () => {
+    expect(at("Bash", { command: "grep -rn retry api" })).toBe(MESSAGES.recursive);
+    expect(at("Bash", { command: "grep -rn retry ." }, path.join(folder, "api"))).toBe(
+      MESSAGES.recursive,
+    );
+    expect(at("Bash", { command: "grep -rn --exclude-dir=.anur retry api" })).toBeNull();
+    // A recursive read inside the repo's code, below its .anur/, is fine.
+    expect(at("Bash", { command: "grep -rn retry api/src" })).toBeNull();
+  });
+
+  it("still guards only the folder's .anur/ when no homes are given, as before", () => {
+    expect(call("Read", { file_path: "api/.anur/x" })).toBeNull();
+    expect(call("Read", { file_path: ".anur/x" })).toBe(MESSAGES.anur);
+  });
+});

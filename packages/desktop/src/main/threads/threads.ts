@@ -93,6 +93,10 @@ export type ThreadDeps = {
   autoApply?: () => boolean;
   /** Which switchable Core features are on (group 12); all on when not given. */
   features?: () => FeatureFlags;
+  /** A doc's `.anur/`, in its home (18.15.2); the opened folder's when not given. */
+  anurDirOf?: (doc: DocId) => string;
+  /** Every home's `.anur/`, the opened folder's first: where threads may be, and what the agent can't touch. */
+  anurDirs?: () => Promise<string[]>;
   /** Decisions and kept findings committed with the folder or its repo (18.9). */
   committed?: Pick<CommittedDecisions, "keep" | "drop"> & {
     /** Every committed decision and finding the opened folder collects (18.14). */
@@ -321,7 +325,7 @@ export class Threads {
   readonly previews: PreviewStore;
 
   constructor(private readonly d: ThreadDeps) {
-    this.previews = new PreviewStore(d.folder, d.device);
+    this.previews = new PreviewStore(d.folder, d.device, (doc) => this.anurOf(doc));
     this.turnWatch = new TurnWatch(d.folder, (change, threads) => {
       void this.flag(change, threads);
     });
@@ -400,8 +404,20 @@ export class Threads {
     return path.join(this.copiesRoot, thread);
   }
 
+  /** Docs whose `.anur/` was found by looking, as a thread's after a restart. */
+  private readonly docDirs = new Map<DocId, string>();
+
+  /** The `.anur/` a doc's threads, inputs and previews live in: its home's (18.15.2). */
+  private anurOf(doc: DocId): string {
+    return this.docDirs.get(doc) ?? this.d.anurDirOf?.(doc) ?? path.join(this.d.folder, ANUR_DIR);
+  }
+
+  private async anurDirsAll(): Promise<string[]> {
+    return (await this.d.anurDirs?.()) ?? [path.join(this.d.folder, ANUR_DIR)];
+  }
+
   private threadsDir(doc: DocId) {
-    return path.join(this.d.folder, ANUR_DIR, anurPaths.doc(doc), "threads");
+    return path.join(this.anurOf(doc), anurPaths.doc(doc), "threads");
   }
 
   private async linesOf(doc: DocId, thread: string): Promise<KnownThreadLine[]> {
@@ -426,13 +442,13 @@ export class Threads {
     thread: string,
     line: Record<string, unknown>,
   ): Promise<{ id: string }> {
-    const file = path.join(this.d.folder, ANUR_DIR, anurPaths.thread(doc, thread, this.d.device));
+    const file = path.join(this.anurOf(doc), anurPaths.thread(doc, thread, this.d.device));
     return this.appendTo(file, line);
   }
 
   /** The doc's own inputs file: what people added to its sections, one file per device (10.1). */
   private sectionInputsDir(doc: DocId) {
-    return path.join(this.d.folder, ANUR_DIR, anurPaths.doc(doc), "inputs");
+    return path.join(this.anurOf(doc), anurPaths.doc(doc), "inputs");
   }
 
   private async sectionInputLines(doc: DocId): Promise<KnownThreadLine[]> {
@@ -1031,11 +1047,14 @@ export class Threads {
     await mkdir(dir, { recursive: true });
     const config = path.join(dir, `${thread}.json`);
     const anurDir = path.join(this.d.folder, ANUR_DIR);
+    const anurDirs = await this.anurDirsAll();
     await writeFile(
       config,
       JSON.stringify({
         folder: this.d.folder,
         anurDir,
+        // Every home's `.anur/` is the agent's to leave alone, not only the folder's (18.15.2).
+        anurDirs,
         thread,
         log: path.join(dir, `${thread}.log.jsonl`),
         copies: this.copiesOf(thread),
@@ -1077,6 +1096,7 @@ export class Threads {
           args: ["ELECTRON_RUN_AS_NODE=1", this.d.node, this.d.hookScript, config],
         },
         anurDir,
+        anurDirs,
         copies: this.copiesOf(thread),
       },
     };
@@ -2613,19 +2633,18 @@ export class Threads {
   private async docOfThread(thread: string): Promise<DocId | null> {
     const live = this.live.get(thread);
     if (live) return live.doc;
-    const docs = path.join(this.d.folder, ANUR_DIR, "docs");
-    let names: string[];
-    try {
-      names = await readdir(docs);
-    } catch {
-      return null;
-    }
-    for (const d of names) {
-      try {
-        await readdir(path.join(docs, d, "threads", thread));
-        return d as DocId;
-      } catch {
-        // Not this doc.
+    // Any home may hold it: look in each `.anur/`, and remember where it was.
+    for (const anurDir of await this.anurDirsAll()) {
+      const docs = path.join(anurDir, "docs");
+      const names = await readdir(docs).catch(() => [] as string[]);
+      for (const d of names) {
+        try {
+          await readdir(path.join(docs, d, "threads", thread));
+          this.docDirs.set(d as DocId, anurDir);
+          return d as DocId;
+        } catch {
+          // Not this doc.
+        }
       }
     }
     return null;
@@ -3021,7 +3040,7 @@ export class Threads {
     }
     await rm(dir, { recursive: true, force: true });
     await rm(this.copiesOf(thread), { recursive: true, force: true });
-    const previews = path.join(this.d.folder, ANUR_DIR, anurPaths.doc(doc), "previews");
+    const previews = path.join(this.anurOf(doc), anurPaths.doc(doc), "previews");
     for (const dev of await readdir(previews).catch(() => [] as string[]))
       await rm(path.join(previews, dev, `${previewIdOf(thread)}.json`), { force: true });
   }

@@ -14,6 +14,8 @@ export type Guard = {
   hook: { command: string; args: string[] };
   /** `.anur/`, closed to the agent's own file tools. */
   anurDir: string;
+  /** Every home's `.anur/`, closed the same way (18.15.2). */
+  anurDirs?: string[];
   /** This thread's working copies, part of the agent's workspace. */
   copies: string;
 };
@@ -79,7 +81,9 @@ export function claudeCode(opts: {
               },
               permissions: {
                 // "//abs/path" is the absolute-path form of a permission rule.
-                deny: ["Read", "Edit", "Write"].map((t) => `${t}(/${guard.anurDir}/**)`),
+                deny: [...new Set([guard.anurDir, ...(guard.anurDirs ?? [])])].flatMap((d) =>
+                  ["Read", "Edit", "Write"].map((t) => `${t}(/${d}/**)`),
+                ),
                 additionalDirectories: [guard.copies],
               },
             },

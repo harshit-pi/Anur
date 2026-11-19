@@ -100,7 +100,8 @@ export function personKey(
   return `e-${sha256(email).slice(0, 12)}`;
 }
 
-const KEEP_DECISIONS = ["!.gitignore", "!decisions/", "!decisions/*.jsonl"];
+/** Always committed: decisions, and the home's ID that keeps doc IDs the same on every clone. */
+const KEEP_DECISIONS = ["!.gitignore", "!decisions/", "!decisions/*.jsonl", "!home-id"];
 
 /**
  * `.anur/.gitignore` with decisions committed. A folder commits `.anur/` by

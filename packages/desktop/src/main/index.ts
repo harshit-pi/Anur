@@ -61,7 +61,8 @@ import { planLinkUpdates } from "./folder/link-updates.ts";
 import { openDoc } from "./folder/open-doc.ts";
 import { DocWatcher } from "./folder/doc-watcher.ts";
 import { Journal } from "./folder/journal.ts";
-import { SectionVersions, lastSavedIn } from "./folder/versions.ts";
+import { lastSavedIn } from "./folder/versions.ts";
+import { HomeVersions } from "./folder/home-versions.ts";
 import { sectionCommits } from "./folder/git-history.ts";
 import { suggestMatch } from "./folder/orphans.ts";
 import { personName } from "./folder/people.ts";
@@ -169,21 +170,19 @@ let device: string | null = null;
 /** The doc each window shows, so leaving it ends its typing session. */
 const shownDoc = new Map<number, string>();
 /** Section IDs and versions (2.21), one writer per open folder; none for a read-only folder. */
-const versions = new Map<string, SectionVersions>();
-function versionsFor(folder: FolderState): SectionVersions | null {
+const versions = new Map<string, HomeVersions>();
+/** Section IDs and history, kept in each doc's home beneath the folder (18.15.2). */
+function versionsFor(folder: FolderState): HomeVersions | null {
   if (!device || folder.mode !== "writable") return null;
   let v = versions.get(folder.path);
   if (!v) {
-    v = new SectionVersions(
-      folder.path,
-      device,
-      (e) => {
+    v = new HomeVersions(folder.path, device, {
+      onError: (e) => {
         console.error("Anur couldn't record section versions:", e);
       },
-      lastSavedIn(app.getPath("userData"), folder.path),
-      undefined,
-      () => appSettings.get().features.history,
-    );
+      memoryFor: (home) => lastSavedIn(app.getPath("userData"), home),
+      recording: () => appSettings.get().features.history,
+    });
     versions.set(folder.path, v);
   }
   return v;
@@ -461,6 +460,8 @@ function threadsFor(folder: FolderState): Threads | null {
       hookScript: hookEntry(here),
       node: process.execPath,
       locate: (rel, text) => ids.locate(rel, text),
+      anurDirOf: (doc) => ids.anurDirOf(doc),
+      anurDirs: () => ids.anurDirs(),
       committed: committedFor(folder.path, device),
       emit: (event) => {
         for (const [id, win] of windows) {
@@ -572,6 +573,9 @@ const folderWatch = new FolderWatch((windowId) => {
     const win = windows.get(windowId);
     if (!before || !now || !win) return;
     const lists = (f: FolderState) => JSON.stringify([f.docs, f.folders, f.files, f.offloaded]);
+    // New or gone folders may be repos cloned or removed: find the homes again (18.15.2).
+    if (JSON.stringify(before.folders) !== JSON.stringify(now.folders))
+      void versions.get(now.path)?.refresh();
     if (lists(before) !== lists(now)) send(win, "folder:changed", now);
   })();
 });
