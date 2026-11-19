@@ -710,14 +710,8 @@ export function Page({
       if (change.path !== doc.path) return;
       if (change.kind === "changed") fold(change.text, change.hash);
       else if (change.kind === "gone") {
-        // Nothing typed that isn't on disk: nothing to keep, so the tab just closes.
-        if (!saver?.dirty) {
-          window.dispatchEvent(new CustomEvent("anur:doc-gone", { detail: { path: doc.path } }));
-          return;
-        }
-        saver.stop(
-          "This doc was deleted or moved outside Anur. Its text is still on the page; copy it to keep it.",
-        );
+        // Deleted or moved outside Anur: its tab closes, as in Obsidian.
+        window.dispatchEvent(new CustomEvent("anur:doc-gone", { detail: { path: doc.path } }));
       } else saver?.stop(change.reason);
     });
     onSaveStatus(editable ? "saved" : null, null);
