@@ -101,7 +101,7 @@ const TOOLS = [
   {
     name: "anur_note_decision",
     description:
-      "Record a decision the person made that should outlast this task: a choice about the work, or a correction of what you did or proposed. Give their exact words from this thread as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it settles with an Undo for the person; otherwise they're asked to keep it. Kept decisions reach every new thread on this section. Don't record one-off instructions for this task, or your own choices.",
+      "Record a decision the person made that should outlast this task: a choice about the work, or a correction of what you did or proposed. Give their exact words from this thread as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it settles with an Undo for the person; otherwise they're asked to keep it. Kept decisions reach every new thread on this section. Don't record one-off instructions for this task, your own choices or assumptions, or which option or edit they picked: the doc holds that.",
     inputSchema: {
       type: "object",
       properties: {
