@@ -61,6 +61,8 @@ type Box = {
     ask: { request: string; option: string } | null;
     /** For a planned one: the thread that proposed it, and its ID. */
     proposal?: { thread: string; action: string };
+    /** For a planned one: what it will do, shown on hover. */
+    what?: string;
   };
   /** The chip folding a made choice's other options, and whether it's open. */
   fold?: { open: boolean; count: number };
@@ -454,6 +456,30 @@ export function MapView({
         const source = here.find((x) => x.id === from);
         return source ? 1 + depth(source, new Set([...seen, t.id])) : 0;
       };
+      // Actions a thread proposed and nobody has run hang off that thread, planned, with ▶ Run.
+      const planned = (t: ThreadView, tid: string) => {
+        for (const it of t.items) {
+          if (it.kind !== "proposed-action" || it.run) continue;
+          const aid = `a:${it.id}`;
+          nodes.push({ id: aid, parent: tid, w: ACTION_W, h: ACTION_H });
+          info.set(aid, {
+            id: aid,
+            kind: "action",
+            index: s.index,
+            thread: t,
+            heading: it.title,
+            act: {
+              state: "planned",
+              tag: "BUILD",
+              detail: "Proposed",
+              ask: null,
+              proposal: { thread: t.id, action: it.id },
+              what: it.what,
+            },
+            parent: tid,
+          });
+        }
+      };
       for (const t of [...here].sort((a, b) => depth(a) - depth(b))) {
         const tid = `t:${t.id}`;
         const from = t.branchedFrom?.thread;
@@ -475,6 +501,7 @@ export function MapView({
             },
             parent,
           });
+          planned(t, tid);
           continue;
         }
         nodes.push({
@@ -490,31 +517,8 @@ export function MapView({
           heading: t.title,
           parent,
         });
+        planned(t, tid);
       }
-      // Actions threads proposed and nobody has run: planned, with ▶ Run.
-      for (const t of threads)
-        for (const it of t.items) {
-          if (it.kind !== "proposed-action" || it.run) continue;
-          const on = it.path ?? t.path;
-          if (!on || !samePath(on, s.path)) continue;
-          const aid = `a:${it.id}`;
-          nodes.push({ id: aid, parent: id, w: ACTION_W, h: ACTION_H });
-          info.set(aid, {
-            id: aid,
-            kind: "action",
-            index: s.index,
-            thread: t,
-            heading: it.title,
-            act: {
-              state: "planned",
-              tag: "BUILD",
-              detail: "Proposed",
-              ask: null,
-              proposal: { thread: t.id, action: it.id },
-            },
-            parent: id,
-          });
-        }
       // Links to other docs' sections (8.6): one badge on the section, with the list on a click.
       const seen = new Set<string>();
       const outLinks: NonNullable<Box["outLinks"]> = [];
@@ -1073,7 +1077,10 @@ export function MapView({
         );
       return;
     }
-    if ((b.kind === "thread" || b.kind === "option" || b.kind === "edit") && b.thread) {
+    if (
+      (b.kind === "thread" || b.kind === "option" || b.kind === "edit" || b.kind === "action") &&
+      b.thread
+    ) {
       onSelect(b.index);
       window.dispatchEvent(
         new CustomEvent("anur:open-thread", { detail: { thread: b.thread.id } }),
@@ -1580,7 +1587,7 @@ export function MapView({
               role="button"
               tabIndex={-1}
               className={`map-action ${b.act.state}`}
-              title={ACTION_TITLE[b.act.state]}
+              data-peek={b.id}
               style={{ left: b.x - b.w / 2, top: b.y, width: b.w, transform: "translateY(-50%)" }}
               onPointerDown={(e) => {
                 onBoxDown(e, b);
@@ -1606,14 +1613,6 @@ export function MapView({
                     thread={b.thread}
                     docPath={docPath}
                     docText={docText}
-                    onOpen={() => {
-                      onSelect(b.index);
-                      window.dispatchEvent(
-                        new CustomEvent("anur:open-thread", {
-                          detail: { thread: b.thread?.id ?? "" },
-                        }),
-                      );
-                    }}
                   />
                 ) : null}
               </div>
@@ -1824,6 +1823,39 @@ export function MapView({
         />
       ) : null}
       {(() => {
+        // An action: what it will do, or what its thread last said it did.
+        const act = peek ? byId.get(peek) : undefined;
+        if (act?.kind === "action" && act.act && act.thread && !drag && !linking) {
+          const said = act.thread.items.findLast((x) => x.kind === "message" && x.role === "agent");
+          const body =
+            act.act.state === "planned"
+              ? (act.act.what ?? "")
+              : said?.kind === "message"
+                ? said.text
+                : "";
+          const r = host.current?.getBoundingClientRect();
+          const right = (act.x + act.w / 2) * v.z + v.x + 12;
+          const left = (act.x - act.w / 2) * v.z + v.x - 12 - 320;
+          const x = r && right + 320 > r.width ? Math.max(8, left) : right;
+          const y = Math.max(
+            8,
+            Math.min((act.y - act.h / 2) * v.z + v.y, (r?.height ?? 600) - 320 - 60),
+          );
+          return (
+            <div
+              className="map-peek"
+              style={{ left: x, top: y }}
+              role="note"
+              aria-label={act.heading}
+            >
+              <div className="map-peek-name">
+                {act.act.tag === "CHECK" ? "Check" : "Build"} · {ACTION_STATE[act.act.state]}:{" "}
+                {act.heading}
+              </div>
+              {body ? <Markdown text={body} /> : <p className="quiet">Nothing said yet.</p>}
+            </div>
+          );
+        }
         const opt = peek?.startsWith("o:") || peek?.startsWith("p:") ? byId.get(peek) : undefined;
         const s = peek?.startsWith("s:") ? tree.sections[Number(peek.slice(2))] : undefined;
         const b = opt ?? (s ? byId.get(idOf(s.index)) : undefined);
@@ -2030,15 +2062,6 @@ const ACTION_STATE: Record<NonNullable<Box["act"]>["state"], string> = {
   stopped: "Stopped",
 };
 
-const ACTION_TITLE: Record<NonNullable<Box["act"]>["state"], string> = {
-  planned: "Proposed and not run: ▶ Run starts it",
-  running: "Running now: ■ Stop ends it",
-  needs: "Waiting on you: Approve lets it go on",
-  done: "Done: Open shows what it made",
-  failed: "It failed: Retry goes on from the step that failed",
-  stopped: "Stopped: Resume goes on from where it stopped",
-};
-
 /**
  * An action box's one control (Mock 10). A done action only opens: running it
  * again could send or file things twice, so that's in its thread, asked first.
@@ -2048,13 +2071,11 @@ function ActionControl({
   thread,
   docPath,
   docText,
-  onOpen,
 }: {
   act: NonNullable<Box["act"]>;
   thread: ThreadView;
   docPath: string;
   docText: () => string;
-  onOpen: () => void;
 }) {
   const say = (message: string) => {
     void anur.call("thread:send", { thread: thread.id, path: docPath, text: docText(), message });
@@ -2099,7 +2120,7 @@ function ActionControl({
             },
             true,
           )
-        : button("Open", onOpen);
+        : null;
     case "failed":
       return button("↻ Retry", () => {
         say(
@@ -2113,6 +2134,7 @@ function ActionControl({
         );
       });
     default:
-      return button("Open", onOpen);
+      // Done: no control. Clicking the box opens its thread; running again is there, asked first.
+      return null;
   }
 }
