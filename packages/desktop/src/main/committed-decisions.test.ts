@@ -5,6 +5,9 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { CommittedDecisions, decisionsHome, personIn } from "./committed-decisions.ts";
 
+// Personal decisions live in the home folder: never the real one in a test.
+process.env.HOME = mkdtempSync(path.join(tmpdir(), "anur-test-home-"));
+
 const git = (dir: string, ...args: string[]) =>
   execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" });
 
@@ -167,5 +170,64 @@ describe("one's next session sees a decision at once (23.9)", () => {
     expect(git(dir, "status", "--porcelain")).not.toContain("CLAUDE.local.md");
     await store.drop("notes.md", "fnd-00000020");
     expect(existsSync(local)).toBe(false);
+  });
+});
+
+describe("how far a decision reaches (18.3)", () => {
+  function stores() {
+    const folder = mkdtempSync(path.join(tmpdir(), "anur-scope-"));
+    repo(folder);
+    const personal = mkdtempSync(path.join(tmpdir(), "anur-personal-"));
+    const everywhere: string[][] = [];
+    const store = new CommittedDecisions(
+      folder,
+      "mac-a",
+      () => Promise.resolve("sam"),
+      () => undefined,
+      () => undefined,
+      personal,
+      (entries) => everywhere.push(entries.map((e) => (e.kind === "decision" ? e.decision : ""))),
+    );
+    return { folder, personal, store, everywhere };
+  }
+
+  it("keeps a decision for its section, its doc, or its repo, as scopes readers know", async () => {
+    const { folder, store } = stores();
+    await store.keep("notes.md", "Checkout", "r-section", decision, "section");
+    await store.keep("notes.md", "Checkout", "r-doc", decision, "doc");
+    await store.keep("notes.md", "Checkout", "r-folder", decision, "folder");
+    const scopes: Record<string, string> = Object.fromEntries(
+      (await store.current(folder)).map((e) => [e.ref ?? "", e.scope]),
+    );
+    expect(scopes).toEqual({
+      "r-section": "section:notes.md#Checkout",
+      "r-doc": "section:notes.md#",
+      "r-folder": "repo",
+    });
+  });
+
+  it("moves a decision kept again at another scope, leaving one, not two", async () => {
+    const { folder, store } = stores();
+    await store.keep("notes.md", "Checkout", "r-1", decision, "section");
+    await store.keep("notes.md", "Checkout", "r-1", decision, "doc");
+    expect((await store.current(folder)).map((e) => [e.ref, e.scope])).toEqual([
+      ["r-1", "section:notes.md#"],
+    ]);
+  });
+
+  it("keeps an everywhere decision in the person's own file, out of the repo, and in their user CLAUDE.md", async () => {
+    const { folder, personal, store, everywhere } = stores();
+    await store.keep("notes.md", "Checkout", "r-e", decision, "everywhere");
+    expect(await store.current(folder)).toEqual([]);
+    expect(existsSync(path.join(personal, ".anur", "decisions", "sam.jsonl"))).toBe(true);
+    const all = await store.all([]);
+    expect(all.map((e) => [e.ref, e.scope, e.home])).toEqual([["r-e", "everywhere", "~"]]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(everywhere.at(-1)).toEqual(["Three retries"]);
+    // Moved to the repo, it leaves the personal file.
+    await store.keep("notes.md", "Checkout", "r-e", decision, "folder");
+    expect((await store.all([])).map((e) => [e.ref, e.home])).toEqual([["r-e", ""]]);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(everywhere.at(-1)).toEqual([]);
   });
 });

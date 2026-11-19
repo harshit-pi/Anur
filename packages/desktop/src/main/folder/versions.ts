@@ -142,6 +142,13 @@ export class SectionVersions {
     });
   }
 
+  /** A doc's path in this store's folder, from its ID; null when it isn't known or is gone. */
+  async pathOf(doc: DocId): Promise<string | null> {
+    this.loaded ??= this.docIds.load();
+    await this.loaded;
+    return this.docIds.pathOf(doc);
+  }
+
   /**
    * Docs Anur renamed or moved: each keeps its ID, so its sections, threads
    * and history follow it. A typing session on the old path ends first.

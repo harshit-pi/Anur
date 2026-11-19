@@ -130,6 +130,12 @@ const TOOLS = [
           description:
             "0 to 1: how sure you are this is a lasting decision, not a one-off instruction for this task.",
         },
+        scope: {
+          type: "string",
+          enum: ["section", "doc", "folder", "everywhere"],
+          description:
+            'How far it reaches, from the person\'s words: "section" (default), "doc" ("in this doc"), "folder" ("in this repo", "across the project"), or "everywhere" ("always", "in every project").',
+        },
       },
       required: ["quote", "decision", "confidence"],
       additionalProperties: false,
@@ -467,6 +473,12 @@ const TERMINAL_TOOLS = [
           type: "boolean",
           description:
             "True only after the person said yes to keeping it, when Anur asked you to check.",
+        },
+        scope: {
+          type: "string",
+          enum: ["section", "doc", "folder", "everywhere"],
+          description:
+            'How far it reaches, from the person\'s words: "folder" for this repo (the default without a doc), "doc" or "section" with a doc, or "everywhere" ("always", "in every project").',
         },
         doc: { ...docArg, description: "The doc it's about, if any; leave out for the repo." },
         section: sectionArg,

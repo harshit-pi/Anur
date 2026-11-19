@@ -6,6 +6,9 @@ import { describe, expect, it } from "vitest";
 import { CommittedDecisions } from "../committed-decisions.ts";
 import { personSaid, terminalHandler, type TerminalDeps } from "./terminal.ts";
 
+// Personal decisions live in the home folder: never the real one in a test.
+process.env.HOME = mkdtempSync(path.join(tmpdir(), "anur-test-home-"));
+
 const said = (...texts: string[]) =>
   texts
     .map((t, i) =>

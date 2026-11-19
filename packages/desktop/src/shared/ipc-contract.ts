@@ -194,6 +194,8 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     claim: z.string(),
     source: z.string().nullable(),
     status: z.enum(["proposed", "kept", "dropped"]),
+    /** How far it reaches (18.3). */
+    scope: z.enum(["section", "doc", "folder", "everywhere"]).optional(),
     /** A person's decision, not a source's finding: their words, who (null for you), and so on. */
     by: z.literal("person").optional(),
     quote: z.string().nullable().optional(),
@@ -1394,6 +1396,8 @@ export const ipcContract = {
         id: z.string().optional(),
         status: z.enum(["kept", "dropped"]).optional(),
         claim: z.string().max(600).nullable().optional(),
+        /** How far a kept one reaches (18.3); kept again with another scope, it moves. */
+        scope: z.enum(["section", "doc", "folder", "everywhere"]).optional(),
         add: z.object({ claim: z.string().max(600), source: z.string().nullable() }).optional(),
       })
       .strict(),

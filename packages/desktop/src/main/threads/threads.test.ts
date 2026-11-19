@@ -8,7 +8,7 @@ import { SectionVersions } from "../folder/versions.ts";
 import { HomeVersions } from "../folder/home-versions.ts";
 import { execFileSync } from "node:child_process";
 import type { AgentHub } from "./hub.ts";
-import { Threads, appliesTo, linksIn } from "./threads.ts";
+import { Threads, appliesTo, linksIn, reachOf } from "./threads.ts";
 
 const DOC = `# Plan
 
@@ -921,5 +921,161 @@ describe("where a committed decision reaches (23.4)", () => {
     expect(asked?.type === "prompt" ? asked.text : "").toMatch(
       /Decided by Priya .*Three retries, never infinite\. \[on the whole folder\]/,
     );
+  });
+});
+
+describe("carried nearest first (18.3)", () => {
+  it("ranks a section's own, then above, the doc, the repo, and everywhere", () => {
+    expect(reachOf("section:plan.md#Plan › Risks", ["Plan", "Risks"])).toBe(0);
+    expect(reachOf("section:plan.md#Plan", ["Plan", "Risks"])).toBe(1);
+    expect(reachOf("section:plan.md#", ["Plan", "Risks"])).toBe(2);
+    expect(reachOf("repo", ["Plan", "Risks"])).toBe(3);
+    expect(reachOf("folder:docs", ["Plan", "Risks"])).toBe(3);
+    expect(reachOf("everywhere", ["Plan", "Risks"])).toBe(4);
+    expect(appliesTo("everywhere", "~", "anything/at/all.md", [])).toBe("everywhere");
+  });
+
+  it("puts a section's own decision before its doc's, its repo's and everywhere's in a new thread", async () => {
+    const base = {
+      at: "2026-11-18T10:00:00.000Z",
+      dev: "mac-b",
+      seq: 0,
+      kind: "decision" as const,
+      ref: null,
+      quote: "q",
+      instead: null,
+      until: null,
+      who: "Priya",
+      person: "priya",
+      home: "",
+    };
+    const entries = [
+      {
+        ...base,
+        id: "e0000000-0000-4000-8000-000000000001",
+        scope: "everywhere",
+        decision: "Everywhere rule",
+        home: "~",
+      },
+      { ...base, id: "e0000000-0000-4000-8000-000000000002", scope: "repo", decision: "Repo rule" },
+      {
+        ...base,
+        id: "e0000000-0000-4000-8000-000000000003",
+        scope: "section:plan.md#",
+        decision: "Doc rule",
+      },
+      {
+        ...base,
+        id: "e0000000-0000-4000-8000-000000000004",
+        scope: "section:plan.md#Plan › Risks",
+        decision: "Section rule",
+      },
+    ];
+    const { threads: t, sent } = await setup({
+      committed: {
+        keep: () => Promise.resolve(null),
+        drop: () => Promise.resolve(),
+        collected: () => Promise.resolve(entries),
+      },
+    });
+    const r = await t.start("plan.md", DOC, risks, "Go.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const asked = sent.find((m) => m.type === "prompt");
+    const text = asked?.type === "prompt" ? asked.text : "";
+    const order = ["Section rule", "Doc rule", "Repo rule", "Everywhere rule"].map((x) =>
+      text.indexOf(x),
+    );
+    expect(order.every((i) => i > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it("passes the scope a person picks on to the committed copy", async () => {
+    const kept: string[] = [];
+    const { threads: t, reply } = await setup({
+      committed: {
+        keep: (_rel, _section, _ref, _entry, scope) => {
+          kept.push(scope ?? "section");
+          return Promise.resolve(null);
+        },
+        drop: () => Promise.resolve(),
+      },
+    });
+    const a = await t.start("plan.md", DOC, risks, "What does the host cost?");
+    if (a.kind !== "started") throw new Error(a.reason);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    await tool(a.thread.id, "anur_propose_finding", { claim: "£40 a month.", source: "bill.pdf" });
+    await reply(a.thread.id, "Proposed.");
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === a.thread.id);
+    const f = (view?.items ?? []).find((i) => i.kind === "finding");
+    if (f?.kind !== "finding") throw new Error("no finding");
+    await t.decideFinding(a.thread.id, { id: f.id, status: "kept", claim: null, scope: "doc" });
+    expect(kept).toEqual(["doc"]);
+    const again = (await t.list("plan.md", DOC)).find((x) => x.id === a.thread.id);
+    const shown = (again?.items ?? []).find((i) => i.kind === "finding");
+    expect(shown?.kind === "finding" && shown.scope).toBe("doc");
+  });
+});
+
+describe("a thread that isn't open still reaches the committed copy", () => {
+  it("passes a scope change and an Undo through after a restart", async () => {
+    const folder = await mkdtemp(path.join(tmpdir(), "anur-closed-"));
+    await writeFile(path.join(folder, "plan.md"), DOC);
+    const calls: string[] = [];
+    const committed = {
+      keep: (rel: string, _s: string, _r: string, _e: unknown, scope?: string) => {
+        calls.push(`keep ${rel} ${scope ?? "section"}`);
+        return Promise.resolve(null);
+      },
+      drop: (rel: string) => {
+        calls.push(`drop ${rel}`);
+        return Promise.resolve();
+      },
+    };
+    const versions = new HomeVersions(folder, "dev1");
+    const make = () => {
+      const { hub, reply } = fakeHub();
+      threads = new Threads({
+        folder,
+        device: "dev1",
+        appSupport: path.join(folder, "..", `${path.basename(folder)}-support`),
+        hub,
+        hookScript: "/x/hook.js",
+        node: "/x/node",
+        locate: (rel, text) => versions.locate(rel, text),
+        relOf: (doc) => versions.relOf(doc),
+        anurDirOf: (doc) => versions.anurDirOf(doc),
+        anurDirs: () => versions.anurDirs(),
+        emit: () => undefined,
+        previewsChanged: () => undefined,
+        defaultAgent: () => "claude-code",
+        committed,
+      });
+      return { t: threads, reply };
+    };
+    const first = make();
+    const r = await first.t.start("plan.md", DOC, risks, "What does the host cost?");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const tool = (
+      first.t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(first.t);
+    await tool(r.thread.id, "anur_propose_finding", { claim: "£40 a month.", source: "bill.pdf" });
+    await first.reply(r.thread.id, "Proposed.");
+    const view = (await first.t.list("plan.md", DOC)).find((x) => x.id === r.thread.id);
+    const f = (view?.items ?? []).find((i) => i.kind === "finding");
+    if (f?.kind !== "finding") throw new Error("no finding");
+    await first.t.decideFinding(r.thread.id, { id: f.id, status: "kept", claim: null });
+    await first.t.close();
+    // Restarted: nothing live.
+    const again = make();
+    await again.t.decideFinding(r.thread.id, {
+      id: f.id,
+      status: "kept",
+      claim: null,
+      scope: "doc",
+    });
+    await again.t.decideFinding(r.thread.id, { id: f.id, status: "dropped", claim: null });
+    expect(calls).toEqual(["keep plan.md section", "keep plan.md doc", "drop plan.md"]);
   });
 });

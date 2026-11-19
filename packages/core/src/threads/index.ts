@@ -1,4 +1,5 @@
 export {
+  DecisionScope,
   KnownThreadLine,
   MessageLine,
   OtherThreadLine,

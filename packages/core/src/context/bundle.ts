@@ -148,6 +148,9 @@ export const FULL_TEXT_BUDGET = 240_000;
  * (4.2): a third of it, at roughly four characters a token. Before the
  * agent has reported a window, the 200,000-token default.
  */
+/** At most this many decisions, and this many findings, carried into a thread (18.3). */
+export const CARRY_CAP = 30;
+
 export function budgetFor(windowTokens: number | null | undefined): number {
   if (!windowTokens || windowTokens <= 0) return FULL_TEXT_BUDGET;
   return Math.round((windowTokens / 3) * 4);
@@ -346,8 +349,13 @@ export function buildBundle({
       lines.push("## Sections beside it, as an outline", "", part.text, "");
     }
   }
-  const decided = findings.filter((f) => f.by === "person");
-  const found = findings.filter((f) => f.by !== "person");
+  // Nearest first, as given (18.3): a section's own, then the doc's, its
+  // folder's and everywhere's; past the cap, only a count, so decisions never
+  // crowd out the doc.
+  const allDecided = findings.filter((f) => f.by === "person");
+  const allFound = findings.filter((f) => f.by !== "person");
+  const decided = allDecided.slice(0, CARRY_CAP);
+  const found = allFound.slice(0, CARRY_CAP);
   if (decided.length > 0)
     lines.push(
       "## Decided on this section",
@@ -358,6 +366,11 @@ export function buildBundle({
         (f) =>
           `- Decided by ${f.who ?? "a teammate"}${f.when ? ` (${f.when})` : ""}: ${f.claim}${f.instead ? ` Instead of: ${f.instead}.` : ""}${f.until ? ` Until: ${f.until}.` : ""}${f.section ? ` [on ${f.section}]` : ""}`,
       ),
+      ...(allDecided.length > decided.length
+        ? [
+            `- And ${String(allDecided.length - decided.length)} more decided further from here, not listed.`,
+          ]
+        : []),
       "",
     );
   if (found.length > 0)
@@ -370,6 +383,11 @@ export function buildBundle({
         (f) =>
           `- ${f.claim}${f.source ? ` (source: ${f.source})` : ""}${f.section ? ` [on ${f.section}]` : ""}`,
       ),
+      ...(allFound.length > found.length
+        ? [
+            `- And ${String(allFound.length - found.length)} more kept further from here, not listed.`,
+          ]
+        : []),
       "",
     );
   for (const e of extra) if (e.lines.length > 0) lines.push(`## ${e.label}`, "", ...e.lines, "");

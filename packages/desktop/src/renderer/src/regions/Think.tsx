@@ -2695,6 +2695,7 @@ function FindingCard({
     claim: string;
     source: string | null;
     status: "proposed" | "kept" | "dropped";
+    scope?: Scope | undefined;
     by?: "person" | undefined;
     quote?: string | null | undefined;
     instead?: string | null | undefined;
@@ -2707,9 +2708,15 @@ function FindingCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(item.claim);
-  const decide = (status: "kept" | "dropped", claim: string | null = null) => {
+  const decide = (status: "kept" | "dropped", claim: string | null = null, scope?: Scope) => {
     setEditing(false);
-    void anur.call("finding:decide", { thread, id: item.id, status, claim });
+    void anur.call("finding:decide", {
+      thread,
+      id: item.id,
+      status,
+      claim,
+      ...(scope ? { scope } : {}),
+    });
   };
   if (item.by === "person") return <DecisionCard item={item} writable={writable} decide={decide} />;
   if (item.status !== "proposed")
@@ -2781,6 +2788,54 @@ function FindingCard({
  * quiet line with Undo; when the agent was unsure, or the words were a
  * question, it asks once: keep it for later work, or just this once.
  */
+/** How far a decision reaches (18.3), as a person picks it. */
+type Scope = "section" | "doc" | "folder" | "everywhere";
+const SCOPES: { value: Scope; label: string; title: string }[] = [
+  { value: "section", label: "This section", title: "This section and the ones under it" },
+  { value: "doc", label: "This doc", title: "Every section of this doc" },
+  {
+    value: "folder",
+    label: "This repo or folder",
+    title: "Every doc in this repo, or this folder when it isn't in one",
+  },
+  {
+    value: "everywhere",
+    label: "Everywhere",
+    title: "Every folder you open, and every Claude Code session",
+  },
+];
+
+/** Where a decision applies: changed on a kept one at once, or chosen before Keep. */
+function ScopePicker({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: Scope;
+  disabled: boolean;
+  onChange: (s: Scope) => void;
+}) {
+  return (
+    <label className="think-scope quiet">
+      Applies to{" "}
+      <select
+        value={value}
+        disabled={disabled}
+        title={SCOPES.find((s) => s.value === value)?.title}
+        onChange={(e) => {
+          onChange(e.currentTarget.value as Scope);
+        }}
+      >
+        {SCOPES.map((s) => (
+          <option key={s.value} value={s.value} title={s.title}>
+            {s.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function DecisionCard({
   item,
   writable,
@@ -2789,6 +2844,7 @@ function DecisionCard({
   item: {
     claim: string;
     status: "proposed" | "kept" | "dropped";
+    scope?: Scope | undefined;
     quote?: string | null | undefined;
     instead?: string | null | undefined;
     until?: string | null | undefined;
@@ -2796,8 +2852,9 @@ function DecisionCard({
     auto?: boolean | undefined;
   };
   writable: boolean;
-  decide: (status: "kept" | "dropped") => void;
+  decide: (status: "kept" | "dropped", claim?: string | null, scope?: Scope) => void;
 }) {
+  const [scope, setScope] = useState<Scope>(item.scope ?? "section");
   const said = item.who ? `${item.who}: ` : "";
   const extra = [
     item.instead ? `instead of ${item.instead}` : null,
@@ -2819,6 +2876,16 @@ function DecisionCard({
           {extra.length ? <span className="quiet"> ({extra.join(", ")})</span> : null}
           {item.who ? <span className="quiet"> · {item.who}</span> : null}
         </span>
+        {item.status === "kept" ? (
+          <ScopePicker
+            value={scope}
+            disabled={!writable}
+            onChange={(next) => {
+              setScope(next);
+              decide("kept", null, next);
+            }}
+          />
+        ) : null}
         {writable && item.status === "kept" && item.auto ? (
           <button
             type="button"
@@ -2843,14 +2910,15 @@ function DecisionCard({
       ) : null}
       <div>{item.claim}</div>
       {extra.length ? <div className="quiet think-claim-note">{extra.join(" · ")}</div> : null}
+      <ScopePicker value={scope} disabled={!writable} onChange={setScope} />
       {writable ? (
         <div className="think-offer-actions">
           <button
             type="button"
             className="think-button primary"
-            title="New threads on this section will follow it"
+            title="New threads where it applies will follow it"
             onClick={() => {
-              decide("kept");
+              decide("kept", null, scope);
             }}
           >
             Keep

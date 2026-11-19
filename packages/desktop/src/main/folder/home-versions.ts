@@ -56,6 +56,22 @@ export class HomeVersions {
     return path.join(this.folder, this.docHome.get(doc) ?? "", ANUR_DIR);
   }
 
+  /**
+   * A doc's path from the opened folder, from its ID: what a thread that
+   * isn't open needs to find its doc. Looked up in the home the doc was
+   * located in, else in each home.
+   */
+  async relOf(doc: DocId): Promise<string | null> {
+    await this.ready;
+    const known = this.docHome.get(doc);
+    const homes = known !== undefined ? [known] : ["", ...this.homes];
+    for (const home of homes) {
+      const p = await this.store(home).pathOf(doc);
+      if (p) return home ? `${home}/${p}` : p;
+    }
+    return null;
+  }
+
   /** A doc's home, from the opened folder ("" for the folder itself). */
   homeOfDoc(rel: string): string {
     return homeOf(rel, this.homes).home;
