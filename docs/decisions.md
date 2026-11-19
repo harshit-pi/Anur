@@ -353,3 +353,9 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - Each read of a folder's system is saved in `.anur/system/last-read.json` (written beside, then renamed). On launch the tab draws the saved read at once, with "Updating…" beside Rescan, while a fresh read runs; the fresh one replaces it when it finishes. Only a folder's first open shows "Reading the repos…".
 - Opened frames join the trail (pitrade-official › PiDataServiceProcessor › Storage): a crumb goes back to that level, and Esc closes the frame opened last.
 - The map takes the tab's height and scrolls both ways inside; frames have wider gaps, so lines run between boxes.
+
+## The system is a map, opened like a doc
+
+- No ribbon icon for the system. With Engineering on, the files panel's first row is "System", and ⌘K has "Open the system map"; it opens in a tab like a doc.
+- The system has no page, so its tab is map only: the Page / Map switch shows Map on and Page greyed, saying why.
+- What a doc's tab shows in Think, the system shows in the right sidebar: recent tasks, the calls of a line clicked on the map with their files and lines, and Choose repos. The map has the whole centre.

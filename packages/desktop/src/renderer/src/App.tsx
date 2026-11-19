@@ -1155,7 +1155,8 @@ export function App() {
           setTabs((t) => newTab(t));
         }}
         onListTabs={listTabs}
-        view={doc && sections ? centerView : null}
+        view={selected === SYSTEM_TAB ? "map" : doc && sections ? centerView : null}
+        mapOnly={selected === SYSTEM_TAB}
         onView={setCenterView}
         onAsk={doc && sections ? ask : null}
       />
@@ -1174,11 +1175,10 @@ export function App() {
         onPlugins={() => {
           setSettings("core");
         }}
-        onSystem={engineeringOn ? openSystem : null}
-        systemOpen={selected === SYSTEM_TAB}
       />
       <LeftSidebar
         folder={shown}
+        system={engineeringOn ? { open: selected === SYSTEM_TAB, onOpen: openSystem } : null}
         selected={selected}
         onSelect={openDoc}
         hidden={!open.left}
@@ -1282,16 +1282,21 @@ export function App() {
       <RightSidebar
         hidden={!open.right}
         think={
-          <Think
-            docPath={doc && sections ? doc.path : null}
-            docText={docText}
-            tree={sections}
-            section={sections?.sections[cursorSection] ?? sections?.sections[0] ?? null}
-            writable={folder?.mode === "writable" && doc?.mode === "editable"}
-            request={threadRequest}
-            onJump={jumpTo}
-            page={pageView}
-          />
+          selected === SYSTEM_TAB ? (
+            // The system's map fills this with recent tasks, a line's calls and its repos.
+            <div id="system-panel" className="system-panel" />
+          ) : (
+            <Think
+              docPath={doc && sections ? doc.path : null}
+              docText={docText}
+              tree={sections}
+              section={sections?.sections[cursorSection] ?? sections?.sections[0] ?? null}
+              writable={folder?.mode === "writable" && doc?.mode === "editable"}
+              request={threadRequest}
+              onJump={jumpTo}
+              page={pageView}
+            />
+          )
         }
       />
       <StatusBar

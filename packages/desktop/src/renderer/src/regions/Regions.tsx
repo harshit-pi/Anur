@@ -39,8 +39,6 @@ export function Ribbon({
   onSearch,
   onSettings,
   onPlugins,
-  onSystem,
-  systemOpen,
 }: {
   filesOpen: boolean;
   onFiles: () => void;
@@ -48,9 +46,6 @@ export function Ribbon({
   onSearch: () => void;
   onSettings: () => void;
   onPlugins: () => void;
-  /** Open the system tab; null when the Engineering plugin is off. */
-  onSystem: (() => void) | null;
-  systemOpen: boolean;
 }) {
   return (
     <nav className="ribbon" aria-label="Ribbon">
@@ -74,18 +69,6 @@ export function Ribbon({
       >
         <SearchIcon />
       </button>
-      {onSystem ? (
-        <button
-          className={`ribbon-button${systemOpen ? " active" : ""}`}
-          type="button"
-          aria-label="System"
-          aria-pressed={systemOpen}
-          title="System: the folder's repos and their parts"
-          onClick={onSystem}
-        >
-          <SystemIcon />
-        </button>
-      ) : null}
       <div className="ribbon-spacer" />
       <button
         className="ribbon-button"
@@ -145,7 +128,10 @@ export function LeftSidebar({
   notice = null,
   makeDoc = 0,
   outline = null,
+  system = null,
 }: {
+  /** The folder's system map, when Engineering is on: a row above the files. */
+  system?: { open: boolean; onOpen: () => void } | null;
   /** The open doc's outline, under the files; folds away. */
   outline?: ReactNode;
   folder: FolderState | null;
@@ -254,6 +240,17 @@ export function LeftSidebar({
           <CollapseAllIcon />
         </button>
       </div>
+      {system ? (
+        <button
+          type="button"
+          className={`tree-row system-row${system.open ? " selected" : ""}`}
+          title="The folder's repos and the links between them"
+          onClick={system.onOpen}
+        >
+          <SystemIcon />
+          <span className="truncate">System</span>
+        </button>
+      ) : null}
       <FileTree
         root={folder.path}
         docs={folder.docs}
@@ -629,7 +626,14 @@ export function OutlinePanel({
 }
 
 /** 5. Right sidebar: Think, on the section in focus. */
-export function RightSidebar({ hidden, think }: { hidden: boolean; think: React.ReactNode }) {
+export function RightSidebar({
+  hidden,
+  think,
+}: {
+  hidden: boolean;
+  /** Think for a doc; for the system, a slot its map fills with what's clicked. */
+  think: React.ReactNode;
+}) {
   return (
     <aside className="right-sidebar" aria-label="Think" hidden={hidden}>
       <div className="right-main">{think}</div>

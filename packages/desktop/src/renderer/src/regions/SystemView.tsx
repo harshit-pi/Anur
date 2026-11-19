@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { anur } from "../bridge.ts";
 import { SystemMap } from "./SystemMap.tsx";
 import { taskTitle, type TaskReport } from "../layout/task-report.ts";
@@ -133,6 +134,11 @@ export function SystemView({
   /** Frames opened on the map, and the line whose calls the list shows. */
   const [openFrames, setOpenFrames] = useState<ReadonlySet<string>>(new Set());
   const [focus, setFocus] = useState<string | null>(null);
+  // The right sidebar's slot for this tab, filled through a portal.
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  useEffect(() => {
+    setSlot(document.getElementById("system-panel"));
+  }, []);
   // Esc goes up a level: it closes the frame opened last, and what's open inside it.
   const framesNow = useRef(openFrames);
   framesNow.current = openFrames;
@@ -265,7 +271,7 @@ export function SystemView({
           </span>
         ))}
         <span className="system-actions">
-          {level ? null : (
+          {
             <button
               type="button"
               aria-expanded={choosing}
@@ -276,7 +282,7 @@ export function SystemView({
             >
               Choose repos
             </button>
-          )}
+          }
           {shown.updating ? (
             <span className="quiet" role="status">
               Updating…
@@ -287,8 +293,6 @@ export function SystemView({
           </button>
         </span>
       </nav>
-      {choosing && !level ? <RepoChooser repos={shown.repos} /> : null}
-      {level ? null : <RecentTasks onOpen={onOpenTask} />}
       {review.asking ? (
         <Asking since={review.askingSince} />
       ) : review.failed ? (
@@ -393,13 +397,23 @@ export function SystemView({
           }}
         />
       )}
-      <EdgeList
-        sections={all}
-        edges={shown.edges}
-        misses={shown.misses.flatMap((m) => m.misses)}
-        within={level}
-        focus={focus}
-      />
+      {/* What's clicked on the map, recent tasks and the repos chosen: the right sidebar. */}
+      {slot
+        ? createPortal(
+            <div className="system-side">
+              {choosing ? <RepoChooser repos={shown.repos} /> : null}
+              <RecentTasks onOpen={onOpenTask} />
+              <EdgeList
+                sections={all}
+                edges={shown.edges}
+                misses={shown.misses.flatMap((m) => m.misses)}
+                within={level}
+                focus={focus}
+              />
+            </div>,
+            slot,
+          )
+        : null}
     </div>
   );
 }
