@@ -103,3 +103,4 @@ ANUR_SCREENSHOT=/tmp/shot.png ANUR_OPEN_FOLDER=/path/to/folder ANUR_SCREENSHOT_C
 - Every PR description has a "## Release note" section: one line for people using Anur, as the app's What's new shows it, or "none". The release script gathers these into the GitHub release, the update feed and What's new, and lists PRs that have none.
 - The pre-commit hook formats, lints and type-checks; `pnpm check` runs what CI runs.
 - This repo is public: no personal names, emails or private notes in code, comments, docs or PR text.
+- `docs/what-anur-reads.md` lists every technology the engineering plugin reads, with Read, Partly or Not yet. A PR that adds, changes or removes a detector, build file, route or call pattern updates it in the same PR, so a miss can be told apart as a bug or a new technology.
