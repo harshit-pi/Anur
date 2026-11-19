@@ -114,3 +114,19 @@ export function gitignoreKeepingDecisions(current: string | null): string | null
   const body = current.endsWith("\n") || current === "" ? current : `${current}\n`;
   return body + KEEP_DECISIONS.filter((k) => !rows.includes(k)).join("\n") + "\n";
 }
+
+/**
+ * A section scope, "section:<doc>#<A › B>", read from the home it was kept
+ * in, as the doc's path from the opened folder and the heading path; null
+ * for a scope that isn't a section's, such as a part's (23.1).
+ */
+export function sectionScope(scope: string, home: string): { doc: string; path: string[] } | null {
+  const m = /^section:([^#]+)#(.*)$/s.exec(scope);
+  if (!m?.[1]) return null;
+  const parts = [...(home && home !== "." ? home.split("/") : []), ...m[1].split("/")];
+  const doc: string[] = [];
+  for (const p of parts)
+    if (p === "..") doc.pop();
+    else if (p && p !== ".") doc.push(p);
+  return { doc: doc.join("/"), path: m[2] ? m[2].split(" › ") : [] };
+}

@@ -58,6 +58,7 @@ import { TurnWatch, type DocChange } from "./turn-watch.ts";
 import { readSection } from "./read-section.ts";
 import { readFile } from "../../vault/anur-copy.ts";
 import type { CommittedDecisions } from "../committed-decisions.ts";
+import { sectionScope, type CommittedEntry } from "@anur/core";
 
 export { readSection } from "./read-section.ts";
 
@@ -93,7 +94,10 @@ export type ThreadDeps = {
   /** Which switchable Core features are on (group 12); all on when not given. */
   features?: () => FeatureFlags;
   /** Decisions and kept findings committed with the folder or its repo (18.9). */
-  committed?: Pick<CommittedDecisions, "keep" | "drop">;
+  committed?: Pick<CommittedDecisions, "keep" | "drop"> & {
+    /** Every committed decision and finding the opened folder collects (18.14). */
+    collected?: () => Promise<(CommittedEntry & { home: string })[]>;
+  };
   /** Who uses each device, and this person's own name, to show who started others' threads. */
   people?: () => Promise<{ me: string | null; byDevice: ReadonlyMap<string, string> }>;
   /** Plugins switched on for this folder (group 19): their IDs, for the MCP server, and their context lines. */
@@ -881,7 +885,7 @@ export class Threads {
     const gone = (live.proposed ?? []).filter((p) => !still.includes(p));
     live.waiting = live.proposed?.length ? { still, gone } : null;
     live.carried = await this.carriedFor(at, start.section, thread);
-    live.findings = await this.findingsFor(at, start.section);
+    live.findings = await this.findingsFor(at, start.section, rel);
     live.pluginLines =
       (await this.d.plugins
         ?.context(rel, at.tree.sections[indexIn(at, start.section)]?.path ?? [])
@@ -1564,11 +1568,51 @@ export class Threads {
    * any a person removed. The latest of each source stays.
    */
   /**
+   * Committed decisions and kept findings on this section or above it, as
+   * the opened folder collects them (18.14): a teammate's arrive with a
+   * pull. Ones already here from this folder's own threads aren't repeated.
+   */
+  private async committedFor(
+    at: Located,
+    index: number,
+    rel: string,
+    local: readonly KeptFinding[],
+  ): Promise<KeptFinding[]> {
+    const collected = this.d.committed?.collected;
+    if (!collected) return [];
+    const here = at.tree.sections[index]?.path ?? [];
+    const seen = new Set(local.map((f) => f.id));
+    const me = (await this.d.people?.().catch(() => null))?.me ?? null;
+    const out: KeptFinding[] = [];
+    for (const e of await collected().catch(() => [])) {
+      if (e.ref && seen.has(e.ref)) continue;
+      const s = sectionScope(e.scope, e.home);
+      if (s?.doc !== rel || s.path.some((p, i) => here[i] !== p)) continue;
+      const decision = e.kind === "decision";
+      out.push({
+        id: e.id,
+        thread: "",
+        claim: decision ? e.decision : e.claim,
+        source: decision ? null : e.source,
+        section: s.path.at(-1) ?? "this doc",
+        at: e.at,
+        by: decision ? "person" : "source",
+        quote: decision ? e.quote : null,
+        who: decision ? e.who : null,
+        mine: decision && !!me && e.who === me,
+        instead: decision ? e.instead : null,
+        until: decision ? e.until : null,
+      });
+    }
+    return out;
+  }
+
+  /**
    * Findings kept on a section or the sections above it (16.1), oldest
    * first: each claim as the person kept it, with its source. Dropped ones,
    * and ones never decided, don't carry.
    */
-  async findingsFor(at: Located, section: SectionId): Promise<KeptFinding[]> {
+  async findingsFor(at: Located, section: SectionId, rel?: string): Promise<KeptFinding[]> {
     const index = indexIn(at, section);
     if (index < 0) return [];
     const above = new Set<string>();
@@ -1610,6 +1654,7 @@ export class Threads {
         });
       }
     }
+    if (rel) out.push(...(await this.committedFor(at, index, rel, out)));
     return out.sort((a, b) => a.at.localeCompare(b.at));
   }
 
@@ -1623,7 +1668,7 @@ export class Threads {
         ? sectionIndex
         : at.tree.sections.findIndex((s) => s.path.join("\u0000") === sectionPath.join("\u0000"));
     const section = at.ids[index];
-    return section ? this.findingsFor(at, section) : [];
+    return section ? this.findingsFor(at, section, rel) : [];
   }
 
   /**

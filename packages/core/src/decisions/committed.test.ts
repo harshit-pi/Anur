@@ -4,6 +4,7 @@ import {
   gitignoreKeepingDecisions,
   loginFromEmail,
   personKey,
+  sectionScope,
 } from "./committed.ts";
 
 /** A stand-in for SHA-256: hex of the text's char codes, enough to test the key's shape. */
@@ -85,5 +86,16 @@ describe(".anur/.gitignore with decisions committed", () => {
     const next = gitignoreKeepingDecisions("*\n");
     expect(next).toBe("*\n!.gitignore\n!decisions/\n!decisions/*.jsonl\n");
     expect(gitignoreKeepingDecisions(next)).toBeNull();
+  });
+});
+
+describe("a section scope read through the opened folder (18.14)", () => {
+  it("is the doc's path from the folder and its heading path, whatever home it was kept in", () => {
+    expect(sectionScope("section:docs/design.md#Plan › Risks", "api")).toEqual({
+      doc: "api/docs/design.md",
+      path: ["Plan", "Risks"],
+    });
+    expect(sectionScope("section:plan.md#", "")).toEqual({ doc: "plan.md", path: [] });
+    expect(sectionScope("part:abc", "api")).toBeNull();
   });
 });

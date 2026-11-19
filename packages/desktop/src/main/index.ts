@@ -409,6 +409,26 @@ async function pluginHostFor(folderPath: string): Promise<PluginHost> {
   return pluginHosts.get(folderPath) ?? syncPlugins(folderPath);
 }
 
+/**
+ * Decisions committed with the folder (18.9), written where a doc lives and
+ * read through the opened folder alone (18.14): its own and every home a
+ * plugin names, such as each repo of a system.
+ */
+function committedFor(folderPath: string, device: string) {
+  const store = new CommittedDecisions(folderPath, device);
+  return {
+    keep: store.keep.bind(store),
+    drop: store.drop.bind(store),
+    collected: async () => {
+      const host = await pluginHostFor(folderPath);
+      const homes = await Promise.all(
+        host.decisionHomes().map((h) => h.homes(folderPath).catch(() => [] as string[])),
+      );
+      return store.all(homes.flat());
+    },
+  };
+}
+
 function threadsFor(folder: FolderState): Threads | null {
   const ids = versionsFor(folder);
   if (!device || !ids) return null;
@@ -422,7 +442,7 @@ function threadsFor(folder: FolderState): Threads | null {
       hookScript: hookEntry(here),
       node: process.execPath,
       locate: (rel, text) => ids.locate(rel, text),
-      committed: new CommittedDecisions(folder.path, device),
+      committed: committedFor(folder.path, device),
       emit: (event) => {
         for (const [id, win] of windows) {
           if (folders.current(id)?.path === folder.path) send(win, "thread:event", event);

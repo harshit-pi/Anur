@@ -6,6 +6,7 @@ import {
   awsLinks,
   edgesIn,
   findRepoDirs,
+  includedRepoDirs,
   groupParts,
   readReview,
   reviewState,
@@ -32,6 +33,7 @@ export const engineering: Plugin = {
       "map-layer",
       "surface",
       "mcp-tools",
+      "decision-homes",
     ],
     mcpPrefix: "eng_",
     surfaces: ["CLAUDE.md", "CLAUDE.local.md"],
@@ -52,6 +54,11 @@ export const engineering: Plugin = {
       id: "http",
       misses: HTTP_MISSES,
       edges: (folder) => Promise.resolve(systemEdges(folder)),
+    });
+    // Each repo in the system keeps its own committed decisions; the folder collects them (18.14).
+    api.registerDecisionHomes({
+      id: "repos",
+      homes: (folder) => Promise.resolve(includedRepoDirs(folder).filter((d) => d !== ".")),
     });
     // Lambdas, tables, queues, topics and buckets, within a repo and across (22.6).
     api.registerEdgeDetector({

@@ -189,6 +189,7 @@ export {
   gitignoreKeepingDecisions,
   loginFromEmail,
   personKey,
+  sectionScope,
   type CommittedEntry,
 } from "./decisions/committed.ts";
 export * from "./plugins/api.ts";

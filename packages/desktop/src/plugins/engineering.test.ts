@@ -93,3 +93,14 @@ describe("one system per GitHub owner", () => {
     );
   });
 });
+
+describe("each repo keeps its own decisions (18.14)", () => {
+  it("names every repo in the system as a home the folder collects, in main", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "anur-eng-"));
+    twoRepoSystem(dir);
+    const main = new PluginHost("main");
+    await main.load(engineering);
+    const [homes] = main.decisionHomes();
+    expect(await homes?.homes(dir)).toEqual(["api", "web"]);
+  });
+});

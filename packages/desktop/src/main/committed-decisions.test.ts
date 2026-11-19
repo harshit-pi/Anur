@@ -96,3 +96,23 @@ describe("committed decisions (18.9)", () => {
     expect(staged).not.toContain(".anur/docs/thread.jsonl");
   });
 });
+
+describe("the opened folder's one reader (18.14)", () => {
+  it("collects its own decisions and each repo's, saying which home each came from", async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), "anur-dec-"));
+    writeFileSync(path.join(folder, "plan.md"), "# Plan\n");
+    const api = path.join(folder, "api");
+    repo(api);
+    const store = new CommittedDecisions(folder, "mac-a", () => Promise.resolve("sam"));
+    await store.keep("plan.md", "Plan", "fnd-00000003", decision);
+    await store.keep("api/notes.md", "Checkout", "fnd-00000004", {
+      ...decision,
+      decision: "Use Stripe",
+    });
+    const all = await store.all(["api"]);
+    expect(all.map((e) => [e.home, e.kind === "decision" ? e.decision : "", e.scope])).toEqual([
+      ["", "Three retries", "section:plan.md#Plan"],
+      ["api", "Use Stripe", "section:notes.md#Checkout"],
+    ]);
+  });
+});
