@@ -1,8 +1,23 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
-import { currentEntries, renderBlock, withBlock, type CommittedEntry } from "@anur/core";
+import {
+  currentEntries,
+  renderBlock,
+  withBlock,
+  type BlockKind,
+  type CommittedEntry,
+} from "@anur/core";
 import { decisionFiles } from "./claude-md.ts";
+import { edgesIn } from "./edges.ts";
+import { scanSystem } from "./system.ts";
 
 /**
  * A person's own decisions not yet on the default branch, in their
@@ -88,7 +103,11 @@ export function ignoreLocal(repo: string): boolean {
  */
 export function writeLocalMd(repo: string): boolean {
   if (git(repo, "rev-parse", "--is-inside-work-tree") === null) return false;
-  const block = renderBlock(unmergedEntries(repo), "local");
+  return writeLocalBlock(repo, renderBlock(unmergedEntries(repo), "local"), "local");
+}
+
+/** One of Anur's blocks in `CLAUDE.local.md`, the rest of the file kept; whether it changed. */
+function writeLocalBlock(repo: string, block: string | null, kind: BlockKind): boolean {
   const file = path.join(repo, LOCAL);
   let now: string | null;
   try {
@@ -96,9 +115,9 @@ export function writeLocalMd(repo: string): boolean {
   } catch {
     now = null;
   }
-  const next = withBlock(now, block);
+  const next = withBlock(now, block, kind);
   if (next === now) return false;
-  if (next === null || next === "") {
+  if (next === null || next === "" || !next.trim()) {
     rmSync(file, { force: true });
     return now !== null;
   }
@@ -106,4 +125,37 @@ export function writeLocalMd(repo: string): boolean {
   if (!ignoreLocal(repo)) return false;
   writeFileSync(file, next);
   return true;
+}
+
+/**
+ * Decisions on calls between repos, at the other end too (23.10): a
+ * decision on a call is kept in the repo the person worked in, so the repo
+ * at the other end of the call lists it in its own `CLAUDE.local.md`, for
+ * every session there on this Mac. Only a system folder knows both ends;
+ * each repo's own `CLAUDE.md` lists only its own. The repos written.
+ */
+export function writeEdgeSides(folder: string): string[] {
+  const scan = scanSystem(folder);
+  const edges = edgesIn(
+    folder,
+    scan.repos.map((r) => r.dir),
+    scan.parts,
+  );
+  const ends = new Map<string, string[]>();
+  for (const e of edges) if ("repo" in e.to) ends.set(e.id, [e.from.repo, e.to.repo]);
+  const kept = scan.repos.flatMap((r) =>
+    currentEntries(decisionFiles(path.join(folder, r.dir))).map((e) => ({ ...e, home: r.dir })),
+  );
+  const written: string[] = [];
+  for (const r of scan.repos) {
+    const others = kept.filter((e) => {
+      if (e.home === r.dir || !e.scope.startsWith("edge:")) return false;
+      return ends.get(e.scope.slice("edge:".length))?.includes(r.dir) ?? false;
+    });
+    const repo = path.join(folder, r.dir);
+    // A repo with nothing to list and no file yet is left alone.
+    if (!others.length && !existsSync(path.join(repo, LOCAL))) continue;
+    if (writeLocalBlock(repo, renderBlock(others, "edges"), "edges")) written.push(r.dir);
+  }
+  return written;
 }

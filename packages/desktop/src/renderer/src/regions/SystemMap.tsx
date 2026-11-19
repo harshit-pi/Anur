@@ -516,6 +516,21 @@ function LineCard({
             >
               Hide
             </button>
+            {e.decisions?.length ? (
+              <ul className="edge-decisions" aria-label="Decided on this call">
+                {e.decisions.map((d) => (
+                  <li key={d.id} className={`edge-decision ${d.kind}`}>
+                    {d.text}
+                    <span className="quiet">
+                      {" "}
+                      {[d.kind === "finding" ? "kept fact" : d.who, `in ${d.repo || "this folder"}`]
+                        .filter(Boolean)
+                        .join(", ")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </li>
         ))}
       </ul>

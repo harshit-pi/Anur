@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { mkdtempSync, mkdirSync } from "node:fs";
 import { readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -375,7 +376,7 @@ async function startClaudeSkill(): Promise<void> {
           ? ((await t(at.win.webContents.id)?.sectionPathOf(rel, text, section)) ?? null)
           : null;
       },
-      committed: (base) => new CommittedDecisions(base, device ?? "terminal"),
+      committed: (base) => storeFor(base, device ?? "terminal"),
       me: () => {
         const at = front();
         return personName(at?.folder.path ?? homedir(), appSettings.get().name);
@@ -444,8 +445,50 @@ async function pluginHostFor(folderPath: string): Promise<PluginHost> {
  * read through the opened folder alone (18.14): its own and every home a
  * plugin names, such as each repo of a system.
  */
+/** Defaults for every argument before the last, so a store can name only its sides. */
+function storeFor(base: string, dev: string): CommittedDecisions {
+  return new CommittedDecisions(
+    base,
+    dev,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => {
+      edgeSidesSoon(base);
+    },
+  );
+}
+
+const sidesTimers = new Map<string, NodeJS.Timeout>();
+const sidesRead = new Set<string>();
+/**
+ * Each repo's `CLAUDE.local.md` lists decisions on its calls kept at the
+ * other end (23.10), written by the headless CLI in its own process, since
+ * reading every repo's calls takes seconds; at most once a second per folder.
+ */
+function edgeSidesSoon(folderPath: string): void {
+  if (!pluginsOn(folderPath).includes("engineering")) return;
+  clearTimeout(sidesTimers.get(folderPath));
+  sidesTimers.set(
+    folderPath,
+    setTimeout(() => {
+      sidesTimers.delete(folderPath);
+      execFile(
+        process.execPath,
+        [path.join(here, "system-cli.js"), "edge-sides", folderPath],
+        { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, timeout: 120_000 },
+        (err) => {
+          if (err) console.error("Anur couldn't list decisions on calls:", err.message);
+        },
+      );
+    }, 1000),
+  );
+}
+
 function committedFor(folderPath: string, device: string) {
-  const store = new CommittedDecisions(folderPath, device);
+  const store = storeFor(folderPath, device);
   return {
     keep: store.keep.bind(store),
     drop: store.drop.bind(store),
@@ -457,6 +500,36 @@ function committedFor(folderPath: string, device: string) {
       return store.all(homes.flat());
     },
   };
+}
+
+/**
+ * Each edge's decisions and kept findings (23.10), from every repo in the
+ * system: one kept by the caller's repo and one by the provider's both show
+ * on the same line.
+ */
+async function edgeDecisions(folderPath: string) {
+  const out = new Map<
+    string,
+    { id: string; kind: "decision" | "finding"; text: string; who: string | null; repo: string }[]
+  >();
+  if (!device) return out;
+  const all = await committedFor(folderPath, device)
+    .collected()
+    .catch(() => []);
+  for (const e of all) {
+    if (!e.scope.startsWith("edge:")) continue;
+    const edge = e.scope.slice("edge:".length);
+    const list = out.get(edge) ?? [];
+    list.push({
+      id: e.id,
+      kind: e.kind,
+      text: e.kind === "decision" ? e.decision : e.claim,
+      who: e.kind === "decision" ? e.who : null,
+      repo: e.home,
+    });
+    out.set(edge, list);
+  }
+  return out;
 }
 
 function threadsFor(folder: FolderState): Threads | null {
@@ -1013,6 +1086,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
       } else read = await cached.read;
       const sections = read.sources.flatMap((s) => s.sections);
       const edgeState = reviewState(readReview(folder.path));
+      const onEdges = await edgeDecisions(folder.path);
+      // Once a run: teammates' decisions on calls arrive by git pull, not through Anur.
+      if (!sidesRead.has(folder.path)) {
+        sidesRead.add(folder.path);
+        edgeSidesSoon(folder.path);
+      }
       return {
         kind: "ok",
         folder: folder.path,
@@ -1025,6 +1104,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
             : edgeState.confirmedEdges.has(e.id)
               ? ("confirmed" as const)
               : ("shown" as const),
+          decisions: onEdges.get(e.id) ?? [],
         })),
         misses: read.misses,
         repos: (() => {

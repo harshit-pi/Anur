@@ -196,6 +196,8 @@ export {
 export {
   BLOCK_BEGIN,
   BLOCK_END,
+  EDGES_BEGIN,
+  EDGES_END,
   renderBlock,
   withBlock,
   type BlockKind,
