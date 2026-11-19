@@ -57,6 +57,7 @@ import type { AnurSocket, ToolAnswer } from "./anur-socket.ts";
 import { TurnWatch, type DocChange } from "./turn-watch.ts";
 import { readSection } from "./read-section.ts";
 import { readFile } from "../../vault/anur-copy.ts";
+import type { CommittedDecisions } from "../committed-decisions.ts";
 
 export { readSection } from "./read-section.ts";
 
@@ -91,6 +92,8 @@ export type ThreadDeps = {
   autoApply?: () => boolean;
   /** Which switchable Core features are on (group 12); all on when not given. */
   features?: () => FeatureFlags;
+  /** Decisions and kept findings committed with the folder or its repo (18.9). */
+  committed?: Pick<CommittedDecisions, "keep" | "drop">;
   /** Who uses each device, and this person's own name, to show who started others' threads. */
   people?: () => Promise<{ me: string | null; byDevice: ReadonlyMap<string, string> }>;
   /** Plugins switched on for this folder (group 19): their IDs, for the MCP server, and their context lines. */
@@ -1658,9 +1661,56 @@ export class Threads {
       status,
       claim: claim?.trim() ? claim.trim().slice(0, 600) : null,
     });
+    await this.commitDecided(thread, id, status);
     const live = this.live.get(thread);
     if (live) await this.refresh(live.rel, live.docText, thread);
     return { kind: "ok" };
+  }
+
+  /**
+   * A finding kept or dropped reaches the committed file (18.9): a kept
+   * decision or finding is added; a drop or Undo takes it back. Never
+   * fails the decision itself: the thread line is the record.
+   */
+  private async commitDecided(thread: string, finding: string, status: "kept" | "dropped") {
+    const c = this.d.committed;
+    const live = this.live.get(thread);
+    if (!c || !live) return;
+    try {
+      if (status === "dropped") {
+        await c.drop(live.rel, finding);
+        return;
+      }
+      const lines = await this.linesOf(live.doc, thread);
+      const f = lines.find((l) => l.kind === "finding" && l.id === finding);
+      if (f?.kind !== "finding") return;
+      const decided = lines.findLast((d) => d.kind === "finding-decided" && d.finding === finding);
+      const claim = (decided?.kind === "finding-decided" && decided.claim) || f.claim;
+      const start = lines.find((l) => l.kind === "thread");
+      const at = await this.d.locate(live.rel, live.docText);
+      const section =
+        at && start?.kind === "thread"
+          ? (at.tree.sections[indexIn(at, start.section)]?.path ?? []).join(" › ")
+          : "";
+      const from = f.from ? lines.find((m) => m.id === f.from) : undefined;
+      await c.keep(
+        live.rel,
+        section,
+        finding,
+        f.by === "person"
+          ? {
+              kind: "decision",
+              decision: claim,
+              quote: f.quote ?? null,
+              instead: f.instead ?? null,
+              until: f.until ?? null,
+              who: await this.nameOf(from?.dev ?? f.dev),
+            }
+          : { kind: "finding", claim, source: f.source },
+      );
+    } catch {
+      // The committed copy is best effort; the thread keeps the decision.
+    }
   }
 
   /**
@@ -1704,6 +1754,7 @@ export class Threads {
         claim: null,
         how: "auto",
       });
+    if (rule.kind === "settle") await this.commitDecided(thread, line.id, "kept");
     await this.refresh(live.rel, live.docText, thread);
     return {
       text:

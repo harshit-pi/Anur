@@ -30,7 +30,7 @@ describe("settings main acts on", () => {
     expect((await new AppSettingsStore(d).load()).features.history).toBe(false);
   });
 
-  it("commit .anur/ by removing its ignore file, and stop by writing it back", async () => {
+  it("commit .anur/ by removing its ignore file, and stop by writing it back, decisions still committed", async () => {
     const f = dir();
     mkdirSync(path.join(f, ".anur"));
     writeFileSync(path.join(f, ".anur", ".gitignore"), "*\n");
@@ -38,6 +38,8 @@ describe("settings main acts on", () => {
     await setCommitsAnur(f, true);
     expect(await commitsAnur(f)).toBe(true);
     await setCommitsAnur(f, false);
-    expect(readFileSync(path.join(f, ".anur", ".gitignore"), "utf8")).toBe("*\n");
+    expect(readFileSync(path.join(f, ".anur", ".gitignore"), "utf8")).toBe(
+      "*\n!.gitignore\n!decisions/\n!decisions/*.jsonl\n",
+    );
   });
 });

@@ -65,6 +65,7 @@ import { SectionVersions, lastSavedIn } from "./folder/versions.ts";
 import { sectionCommits } from "./folder/git-history.ts";
 import { suggestMatch } from "./folder/orphans.ts";
 import { personName } from "./folder/people.ts";
+import { CommittedDecisions } from "./committed-decisions.ts";
 import { PluginHost, PluginRefused } from "@anur/core";
 import { FIRST_PARTY, pluginById } from "../plugins/index.ts";
 import {
@@ -420,6 +421,7 @@ function threadsFor(folder: FolderState): Threads | null {
       hookScript: hookEntry(here),
       node: process.execPath,
       locate: (rel, text) => ids.locate(rel, text),
+      committed: new CommittedDecisions(folder.path, device),
       emit: (event) => {
         for (const [id, win] of windows) {
           if (folders.current(id)?.path === folder.path) send(win, "thread:event", event);
