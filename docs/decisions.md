@@ -233,6 +233,13 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - Kept decisions reach every new thread on the section and below, listed apart from findings as "Decided by Sam (3 Nov): … Instead of: …". The agent is told to follow them, to say in a line when it relied on one, and to ask rather than go against one.
 - Names show only on someone else's decisions. In a real run, a new thread asked to cut the price below a competitor answered "No. On 18 November Harshit decided…".
 
+## The carry eval (18.7)
+
+- `pnpm eval:carry [runs] [--no-model]` (`evals/carry/`): a workspace with two repos and 200 committed decisions and findings, and a thread on `docs/plan.md › Pricing`. 100 reach that section; the other 100 are on other sections, docs, folders and repos, lapsed, dropped, replaced, on a section that's gone, or lines that aren't decisions. It runs Anur's own reader and bundle, then twelve questions through Claude Code, scored by script.
+- Selection, first run (2026-11-19, `evals/carry/results/2026-11-19T19-08-15-507Z.json`): none of the 100 wrong ones reached the thread; the 30 nearest decisions and 10 findings were listed in order, disputes marked, and the other 60 counted ("And 60 more decided further from here, not listed").
+- Following: every question whose decision was listed was answered right (7 of 7): a replaced decision over the old one, both sides of a disagreement with no pick, a decision over a stale line in the doc, and "can't tell" for a lapsed one.
+- The cap is where it fails: all 5 questions answered by a decision past the 30 failed, and the agent said it couldn't tell. With 30 on the section itself, nothing from the doc, the repo, a folder or everywhere is listed, and the agent has no way to read the rest. Within a reach the oldest come first, so 6 of 8 newer decisions that replace older ones were cut while the decisions they replaced were dropped.
+
 ## The plugin API (group 19)
 
 - Seven points, in `packages/core/src/plugins`, headless so the app, the pre-commit hook and CI share them: section source, edge detector, context provider, map layer, surface, MCP tools under a prefix, and decision homes: places beyond the folder's own `.anur/` whose committed decisions the opened folder collects (18.14).
