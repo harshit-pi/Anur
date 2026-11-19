@@ -100,6 +100,8 @@ type Box = {
 
 /** The smallest zoom a map opens at, where a box's name still reads. */
 const READABLE = 0.75;
+/** Fit never goes below this: past it, a box's name can't be read (30.27). */
+const FIT_MIN = 0.6;
 
 /** A thread's pill: as wide as its name needs, within bounds. */
 const pill = (title: string, marks = 0) => ({
@@ -967,21 +969,40 @@ export function MapView({
     const el = host.current;
     if (!el || view || (!loaded && !waited) || boxes.length === 0) return;
     const r = el.getBoundingClientRect();
-    const xs = boxes.flatMap((b) => [b.x - b.w / 2, b.x + b.w / 2]);
-    const ys = boxes.flatMap((b) => [b.y - b.h / 2, b.y + b.h / 2]);
+    // Fit frames what matters (30.27): the sections, and the choices waiting
+    // on the person. Choices found exploring one, and the options passed
+    // over, stay out of the frame; panning still reaches them.
+    const byId = new Map(boxes.map((b) => [b.id, b] as const));
+    const underOption = (b: Box) => {
+      for (let p = b.parent; p; p = byId.get(p)?.parent ?? null)
+        if (p.startsWith("o:")) return true;
+      return false;
+    };
+    const framed = fitAll.current
+      ? boxes.filter(
+          (b) =>
+            b.kind === "section" ||
+            ((b.kind === "option" || b.kind === "edit") && !b.notPicked && !underOption(b)),
+        )
+      : boxes;
+    const xs = framed.flatMap((b) => [b.x - b.w / 2, b.x + b.w / 2]);
+    const ys = framed.flatMap((b) => [b.y - b.h / 2, b.y + b.h / 2]);
     const w = Math.max(...xs) - Math.min(...xs) + 120;
     const h = Math.max(...ys) - Math.min(...ys) + 120;
     const all = Math.min(1, r.width / w, r.height / h);
     // Never so small the names can't be read: a wide map opens on its title,
     // at the top, and Fit shows the whole of it.
     // Fit pressed shows all of it; opening, never so small the names can't be read.
-    const z = fitAll.current ? all : Math.max(READABLE, all);
+    const fitting = fitAll.current;
+    const z = fitting ? Math.max(FIT_MIN, all) : Math.max(READABLE, all);
     fitAll.current = false;
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
     const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
     const title = boxes.find((b) => b.side === 0);
     // In the mind map the title is in the middle, so the view centres on it.
-    if (z > all && title && layout === "mind")
+    // Fit centres on what it frames; opening centres on the title.
+    if (fitting) setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
+    else if (z > all && title && layout === "mind")
       setView({ x: r.width / 2 - title.x * z, y: r.height / 2 - title.y * z, z });
     else if (z > all && title)
       setView({ x: r.width / 2 - title.x * z, y: 60 - Math.min(...ys) * z, z });
@@ -2233,7 +2254,7 @@ export function MapView({
         <button
           type="button"
           className="map-tool"
-          title="Fit the whole map in view"
+          title="Fit the sections and the choices waiting on you in view"
           onClick={() => {
             userMoved.current = false;
             fitAll.current = true;
