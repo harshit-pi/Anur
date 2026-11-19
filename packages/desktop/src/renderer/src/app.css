@@ -6649,3 +6649,46 @@ button.file-card-name:hover {
   margin: 6px 0;
   border-top: 1px solid var(--rule);
 }
+
+/* A space opening, as at launch: its name and a thin moving bar, never the start page. */
+.space-opening h1 {
+  color: var(--slate);
+  font-weight: 500;
+}
+
+.space-opening-bar {
+  position: relative;
+  width: 220px;
+  height: 3px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--rule);
+}
+
+.space-opening-bar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -40%;
+  width: 40%;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--blue);
+  animation: space-opening 1.1s ease-in-out infinite;
+}
+
+@keyframes space-opening {
+  to {
+    left: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .space-opening-bar::after {
+    left: 0;
+    width: 100%;
+    opacity: 0.4;
+    animation: none;
+  }
+}

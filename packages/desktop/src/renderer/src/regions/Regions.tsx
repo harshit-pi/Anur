@@ -133,6 +133,7 @@ export function LeftSidebar({
   system = null,
   onNewSpace,
   onOpenFolder: onOpenSpaceFolder,
+  opening = false,
 }: {
   /** The folder's system map, when Engineering is on: a row above the files. */
   system?: {
@@ -161,6 +162,8 @@ export function LeftSidebar({
   /** The space switcher's New space and Open folder as space. */
   onNewSpace?: () => void;
   onOpenFolder?: () => void;
+  /** A space is opening into this window: say nothing yet, so the start text doesn't flash. */
+  opening?: boolean;
 }) {
   const [collapse, setCollapse] = useState(0);
   // The repos a system found sit under Repos, closed until opened: code
@@ -190,6 +193,8 @@ export function LeftSidebar({
   useEffect(() => {
     if (folderPath) setSort(loadSort(folderPath));
   }, [folderPath]);
+  if (!folder && opening)
+    return <aside className="left-sidebar" aria-label="Files" hidden={hidden} />;
   if (!folder) {
     return (
       <aside className="left-sidebar" aria-label="Files" hidden={hidden}>
@@ -455,6 +460,7 @@ export function Center({
   docNote,
   docError,
   spaceNotice = null,
+  spaceOpening = null,
   onOpenFolder,
   onNewFolder,
   onFirstDoc,
@@ -485,6 +491,8 @@ export function Center({
   docError: string | null;
   /** A note about the space, shown once: a folder asked for opened as part of its space. */
   spaceNotice?: string | null;
+  /** The space this window is opening, before it's in: shown in place of the start page. */
+  spaceOpening?: string | null;
   onOpenFolder: () => void;
   onNewFolder: () => void;
   /** Start the first doc in an empty folder. */
@@ -660,6 +668,11 @@ export function Center({
           <p>
             {`${String(folder.docs.length)} Markdown files in ${folder.name}. Pick one on the left.`}
           </p>
+        </div>
+      ) : spaceOpening ? (
+        <div className="page-empty space-opening" role="status">
+          <h1>{`Opening ${spaceOpening}…`}</h1>
+          <div className="space-opening-bar" aria-hidden="true" />
         </div>
       ) : (
         <div className="page-empty">
