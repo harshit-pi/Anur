@@ -12,6 +12,7 @@ import {
   type SystemEdge,
   type SystemSection,
 } from "./system-levels.ts";
+import type { SystemIconKind } from "../icons/system/index.tsx";
 
 export type MapNode = {
   id: string;
@@ -30,6 +31,8 @@ export type MapNode = {
   grey: boolean;
   /** Its parent frame on the map, for drawing nested. */
   parent: string | null;
+  /** What it is, for its icon; null draws a plain box. */
+  icon: SystemIconKind | null;
 };
 
 export type MapLine = {
@@ -52,10 +55,46 @@ const BOX_H = 64;
 const HEAD = 38;
 const PAD = 20;
 const GAP = 24;
+/** Between boxes inside an open frame: room for a line's label between them. */
+const GAP_X = 72;
+const GAP_Y = 56;
 const COL_GAP = 150;
 const ROW_GAP = 40;
 
 const plural = (n: number, one: string) => `${String(n)} ${n === 1 ? one : `${one}s`}`;
+
+const GROUP_ICONS: Record<string, SystemIconKind> = {
+  tables: "table",
+  queues: "queue",
+  storage: "bucket",
+  topics: "topic",
+  secrets: "secret",
+  cache: "cache",
+  monitoring: "monitor",
+  schedules: "schedule",
+};
+const RESOURCE_ICONS = new Set<string>(["function", "table", "queue", "topic", "bucket"]);
+
+/**
+ * A box's icon from what the read already knows: a repo's GitHub remote, a
+ * group's kind (tables, queues…), a part's build file, a resource's AWS kind.
+ */
+export function iconOf(sec: SystemSection | undefined): SystemIconKind | null {
+  if (!sec) return null;
+  const { id, text } = sec;
+  if (id.startsWith("repo:")) return text.includes("/") ? "github" : "folder";
+  if (id.startsWith("res:")) {
+    const kind = id.slice(4).split(":")[0] ?? "";
+    return RESOURCE_ICONS.has(kind) ? (kind as SystemIconKind) : null;
+  }
+  if (id.startsWith("part:"))
+    return text.startsWith("stack ") ? "stack" : text.startsWith("package ") ? "package" : null;
+  if (id.startsWith("group:")) {
+    const key = id.slice(6).split("/")[1] ?? "";
+    return GROUP_ICONS[key] ?? null;
+  }
+  return null;
+}
 
 type Sized = { id: string; w: number; h: number; kids: Sized[] };
 
@@ -103,12 +142,13 @@ export function layoutMap(
     const rows: Sized[][] = [];
     sized.forEach((s, i) => (rows[Math.floor(i / cols)] ??= []).push(s));
     const w =
-      PAD * 2 + Math.max(...rows.map((r) => r.reduce((n, s) => n + s.w, 0) + GAP * (r.length - 1)));
+      PAD * 2 +
+      Math.max(...rows.map((r) => r.reduce((n, s) => n + s.w, 0) + GAP_X * (r.length - 1)));
     const h =
       HEAD +
       PAD +
       rows.reduce((n, r) => n + Math.max(...r.map((s) => s.h)), 0) +
-      GAP * (rows.length - 1);
+      GAP_Y * (rows.length - 1);
     return { id, w, h, kids: sized };
   };
 
@@ -208,6 +248,7 @@ export function layoutMap(
       opens: !isRes && kids.length > 0,
       grey: false,
       parent,
+      icon: iconOf(sec),
     });
     if (!s.kids.length) return;
     const cols = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(s.kids.length))));
@@ -217,9 +258,9 @@ export function layoutMap(
       let cx = x + PAD;
       for (const k of row) {
         place(k, cx, cy, s.id);
-        cx += k.w + GAP;
+        cx += k.w + GAP_X;
       }
-      cy += Math.max(...row.map((k) => k.h)) + GAP;
+      cy += Math.max(...row.map((k) => k.h)) + GAP_Y;
     }
   };
 
@@ -257,31 +298,37 @@ export function layoutMap(
       y += s.h + ROW_GAP;
       colW = Math.max(colW, s.w);
     }
-    for (const [id, name] of mine) {
+    for (const [id, full] of mine) {
+      // "table PremiumUsers": the kind gives the icon, the rest the name.
+      const typed = /^(function|table|queue|topic|bucket) (.+)$/.exec(full);
       nodes.push({
         id,
         kind: "stub",
-        name,
+        name: typed?.[2] ?? full,
         line:
           id === "stub:many:outside"
             ? "outside"
-            : id === "stub:many:not-cloned"
-              ? "created in no repo here"
-              : id.startsWith("stub:not-cloned")
-                ? "not cloned"
-                : id.startsWith("ext:")
-                  ? "another system"
-                  : "outside",
+            : typed
+              ? // A table or queue a repo here uses by name: its name says it all.
+                ""
+              : id === "stub:many:not-cloned"
+                ? "created in no repo here"
+                : id.startsWith("stub:not-cloned")
+                  ? "not cloned"
+                  : id.startsWith("ext:")
+                    ? "another system"
+                    : "outside",
         x,
         y,
         w: BOX_W,
-        h: 52,
+        h: BOX_H,
         open: false,
         opens: false,
         grey: false,
         parent: null,
+        icon: (typed?.[1] as SystemIconKind | undefined) ?? null,
       });
-      y += 52 + 14;
+      y += BOX_H + 14;
       colW = Math.max(colW, BOX_W);
     }
     bottom = Math.max(bottom, y);
@@ -341,4 +388,117 @@ export function layoutMap(
   const width = Math.max(0, ...nodes.map((n) => n.x + n.w));
   const height = Math.max(0, ...nodes.map((n) => n.y + n.h));
   return { nodes, lines, width, height };
+}
+
+export type Route = { d: string; mx: number; my: number };
+type Box = { id: string; x: number; y: number; w: number; h: number };
+type Side = "left" | "right" | "top" | "bottom";
+
+/**
+ * Where each line runs, tidily: it leaves and enters by the sides that face
+ * each other (top and bottom for boxes stacked in a column), and lines on
+ * one side are spread along it, ordered by where they go, so they don't
+ * all leave from one point and cross.
+ */
+export function routeLines(
+  boxes: readonly Box[],
+  lines: readonly { key: string; from: string; to: string }[],
+): Map<string, Route> {
+  const byId = new Map(boxes.map((b) => [b.id, b]));
+  type End = { key: string; box: Box; side: Side; other: Box };
+  const ends: End[] = [];
+  const sides = new Map<string, [Side, Side]>();
+  for (const l of lines) {
+    const a = byId.get(l.from);
+    const b = byId.get(l.to);
+    if (!a || !b) continue;
+    const overlapX = a.x < b.x + b.w && b.x < a.x + a.w;
+    const pair: [Side, Side] = overlapX
+      ? b.y >= a.y + a.h / 2
+        ? ["bottom", "top"]
+        : ["top", "bottom"]
+      : b.x >= a.x + a.w / 2
+        ? ["right", "left"]
+        : ["left", "right"];
+    sides.set(l.key, pair);
+    ends.push({ key: `${l.key}|from`, box: a, side: pair[0], other: b });
+    ends.push({ key: `${l.key}|to`, box: b, side: pair[1], other: a });
+  }
+  // Spread the ends on each side of a box, ordered by where their other box is.
+  const at = new Map<string, { x: number; y: number }>();
+  const groups = new Map<string, End[]>();
+  for (const e of ends) {
+    const k = `${e.box.id}|${e.side}`;
+    const g = groups.get(k) ?? [];
+    g.push(e);
+    groups.set(k, g);
+  }
+  for (const g of groups.values()) {
+    const first = g[0];
+    if (!first) continue;
+    const { box, side } = first;
+    const vertical = side === "left" || side === "right";
+    g.sort((p, q) =>
+      vertical ? p.other.y + p.other.h / 2 - (q.other.y + q.other.h / 2) : p.other.x - q.other.x,
+    );
+    // A frame's ends stay near its head, where its name is.
+    const span = vertical ? Math.min(box.h, 64) : box.w;
+    g.forEach((e, i) => {
+      const t = (i + 1) / (g.length + 1);
+      at.set(
+        e.key,
+        side === "left"
+          ? { x: box.x, y: box.y + span * t }
+          : side === "right"
+            ? { x: box.x + box.w, y: box.y + span * t }
+            : side === "top"
+              ? { x: box.x + box.w * t, y: box.y }
+              : { x: box.x + box.w * t, y: box.y + box.h },
+      );
+    });
+  }
+  const out = new Map<string, Route>();
+  for (const l of lines) {
+    const pair = sides.get(l.key);
+    const p = at.get(`${l.key}|from`);
+    const q = at.get(`${l.key}|to`);
+    if (!pair || !p || !q) continue;
+    const pull = (s: Side, d: number) =>
+      s === "left" ? [-d, 0] : s === "right" ? [d, 0] : s === "top" ? [0, -d] : [0, d];
+    const dist = Math.hypot(q.x - p.x, q.y - p.y);
+    const d = Math.max(16, Math.min(160, dist / 2.5));
+    const [ax, ay] = pull(pair[0], d);
+    const [bx, by] = pull(pair[1], d);
+    const n = (v: number) => String(Math.round(v * 10) / 10);
+    out.set(l.key, {
+      d: `M${n(p.x)},${n(p.y)} C${n(p.x + (ax ?? 0))},${n(p.y + (ay ?? 0))} ${n(q.x + (bx ?? 0))},${n(q.y + (by ?? 0))} ${n(q.x)},${n(q.y)}`,
+      mx: (p.x + q.x) / 2,
+      my: (p.y + q.y) / 2,
+    });
+  }
+  return out;
+}
+
+/**
+ * Lines whose two ends sit inside the same open frame: a repo's own links
+ * between its groups. They show when the person points at one of their ends,
+ * so an open repo isn't a knot of its own wiring.
+ */
+export function innerLines(
+  nodes: readonly { id: string; parent: string | null }[],
+  lines: readonly { key: string; from: string; to: string }[],
+): Set<string> {
+  const parent = new Map(nodes.map((n) => [n.id, n.parent]));
+  const root = (id: string) => {
+    let at = id;
+    for (let up = parent.get(at); up; up = parent.get(at)) at = up;
+    return at;
+  };
+  const out = new Set<string>();
+  for (const l of lines) {
+    if (!parent.has(l.from) || !parent.has(l.to)) continue;
+    const r = root(l.from);
+    if (r !== l.from && r !== l.to && r === root(l.to)) out.add(l.key);
+  }
+  return out;
 }

@@ -2082,20 +2082,24 @@ body.resizing * {
 }
 
 /* The system as a map (24.4): repos as frames, lines from code. */
-.system-map {
-  overflow: auto;
-  /* The map takes the tab's height; past that it scrolls both ways inside. */
-  height: max(420px, calc(100vh - 210px));
-  margin-bottom: 8px;
-  border: 1px solid var(--rule);
-  border-radius: 10px;
-  background-color: var(--sheet);
-  background-image: radial-gradient(var(--rule) 1px, transparent 1px);
-  background-size: 22px 22px;
+/* The system map is the whole tab, a whiteboard like a page's map. */
+.system-view.whole {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
 }
 
-.system-map-canvas {
-  position: relative;
+.system-view.whole > :not(.system-map) {
+  margin: 12px 24px 0;
+}
+
+.system-view.whole > .system-trail {
+  margin-bottom: 8px;
+}
+
+.system-map {
+  border-top: 1px solid var(--rule);
 }
 
 .system-map-lines {
@@ -2145,6 +2149,24 @@ body.resizing * {
 
 .map-line.grey {
   opacity: 0.25;
+}
+
+/* Pointing at a box: its lines stay, the others step back. */
+.map-line.faded {
+  opacity: 0.12;
+}
+
+.map-line-label.grey {
+  opacity: 0.25;
+}
+
+.map-line-label.faded {
+  opacity: 0.12;
+}
+
+.map-line-label.guessed {
+  fill: var(--graphite);
+  font-weight: 400;
 }
 
 .map-line-label {
@@ -2209,6 +2231,11 @@ body.resizing * {
   background: transparent;
 }
 
+/* A box with a name only sits it in the middle. */
+.map-node.stub:not(:has(.map-node-line)) {
+  justify-content: center;
+}
+
 .map-node.grey {
   opacity: 0.4;
 }
@@ -2218,6 +2245,44 @@ body.resizing * {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.map-node-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.sys-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+.map-node.open .sys-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.sys-pkg svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: var(--slate);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.sys-icon-repo {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  fill: var(--ink);
+}
+
+.map-node.open .sys-icon-repo {
+  fill: var(--slate);
 }
 
 .map-node-line {
@@ -5246,6 +5311,12 @@ button.file-card-name:hover {
   box-shadow: 0 10px 30px var(--shadow);
   font-family: var(--font-ui);
   font-size: 12.5px;
+}
+
+/* The hidden lines, above the map's tools. */
+.line-card.hidden-lines {
+  right: 12px;
+  bottom: 56px;
 }
 
 .line-card-head {
