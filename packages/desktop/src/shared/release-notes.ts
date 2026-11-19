@@ -13,12 +13,15 @@ export function noteOf(body: string): string | null {
   const text = (m[1] ?? "")
     .replace(/<!--[\s\S]*?-->/g, "")
     .split("\n")
+    // The PR's "Generated with Claude Code" line follows a last-section note.
+    .filter((l) => !/^\s*🤖\s/u.test(l))
     .map((l) => l.replace(/^\s*[-*]\s+/, "").trim())
     .filter(Boolean)
     .join(" ")
     .trim();
   if (!text) return null;
-  return /^none\.?$/i.test(text) ? "none" : text;
+  // "none", or "None: release tooling." with the why.
+  return /^none\b(?:[.:]|\s+beyond\b|$)/i.test(text) ? "none" : text;
 }
 
 /** The release's notes, and the PRs that still need one written. */

@@ -10,6 +10,13 @@ describe("release notes", () => {
     expect(noteOf(body("none"))).toBe("none");
     expect(noteOf(body(""))).toBeNull();
     expect(noteOf("## What changes\n\nNo note section.")).toBeNull();
+    // A note in the body's last section, above the "Generated with" line.
+    const last =
+      "## Release note\n\nSpaces open faster.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n";
+    expect(noteOf(last)).toBe("Spaces open faster.");
+    expect(noteOf(body("None: release tooling."))).toBe("none");
+    expect(noteOf(body("None beyond #255."))).toBe("none");
+    expect(noteOf(body("Nonetheless, maps load."))).toBe("Nonetheless, maps load.");
   });
 
   it("gathers a release's notes and names the PRs missing one", () => {
