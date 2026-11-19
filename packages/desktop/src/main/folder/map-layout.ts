@@ -1,7 +1,8 @@
-import { mkdir, readFile, readdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import { ANUR_DIR, MapLayoutFile, anurPaths, type DocId } from "@anur/core";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
+import { readFile } from "../../vault/anur-copy.ts";
 
 /**
  * Where a person put boxes on a doc's map (task 7), in

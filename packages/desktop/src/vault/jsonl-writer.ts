@@ -1,8 +1,9 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, open, readFile, stat, truncate, type FileHandle } from "node:fs/promises";
+import { mkdir, open, stat, truncate, type FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { LineEnvelope, encodeLine, nextStamp, parseJsonl, type ParsedJsonl } from "@anur/core";
 import type { z } from "zod";
+import { readFile, anurWritten } from "./anur-copy.ts";
 
 /** A random line ID: 16 URL-safe characters, 96 bits. */
 export function newLineId(): string {
@@ -70,6 +71,7 @@ export class JsonlWriter {
       const line = { id: this.newId(), at: stamp.at, dev: this.device, seq: stamp.seq, ...payload };
       await this.handle.appendFile(encodeLine(line), "utf8");
       await this.handle.datasync();
+      anurWritten(this.file);
       this.last = stamp;
       return line;
     };

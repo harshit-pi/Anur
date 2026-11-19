@@ -1,8 +1,9 @@
-import { mkdir, readFile, readdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { ANUR_DIR, anurPaths, type DocId } from "@anur/core";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
+import { readFile } from "../../vault/anur-copy.ts";
 
 /**
  * Pen strokes drawn on a doc's map, in `.anur/docs/<doc>/ink/<device>.json`.

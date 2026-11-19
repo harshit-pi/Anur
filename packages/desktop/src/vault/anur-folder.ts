@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   ANUR_DIR,
@@ -9,6 +9,7 @@ import {
   formatFileText,
   type FolderAccess,
 } from "@anur/core";
+import { readFile } from "./anur-copy.ts";
 
 export type OpenedAnurFolder = FolderAccess & {
   /** The absolute path of `.anur/`. */
