@@ -358,6 +358,17 @@ async function startClaudeSkill(): Promise<void> {
         win.focus();
         send(win, "app:open-doc", { path: rel, section });
       },
+      sectionPath: async (_f, rel, text, section) => {
+        const at = front();
+        return at
+          ? ((await t(at.win.webContents.id)?.sectionPathOf(rel, text, section)) ?? null)
+          : null;
+      },
+      committed: (base) => new CommittedDecisions(base, device ?? "terminal"),
+      me: () => {
+        const at = front();
+        return personName(at?.folder.path ?? homedir(), appSettings.get().name);
+      },
     }),
   );
   try {

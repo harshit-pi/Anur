@@ -2346,6 +2346,14 @@ export class Threads {
   }
 
   /** anur_section_bundle: what a new thread on the section starts with. */
+  /** A section named by heading, ID or path, as its heading path; null when there's none. */
+  async sectionPathOf(rel: string, text: string, query: string): Promise<string[] | null> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return null;
+    const index = Threads.findSection(at, query);
+    return index < 0 ? null : (at.tree.sections[index]?.path ?? null);
+  }
+
   async bundleOf(rel: string, text: string, query: string): Promise<string | null> {
     const at = await this.d.locate(rel, text);
     if (!at) return null;

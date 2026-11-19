@@ -6,7 +6,7 @@
 
 const SKILL = `---
 name: anur
-description: Turn this chat into a doc in Anur, start a doc of headings in Anur, or open a file in Anur. Use when the person types /anur doc, /anur new or /anur open, or asks to put this conversation into Anur.
+description: Turn this chat into a doc in Anur, start a doc of headings in Anur, or open a file in Anur; and record the person's lasting decisions and kept findings so the team's agents follow them. Use when the person types /anur doc, /anur new or /anur open, asks to put this conversation into Anur, or makes a decision that should outlast this task, such as correcting what you did.
 ---
 
 # Anur
@@ -39,6 +39,15 @@ While the person works in a doc, these help:
 - \`anur_section_bundle\`: what a thread on a section starts with: the text above it, the section, and the rest of the doc.
 - \`anur_list_threads\`: how many threads each section has, and whether any is running.
 - \`anur_propose_preview\`: propose new text for a section. It shows in Anur as a proposed edit; the person decides. It never changes the file.
+
+## Decisions and findings
+
+Whatever you're working on, record what should outlast this session, so the team's agents follow it. It's committed with the code in \`.anur/decisions/\`.
+
+- When the person makes a lasting decision, such as a choice about the work or a correction of what you did ("no, three retries, not infinite"), call \`anur_note_decision\` with their exact words as the quote, the decision in under 15 words, and how sure you are it's lasting. Leave out \`doc\` for the repo you're working in. If Anur says to check, ask the person in one line, and call again with \`confirmed: true\` only if they agree.
+- When you establish a fact later work here should know, ask the person whether to keep it, and if they agree, call \`anur_propose_finding\` with \`confirmed: true\` and its source.
+- Tell the person in one line what was recorded. If they want it gone, call \`anur_drop_decision\` with the id Anur gave.
+- Don't record one-off instructions for this task, questions you answered, or your own choices.
 `;
 
 /** Each file, by its path under the skill's folder. */

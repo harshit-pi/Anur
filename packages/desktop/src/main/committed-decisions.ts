@@ -127,6 +127,7 @@ export class CommittedDecisions {
     const text = await readFile(file, "utf8").catch(() => "");
     const sep = text === "" || text.endsWith("\n") ? "" : "\n";
     await writeFile(file, `${text}${sep}${JSON.stringify(line)}\n`);
+    return line.id;
   }
 
   /**
@@ -134,15 +135,37 @@ export class CommittedDecisions {
    * its section as "section:<doc>#<A › B>", the doc's path from where the
    * file lives, so it reads the same in the repo as in the folder.
    */
-  async keep(rel: string, section: string, ref: string, entry: KeptEntry): Promise<void> {
+  async keep(rel: string, section: string, ref: string, entry: KeptEntry): Promise<string | null> {
     const at = await this.place(rel);
-    if (!at) return;
+    if (!at) return null;
     const doc = path.relative(at.home, path.join(this.folder, rel)).split(path.sep).join("/");
-    const scope = `section:${doc}#${section}`;
+    return this.keepIn(at, `section:${doc}#${section}`, ref, entry);
+  }
+
+  /**
+   * Kept for a whole place, not a doc's section, as from a terminal session
+   * working in a repo (23.4): scoped "repo" at the repo's root, else
+   * "folder:<dir>" from where the file lives.
+   */
+  async keepFor(dir: string, ref: string, entry: KeptEntry): Promise<string | null> {
+    // A file name inside the dir, so the home is found from the dir itself.
+    const at = await this.place(path.join(dir, ".anur-here"));
+    if (!at) return null;
+    const rel = path.relative(at.home, path.join(this.folder, dir)).split(path.sep).join("/");
+    return this.keepIn(at, rel ? `folder:${rel}` : "repo", ref, entry);
+  }
+
+  private async keepIn(
+    at: { home: string; file: string },
+    scope: string,
+    ref: string,
+    entry: KeptEntry,
+  ): Promise<string | null> {
     await this.openDecisions(at.home);
     // Kept again after an Undo: one line, not two.
-    if ((await this.current(at.home)).some((e) => e.ref === ref)) return;
-    await this.append(at.file, { ...entry, scope, ref });
+    const already = (await this.current(at.home)).find((e) => e.ref === ref);
+    if (already) return already.id;
+    return this.append(at.file, { ...entry, scope, ref });
   }
 
   /**

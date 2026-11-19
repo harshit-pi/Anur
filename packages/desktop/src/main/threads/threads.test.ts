@@ -417,7 +417,7 @@ describe("Threads", () => {
     };
     const { threads: t, sent } = await setup({
       committed: {
-        keep: () => Promise.resolve(),
+        keep: () => Promise.resolve(null),
         drop: () => Promise.resolve(),
         collected: () => Promise.resolve([teammate, elsewhere]),
       },

@@ -1,7 +1,10 @@
 import { chmod, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { settleRule } from "@anur/core";
 import type { ToolAnswer } from "../threads/anur-socket.ts";
+import type { CommittedDecisions, KeptEntry } from "../committed-decisions.ts";
 
 /**
  * The tools an agent in the person's own terminal reaches through the
@@ -50,7 +53,56 @@ export type TerminalDeps = {
   ) => Promise<string | null>;
   /** Show a doc in the front window, at a section if given. */
   open: (webContentsId: number, rel: string, section: string | null) => void;
+  /** A section named by heading, as its heading path; null when there's none. */
+  sectionPath: (
+    folder: string,
+    rel: string,
+    text: string,
+    section: string,
+  ) => Promise<string[] | null>;
+  /** Decisions and kept findings committed where the session works (23.4), from `base`. */
+  committed: (base: string) => Pick<CommittedDecisions, "keep" | "keepFor" | "drop">;
+  /** The person's name, as decisions show it. */
+  me: () => Promise<string | null>;
+  /** The session's transcript; Claude Code's own file for that folder unless given. */
+  transcript?: (cwd: string) => Promise<string | null>;
 };
+
+/**
+ * What the person typed in a Claude Code session, from its transcript: their
+ * own messages, not tool results, command echoes or Claude Code's notes.
+ */
+export function personSaid(transcript: string | null): { id: string; text: string }[] {
+  if (!transcript) return [];
+  const out: { id: string; text: string }[] = [];
+  transcript.split("\n").forEach((row, i) => {
+    let o: Record<string, unknown>;
+    try {
+      o = JSON.parse(row) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    if (o.type !== "user" || o.isMeta === true) return;
+    const m = o.message as { role?: unknown; content?: unknown } | undefined;
+    if (m?.role !== "user") return;
+    const texts =
+      typeof m.content === "string"
+        ? [m.content]
+        : Array.isArray(m.content)
+          ? (m.content as { type?: unknown; text?: unknown }[]).flatMap((c) =>
+              c.type === "text" && typeof c.text === "string" ? [c.text] : [],
+            )
+          : [];
+    for (const t of texts)
+      if (
+        t.trim() &&
+        !/^\s*<(command-|local-command|system-reminder)/.test(t) &&
+        !t.startsWith("Caveat:")
+      )
+        out.push({ id: typeof o.uuid === "string" ? o.uuid : `line-${String(i)}`, text: t });
+  });
+  return out;
+}
 
 /** A doc named by path in the folder, full path, or name. */
 function resolveDoc(folder: string, docs: string[], given: string): string | null {
@@ -150,6 +202,13 @@ export function terminalHandler(d: TerminalDeps) {
       return words ? d.search(words) : { error: "Say which words to look for." };
     }
 
+    if (
+      tool === "anur_note_decision" ||
+      tool === "anur_propose_finding" ||
+      tool === "anur_drop_decision"
+    )
+      return decisionTool(d, tool, args, front);
+
     const given = str(args.doc);
     if (!given) return { error: "Say which doc." };
     const rel = resolveDoc(folder, docs, given);
@@ -200,4 +259,97 @@ export async function writeTerminalFile(
   await chmod(path.dirname(file), 0o700);
   await writeFile(file, JSON.stringify({ socket, token }), { mode: 0o600 });
   await chmod(file, 0o600);
+}
+
+/**
+ * Decisions and findings from a plain Claude Code session (23.4, 23.11),
+ * written to the committed file where the session works: the doc's repo
+ * when a doc is named, else the repo or folder the session is in. A
+ * decision settles only on the person's own words, as in a thread; a
+ * question or an unsure one, and every finding, waits for the person to
+ * agree in the chat.
+ */
+async function decisionTool(
+  d: TerminalDeps,
+  tool: "anur_note_decision" | "anur_propose_finding" | "anur_drop_decision",
+  args: Record<string, unknown>,
+  front: { folder: string; docs: string[] },
+): Promise<ToolAnswer> {
+  const cwd = str(args._cwd);
+  const fromFolder = cwd ? path.relative(front.folder, cwd) : "";
+  // The folder open in Anur when the session works inside it; else the session's own.
+  const inside = !fromFolder.startsWith("..") && !path.isAbsolute(fromFolder);
+  const base = inside || !cwd ? front.folder : cwd;
+  const dir = inside ? fromFolder : "";
+  const store = d.committed(base);
+
+  const given = str(args.doc);
+  let doc: { rel: string; path: string[] } | null = null;
+  if (given) {
+    if (base !== front.folder)
+      return {
+        error: `${given} isn't in the folder open in Anur; leave out doc to record it for this repo.`,
+      };
+    const rel = resolveDoc(front.folder, front.docs, given);
+    if (!rel) return { error: `There's no ${given} in the folder open in Anur (${front.folder}).` };
+    const text = await readFile(path.join(front.folder, rel), "utf8").catch(() => null);
+    const section = str(args.section);
+    const at =
+      text === null || !section ? [] : await d.sectionPath(front.folder, rel, text, section);
+    if (at === null) return { error: `There's no section "${section ?? ""}" in ${rel}.` };
+    doc = { rel, path: at };
+  }
+  const where = doc
+    ? `${doc.rel}${doc.path.length ? ` › ${doc.path.join(" › ")}` : ""}`
+    : "this repo";
+
+  if (tool === "anur_drop_decision") {
+    const id = str(args.id);
+    if (!id) return { error: "Give the id Anur gave when it was recorded." };
+    await store.drop(doc ? doc.rel : path.join(dir, ".anur-here"), id);
+    return { text: "Taken back. It no longer reaches anyone's agent." };
+  }
+
+  const confirmed = args.confirmed === true;
+  const ref = `term-${randomUUID()}`;
+  let entry: KeptEntry;
+  if (tool === "anur_note_decision") {
+    const quote = str(args.quote);
+    const decision = str(args.decision);
+    if (!quote || !decision) return { error: "Give the person's exact words and the decision." };
+    const said = personSaid(cwd ? await (d.transcript ?? latestTranscript)(cwd) : null);
+    const rule = settleRule(quote, typeof args.confidence === "number" ? args.confidence : 0, said);
+    if (rule.kind === "refuse") return { error: rule.reason };
+    if (rule.kind === "propose" && !confirmed)
+      return {
+        text: `Not recorded yet: ${rule.why === "question" ? "their words read as a question" : "it may be a one-off"}. Ask the person in one line whether to keep "${decision}" as a decision; if they say yes, call again with confirmed: true.`,
+      };
+    entry = {
+      kind: "decision",
+      decision: decision.slice(0, 400),
+      quote: quote.slice(0, 600),
+      instead: str(args.instead)?.slice(0, 300) ?? null,
+      until: str(args.until)?.slice(0, 200) ?? null,
+      who: await d.me(),
+    };
+  } else {
+    const claim = str(args.claim);
+    if (!claim) return { error: "Give the finding, one claim." };
+    if (!confirmed)
+      return {
+        text: `Not kept yet: ask the person in one line whether to keep "${claim}" for later work on ${where}; if they say yes, call again with confirmed: true.`,
+      };
+    entry = { kind: "finding", claim: claim.slice(0, 600), source: str(args.source) };
+  }
+  const id = doc
+    ? await store.keep(doc.rel, doc.path.join(" › "), ref, entry)
+    : await store.keepFor(dir, ref, entry);
+  if (!id)
+    return {
+      error:
+        "Anur couldn't tell whose file to write: set git's user.email in this repo, then try again.",
+    };
+  return {
+    text: `Recorded on ${where}, in .anur/decisions/ so it's committed with the code and reaches the team's agents. Tell the person in one line. To take it back, call anur_drop_decision with id ${ref}.`,
+  };
 }
