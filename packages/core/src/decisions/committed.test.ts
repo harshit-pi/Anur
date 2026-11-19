@@ -84,6 +84,8 @@ describe("whose file", () => {
 describe(".anur/.gitignore with decisions committed", () => {
   it("leaves a folder that commits .anur/ alone, and opens decisions/ in one that doesn't", () => {
     expect(gitignoreKeepingDecisions(null)).toBeNull();
+    // Committing `.anur/` already commits decisions: nothing to add.
+    expect(gitignoreKeepingDecisions("open/\n")).toBeNull();
     const next = gitignoreKeepingDecisions("*\n");
     expect(next).toBe("*\n!.gitignore\n!decisions/\n!decisions/*.jsonl\n!home-id\n");
     expect(gitignoreKeepingDecisions(next)).toBeNull();

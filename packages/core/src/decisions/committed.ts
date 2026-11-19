@@ -158,6 +158,8 @@ const KEEP_DECISIONS = ["!.gitignore", "!decisions/", "!decisions/*.jsonl", "!ho
 export function gitignoreKeepingDecisions(current: string | null): string | null {
   if (current === null) return null;
   const rows = current.split("\n").map((r) => r.trim());
+  // Nothing keeps `.anur/` out: decisions are committed already.
+  if (!rows.includes("*")) return null;
   if (KEEP_DECISIONS.every((k) => rows.includes(k))) return null;
   const body = current.endsWith("\n") || current === "" ? current : `${current}\n`;
   return body + KEEP_DECISIONS.filter((k) => !rows.includes(k)).join("\n") + "\n";

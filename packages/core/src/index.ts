@@ -29,7 +29,12 @@ export {
 export {
   ANUR_DIR,
   FormatFile,
+  DEVICE_ONLY,
+  GENERATED_ATTRIBUTES,
   IGNORE_ALL,
+  gitignoreCommitting,
+  gitignoreWithDeviceOnly,
+  keepsAnurOut,
   accessFor,
   anurPaths,
   formatFileText,

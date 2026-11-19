@@ -1,6 +1,12 @@
-import { readFile, rm, stat, writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { ANUR_DIR, IGNORE_ALL, anurPaths, gitignoreKeepingDecisions } from "@anur/core";
+import {
+  ANUR_DIR,
+  anurPaths,
+  gitignoreCommitting,
+  gitignoreKeepingDecisions,
+  keepsAnurOut,
+} from "@anur/core";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
 import { DEFAULT_AGENT, isAgentId, type AgentId } from "../shared/agents.ts";
 import { DEFAULT_FLAGS, flagsFrom, type FeatureFlags } from "../shared/features.ts";
@@ -92,17 +98,18 @@ function pluginsFrom(raw: unknown): Record<string, string[]> {
   return out;
 }
 
-/** True when the folder commits `.anur/` with git: its ignore file is gone. */
+/** True when the folder commits `.anur/` with git: no "*" line in its ignore file. */
 export async function commitsAnur(folder: string): Promise<boolean> {
-  return stat(path.join(folder, ANUR_DIR, anurPaths.gitignore())).then(
-    () => false,
-    () => true,
+  const text = await readFile(path.join(folder, ANUR_DIR, anurPaths.gitignore()), "utf8").catch(
+    () => null,
   );
+  return !keepsAnurOut(text);
 }
 
 export async function setCommitsAnur(folder: string, commit: boolean): Promise<void> {
   const file = path.join(folder, ANUR_DIR, anurPaths.gitignore());
-  if (commit) await rm(file, { force: true });
+  const now = await readFile(file, "utf8").catch(() => null);
+  const next = gitignoreCommitting(now, commit);
   // Keeping `.anur/` out of git still commits its decisions (18.9).
-  else await writeFile(file, gitignoreKeepingDecisions(IGNORE_ALL) ?? IGNORE_ALL);
+  await writeFile(file, commit ? next : (gitignoreKeepingDecisions(next) ?? next));
 }
