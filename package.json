@@ -22,7 +22,8 @@
     "plugins:publish": "node scripts/plugins.mjs publish",
     "upgrade:list": "pnpm outdated --recursive || true",
     "upgrade:latest": "pnpm update --recursive --latest",
-    "upgrade:test": "pnpm install && pnpm check && pnpm --filter @anur/desktop build"
+    "upgrade:test": "pnpm install && pnpm check && pnpm --filter @anur/desktop build",
+    "site:publish": "sh scripts/site.sh"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

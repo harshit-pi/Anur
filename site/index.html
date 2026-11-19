@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Anur · hianur</title>
+    <meta
+      name="description"
+      content="Anur keeps the thinking behind your docs, so you and your teammates build your understanding together. A Mac app that works on your own files."
+    />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <style>
+      /* Colours and type from brand/tokens.css */
+      :root {
+        color-scheme: light dark;
+        --paper: light-dark(#eef1f4, #0e1420);
+        --sheet: light-dark(#ffffff, #151c2a);
+        --rule: light-dark(#d8dee6, #2a3446);
+        --ink: light-dark(#17223b, #e7ebf3);
+        --ink2: light-dark(#3a4560, #c4cbd9);
+        --graphite: light-dark(#656e7b, #8f99ab);
+        --blue: light-dark(#2a5bd7, #7fa2f5);
+        --blue-wash: light-dark(#e8eefc, #1c2a4a);
+        --green: light-dark(#24734b, #6ccb98);
+        --font-ui: "Avenir Next", "Avenir", system-ui, sans-serif;
+        --font-doc: "Charter", "Iowan Old Style", Georgia, serif;
+        --font-pen: "Iowan Old Style", "Charter", Georgia, serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+      }
+      body {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        background: var(--paper);
+        color: var(--ink);
+        font-family: var(--font-ui);
+        -webkit-font-smoothing: antialiased;
+      }
+      .wrap {
+        width: 100%;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+      header .wrap {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 72px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--ink);
+        text-decoration: none;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+      .brand svg {
+        width: 18px;
+        height: 18px;
+      }
+      .brand .sub {
+        color: var(--graphite);
+        font-weight: 500;
+      }
+      .soon-pill {
+        font-size: 13px;
+        color: var(--graphite);
+      }
+      main {
+        flex: 1;
+        display: flex;
+        align-items: center;
+      }
+      .hero {
+        padding: 56px 24px 72px;
+      }
+      .icon {
+        width: 72px;
+        height: 72px;
+        display: block;
+        margin-bottom: 28px;
+      }
+      .name {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--graphite);
+        margin: 0 0 12px;
+        letter-spacing: 0.02em;
+      }
+      h1 {
+        font-family: var(--font-doc);
+        font-weight: 400;
+        font-size: clamp(34px, 6vw, 52px);
+        line-height: 1.12;
+        letter-spacing: -0.01em;
+        margin: 0 0 22px;
+        text-wrap: balance;
+      }
+      h1 em {
+        font-family: var(--font-pen);
+        color: var(--ink2);
+      }
+      .lede {
+        font-size: 18px;
+        line-height: 1.6;
+        color: var(--ink2);
+        margin: 0 0 36px;
+        max-width: 560px;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 14px 20px;
+      }
+      .download {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--blue);
+        color: var(--sheet);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 16px;
+        padding: 13px 22px;
+        border-radius: 10px;
+        transition: transform 0.12s ease, box-shadow 0.12s ease;
+      }
+      .download:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 18px -8px var(--blue);
+      }
+      .download:focus-visible {
+        outline: 2px solid var(--blue);
+        outline-offset: 3px;
+      }
+      .download svg {
+        width: 16px;
+        height: 16px;
+      }
+      .meta {
+        font-size: 14px;
+        color: var(--graphite);
+        line-height: 1.5;
+      }
+      .notes {
+        margin-top: 56px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      .note {
+        background: var(--sheet);
+        border: 1px solid var(--rule);
+        border-radius: 12px;
+        padding: 18px 20px;
+      }
+      .note h2 {
+        font-size: 15px;
+        font-weight: 600;
+        margin: 0 0 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .note p {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--ink2);
+      }
+      .tag {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--blue);
+        background: var(--blue-wash);
+        border-radius: 999px;
+        padding: 2px 8px;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green);
+      }
+      footer .wrap {
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--graphite);
+        border-top: 1px solid var(--rule);
+      }
+      @media (max-width: 600px) {
+        .wrap {
+          padding: 0 16px;
+        }
+        .hero {
+          padding: 32px 16px 48px;
+        }
+        .notes {
+          grid-template-columns: 1fr;
+        }
+        .lede {
+          font-size: 17px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .download {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap">
+        <a class="brand" href="/" aria-label="hianur spaces">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M42.9 12.9a10 10 0 0 1 14.2 0l30 30a10 10 0 0 1 0 14.2l-30 30a10 10 0 0 1-14.2 0l-30-30a10 10 0 0 1 0-14.2z"
+            />
+          </svg>
+          <span>hianur <span class="sub">spaces</span></span>
+        </a>
+        <span class="soon-pill">For Mac</span>
+      </div>
+    </header>
+
+    <main>
+      <section class="wrap hero">
+        <img class="icon" src="/anur-icon.png" alt="Anur app icon" width="72" height="72" />
+        <p class="name">Anur</p>
+        <h1>Build your understanding, <em>together with your teammates.</em></h1>
+        <p class="lede">
+          Anur keeps the thinking behind a doc. Each section gets its own threads with the AI agent
+          you already use, and the page holds only what you chose. Your docs stay plain Markdown
+          files in your own folders.
+        </p>
+        <div class="actions">
+          <a class="download" href="/apps/Anur.dmg" download>
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M8 2v8.5M4.5 7 8 10.5 11.5 7M3 13.5h10"
+              />
+            </svg>
+            Download for Mac
+          </a>
+          <span class="meta">Free · Apple silicon and Intel<br />Runs on your Mac, no account</span>
+        </div>
+
+        <div class="notes">
+          <div class="note">
+            <h2>Spaces for teams <span class="tag">Coming soon</span></h2>
+            <p>Share a space with your teammates, so everyone builds on the same reasons.</p>
+          </div>
+          <div class="note">
+            <h2><span class="dot" aria-hidden="true"></span>We don't collect any data</h2>
+            <p>No analytics, no tracking, no account. Your docs stay on your Mac.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <span>© 2026 hianur</span>
+        <span>spaces.hianur.com</span>
+      </div>
+    </footer>
+  </body>
+</html>

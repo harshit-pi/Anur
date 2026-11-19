@@ -37,3 +37,8 @@ aws sso login --profile aws-anur
 - `https://spaces.hianur.com/apps/Anur.dmg`: always the newest; the link to share. `…/Anur.dmg` at the root is the same file, kept for links sent before.
 - `…/Anur-<version>-universal.dmg`: that version, kept.
 - `…/latest-mac.yml`: the feed Anur checks on launch, every 4 hours, and on Anur → Check for Updates…. With Install updates automatically on (the default, in Settings → General), updates download quietly, a card offers Restart, and an update not restarted for installs on quit; off, Anur says one is available and downloads when asked. Anur never restarts by itself.
+
+## The website
+
+- `site/` is the page at `https://spaces.hianur.com`: one `index.html`, the app icon and a favicon, with colours from `brand/tokens.css`. It has no analytics or cookies, and CloudFront and S3 keep no access logs, so "We don't collect any data" stays true; keep it that way.
+- `pnpm site:publish` uploads it to the same bucket and clears the cache. CloudFront serves `index.html` for `/`.
