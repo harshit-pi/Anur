@@ -170,3 +170,19 @@ export function edgeGroups(
       a.key.localeCompare(b.key),
   );
 }
+
+/** Whether a section sits somewhere inside another. */
+export function isInside(all: readonly SystemSection[], id: string, outer: string): boolean {
+  const byId = new Map(all.map((s) => [s.id, s]));
+  for (let at = byId.get(id)?.parent; at; at = byId.get(at)?.parent ?? null)
+    if (at === outer) return true;
+  return false;
+}
+
+/** The edge list's group key for a line drawn between two map boxes. */
+export function lineKey(all: readonly SystemSection[], from: string, to: string): string {
+  const name = (id: string) =>
+    id.startsWith("ext:") ? { name: id.slice(4), stub: null } : endName(all, id);
+  const t = name(to);
+  return `${name(from).name}→${t.stub ?? ""}${t.name}`;
+}

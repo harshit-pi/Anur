@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { anur } from "../bridge.ts";
+import { SystemMap } from "./SystemMap.tsx";
 import { taskTitle, type TaskReport } from "../layout/task-report.ts";
 import {
   boxesAt,
   trailTo,
   edgeGroups,
+  isInside,
+  lineKey,
   endName,
   type SystemBox,
   type SystemEdge,
@@ -120,6 +123,9 @@ export function SystemView({
   const [at, setAt] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
+  /** Frames opened on the map, and the line whose calls the list shows. */
+  const [openFrames, setOpenFrames] = useState<ReadonlySet<string>>(new Set());
+  const [focus, setFocus] = useState<string | null>(null);
   const read = useCallback(() => {
     setShown((s) => (s.kind === "ok" ? s : { kind: "reading" }));
     void anur.call("system:sections", {}).then((r) => {
@@ -159,6 +165,8 @@ export function SystemView({
   const level = at && all.some((s) => s.id === at) ? at : null;
   const trail = trailTo(all, level);
   const boxes = boxesAt(all, level);
+  // Several GitHub owners: pick one first, and its system is the map.
+  const showOwners = !level && all.some((x) => x.id.startsWith("org:"));
   // Group names apply on their own, Claude's or the rule's; a rename is the person's last word.
   const rename = (b: SystemBox, name: string) => {
     void anur.call("system:decide", { group: b.id, action: "rename", name, parts: [] });
@@ -234,77 +242,100 @@ export function SystemView({
           </button>
         </p>
       ) : null}
-      {boxes.length === 0 ? (
-        <p className="quiet">No repos in this folder.</p>
-      ) : (
-        <div className="system-grid">
-          {boxes.map((b) => {
-            const line = <span className="system-line">{b.line}</span>;
-            const name =
-              renaming === b.id ? (
-                <input
-                  className="system-rename"
-                  aria-label={`New name for ${b.name}`}
-                  defaultValue={b.name}
-                  autoFocus
-                  maxLength={60}
-                  onKeyDown={(e) => {
-                    if (e.key === "Escape") setRenaming(null);
-                    if (e.key !== "Enter") return;
-                    const next = e.currentTarget.value.trim();
-                    setRenaming(null);
-                    if (next && next !== b.name) rename(b, next);
-                  }}
-                  onBlur={() => {
-                    setRenaming(null);
-                  }}
-                />
-              ) : (
-                <span className="system-name">{b.name}</span>
-              );
-            return (
-              <div
-                key={b.id}
-                className={`system-box ${b.empty ? "empty" : b.kind === "part" ? "part" : "opens"}`}
-              >
-                {b.opens && renaming !== b.id ? (
-                  <button
-                    type="button"
-                    className="system-open"
-                    onClick={() => {
-                      setAt(b.id);
+      {showOwners ? (
+        boxes.length === 0 ? (
+          <p className="quiet">No repos in this folder.</p>
+        ) : (
+          <div className="system-grid">
+            {boxes.map((b) => {
+              const line = <span className="system-line">{b.line}</span>;
+              const name =
+                renaming === b.id ? (
+                  <input
+                    className="system-rename"
+                    aria-label={`New name for ${b.name}`}
+                    defaultValue={b.name}
+                    autoFocus
+                    maxLength={60}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setRenaming(null);
+                      if (e.key !== "Enter") return;
+                      const next = e.currentTarget.value.trim();
+                      setRenaming(null);
+                      if (next && next !== b.name) rename(b, next);
                     }}
-                  >
-                    {name}
-                    {line}
-                  </button>
+                    onBlur={() => {
+                      setRenaming(null);
+                    }}
+                  />
                 ) : (
-                  <>
-                    {name}
-                    {line}
-                  </>
-                )}
-                {b.kind === "group" && renaming !== b.id ? (
-                  <button
-                    type="button"
-                    className="system-rename-link"
-                    onClick={() => {
-                      setRenaming(b.id);
-                    }}
-                  >
-                    Rename
-                  </button>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
+                  <span className="system-name">{b.name}</span>
+                );
+              return (
+                <div
+                  key={b.id}
+                  className={`system-box ${b.empty ? "empty" : b.kind === "part" ? "part" : "opens"}`}
+                >
+                  {b.opens && renaming !== b.id ? (
+                    <button
+                      type="button"
+                      className="system-open"
+                      onClick={() => {
+                        setAt(b.id);
+                      }}
+                    >
+                      {name}
+                      {line}
+                    </button>
+                  ) : (
+                    <>
+                      {name}
+                      {line}
+                    </>
+                  )}
+                  {b.kind === "group" && renaming !== b.id ? (
+                    <button
+                      type="button"
+                      className="system-rename-link"
+                      onClick={() => {
+                        setRenaming(b.id);
+                      }}
+                    >
+                      Rename
+                    </button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        <SystemMap
+          sections={all}
+          edges={shown.edges}
+          scope={level}
+          open={openFrames}
+          onToggle={(id) => {
+            setOpenFrames((o) => {
+              const next = new Set(o);
+              if (next.has(id)) {
+                // Closing a frame closes what's open inside it too.
+                for (const x of [...next]) if (x === id || isInside(all, x, id)) next.delete(x);
+              } else next.add(id);
+              return next;
+            });
+          }}
+          onLine={(l) => {
+            setFocus(lineKey(all, l.from, l.to));
+          }}
+        />
       )}
       <EdgeList
         sections={all}
         edges={shown.edges}
         misses={shown.misses.flatMap((m) => m.misses)}
         within={level}
+        focus={focus}
       />
     </div>
   );
@@ -320,13 +351,19 @@ function EdgeList({
   edges,
   misses,
   within,
+  focus,
 }: {
   sections: SystemSection[];
   edges: SystemEdge[];
   misses: string[];
   within: string | null;
+  /** A group to show open, from a click on its line on the map. */
+  focus: string | null;
 }) {
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(focus);
+  useEffect(() => {
+    if (focus) setOpen(focus);
+  }, [focus]);
   const [showHidden, setShowHidden] = useState(false);
   const [menu, setMenu] = useState<string | null>(null);
   const live = edges.filter((e) => e.state !== "hidden");
