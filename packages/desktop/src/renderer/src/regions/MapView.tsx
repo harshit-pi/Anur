@@ -3,6 +3,7 @@ import { boxSize, mapLayout, resolveWiki, type MapNode, type SectionTree } from 
 import type { InkStroke, PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { useFeatures } from "../features.ts";
+import { boxStatus, type BoxStatus } from "../layout/box-status.ts";
 import { changeSummary } from "../layout/change-summary.ts";
 import { mapSkeleton } from "../layout/map-drawing.ts";
 import { BoxSketch, sketchLine } from "./MapSketch.tsx";
@@ -40,6 +41,8 @@ type Box = {
   exploring?: boolean;
   /** The box's second line: what's under it, or what sets it apart. */
   sub?: string;
+  /** What happened on a section's box, from its threads (mock 9). */
+  status?: BoxStatus | null;
   /** A section's links to other docs (8.6), shown as one badge with a list. */
   outLinks?: { doc: string | null; heading: string | null; label: string }[];
   /** Where the layout put its parent's rail for its row, and the spine (group 7). */
@@ -282,6 +285,22 @@ export function MapView({
     }, 450);
   };
   const placeNew = useRef<{ path: string[]; at: Pos } | null>(null);
+  /** A section just made by Tab or Enter: named next, and removed if left untouched (mock 8). */
+  const freshNew = useRef<{ path: string[]; armed: boolean } | null>(null);
+  const [freshIndex, setFreshIndex] = useState<number | null>(null);
+  /** Set by Escape so the blur that follows doesn't save the name. */
+  const cancelRename = useRef(false);
+  /** A short note on the map: what a key just did to the doc, or why it didn't. */
+  const [note, setNote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!note) return;
+    const t = window.setTimeout(() => {
+      setNote(null);
+    }, 3200);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [note]);
   const textNow = useRef(docText);
   textNow.current = docText;
 
@@ -359,7 +378,8 @@ export function MapView({
       const id = idOf(s.index);
       const heading = s.path.at(-1) ?? "";
       // The second line: what's under the box, its sections and threads.
-      const count = threads.filter((t) => samePath(t.path, s.path)).length;
+      const here = threads.filter((t) => samePath(t.path, s.path));
+      const count = here.length;
       const kids = tree.sections.filter((x) => x.parent === s.index).length;
       const sub = [
         kids > 0 ? plural(kids, "section") : "",
@@ -367,10 +387,12 @@ export function MapView({
       ]
         .filter(Boolean)
         .join(", ");
+      // What happened here, on the box (mock 9).
+      const status = boxStatus(here, here.filter((t) => previewed.has(t.id)).length);
       nodes.push({
         id,
         parent: s.parent === null ? null : idOf(s.parent),
-        ...boxSize(heading, sub),
+        ...boxSize(heading, status ? `${status.label}   ${sub}` : sub),
       });
       info.set(id, {
         id,
@@ -378,10 +400,10 @@ export function MapView({
         index: s.index,
         heading,
         sub,
+        status,
         parent: s.parent === null ? null : idOf(s.parent),
       });
       // A branch hangs off the thread it came from (10.5), so each comes after its source.
-      const here = threads.filter((t) => samePath(t.path, s.path));
       const onSection = new Set(here.map((t) => t.id));
       const depth = (t: ThreadView, seen = new Set<string>()): number => {
         const from = t.branchedFrom?.thread;
@@ -577,6 +599,18 @@ export function MapView({
   }, [tree, threads, previews, idOf, moved, drag, docs, docPath, features.links]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
+
+  // A section made by a key opens for its name once it's in the tree.
+  useEffect(() => {
+    const want = freshNew.current;
+    if (!want?.armed) return;
+    const at = tree.sections.find((x) => samePath(x.path, want.path));
+    if (!at) return;
+    want.armed = false;
+    onSelect(at.index);
+    setFreshIndex(at.index);
+    setRenaming(at.index);
+  }, [tree, onSelect]);
 
   // A section added by double-click is put where it was drawn, once it has an ID.
   useEffect(() => {
@@ -975,14 +1009,47 @@ export function MapView({
       redo();
       return;
     }
-    if ((e.key === "Enter" || e.key === "F2") && writable && tree.sections[selected]) {
+    // Tab: a section under the selected one; Enter: one beside it (mock 8).
+    // Each writes its heading into the doc, then opens for its name.
+    if ((e.key === "Tab" || e.key === "Enter") && !e.shiftKey && !mod && writable) {
+      const here = tree.sections[selected];
+      if (!here) return;
+      e.preventDefault();
+      const parent = e.key === "Enter" && here.parent !== null ? here.parent : selected;
+      const under = tree.sections[parent];
+      const taken = new Set(
+        tree.sections.filter((x) => x.parent === parent).map((x) => x.path.at(-1) ?? ""),
+      );
+      let name = "New section";
+      for (let n = 2; taken.has(name); n++) name = `New section ${String(n)}`;
+      const path = onAddSection(parent, name);
+      if (path) {
+        record({ kind: "doc" });
+        freshNew.current = { path, armed: true };
+        setNote(`Added a heading under ${under?.path.at(-1) ?? "the title"} in the doc`);
+      }
+      return;
+    }
+    if (e.key === "F2" && writable && tree.sections[selected]) {
       e.preventDefault();
       setRenaming(selected);
       return;
     }
+    // Backspace or Delete: only an empty section goes from the map; one with
+    // text or sections under it is removed on the page, where its words show.
     if ((e.key === "Backspace" || e.key === "Delete") && writable) {
       e.preventDefault();
-      const parent = tree.sections[selected]?.parent ?? 0;
+      const s = tree.sections[selected];
+      if (!s || selected === 0) return;
+      const empty =
+        !tree.sections.some((x) => x.parent === selected) && !bodyOf(docText(), s).trim();
+      if (!empty) {
+        setNote(
+          `${s.path.at(-1) ?? "This section"} has text or sections under it: remove it on the page`,
+        );
+        return;
+      }
+      const parent = s.parent ?? 0;
       if (onDelete(selected)) {
         record({ kind: "doc" });
         onSelect(parent);
@@ -1118,23 +1185,44 @@ export function MapView({
     );
     return { x: a.x + dx * Math.min(1, t), y: a.y + dy * Math.min(1, t) };
   };
-  const links = tree.sections.flatMap((s) =>
+  const inText = tree.sections.flatMap((s) =>
     [...new Set(s.linksOut.filter((l) => l.sameDoc).map((l) => l.targetIndex))]
       .filter((t): t is number => t !== null && t !== s.index)
-      .flatMap((t) => {
-        const a = byId.get(idOf(s.index));
-        const b = byId.get(idOf(t));
-        if (!a || !b) return [];
-        const p = edge(a, b);
-        const q = edge(b, a);
-        return line(
-          `${a.id}>${b.id}`,
-          "map-link",
-          `M ${String(p.x)} ${String(p.y)} L ${String(q.x)} ${String(q.y)}`,
-          "url(#map-arrow)",
-        );
-      }),
+      .map((t) => ({ s, t })),
   );
+  const links = inText.flatMap(({ s, t }) => {
+    const a = byId.get(idOf(s.index));
+    const b = byId.get(idOf(t));
+    if (!a || !b) return [];
+    const p = edge(a, b);
+    const q = edge(b, a);
+    // The words the link reads as in the text, when they aren't just the heading.
+    const heading = tree.sections[t]?.path.at(-1) ?? "";
+    const label = s.linksOut.find(
+      (l) => l.sameDoc && l.targetIndex === t && l.alias && l.alias !== heading,
+    )?.alias;
+    return [
+      ...line(
+        `${a.id}>${b.id}`,
+        "map-link",
+        `M ${String(p.x)} ${String(p.y)} L ${String(q.x)} ${String(q.y)}`,
+        "url(#map-arrow)",
+      ),
+      ...(label
+        ? [
+            <text
+              key={`${a.id}>${b.id}:label`}
+              className="map-link-label"
+              x={(p.x + q.x) / 2}
+              y={(p.y + q.y) / 2 - 6}
+              textAnchor="middle"
+            >
+              {label.length > 32 ? `${label.slice(0, 31)}…` : label}
+            </text>,
+          ]
+        : []),
+    ];
+  });
   const drawing = (() => {
     if (!linking) return null;
     const a = byId.get(linking.from);
@@ -1320,15 +1408,32 @@ export function MapView({
                     }}
                     onKeyDown={(e) => {
                       e.stopPropagation();
-                      if (e.key === "Enter") e.currentTarget.blur();
+                      // Enter or Tab names it.
+                      if (e.key === "Enter" || e.key === "Tab") {
+                        e.preventDefault();
+                        e.currentTarget.blur();
+                      }
                       if (e.key === "Escape") {
+                        const fresh = freshIndex === b.index;
+                        cancelRename.current = true;
                         setRenaming(null);
+                        setFreshIndex(null);
+                        // A section a key just made, left as it was: taken back out.
+                        if (fresh && onDelete(b.index)) {
+                          record({ kind: "doc" });
+                          onSelect(tree.sections[b.index]?.parent ?? 0);
+                        }
                         host.current?.focus();
                       }
                     }}
                     onBlur={(e) => {
+                      if (cancelRename.current) {
+                        cancelRename.current = false;
+                        return;
+                      }
                       const name = e.currentTarget.value.trim();
                       setRenaming(null);
+                      setFreshIndex(null);
                       if (name && name !== b.heading) {
                         onRename(b.index, name);
                         record({ kind: "doc" });
@@ -1396,12 +1501,15 @@ export function MapView({
                   const offers = t.items.flatMap((x) => (x.kind === "options" ? [x] : []));
                   return (offers.length > 0 && !offers.some((x) => x.used)) || previewed.has(t.id);
                 });
-                return b.sub || needs ? (
+                return b.sub || needs || b.status ? (
                   <div
                     className="map-box-sub"
                     title={needs ? "A thread here needs you" : undefined}
                   >
                     {needs ? <span className="think-needs-dot" aria-label="Needs you" /> : null}
+                    {b.status ? (
+                      <span className={`map-status ${b.status.tone}`}>{b.status.label}</span>
+                    ) : null}
                     {b.sub}
                   </div>
                 ) : null;
@@ -1512,6 +1620,7 @@ export function MapView({
           { cls: "option", label: "Option", on: has("option") },
           { cls: "edit", label: "Proposed edit", on: has("edit") },
           { cls: "link", label: "Link", on: has("link") },
+          { cls: "link", label: "Link in the text", on: inText.length > 0 },
         ].filter((k) => k.on);
         if (!has("thread"))
           return (
@@ -1522,13 +1631,19 @@ export function MapView({
         return (
           <div className="map-legend" aria-hidden="true">
             {keys.map((k) => (
-              <span key={k.cls}>
+              <span key={k.label}>
                 <i className={`map-key ${k.cls}`} /> {k.label}
               </span>
             ))}
           </div>
         );
       })()}
+      {writable ? <KeyBar /> : null}
+      {note ? (
+        <div className="map-note" role="status">
+          {note}
+        </div>
+      ) : null}
       <div className="map-tools">
         <button
           type="button"
@@ -1555,7 +1670,7 @@ export function MapView({
         <button
           type="button"
           className="map-tool"
-          title="Make an Excalidraw drawing of this map, to sketch on (⌘-click: open it in a new tab)"
+          title="Sketch on a copy of this map in Excalidraw (⌘-click: open it in a new tab)"
           disabled={!writable || makingDrawing}
           onClick={(e) => {
             const newTab = e.metaKey || e.ctrlKey;
@@ -1565,7 +1680,7 @@ export function MapView({
             });
           }}
         >
-          Drawing
+          Sketch
         </button>
         <button
           type="button"
@@ -1595,6 +1710,46 @@ export function MapView({
         ) : null}
         <span className="map-zoom quiet">{Math.round(v.z * 100)}%</span>
       </div>
+    </div>
+  );
+}
+
+const KEYS: readonly (readonly [string, string])[] = [
+  ["Tab", "a section under it"],
+  ["Enter", "one beside it"],
+  ["F2", "rename"],
+  ["⌫", "remove an empty one"],
+  ["← → ↑ ↓", "move"],
+];
+const KEYS_SEEN = "anur.map.keysSeen";
+
+/**
+ * The map's keys (mock 8): in full the first time, then only the keys,
+ * spelled out again on hover.
+ */
+function KeyBar() {
+  const [first] = useState(() => {
+    try {
+      return !localStorage.getItem(KEYS_SEEN);
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(KEYS_SEEN, "1");
+    } catch {
+      // Without storage it shows in full each time; nothing breaks.
+    }
+  }, []);
+  return (
+    <div className={`map-keys${first ? " open" : ""}`} aria-label="Map keys">
+      {KEYS.map(([k, what]) => (
+        <span key={k}>
+          <kbd>{k}</kbd>
+          <span className="map-keys-what">{what}</span>
+        </span>
+      ))}
     </div>
   );
 }

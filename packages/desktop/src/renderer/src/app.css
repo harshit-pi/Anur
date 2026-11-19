@@ -3029,9 +3029,111 @@ body.resizing * {
 
 .map-key.link {
   width: 16px;
-  height: 0;
-  border-top: 1.5px solid var(--blue);
+  height: 1.5px;
   border-radius: 0;
+  background: var(--blue);
+}
+
+.map-link-label {
+  fill: var(--blue);
+  font: 11.5px var(--font-ui);
+  paint-order: stroke;
+  stroke: var(--canvas, var(--sheet));
+  stroke-width: 4px;
+}
+
+/* What happened on a box (mock 9), beside its counts. */
+.map-status {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 550;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.map-status.blue {
+  background: var(--blue-wash);
+  color: var(--blue);
+}
+
+.map-status.green {
+  background: var(--green-wash);
+  color: var(--green);
+}
+
+.map-status.amber {
+  background: var(--amber-wash);
+  color: var(--amber);
+}
+
+/* The map's keys (mock 8): in full once, then just the keys until hovered. */
+.map-keys {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  font: 12px var(--font-ui);
+  color: var(--graphite);
+  cursor: default;
+}
+
+.map-keys > span {
+  display: flex;
+  align-items: center;
+}
+
+.map-keys kbd {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--hover);
+  color: var(--ink);
+  font:
+    11px ui-monospace,
+    "SF Mono",
+    Menlo,
+    monospace;
+}
+
+.map-keys-what {
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: max-width 160ms ease;
+}
+
+.map-keys.open .map-keys-what,
+.map-keys:hover .map-keys-what {
+  max-width: 160px;
+  margin-left: 5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-keys-what {
+    transition: none;
+  }
+}
+
+/* What a key just did to the doc. */
+.map-note {
+  position: absolute;
+  bottom: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--sheet);
+  font: 12.5px var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .map-peek {
