@@ -988,6 +988,7 @@ export class Threads {
         ? {
             thread: start.branchedFrom.thread,
             title: await this.titleOf(at.doc, start.branchedFrom.thread),
+            upTo: Number(start.branchedFrom.line),
           }
         : null,
       closed,

@@ -291,7 +291,15 @@ export const ThreadView = z.object({
   lastAt: z.string().nullable().optional(),
   lastReply: z.string().nullable().optional(),
   /** For a branch (10.5): the thread it came from, and that thread's name. */
-  branchedFrom: z.object({ thread: z.string(), title: z.string() }).nullable().optional(),
+  branchedFrom: z
+    .object({
+      thread: z.string(),
+      title: z.string(),
+      /** The parent's item it branched after; its chat up to there shows above the branch's own. */
+      upTo: z.number().optional(),
+    })
+    .nullable()
+    .optional(),
   /** Every edit this thread proposes now, by doc and section (9.3). */
   changeSet: z
     .array(z.object({ doc: z.string(), sections: z.array(z.array(z.string())) }))
