@@ -792,8 +792,6 @@ export function RightSidebar({
   return (
     <aside className="right-sidebar" aria-label="Think" hidden={hidden}>
       <div className="right-main">{think}</div>
-      {/* A section's context and history, folded at the foot, filled by Think. */}
-      <div id="right-footer" className="right-footer" />
     </aside>
   );
 }
