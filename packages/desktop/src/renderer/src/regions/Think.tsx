@@ -376,6 +376,40 @@ function proposedBody(part: { proposed: string }): string {
  * An edit a thread made to a section, shown like an option: what the section
  * would say, and Use this. The page shows the same edit in place.
  */
+/**
+ * A choice card's text, cut short with a fade. It opens when clicked, never on hover:
+ * hovering used to open it and push Use, Add as subsection and Explore this down from
+ * under the pointer, so the first click missed (30.30).
+ */
+function OfferText({
+  children,
+  open,
+  onToggle,
+}: {
+  children: React.ReactNode;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div
+      className={`think-offer-text${open ? " open" : ""}`}
+      role="button"
+      tabIndex={0}
+      aria-expanded={open}
+      title={open ? "Show less" : "Show all"}
+      onClick={onToggle}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggle();
+        }
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 function EditCard({
   part,
   writable,
@@ -390,6 +424,7 @@ function EditCard({
   onDrop: () => void;
 }) {
   const body = proposedBody(part);
+  const [textOpen, setTextOpen] = useState(false);
   return (
     <div
       className="think-offer edit"
@@ -400,9 +435,14 @@ function EditCard({
         <strong>± Edit {part.path.at(-1)}</strong>
         <span className="quiet">Not in the doc yet</span>
       </div>
-      <div className="think-offer-text">
+      <OfferText
+        open={textOpen}
+        onToggle={() => {
+          setTextOpen((v) => !v);
+        }}
+      >
         {body ? <Markdown text={body} /> : <p className="quiet">Removes the section's text.</p>}
-      </div>
+      </OfferText>
       <div className="think-offer-actions">
         {writable ? (
           <button type="button" className="think-button primary" onClick={onUse}>
@@ -789,6 +829,7 @@ export function Think({
   );
   /** Closed threads on this section, shown on a click (11.3). */
   const [showClosed, setShowClosed] = useState(false);
+  const [openOffers, setOpenOffers] = useState<ReadonlySet<string>>(new Set());
   const [open, setOpen] = useState<string | null>(null);
   // A thread deleted from the map: gone from the list, and closed if it was open here.
   useEffect(() => {
@@ -1774,9 +1815,18 @@ export function Think({
                           <span className="quiet">Explored</span>
                         ) : null}
                       </div>
-                      <div className="think-offer-text">
+                      <OfferText
+                        open={openOffers.has(o.id)}
+                        onToggle={() => {
+                          setOpenOffers((cur) => {
+                            const next = new Set(cur);
+                            if (!next.delete(o.id)) next.add(o.id);
+                            return next;
+                          });
+                        }}
+                      >
                         <Markdown text={o.text} />
-                      </div>
+                      </OfferText>
                       {writable && item.several && !item.added.includes(o.id) ? (
                         <div className="think-offer-actions">
                           <button
