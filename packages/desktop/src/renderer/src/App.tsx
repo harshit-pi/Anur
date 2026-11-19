@@ -215,6 +215,22 @@ export function App() {
 
   // Each folder has its own tabs, remembered on this device.
   const folderPath = folder?.path ?? null;
+  // A folder with drawings: Excalidraw loads a few seconds after it opens,
+  // while Anur is idle, so the first drawing shown doesn't wait for it.
+  const hasDrawings = folder?.docs.some((d) => isDrawing(d)) ?? false;
+  useEffect(() => {
+    if (!hasDrawings) return;
+    const t = window.setTimeout(() => {
+      window.requestIdleCallback(() => {
+        void import("./editor/drawings/drawing-widget.ts").then((m) => {
+          m.loadAhead();
+        });
+      });
+    }, 3000);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [hasDrawings]);
   // Remembered on this Mac per folder: the palette ranks these docs higher.
   useEffect(() => {
     if (!folderPath) return;
