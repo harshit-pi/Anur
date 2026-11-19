@@ -6561,11 +6561,18 @@ button.file-card-name:hover {
   font-size: 12px;
 }
 
+/* A full-width block at the panel's foot, as the outline is: its icon lines up with "Outline". */
 .vault-switcher {
   position: relative;
-  margin-top: auto;
-  padding: 6px 4px 0;
+  margin: auto -16px -16px;
+  padding: 8px 8px 10px;
   border-top: 1px solid var(--rule);
+  background: var(--paper);
+}
+
+/* Above the switcher, the outline stops at it instead of running to the panel's edge. */
+.left-outline:has(+ .vault-switcher) {
+  margin-bottom: 0;
 }
 
 .vault-current {
@@ -6595,9 +6602,9 @@ button.file-card-name:hover {
 
 .vault-menu {
   position: absolute;
-  right: 4px;
+  right: 12px;
   bottom: calc(100% + 6px);
-  left: 4px;
+  left: 12px;
   z-index: 30;
   display: flex;
   flex-direction: column;
