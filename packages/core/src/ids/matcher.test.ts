@@ -142,3 +142,26 @@ describe("conflict markers", () => {
     expect(hasConflictMarkers("text with <<<<<<< inside\n")).toBe(false);
   });
 });
+
+describe("matching by place", () => {
+  it("keeps the IDs of a renamed title and a renamed empty section", () => {
+    const before = old("# Untitled\n\n## New section\n\n## Goal\n\nGrow funded accounts.\n");
+    const after = next("# GTM\n\n## Channels\n\n## Goal\n\nGrow funded accounts.\n");
+    const r = matchSections(before, after);
+    expect(r.carried).toEqual(before.map((s) => s.id));
+    expect(r.how).toEqual(["place", "place", "heading"]);
+    expect(r.orphans).toEqual([]);
+  });
+
+  it("doesn't carry an ID to a different section that took a full one's place", () => {
+    const before = old(
+      "# Plan\n\n## Rewards\n\nBoth sides get one share after the deposit clears.\n\n## Goal\n\nGrow.\n",
+    );
+    const after = next(
+      "# Plan\n\n## Support\n\nBrief the team on the common questions before launch day.\n\n## Goal\n\nGrow.\n",
+    );
+    const r = matchSections(before, after);
+    expect(r.carried[1]).toBeNull();
+    expect(r.orphans.map((o) => o.id)).toEqual([before[1]?.id]);
+  });
+});

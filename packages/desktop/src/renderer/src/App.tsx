@@ -1313,8 +1313,9 @@ export function App() {
               writable={folder?.mode === "writable" && doc.mode === "editable"}
               docs={folder?.docs ?? []}
             />
-          ) : centerView === "map" ? (
-            // While a doc's sections are read, an empty map, so the page never shows through.
+          ) : centerView === "map" && selected && /\.md$/i.test(selected) ? (
+            // While a doc's sections are read, or the doc is moved or renamed, an
+            // empty map, so neither the page nor "Pick a doc" shows through.
             <div className="map" aria-hidden="true" />
           ) : null
         }

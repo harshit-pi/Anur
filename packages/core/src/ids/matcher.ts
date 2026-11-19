@@ -8,7 +8,9 @@ import type { SectionTree } from "../sections/tree.ts";
  *
  * 1. the exact heading path;
  * 2. the same heading text at a new path;
- * 3. text similarity within the same file.
+ * 3. text similarity within the same file;
+ * 4. the same place: between the same matched neighbours, at the same depth,
+ *    for a section with no text of its own, as when its heading is renamed.
  *
  * Headings that share a path, such as two "Notes", are told apart by their
  * text; the ordinal is used only when minting. A section left without a match
@@ -25,7 +27,7 @@ export type MatchResult = {
   /** For each new section, the ID it keeps, or null to mint one. */
   carried: (SectionId | null)[];
   /** How each match was made, for the corpus test and for debugging. */
-  how: ("path" | "heading" | "text" | null)[];
+  how: ("path" | "heading" | "text" | "place" | null)[];
   /** Old sections with no match, each with its best suggestion among the new ones. */
   orphans: { id: SectionId; suggestion: number | null; score: number }[];
 };
@@ -93,7 +95,7 @@ export function matchSections(
   const carried: (SectionId | null)[] = next.map(() => null);
   const how: MatchResult["how"] = next.map(() => null);
   const usedOld = new Set<number>();
-  const take = (o: number, n: number, kind: "path" | "heading" | "text") => {
+  const take = (o: number, n: number, kind: "path" | "heading" | "text" | "place") => {
     const s = old[o];
     if (!s) return;
     usedOld.add(o);
@@ -133,6 +135,37 @@ export function matchSections(
 
   // 3: text similarity within the file, above the bar.
   for (const [o, n] of pairByText(freeOld(), freeNew(), old, next, MATCH_BAR)) take(o, n, "text");
+
+  // 4: the same place. Between two sections already matched (or a file's
+  // start or end), the free old and new ones pair in order when there are as
+  // many of each at the same depths: a renamed heading with no text to match.
+  const oldAt = new Map<SectionId, number>(old.map((s, i) => [s.id, i]));
+  const anchors: [number, number][] = [[-1, -1]];
+  next.forEach((_, n) => {
+    const id = carried[n];
+    const o = id ? oldAt.get(id) : undefined;
+    if (o !== undefined) anchors.push([o, n]);
+  });
+  anchors.push([old.length, next.length]);
+  for (let i = 0; i + 1 < anchors.length; i++) {
+    const [o0, n0] = anchors[i] ?? [0, 0];
+    const [o1, n1] = anchors[i + 1] ?? [0, 0];
+    // Anchors out of order mean a section moved: no place to read.
+    if (o1 <= o0) continue;
+    const olds = freeOld().filter((o) => o > o0 && o < o1);
+    const news = freeNew().filter((n) => n > n0 && n < n1);
+    if (olds.length === 0 || olds.length !== news.length) continue;
+    const depths = (ix: number[], of: readonly { path: readonly string[] }[]) =>
+      ix.map((x) => of[x]?.path.length ?? 0).join(",");
+    if (depths(olds, old) !== depths(news, next)) continue;
+    olds.forEach((o, k) => {
+      const n = news[k];
+      if (n === undefined) return;
+      // Only where text can't tell: a section with words of its own was
+      // matched by them in 3, or was rewritten and is a new section.
+      if (words(old[o]?.body ?? "").size === 0) take(o, n, "place");
+    });
+  }
 
   const orphans = freeOld().map((o) => {
     let suggestion: number | null = null;

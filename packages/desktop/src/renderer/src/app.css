@@ -2781,6 +2781,7 @@ body.resizing * {
 .map-box.title .map-box-name {
   font-family: var(--font-doc);
   font-size: 16px;
+  font-weight: 600;
 }
 
 .map-box.selected {
@@ -2803,7 +2804,7 @@ body.resizing * {
 .map-box-name {
   flex: 1;
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 500;
   line-height: 22px;
   overflow-wrap: anywhere;
 }
