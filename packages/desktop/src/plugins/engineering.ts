@@ -1,6 +1,8 @@
-import { API_VERSION, type Plugin, type SourcedSection } from "@anur/core";
+import { API_VERSION, type Edge, type Plugin, type SourcedSection } from "@anur/core";
 import {
+  HTTP_MISSES,
   applyReview,
+  edgesIn,
   findRepoDirs,
   groupParts,
   readReview,
@@ -42,6 +44,12 @@ export const engineering: Plugin = {
       sections: (folder) => Promise.resolve(systemSections(folder)),
       // One watcher per repo (20.8): a build file's change reads the system again.
       watch: (folder, onChange) => watchSystem(folder, onChange),
+    });
+    // Calls from one repo to another's HTTP routes (group 22).
+    api.registerEdgeDetector({
+      id: "http",
+      misses: HTTP_MISSES,
+      edges: (folder) => Promise.resolve(systemEdges(folder)),
     });
   },
 };
@@ -95,4 +103,34 @@ export function systemSections(folder: string): SourcedSection[] {
     for (const p of [...left]) partSection(p.name, repoId);
   }
   return out;
+}
+
+/**
+ * The folder's HTTP edges as sections' edges: each end the part that holds
+ * the file, else its repo; an outside service or a repo not cloned, a stub.
+ */
+export function systemEdges(folder: string): Edge[] {
+  const scan = scanSystem(folder);
+  const repoId = (dir: string) => `repo:${scan.repos.find((r) => r.dir === dir)?.id ?? dir}`;
+  const end = (repo: string, part: string | null) => {
+    const p = part ? scan.parts.find((x) => x.repo === repo && x.name === part) : undefined;
+    return p ? `part:${p.id}` : repoId(repo);
+  };
+  return edgesIn(
+    folder,
+    scan.repos.map((r) => r.dir),
+    scan.parts,
+  ).map((e) => ({
+    id: e.id,
+    from: end(e.from.repo, e.from.part),
+    to:
+      "repo" in e.to
+        ? end(e.to.repo, e.to.part)
+        : `stub:${e.to.stub === "outside" ? "outside" : "not-cloned"}:${e.to.name}`,
+    kind: e.kind,
+    label: `${e.method ? `${e.method} ` : ""}${e.route}`,
+    how: e.how,
+    evidence: e.evidence,
+    declared: e.declared,
+  }));
 }

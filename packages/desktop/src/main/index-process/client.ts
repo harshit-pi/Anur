@@ -1,9 +1,7 @@
 import path from "node:path";
 import { utilityProcess, type UtilityProcess } from "electron";
-import type { SourcedSection } from "@anur/core";
-import type { FromIndex, ToIndex } from "./protocol.ts";
+import type { FolderRead, FromIndex, ToIndex } from "./protocol.ts";
 
-type Sources = { id: string; sections: SourcedSection[] }[];
 type Answer = Exclude<FromIndex, { type: "changed" }>;
 
 /** The index process's entry, built beside main's own. */
@@ -24,7 +22,7 @@ export class IndexProcess {
     private readonly onChanged: (folder: string) => void = () => undefined,
   ) {}
 
-  sections(folder: string, plugins: string[], timeoutMs = 60_000): Promise<Sources> {
+  sections(folder: string, plugins: string[], timeoutMs = 60_000): Promise<FolderRead> {
     const id = this.next++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -33,7 +31,7 @@ export class IndexProcess {
       }, timeoutMs);
       this.waiting.set(id, (r) => {
         clearTimeout(timer);
-        if (r.type === "sections") resolve(r.sources);
+        if (r.type === "sections") resolve(r.read);
         else reject(new Error(r.reason));
       });
       this.process().postMessage({ type: "sections", id, folder, plugins } satisfies ToIndex);

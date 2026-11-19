@@ -1,4 +1,5 @@
 import { PluginHost, type SourcedSection } from "@anur/core";
+import type { FolderRead } from "./protocol.ts";
 import { pluginById } from "../../plugins/index.ts";
 
 /**
@@ -35,7 +36,7 @@ export async function sectionsFor(
   folder: string,
   plugins: string[],
   onChange: (folder: string) => void = () => undefined,
-): Promise<{ id: string; sections: SourcedSection[] }[]> {
+): Promise<FolderRead> {
   const host = await hostFor(folder, plugins);
   const sources = host.sectionSources();
   const stops = watching.get(folder) ?? new Map<string, () => void>();
@@ -58,5 +59,13 @@ export async function sectionsFor(
         }),
       );
   }
-  return out;
+  // Edges only where a source found something to join (group 22).
+  const edges: FolderRead["edges"] = [];
+  const misses: FolderRead["misses"] = [];
+  if (out.length)
+    for (const d of host.edgeDetectors()) {
+      edges.push(...(await d.edges(folder)));
+      misses.push({ detector: d.id, misses: d.misses });
+    }
+  return { sources: out, edges, misses };
 }

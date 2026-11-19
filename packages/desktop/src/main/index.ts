@@ -108,6 +108,7 @@ import { TaskHooks } from "./claude-plugin/task-hooks.ts";
 import { ReportWatch, listReports, readReport } from "./task-reports.ts";
 import { codeRepos } from "./engineering-offer.ts";
 import { SystemReview } from "./system-review.ts";
+import { appendReview, readReview, reviewState } from "@anur/system";
 import { AgentChoices } from "./threads/agent-choices.ts";
 import { AnurSocket } from "./threads/anur-socket.ts";
 import { Threads } from "./threads/threads.ts";
@@ -894,11 +895,21 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const on = folder ? pluginsOn(folder.path) : [];
     if (!folder || !on.includes("engineering")) return { kind: "off" };
     try {
-      const sources = await indexProcess.sections(folder.path, on);
-      const sections = sources.flatMap((s) => s.sections);
+      const read = await indexProcess.sections(folder.path, on);
+      const sections = read.sources.flatMap((s) => s.sections);
+      const edgeState = reviewState(readReview(folder.path));
       return {
         kind: "ok",
         sections,
+        edges: read.edges.map((e) => ({
+          ...e,
+          state: edgeState.hiddenEdges.has(e.id)
+            ? ("hidden" as const)
+            : edgeState.confirmedEdges.has(e.id)
+              ? ("confirmed" as const)
+              : ("shown" as const),
+        })),
+        misses: read.misses,
         review: systemReview.view(folder.path, sections, (prompt) => {
           const t = threadsFor(folder);
           return t ? t.askOnce(prompt) : null;
@@ -907,6 +918,15 @@ const handlers: { [C in Channel]: Handler<C> } = {
     } catch (e) {
       return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
     }
+  },
+  "system:edge": ({ edge, action }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || !pluginsOn(folder.path).includes("engineering")) return { ok: false };
+    const kind =
+      action === "hide" ? "edge-hidden" : action === "show" ? "edge-shown" : "edge-confirmed";
+    appendReview(folder.path, [{ kind, edge, at: new Date().toISOString() }]);
+    systemChanged(folder.path);
+    return { ok: true };
   },
   "system:propose": (_, { webContentsId }) => {
     const folder = folders.current(webContentsId);

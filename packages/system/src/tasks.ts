@@ -36,6 +36,8 @@ export type ReportLine = {
   /** What that line now says, trimmed. */
   text: string;
   how: "added" | "changed" | "deleted";
+  /** What the file calls in other repos or outside, from edges (22.5): "PiAuthService /user/x". */
+  calls?: string[];
 };
 
 export type TaskReport = {

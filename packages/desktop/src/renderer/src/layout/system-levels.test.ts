@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxesAt, trailTo, type SystemSection } from "./system-levels.ts";
+import { boxesAt, edgeGroups, trailTo, type SystemSection } from "./system-levels.ts";
 
 const s = (id: string, path: string[], parent: string | null, text = ""): SystemSection => ({
   id,
@@ -45,5 +45,41 @@ describe("the system tab's levels (group 20)", () => {
       "User",
     ]);
     expect(trailTo(all, null)).toEqual([]);
+  });
+});
+
+describe("lines between repos (group 22)", () => {
+  const e = (id: string, from: string, to: string, state: "shown" | "hidden" = "shown") => ({
+    id,
+    from,
+    to,
+    kind: "http",
+    label: "/x",
+    how: "found" as const,
+    evidence: "f:1",
+    declared: null,
+    state,
+  });
+  const edges = [
+    e("1", "repo:b", "part:1"),
+    e("2", "repo:b", "part:2"),
+    e("3", "repo:b", "stub:outside:api.stripe.com"),
+    e("4", "part:4", "part:3", "hidden"),
+  ];
+
+  it("groups edges by the repos they join, repos before outside services", () => {
+    expect(edgeGroups(all, edges, null).map((g) => [g.from, g.to, g.stub, g.edges.length])).toEqual(
+      [
+        ["scripts", "api", null, 2],
+        ["Billing", "api", null, 1],
+        ["scripts", "api.stripe.com", "outside", 1],
+      ],
+    );
+  });
+
+  it("keeps only the edges touching the level shown", () => {
+    expect(
+      edgeGroups(all, edges, "group:a/tables/user").map((g) => g.edges.map((x) => x.id)),
+    ).toEqual([["1", "2"]]);
   });
 });
