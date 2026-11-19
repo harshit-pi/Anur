@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { installPreCommit } from "@anur/system";
+import { installPreCommit, writeLocalMd } from "@anur/system";
 import { loginPath } from "../agent/find-claude.ts";
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -113,6 +113,10 @@ export class CommittedDecisions {
     private readonly hookFor: (home: string) => void = (home) => {
       if (existsSync(path.join(home, ".git"))) installPreCommit(home);
     },
+    /** The person's not-yet-merged decisions, in their own `CLAUDE.local.md` (23.9). */
+    private readonly localFor: (home: string) => void = (home) => {
+      if (existsSync(path.join(home, ".git"))) writeLocalMd(home);
+    },
   ) {}
 
   private async place(rel: string) {
@@ -189,7 +193,17 @@ export class CommittedDecisions {
     } catch {
       // A hook that can't be written leaves the decision kept; 23.8 shows it isn't active.
     }
+    this.refreshLocal(at.home);
     return id;
+  }
+
+  /** The next session sees what changed at once, through `CLAUDE.local.md` (23.9). */
+  private refreshLocal(home: string) {
+    try {
+      this.localFor(home);
+    } catch {
+      // The decision stands; the local file catches up on the next change.
+    }
   }
 
   /**
@@ -219,6 +233,7 @@ export class CommittedDecisions {
         await this.append(at.file, { kind: "dropped", target: e.id });
       }
     }
+    this.refreshLocal(at.home);
   }
 
   /**

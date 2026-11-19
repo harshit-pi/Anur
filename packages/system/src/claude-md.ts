@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { currentEntries, renderBlock, withBlock } from "@anur/core";
+import { writeLocalMd } from "./claude-local.ts";
 
 /**
  * The `CLAUDE.md` block for one repo (23.5), from its `.anur/decisions/`
@@ -115,5 +116,11 @@ export function stageClaudeMd(repo: string): boolean {
   }
   const working = withBlock(now, block);
   if (working !== null && working !== now) writeFileSync(file, working);
+  // The person's own not-yet-merged list catches up too (23.9).
+  try {
+    writeLocalMd(repo);
+  } catch {
+    // Never in the way of a commit.
+  }
   return changed;
 }

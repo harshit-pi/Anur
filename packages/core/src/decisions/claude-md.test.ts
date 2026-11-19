@@ -123,3 +123,11 @@ describe("the block under a repo's Prettier", () => {
     expect(await format(file, { parser: "markdown" })).toBe(file);
   });
 });
+
+describe("a decision without a full stop", () => {
+  it("gets one before what it replaces, so the line reads as two sentences", () => {
+    const block = renderBlock([decision("d1", "Three retries", { instead: "infinite" })]) ?? "";
+    expect(block).toContain("- Three retries. Instead of: infinite. (Sam)");
+    expect(renderBlock([decision("d2", "Use Stripe")])).toContain("- Use Stripe (Sam)");
+  });
+});

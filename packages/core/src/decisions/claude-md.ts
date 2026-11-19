@@ -25,8 +25,30 @@ function where(scope: string): string | null {
   return scope;
 }
 
+/**
+ * How the block opens: the team's, in `CLAUDE.md`, or one person's decisions
+ * not yet on the default branch, in their own `CLAUDE.local.md` (23.9).
+ */
+export type BlockKind = "team" | "local";
+
+const HEADINGS: Record<BlockKind, { title: string; intro: string }> = {
+  team: {
+    title: "## Decisions",
+    intro:
+      "People working on this repo decided these. Follow them. When your work relies on one, say so in one line. If a task can't be done without going against one, don't: say which, and ask. Never edit `.anur/decisions/` yourself; a person changes a decision.",
+  },
+  local: {
+    title: "## Decisions not yet merged",
+    intro:
+      "Decided here and kept, but not yet on the default branch, so the team's `CLAUDE.md` doesn't list them yet. Follow them as you would the team's: when your work relies on one, say so in one line; if a task can't be done without going against one, don't: say which, and ask. Never edit `.anur/decisions/` yourself; a person changes a decision.",
+  },
+};
+
 /** The block for these entries, or null when there are none. */
-export function renderBlock(entries: readonly CommittedEntry[]): string | null {
+export function renderBlock(
+  entries: readonly CommittedEntry[],
+  kind: BlockKind = "team",
+): string | null {
   const sorted = [...entries].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const decisions = sorted.flatMap((e) => (e.kind === "decision" ? [e] : []));
   const findings = sorted.flatMap((e) => (e.kind === "finding" ? [e] : []));
@@ -36,16 +58,13 @@ export function renderBlock(entries: readonly CommittedEntry[]): string | null {
   const lines = [
     BLOCK_BEGIN,
     "",
-    "## Decisions",
+    HEADINGS[kind].title,
     "",
     "Made by Anur from `.anur/decisions/`; edits between these markers are replaced.",
     "",
   ];
   if (decisions.length) {
-    lines.push(
-      "People working on this repo decided these. Follow them. When your work relies on one, say so in one line. If a task can't be done without going against one, don't: say which, and ask. Never edit `.anur/decisions/` yourself; a person changes a decision.",
-      "",
-    );
+    lines.push(HEADINGS[kind].intro, "");
     for (const d of decisions) {
       const on = where(d.scope);
       const tail = [
@@ -53,8 +72,11 @@ export function renderBlock(entries: readonly CommittedEntry[]): string | null {
         d.until ? `Until: ${flat(d.until)}.` : null,
       ].filter(Boolean);
       const meta = [d.who ? flat(d.who) : null, on ? `on ${flat(on)}` : null].filter(Boolean);
+      // A sentence of its own, so "Instead of" never runs on from it.
+      const said = flat(d.decision);
+      const head = tail.length && !/[.!?]$/.test(said) ? `${said}.` : said;
       lines.push(
-        `- ${flat(d.decision)}${tail.length ? ` ${tail.join(" ")}` : ""}${meta.length ? ` (${meta.join(", ")})` : ""}`,
+        `- ${head}${tail.length ? ` ${tail.join(" ")}` : ""}${meta.length ? ` (${meta.join(", ")})` : ""}`,
       );
     }
     lines.push("");
