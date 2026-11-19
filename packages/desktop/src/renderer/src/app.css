@@ -4812,12 +4812,15 @@ body.resizing * {
 }
 
 .think-reply-actions button {
-  padding: 2px 7px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   border: 0;
   border-radius: 6px;
   background: none;
   color: var(--slate);
-  font: 12px var(--font-ui);
   cursor: pointer;
 }
 
@@ -6691,4 +6694,76 @@ button.file-card-name:hover {
     opacity: 0.4;
     animation: none;
   }
+}
+
+/* Messages sent while the agent works: dashed, above the box, edit or remove on hover. */
+.think-queue {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  margin: 0 0 8px;
+}
+
+.think-queue-label {
+  color: var(--graphite);
+  font: 11.5px var(--font-ui);
+}
+
+.think-queued {
+  position: relative;
+  max-width: 85%;
+  padding: 7px 12px;
+  border: 1.5px dashed var(--rule);
+  border-radius: 12px;
+  color: var(--ink2);
+  font: 14px/1.45 var(--font-ui);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.think-queued:hover,
+.think-queued:focus-within {
+  border-color: var(--graphite);
+}
+
+.think-queued-files {
+  display: block;
+  color: var(--graphite);
+  font-size: 12px;
+}
+
+.think-queued-actions {
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  display: flex;
+  gap: 2px;
+  padding-right: 4px;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 0.12s;
+}
+
+.think-queued:hover .think-queued-actions,
+.think-queued-actions:focus-within {
+  opacity: 1;
+}
+
+.think-queued-actions button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--slate);
+  cursor: pointer;
+}
+
+.think-queued-actions button:hover {
+  background: var(--hover);
+  color: var(--ink);
 }
