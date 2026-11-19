@@ -1298,7 +1298,7 @@ export function Think({
                   if (i >= 0) onJump(i);
                 }}
               >
-                {docPath === FOLDER_DOC ? "on the whole vault" : `on ${thread.path.at(-1) ?? ""}`}
+                {docPath === FOLDER_DOC ? "on the whole space" : `on ${thread.path.at(-1) ?? ""}`}
               </button>
             ) : (
               <span className="think-where quiet">its section is gone</span>

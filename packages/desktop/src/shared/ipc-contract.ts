@@ -429,17 +429,17 @@ export const ipcContract = {
   },
   /** The folder this window has open, if any. */
   /**
-   * Vaults on this Mac (vaults), most recent first: each one's name, path, and
-   * whether it syncs with GitHub. Recent folders that are no longer vaults are left out.
+   * Spaces on this Mac (spaces), most recent first: each one's name, path, and
+   * whether it syncs with GitHub. Recent folders that are no longer spaces are left out.
    */
-  "vaults:list": {
+  "spaces:list": {
     request: z.object({}).strict(),
     response: z.object({
-      vaults: z.array(z.object({ path: z.string(), name: z.string(), github: z.boolean() })),
+      spaces: z.array(z.object({ path: z.string(), name: z.string(), github: z.boolean() })),
     }),
   },
-  /** Opens a vault by its path, in this window, or its own window if this one has one. */
-  "vaults:open": {
+  /** Opens a space by its path, in this window, or its own window if this one has one. */
+  "spaces:open": {
     request: z.object({ path: z.string().max(4096) }).strict(),
     response: z.object({ error: z.string().nullable() }),
   },
@@ -1834,7 +1834,7 @@ export const ipcContract = {
 export const ipcEvents = {
   /** This window's folder changed, as when opened from the menu. */
   "folder:changed": FolderState.nullable(),
-  /** A note for the person about the vault, shown once: as a folder that opened as part of one. */
+  /** A note for the person about the space, shown once: as a folder that opened as part of one. */
   "app:notice": z.object({ text: z.string() }),
   /** A plugin's item in the status bar, and its panel; null removes it. */
   "plugin:status": z.object({ plugin: z.string(), status: PluginStatusSchema.nullable() }),

@@ -3,51 +3,51 @@ import { anur } from "../bridge.ts";
 import { OpenFromButtons } from "./PluginUI.tsx";
 
 /**
- * Vaults (Vaults mock; docs/anur-folder.md): the start page's list of them,
+ * Spaces (Spaces mock; docs/anur-folder.md): the start page's list of them,
  * and the switcher at the foot of the files panel, as in Obsidian.
  */
 
-type Vault = { path: string; name: string; github: boolean };
+type Space = { path: string; name: string; github: boolean };
 
-function useVaults(open: boolean): Vault[] {
-  const [vaults, setVaults] = useState<Vault[]>([]);
+function useSpaces(open: boolean): Space[] {
+  const [spaces, setSpaces] = useState<Space[]>([]);
   useEffect(() => {
     if (!open) return;
-    void anur.call("vaults:list", {}).then((r) => {
-      setVaults(r.vaults);
+    void anur.call("spaces:list", {}).then((r) => {
+      setSpaces(r.spaces);
     });
   }, [open]);
-  return vaults;
+  return spaces;
 }
 
 const initial = (name: string) => (name.trim()[0] ?? "?").toUpperCase();
 const home = (p: string) => p.replace(/^\/Users\/[^/]+/, "~");
 
-function openVault(path: string) {
-  void anur.call("vaults:open", { path });
+function openSpace(path: string) {
+  void anur.call("spaces:open", { path });
 }
 
-/** The start page's vaults, newest first, each opened with a click. */
-export function VaultList() {
-  const vaults = useVaults(true);
-  if (vaults.length === 0) return null;
+/** The start page's spaces, newest first, each opened with a click. */
+export function SpaceList() {
+  const spaces = useSpaces(true);
+  if (spaces.length === 0) return null;
   return (
-    <ul className="vault-list" aria-label="Your vaults">
-      {vaults.map((v) => (
+    <ul className="space-list" aria-label="Your spaces">
+      {spaces.map((v) => (
         <li key={v.path}>
           <button
             type="button"
-            className="vault-row"
+            className="space-row"
             onClick={() => {
-              openVault(v.path);
+              openSpace(v.path);
             }}
           >
-            <span className="vault-icon" aria-hidden="true">
+            <span className="space-icon" aria-hidden="true">
               {initial(v.name)}
             </span>
-            <span className="vault-name">{v.name}</span>
-            {v.github ? <span className="vault-github">● GitHub</span> : null}
-            <span className="vault-path">{home(v.path)}</span>
+            <span className="space-name">{v.name}</span>
+            {v.github ? <span className="space-github">● GitHub</span> : null}
+            <span className="space-path">{home(v.path)}</span>
           </button>
         </li>
       ))}
@@ -55,20 +55,20 @@ export function VaultList() {
   );
 }
 
-/** The open vault's name at the foot of the files panel; a click lists vaults to switch to. */
-export function VaultSwitcher({
+/** The open space's name at the foot of the files panel; a click lists spaces to switch to. */
+export function SpaceSwitcher({
   name,
   path,
-  onNewVault,
+  onNewSpace,
   onOpenFolder,
 }: {
   name: string;
   path: string;
-  onNewVault: () => void;
+  onNewSpace: () => void;
   onOpenFolder: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const vaults = useVaults(open);
+  const spaces = useSpaces(open);
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -84,58 +84,58 @@ export function VaultSwitcher({
     setOpen(false);
   };
   return (
-    <div className="vault-switcher" ref={host}>
+    <div className="space-switcher" ref={host}>
       {open ? (
-        <div className="vault-menu" role="menu">
-          {vaults.map((v) => (
+        <div className="space-menu" role="menu">
+          {spaces.map((v) => (
             <button
               key={v.path}
               type="button"
               role="menuitem"
-              className={`vault-menu-item${v.path === path ? " on" : ""}`}
+              className={`space-menu-item${v.path === path ? " on" : ""}`}
               title={v.path}
               onClick={() => {
                 close();
-                if (v.path !== path) openVault(v.path);
+                if (v.path !== path) openSpace(v.path);
               }}
             >
-              <span className="vault-icon small" aria-hidden="true">
+              <span className="space-icon small" aria-hidden="true">
                 {initial(v.name)}
               </span>
               <span className="truncate">{v.name}</span>
             </button>
           ))}
-          <div className="vault-menu-sep" />
+          <div className="space-menu-sep" />
           <button
             type="button"
             role="menuitem"
-            className="vault-menu-item"
+            className="space-menu-item"
             onClick={() => {
               close();
-              onNewVault();
+              onNewSpace();
             }}
           >
-            New vault…
+            New space…
           </button>
           <button
             type="button"
             role="menuitem"
-            className="vault-menu-item"
+            className="space-menu-item"
             onClick={() => {
               close();
               onOpenFolder();
             }}
           >
-            Open folder as vault…
+            Open folder as space…
           </button>
-          <div className="vault-menu-from">
+          <div className="space-menu-from">
             <OpenFromButtons />
           </div>
         </div>
       ) : null}
       <button
         type="button"
-        className="vault-current"
+        className="space-current"
         aria-haspopup="menu"
         aria-expanded={open}
         title={path}
@@ -143,7 +143,7 @@ export function VaultSwitcher({
           setOpen((o) => !o);
         }}
       >
-        <span className="vault-icon small" aria-hidden="true">
+        <span className="space-icon small" aria-hidden="true">
           {initial(name)}
         </span>
         <span className="truncate">{name}</span>

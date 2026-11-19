@@ -96,10 +96,10 @@ export function activate(ctx: PluginContext): PluginInstance {
   let stopTimer: (() => void) | null = null;
   let phase: Phase = { kind: "local" };
   let origin: string | null = null;
-  /** The vault can't be a repo of its own: it holds repos, or sits inside one. */
+  /** The space can't be a repo of its own: it holds repos, or sits inside one. */
   const stuck = (): boolean => ["holds", "inside"].includes(phase.kind);
 
-  /** The repo this vault is part of, when that's a repo around it rather than its own. */
+  /** The repo this space is part of, when that's a repo around it rather than its own. */
   const outerRepo = async (): Promise<string | null> => {
     const top = await git("rev-parse", "--show-toplevel");
     if (top.code !== 0) return null;
@@ -166,11 +166,11 @@ export function activate(ctx: PluginContext): PluginInstance {
           phase.kind === "holds"
             ? {
                 label: "Why",
-                value: "This vault holds repos, so Git won't make it one: each repo syncs itself.",
+                value: "This space holds repos, so Git won't make it one: each repo syncs itself.",
               }
             : {
                 label: "Why",
-                value: `This vault is inside the repo at ${phase.top}. Open that folder as the vault to sync it.`,
+                value: `This space is inside the repo at ${phase.top}. Open that folder as the space to sync it.`,
               },
         ],
         actions: [],
@@ -213,7 +213,7 @@ export function activate(ctx: PluginContext): PluginInstance {
   async function ensureRepo(): Promise<boolean> {
     if (await isRepo()) return true;
     if (blockedByICloud()) return false;
-    // Never a repo inside a repo, nor over repos (vaults): Git syncs exactly the vault.
+    // Never a repo inside a repo, nor over repos (spaces): Git syncs exactly the space.
     const top = await outerRepo();
     if (top) {
       await report({ kind: "inside", top });
@@ -237,8 +237,8 @@ export function activate(ctx: PluginContext): PluginInstance {
       return "This folder is in iCloud Drive, which can damage a git repo. Move it out, or choose Continue anyway.";
     }
     if (!(await ensureRepo())) {
-      if (phase.kind === "holds") return "This vault holds repos, so Git won't make it one.";
-      if (phase.kind === "inside") return `This vault is inside the repo at ${phase.top}.`;
+      if (phase.kind === "holds") return "This space holds repos, so Git won't make it one.";
+      if (phase.kind === "inside") return `This space is inside the repo at ${phase.top}.`;
       return "git couldn't start a repo here.";
     }
     if (!(await remote())) {
@@ -317,13 +317,13 @@ export function activate(ctx: PluginContext): PluginInstance {
       return "This folder is in iCloud Drive, which can damage a git repo. Move it out, or choose Continue anyway first.";
     if (!(await ensureRepo()))
       return phase.kind === "holds"
-        ? "This vault holds repos, so Git won't make it one: each repo syncs itself."
+        ? "This space holds repos, so Git won't make it one: each repo syncs itself."
         : phase.kind === "inside"
-          ? `This vault is inside the repo at ${phase.top}. Open that folder as the vault to sync it.`
+          ? `This space is inside the repo at ${phase.top}. Open that folder as the space to sync it.`
           : "git couldn't start a repo here.";
     const already = await remote();
     if (already) return `This folder is already on GitHub: ${webOf(already) ?? already}`;
-    // Only now GitHub: a vault that can't be a repo never sends anyone to sign in.
+    // Only now GitHub: a space that can't be a repo never sends anyone to sign in.
     const signedIn = await ctx.run("gh", ["auth", "status"]);
     if (signedIn.code !== 0)
       return "Sign in to GitHub first: in Terminal, run `gh auth login`, then try again.";

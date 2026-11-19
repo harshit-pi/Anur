@@ -41,8 +41,8 @@ const seg = segment;
 export const anurPaths = {
   format: () => "format.json",
   gitignore: () => ".gitignore",
-  /** This folder is a vault on this Mac (vaults): never committed, as each Mac chooses its own. */
-  vault: () => "vault.json",
+  /** This folder is a space on this Mac (spaces): never committed, as each Mac chooses its own. */
+  space: () => "space.json",
   attributes: () => ".gitattributes",
   /** A person's committed decisions and kept findings (23.2). */
   decisions: (person: string) => `decisions/${seg("person", person)}.jsonl`,
@@ -72,7 +72,7 @@ export const anurPaths = {
 export const IGNORE_ALL = "*\n";
 
 /** What one Mac keeps for itself in `.anur/`: never committed, even when the rest is (18.10). */
-export const DEVICE_ONLY = ["open/", "system/last-read.json", "vault.json"];
+export const DEVICE_ONLY = ["open/", "system/last-read.json", "space.json"];
 
 const DEVICE_ONLY_NOTE = "# Kept on each Mac, never committed";
 
