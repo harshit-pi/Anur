@@ -1,3 +1,4 @@
+import { ServiceIcon, serviceOf } from "../icons/services/index.tsx";
 import { editsLand } from "../../../shared/edits-land.ts";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { diffLines, type SectionNode, type SectionTree } from "@anur/core";
@@ -1342,6 +1343,7 @@ export function Think({
                   <span className="think-step-mark" aria-hidden="true">
                     {item.status === "failed" ? "×" : item.status === "completed" ? "✓" : "●"}
                   </span>
+                  {serviceOf(item.title) ? <ServiceIcon service={serviceOf(item.title)} /> : null}
                   {toolLabel(item.title)}
                   {item.status === "completed" || item.status === "failed" ? "" : "…"}
                 </div>
@@ -2752,6 +2754,7 @@ function StepsFold({ steps, running }: { steps: ToolItem[]; running: boolean }) 
           redirected(t) ? null : (
             <div key={t.toolUse} className={`think-tool ${t.status}`} title={t.title}>
               {t.status === "failed" ? "× " : ""}
+              {serviceOf(t.title) ? <ServiceIcon service={serviceOf(t.title)} /> : null}
               {toolLabel(t.title)}
             </div>
           ),
@@ -3275,6 +3278,9 @@ function toolLabel(title: string): string {
   if (/^Write \S*\/\.claude\/plans\//.test(title)) return "Wrote the plan";
   const own = /^mcp__anur__(\w+)/.exec(title)?.[1];
   if (own) return OWN_TOOLS[own] ?? own.replace(/^anur_/, "").replace(/_/g, " ");
+  // A service the agent acted in: "Linear: save issue", shown with its mark.
+  const service = serviceOf(title);
+  if (service) return `${service.name}: ${service.action}`;
   return stepOf(title).label;
 }
 

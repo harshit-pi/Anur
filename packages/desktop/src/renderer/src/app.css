@@ -5740,3 +5740,17 @@ button.file-card-name:hover {
   outline-offset: 2px;
   transition: outline-color 0.4s;
 }
+
+/* A service's mark beside a step the agent took in it (Linear, Gmail…). */
+.service-icon {
+  display: inline-block;
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.service-icon.action {
+  fill: var(--graphite);
+}
