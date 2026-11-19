@@ -2707,6 +2707,15 @@ body.resizing * {
   display: none;
 }
 
+/* On Map, bars above it sit on the map's paper, not the page's white. */
+.center:has(> .map) {
+  background: var(--paper);
+}
+
+.center:has(> .map) > .path-row {
+  background: var(--sheet);
+}
+
 .map {
   position: relative;
   flex: 1;
