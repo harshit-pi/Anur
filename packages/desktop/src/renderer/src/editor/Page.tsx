@@ -433,10 +433,14 @@ export function Page({
           if (!landed) break;
         }
         const after = editor.state.doc.toString();
-        const r = await anur.call("thread:use-all", {
-          thread,
-          open: { path: doc.path, before, after, sections: used },
-        });
+        const r = await anur
+          .call("thread:use-all", {
+            thread,
+            open: { path: doc.path, before, after, sections: used },
+          })
+          .finally(() => {
+            window.dispatchEvent(new CustomEvent("anur:use-all-done", { detail: { thread } }));
+          });
         const docs = `${String(r.used)} doc${r.used === 1 ? "" : "s"}`;
         flash(
           r.kept.length > 0
