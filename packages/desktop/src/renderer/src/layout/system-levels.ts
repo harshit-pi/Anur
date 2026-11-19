@@ -109,6 +109,14 @@ export type SystemEdge = {
   evidence: string | null;
   declared: string | null;
   state: "shown" | "hidden" | "confirmed";
+  /** Decisions and kept findings on it, from the repos at both its ends (23.10). */
+  decisions?: {
+    id: string;
+    kind: "decision" | "finding";
+    text: string;
+    who: string | null;
+    repo: string;
+  }[];
 };
 
 /** The repo a section sits in: the nearest section above it, or itself, that is a repo. */

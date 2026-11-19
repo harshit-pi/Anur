@@ -231,3 +231,45 @@ describe("how far a decision reaches (18.3)", () => {
     expect(everywhere.at(-1)).toEqual([]);
   });
 });
+
+describe("a decision on a call reaches the other end (23.10)", () => {
+  it("asks for the other repo's list when one is kept or taken back, and not for a part's", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "anur-dec-"));
+    repo(path.join(dir, "web"));
+    let asked = 0;
+    const store = new CommittedDecisions(
+      dir,
+      "mac-a",
+      () => Promise.resolve("sam"),
+      () => undefined,
+      () => undefined,
+      dir,
+      () => undefined,
+      () => {
+        asked++;
+      },
+    );
+    await store.keepFor("web", "r-1", decision, {
+      kind: "edge",
+      scope: "edge:web/|api/|http|/v1/users",
+      on: "web → api: /v1/users",
+      repo: "api",
+    });
+    expect(asked).toBe(1);
+    const [line] = read(path.join(dir, "web", ".anur", "decisions", "sam.jsonl"));
+    expect(JSON.parse(line ?? "{}")).toMatchObject({
+      scope: "edge:web/|api/|http|/v1/users",
+      within: null,
+    });
+    await store.drop("web/.anur-here", "r-1");
+    expect(asked).toBe(2);
+    await store.keepFor("web", "r-2", decision, {
+      kind: "part",
+      scope: "part:p1",
+      on: "web",
+      repo: "web",
+      dir: "web",
+    });
+    expect(asked).toBe(2);
+  });
+});

@@ -603,6 +603,17 @@ export const ipcContract = {
             evidence: z.string().nullable(),
             declared: z.string().nullable(),
             state: z.enum(["shown", "hidden", "confirmed"]),
+            /** Decisions and kept findings on this edge, from the repos at both its ends (23.10). */
+            decisions: z.array(
+              z.object({
+                id: z.string(),
+                kind: z.enum(["decision", "finding"]),
+                text: z.string(),
+                who: z.string().nullable(),
+                /** The repo it's kept in, from the opened folder. */
+                repo: z.string(),
+              }),
+            ),
           }),
         ),
         /** Every repo found in the folder, and whether it's in the system (the person's choice). */

@@ -126,6 +126,11 @@ export class CommittedDecisions {
     private readonly personalHome: string = os.homedir(),
     /** Decisions kept for everywhere, in Claude Code's own user `CLAUDE.md` (18.3). */
     private readonly everywhereFor: (entries: CommittedEntry[]) => void = writeUserClaudeMd,
+    /**
+     * A decision on a call changed: the repo at the other end lists it in its
+     * own `CLAUDE.local.md` (23.10). Only a system folder knows both ends.
+     */
+    private readonly sidesFor: () => void = () => undefined,
   ) {}
 
   private async place(rel: string) {
@@ -272,6 +277,7 @@ export class CommittedDecisions {
       // A hook that can't be written leaves the decision kept; 23.8 shows it isn't active.
     }
     this.refreshLocal(at.home);
+    if (scope.startsWith("edge:")) this.sidesFor();
     return id;
   }
 
@@ -292,6 +298,7 @@ export class CommittedDecisions {
     const at = await this.place(rel);
     if (!at) return;
     for (const e of (await this.current(at.home)).filter((x) => x.ref === ref)) {
+      if (e.scope.startsWith("edge:")) this.sidesFor();
       const ownFile = path.join(at.home, ANUR_DIR, anurPaths.decisions(e.person));
       const committed = await git(
         at.home,

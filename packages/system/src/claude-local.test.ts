@@ -3,7 +3,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { defaultRef, unmergedEntries, writeLocalMd } from "./claude-local.ts";
+import { aboutFiles } from "./about.ts";
+import { defaultRef, unmergedEntries, writeEdgeSides, writeLocalMd } from "./claude-local.ts";
+import { twoRepoSystem } from "./fixtures.ts";
 
 const env = {
   ...process.env,
@@ -102,5 +104,44 @@ describe("CLAUDE.local.md: one's own decisions not yet merged (23.9)", () => {
     decide(bare, "d-0000009", "Fresh repo rule.");
     expect(defaultRef(bare)).toBeNull();
     expect(unmergedEntries(bare).map((e) => e.id)).toEqual(["d-0000009"]);
+  });
+});
+
+describe("decisions on calls, at the other end too (23.10)", () => {
+  const onEdge = (dir: string, edge: string, text: string) => {
+    mkdirSync(path.join(dir, ".anur", "decisions"), { recursive: true });
+    writeFileSync(
+      path.join(dir, ".anur", "decisions", "sam.jsonl"),
+      `${JSON.stringify({ id: "d-edge-0001", at: "2026-11-18T10:00:00.000Z", dev: "m", seq: 0, kind: "decision", scope: `edge:${edge}`, ref: null, on: "@acme/web → @acme/api: /v1/users", decision: text, quote: text, instead: null, until: null, who: "Sam" })}\n`,
+    );
+  };
+
+  it("lists a decision kept by the caller in the provider's CLAUDE.local.md, and takes it out when it goes", () => {
+    const folder = mkdtempSync(path.join(tmpdir(), "anur-sides-"));
+    twoRepoSystem(folder);
+    const edge = aboutFiles(folder, ["web/src/api.ts", "api/src/routes.ts"]);
+    expect(edge?.kind).toBe("edge");
+    onEdge(path.join(folder, "web"), edge?.scope.slice(5) ?? "", "Users list stays v1.");
+    expect(writeEdgeSides(folder)).toEqual(["api"]);
+    const text = readFileSync(local(path.join(folder, "api")), "utf8");
+    expect(text).toContain("## Decisions on calls with other repos");
+    expect(text).toContain("- Users list stays v1. (Sam, on @acme/web → @acme/api: /v1/users)");
+    expect(text).toContain("<!-- anur:edges:begin -->");
+    // Never in the repo that keeps it, nor anywhere git would commit it.
+    expect(existsSync(local(path.join(folder, "web")))).toBe(false);
+    expect(git(path.join(folder, "api"), "status", "--porcelain")).not.toContain("CLAUDE.local.md");
+    // The person's own block beside it is left alone, and it them.
+    decide(path.join(folder, "api"), "d-0000002", "Own rule.");
+    writeLocalMd(path.join(folder, "api"));
+    expect(writeEdgeSides(folder)).toEqual([]);
+    const both = readFileSync(local(path.join(folder, "api")), "utf8");
+    expect(both).toContain("Own rule.");
+    expect(both).toContain("Users list stays v1.");
+    // Dropped at the other end: it comes out, and the own block stays.
+    writeFileSync(path.join(folder, "web", ".anur", "decisions", "sam.jsonl"), "");
+    expect(writeEdgeSides(folder)).toEqual(["api"]);
+    const after = readFileSync(local(path.join(folder, "api")), "utf8");
+    expect(after).not.toContain("Users list stays v1.");
+    expect(after).toContain("Own rule.");
   });
 });

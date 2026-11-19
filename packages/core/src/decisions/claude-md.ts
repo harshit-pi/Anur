@@ -11,6 +11,9 @@ import type { CommittedEntry } from "./committed.ts";
 
 export const BLOCK_BEGIN = "<!-- anur:decisions:begin -->";
 export const BLOCK_END = "<!-- anur:decisions:end -->";
+/** Its own block, beside the person's own, so each is rewritten without the other (23.10). */
+export const EDGES_BEGIN = "<!-- anur:edges:begin -->";
+export const EDGES_END = "<!-- anur:edges:end -->";
 
 /** One line of text, so an entry can't break the list or the block. */
 const flat = (s: string) => s.replace(/\s+/g, " ").replace(/-->/g, "-- >").trim();
@@ -31,9 +34,19 @@ function where(scope: string, on?: string | null): string | null {
  * How the block opens: the team's, in `CLAUDE.md`, or one person's decisions
  * not yet on the default branch, in their own `CLAUDE.local.md` (23.9).
  */
-export type BlockKind = "team" | "local" | "everywhere";
+export type BlockKind = "team" | "local" | "everywhere" | "edges";
 
-const HEADINGS: Record<BlockKind, { title: string; intro: string }> = {
+const markers = (kind: BlockKind) =>
+  kind === "edges" ? ([EDGES_BEGIN, EDGES_END] as const) : ([BLOCK_BEGIN, BLOCK_END] as const);
+
+const HEADINGS: Record<BlockKind, { title: string; intro: string; facts?: string }> = {
+  edges: {
+    title: "## Decisions on calls with other repos",
+    intro:
+      "Kept in the repo at the other end of a call to or from this one, so this repo's `CLAUDE.md` doesn't list them. Follow them when your work touches that call: when it relies on one, say so in one line; if a task can't be done without going against one, don't: say which, and ask.",
+    facts:
+      "Facts people kept about these calls. Treat them as settled unless a source you read now says otherwise.",
+  },
   team: {
     title: "## Decisions",
     intro:
@@ -62,12 +75,13 @@ export function renderBlock(
   if (!decisions.length && !findings.length) return null;
   // Shaped as Prettier formats Markdown, so a repo that runs Prettier on
   // commit leaves it as written and every Mac's bytes stay the same.
+  const [begin, end] = markers(kind);
   const lines = [
-    BLOCK_BEGIN,
+    begin,
     "",
     HEADINGS[kind].title,
     "",
-    "Made by Anur from `.anur/decisions/`; edits between these markers are replaced.",
+    `Made by Anur from ${kind === "edges" ? "the other repos' " : ""}\`.anur/decisions/\`; edits between these markers are replaced.`,
     "",
   ];
   if (decisions.length) {
@@ -90,7 +104,8 @@ export function renderBlock(
   }
   if (findings.length) {
     lines.push(
-      "Facts people kept about this repo. Treat them as settled unless a source you read now says otherwise.",
+      HEADINGS[kind].facts ??
+        "Facts people kept about this repo. Treat them as settled unless a source you read now says otherwise.",
       "",
     );
     for (const f of findings) {
@@ -103,7 +118,7 @@ export function renderBlock(
     }
     lines.push("");
   }
-  lines.push(BLOCK_END);
+  lines.push(end);
   return lines.join("\n");
 }
 
@@ -112,13 +127,18 @@ export function renderBlock(
  * end when it's new, taken out when there's nothing to say. Null when the
  * file needn't exist: no file before, and no block to put in it.
  */
-export function withBlock(file: string | null, block: string | null): string | null {
+export function withBlock(
+  file: string | null,
+  block: string | null,
+  kind: BlockKind = "team",
+): string | null {
+  const [BEGIN, END] = markers(kind);
   const text = file ?? "";
-  const begin = text.indexOf(BLOCK_BEGIN);
-  const end = begin >= 0 ? text.indexOf(BLOCK_END, begin) : -1;
+  const begin = text.indexOf(BEGIN);
+  const end = begin >= 0 ? text.indexOf(END, begin) : -1;
   if (begin >= 0 && end >= 0) {
     const before = text.slice(0, begin);
-    const after = text.slice(end + BLOCK_END.length);
+    const after = text.slice(end + END.length);
     if (block) return before + block + after;
     // Taken out with the blank line that set it apart, so the file is as it was.
     const out = before.replace(/\n\n$/, "\n") + after.replace(/^\n/, "");

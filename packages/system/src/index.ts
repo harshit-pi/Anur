@@ -85,6 +85,12 @@ export {
   preCommitInstalled,
   withHookLines,
 } from "./pre-commit.ts";
-export { defaultRef, ignoreLocal, unmergedEntries, writeLocalMd } from "./claude-local.ts";
+export {
+  defaultRef,
+  ignoreLocal,
+  unmergedEntries,
+  writeEdgeSides,
+  writeLocalMd,
+} from "./claude-local.ts";
 export { writeUserClaudeMd } from "./claude-user.ts";
 export { aboutFiles, filesFrom, type About } from "./about.ts";

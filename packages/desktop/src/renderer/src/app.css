@@ -5450,6 +5450,24 @@ button.file-card-name:hover {
   color: var(--blue);
 }
 
+/* What people decided on a call, from the repos at both its ends (23.10). */
+.line-card .edge-decisions {
+  grid-column: 1 / -1;
+  padding: 2px 0 0;
+}
+
+.line-card .edge-decision {
+  display: block;
+  padding: 4px 0 4px 10px;
+  border-top: none;
+  border-left: 2px solid var(--blue);
+  font-size: 12px;
+}
+
+.line-card .edge-decision.finding {
+  border-left-color: var(--rule);
+}
+
 /* The doc's threads are still being read (an offloaded iCloud file can take a while). */
 .think-loading {
   color: var(--graphite);
