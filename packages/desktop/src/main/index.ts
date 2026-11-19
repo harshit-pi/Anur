@@ -449,7 +449,7 @@ async function startClaudeSkill(): Promise<void> {
         if (!win) return;
         if (win.isMinimized()) win.restore();
         win.focus();
-        send(win, "app:open-doc", { path: rel, section });
+        void openDocIn(win, rel, section);
       },
       sectionPath: async (_f, rel, text, section) => {
         const at = front();
@@ -2286,7 +2286,17 @@ async function openMarkdownFile(chosen: string) {
   if (target.isMinimized()) target.restore();
   target.focus();
   const rel = path.relative(root, file).split(path.sep).join("/");
-  send(target, "app:open-doc", { path: rel, section: null });
+  await openDocIn(target, rel, null);
+}
+
+/** Open `rel` on the window's page; a file made a moment ago is listed first, so it opens. */
+async function openDocIn(win: BrowserWindow, rel: string, section: string | null) {
+  const id = win.webContents.id;
+  if (!folders.current(id)?.docs.includes(rel)) {
+    const now = await folders.refresh(id);
+    if (now) send(win, "folder:changed", now);
+  }
+  send(win, "app:open-doc", { path: rel, section });
 }
 
 /** Files macOS asked Anur to open before it was ready, as when a double-click launched it. */
