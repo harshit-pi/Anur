@@ -621,6 +621,8 @@ export const ipcContract = {
         repos: z.array(
           z.object({ dir: z.string(), included: z.boolean(), copyOf: z.string().nullable() }),
         ),
+        /** Each box's decisions on the map, and how many disagree (29.9), by box ID. */
+        counts: z.record(z.string(), z.object({ decided: z.number(), disagree: z.number() })),
         /** Repos whose pre-commit hook isn't rebuilding their CLAUDE.md block, and why (23.8). */
         hooks: z.array(z.object({ repo: z.string(), why: z.string(), fix: z.boolean() })),
         /** What each edge detector can't see. */

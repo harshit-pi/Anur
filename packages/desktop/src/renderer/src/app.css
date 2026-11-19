@@ -5491,7 +5491,7 @@ button.file-card-name:hover {
 /* The box Think follows, picked on the map (29.1). */
 .map-node.selected {
   box-shadow:
-    0 0 0 3px var(--blue-wash, #e8eefc),
+    0 0 0 3px var(--blue-wash),
     0 0 0 5px var(--blue);
 }
 
@@ -5500,4 +5500,74 @@ button.file-card-name:hover {
   color: var(--blue);
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* Decisions on a box or a line of the system map (29.9). */
+.map-node-decided {
+  margin-left: auto;
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--blue);
+  background: var(--blue-wash);
+  border-radius: 9px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.map-node-decided.disagree {
+  color: var(--amber);
+  background: var(--amber-wash);
+}
+
+.map-line-decided {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--blue);
+}
+
+.map-line-decided.faded {
+  opacity: 0.3;
+}
+
+/* Two decisions that disagree, side by side in Think (18.4, 29.9). */
+.think-disagree {
+  border: 1.5px solid var(--amber);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin: 8px 0 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.think-disagree-tag {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--amber);
+  background: var(--amber-wash);
+  border-radius: 9px;
+  padding: 1px 8px;
+}
+
+.think-disagree-side {
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+  font-size: 12.5px;
+}
+
+.think-disagree-words {
+  font-family: var(--font-doc);
+  font-size: 14px;
+}
+
+.think-disagree-note {
+  margin: 0;
+  font-size: 12px;
 }

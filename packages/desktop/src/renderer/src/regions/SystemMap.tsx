@@ -54,6 +54,7 @@ export function SystemMap({
   onToggle,
   onSelect,
   selected = null,
+  counts = {},
   onCollapseAll,
   onHide,
   onShow,
@@ -66,6 +67,8 @@ export function SystemMap({
   /** A box picked: Think beside the map follows it (29.1). */
   onSelect?: (id: string) => void;
   selected?: string | null;
+  /** Each box's decisions, and how many disagree (29.9). */
+  counts?: Readonly<Record<string, { decided: number; disagree: number }>>;
   onCollapseAll: () => void;
   /** Hide one call or link: a person's word that the code misled. */
   onHide: (edge: string) => void;
@@ -283,6 +286,7 @@ export function SystemMap({
       <span className="map-node-head">
         <SystemIcon kind={n.icon} />
         <span className="map-node-name">{n.name}</span>
+        <DecidedBadge c={counts[n.id]} />
       </span>
       {n.open || !n.line ? null : <span className="map-node-line">{n.line}</span>}
     </div>
@@ -345,6 +349,21 @@ export function SystemMap({
               </text>
             ) : null,
           )}
+          {/* What people decided on a line's calls, from either end (29.9). */}
+          {shownLines.map(({ l, p, touches }) => {
+            const n = l.edges.reduce((sum, e) => sum + (e.decisions?.length ?? 0), 0);
+            return n ? (
+              <text
+                key={`d:${l.key}`}
+                x={p.mx}
+                y={p.my + 8}
+                textAnchor="middle"
+                className={`map-line-decided${hover && !touches ? " faded" : ""}`}
+              >
+                {n} decided
+              </text>
+            ) : null;
+          })}
         </svg>
         {card && cardLine ? (
           <LineCard
@@ -544,5 +563,19 @@ function LineCard({
         ))}
       </ul>
     </div>
+  );
+}
+
+/** A box's decisions on the map: how many, or how many disagree, in amber (29.9). */
+function DecidedBadge({ c }: { c: { decided: number; disagree: number } | undefined }) {
+  if (!c?.decided) return null;
+  return c.disagree ? (
+    <span className="map-node-decided disagree" title="Decisions here disagree; pick one in Think">
+      {c.disagree} disagree
+    </span>
+  ) : (
+    <span className="map-node-decided" title="Decisions people made here">
+      {c.decided} decided
+    </span>
   );
 }
