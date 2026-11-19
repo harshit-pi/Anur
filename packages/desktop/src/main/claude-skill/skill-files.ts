@@ -11,7 +11,7 @@ description: Turn this chat into a doc in Anur, start a doc of headings in Anur,
 
 # Anur
 
-Anur is the person's app for docs that are thought through section by section. It is open on their computer, with a folder of Markdown docs. Reach it through its MCP tools, whose names start with \`anur_\`. If a tool says Anur isn't open, ask the person to open Anur, then try again.
+Anur is the person's app for docs that are thought through section by section. It is open on their computer, with a folder of Markdown docs. Reach it through its MCP tools, whose names start with \`anur_\`. If a tool says Anur isn't open, ask the person to open Anur, then try again. Recording a decision or finding works with Anur closed too.
 
 ## /anur doc
 

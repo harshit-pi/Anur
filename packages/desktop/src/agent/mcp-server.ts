@@ -2,6 +2,7 @@ import { PluginHost } from "@anur/core";
 import { pluginById } from "../plugins/index.ts";
 import { readFileSync } from "node:fs";
 import { createConnection } from "node:net";
+import path from "node:path";
 import { createInterface } from "node:readline";
 
 /**
@@ -326,6 +327,9 @@ const pluginTools = () =>
     .map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
 const inTerminal = !process.env.ANUR_TOKEN && terminalFile !== "";
 
+/** The tools that still work with Anur closed (2026-11-19): a decision lands in the repo either way. */
+const OFFLINE = new Set(["anur_note_decision", "anur_propose_finding", "anur_drop_decision"]);
+
 function reach(): { socket: string; token: string } | null {
   if (!inTerminal)
     return { socket: process.env.ANUR_SOCKET ?? "", token: process.env.ANUR_TOKEN ?? "" };
@@ -600,11 +604,21 @@ function call(
   tool: string,
   args: unknown,
 ): Promise<{ text?: string; error?: string; image?: { data: string; mimeType: string } }> {
+  // Anur closed: a decision still lands in the repo, through the same checks (2026-11-19).
+  // Loaded only then: the store's code is heavier than this program's start needs.
+  const closed = (): Promise<{ text?: string; error?: string }> =>
+    inTerminal && OFFLINE.has(tool)
+      ? import("../main/claude-skill/offline.ts")
+          .then((m) =>
+            m.offlineDecision(tool, (args ?? {}) as Record<string, unknown>, {
+              cwd: process.cwd(),
+              appSupport: path.dirname(path.dirname(terminalFile)),
+            }),
+          )
+          .catch((e: unknown) => ({ error: `Couldn't record it: ${String(e)}` }))
+      : Promise.resolve({ error: "Anur isn't open. Ask the person to open Anur, then try again." });
   const to = reach();
-  if (!to)
-    return Promise.resolve({
-      error: "Anur isn't open. Ask the person to open Anur, then try again.",
-    });
+  if (!to) return closed();
   return new Promise((resolve) => {
     const conn = createConnection(to.socket);
     let buf = "";
@@ -623,7 +637,8 @@ function call(
       }
     });
     conn.on("error", () => {
-      done({ error: "Anur isn't open. Ask the person to open Anur, then try again." });
+      conn.destroy();
+      void closed().then(resolve);
     });
     // From a terminal, where the agent runs: Anur finds its chat from there.
     const sent = inTerminal ? { ...(args as object), _cwd: process.cwd() } : args;

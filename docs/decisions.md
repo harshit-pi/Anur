@@ -27,7 +27,8 @@ Add in Anur (once per Mac)
   └─ Anur's MCP server ───▶ Claude Code's user config
         │
 any Claude Code session, any folder
-  └─ anur_note_decision ──▶ the Anur app (must be running)
+  └─ anur_note_decision ──▶ the Anur app, or, with Anur closed,
+        │                     the MCP program itself
         │   same checks as a thread: quote typed by the person,
         │   at most 7 words, scope never wider than said
         ▼
@@ -40,7 +41,7 @@ any Claude Code session, any folder
 - There is no Claude Code hook per repo. Capture is one user-level install, the skill and the MCP server, through `claude mcp add` (`main/claude-skill/install.ts`), and works in every folder.
 - Where it lands: the folder open in Anur when the session is inside it; otherwise the session's own repo. Left unscoped it holds for that repo, or for the part the touched files name (`about`). It holds everywhere only when the person's words say so.
 - `main/claude-skill/terminal.ts` runs `settleRule`, `decisionWordingProblem` and `scopeFromWords`, the same as a thread. The skill text in `skill-files.ts` carries the same "what counts" rule, so a session never records a pick, its own assumption or a one-off.
-- Gap: the tool talks to the running app. With Anur closed it answers "Anur isn't open", and nothing is recorded until the person opens it and the agent tries again.
+- With Anur closed, `anur_note_decision`, `anur_propose_finding` and `anur_drop_decision` still work: the MCP program runs the same `terminal.ts` path itself (`main/claude-skill/offline.ts`), loaded only then, into the session's repo found by `git rev-parse --show-toplevel`, with this Mac's device ID, so Anur shows the decision as the person's own when it opens. A doc can't be named while closed, since only Anur knows its folder; the other tools still answer "Anur isn't open".
 
 ## What a thread reads (2026-11-17)
 

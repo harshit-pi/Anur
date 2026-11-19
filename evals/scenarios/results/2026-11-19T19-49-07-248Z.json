@@ -1,0 +1,495 @@
+{
+  "runs": 2,
+  "scenarios": ["launch", "engineering", "hiring", "research", "shouldnt-build"],
+  "table": "| Rule | launch | engineering | hiring | research | shouldnt-build |\n|---|---|---|---|---|---|\n| Choice comes as options | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 |\n| Options name their decision (when it isn't the title) | 2/2 | – | 2/2 | 2/2 | – |\n| Parts come as a several set | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 |\n| Work rule recorded as work | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 |\n| Decision worded right first time | 2/2 | 1/2 | 2/2 | 2/2 | 2/2 |\n| Decision kept as a statement of ≤7 words | 2/2 | 2/2 | 2/2 | 2/2 | 1/2 |\n| Decision scoped no wider than the doc | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 |\n| Work rule kept out of the text | 2/2 | 2/2 | 2/2 | 1/2 | 2/2 |\n| New thread never names options passed over | 1/2 | 2/2 | 1/2 | 2/2 | 2/2 |\n| Never tried to send | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 |",
+  "results": [
+    {
+      "scenario": "launch",
+      "run": 1,
+      "options": true,
+      "heading": true,
+      "several": true,
+      "workRule": true,
+      "wordedFirst": true,
+      "worded": true,
+      "scoped": true,
+      "keptOut": true,
+      "clean": false,
+      "nothingSent": true,
+      "notes": {
+        "decided": ["Gated on sign-off", "Hold date, go/no-go", "Ship dark, switch on later"],
+        "heading": "Launch date",
+        "parts": [
+          {
+            "several": true,
+            "titles": [
+              "Program design & rewards",
+              "Product & engineering",
+              "Risk, legal & compliance",
+              "Go-to-market & comms",
+              "Analytics & experimentation",
+              "Support & rollout ops"
+            ]
+          }
+        ],
+        "noted": [
+          {
+            "quote": "don't create anything in Linear or Gmail for this",
+            "decision": "Nothing created in Linear or Gmail.",
+            "concerns": "work",
+            "scope": "doc",
+            "confidence": 0.95
+          },
+          {
+            "quote": "keep task lists here in the doc",
+            "decision": "Task lists stay in this doc.",
+            "concerns": "work",
+            "scope": "doc",
+            "confidence": 0.95
+          }
+        ],
+        "refused": [],
+        "passedOver": ["Hold date, go/no-go", "Ship dark, switch on later"],
+        "riskReply": "**The biggest risk is that compliance sign-off decides the whole schedule, but it has no date and no owner.** Counting back from 3 December, written sign-off has to arrive by **Thursday 26 November**. That's one week from today. If it lands any later, 3 December is already gone, and the section doesn't show that anyone is watching for it.\n\nTwo things make this worse:\n- **26 November is US Thanksgiving.** If your compliance team or any approver is US-based, they may lose a day or two that week, so the real deadline could be earlier.\n- **Approval may change the copy.** The 5 days assume compliance approves the text more or less as written. If they ask for real changes to the disclosures or terms, and engineering has built the current wording into the feature, the work could take longer than 5 days.\n\n**What to do first:** ask compliance today where the review stands and whether they can commit to written sign-off by 26 November. Put one named person in charge of chasing it. I've added \"Ask compliance for a sign-off date\" to the map as an action you can run with ▶ Run. It only drafts the note; it doesn't send anything.\n\n**Second:** decide now what happens if sign-off is late, so it isn't decided in a rush on the day. I've put three options on the map under \"If sign-off slips\":\n- **Slip day for day:** the date just moves with sign-off.\n- **Ship dark, switch on later:** engineering ships on 3 December with the feature switched off and turns it on once compliance approves.\n- **Set a hard cutoff:** a hard reset on 26 November.\n\nI'd pick **ship dark, switch on later**. Engineering is already building to 3 December, so nothing they do is wasted. Customers see nothing until sign-off, which keeps your \"nothing announced\" rule. It also only works if the in-app copy can be swapped without a new release, so ask engineering to build it that way now, whichever option you choose.",
+        "written": "- Generate a unique referral code and shareable link for each user\n- Add the referral landing page that reads the code and carries it through sign-up\n- Attribute new sign-ups to the referrer and store the referral record\n- Define the qualifying event and mark referrals complete when it fires\n- Build the reward engine to credit referrer and referee, with idempotency so rewards aren't paid twice\n- Add fraud checks: block self-referral, detect duplicate devices and payment methods, cap rewards per user\n- Build the in-app referral screen with share sheet, link copy, and progress tracking\n- Send notifications when a referral signs up and when a reward is earned\n- Instrument analytics events for link shared, link opened, sign-up, qualified, and reward issued\n- Put the feature behind a flag and set up a staged rollout\n- Add an admin view to look up referrals and reverse or adjust rewards\n- Run end-to-end QA on the full flow, including attribution across install and deep links\n- Write the referral terms page and link it from the referral screen\n- Set up a monitoring dashboard and alerts for reward volume and error rates",
+        "declined": []
+      }
+    },
+    {
+      "scenario": "engineering",
+      "run": 1,
+      "options": true,
+      "heading": null,
+      "several": true,
+      "workRule": true,
+      "wordedFirst": true,
+      "worded": true,
+      "scoped": true,
+      "keptOut": true,
+      "clean": true,
+      "nothingSent": true,
+      "notes": {
+        "decided": ["In-process retries", "Durable retry queue", "Queue plus endpoint health"],
+        "heading": null,
+        "parts": [
+          {
+            "several": true,
+            "titles": [
+              "Delivery outbox",
+              "Delivery worker",
+              "Retry schedule",
+              "Idempotency and signing",
+              "Dead letters and endpoint health",
+              "Delivery log and alerts"
+            ]
+          }
+        ],
+        "noted": [
+          {
+            "quote": "Don't run or change any code in the repos for this; we're only planning here.",
+            "decision": "Planning only, no repo code changes.",
+            "concerns": "work",
+            "scope": "doc",
+            "confidence": 0.85
+          }
+        ],
+        "refused": [],
+        "passedOver": ["In-process retries", "Queue plus endpoint health"],
+        "riskReply": "The design holds up, but it has some gaps. Roughly in order of how much they'd hurt:\n\n1. **Events will arrive out of order.** With retries running over 3 days, an old `updated` event can show up after a newer one and overwrite fresh state on the receiver's side. At-least-once delivery doesn't cover this.\n2. **One dead endpoint can slow down everyone.** If a big customer's endpoint hangs, shared workers sit waiting on timeouts while that customer's backlog grows. When the endpoint comes back, the whole backlog arrives at once. Jitter spreads out retries but doesn't stop that burst. The section also doesn't set a timeout per attempt.\n3. **`Retry-After` has no limits.** A receiver can send `Retry-After: 1` and use up all 8 attempts in seconds. A very large value can push retries past the 3-day window, and if 429s don't count as attempts, retries can go on forever.\n4. **Some 4xx errors are temporary.** A 401/403 during a secret rotation, or a 404 mid-deploy, sends events straight to dead-letter with no retry, even though the cause is a short misconfiguration. You may want to retry those a few times, or at least alert on them.\n5. **Retries can fail signature checks.** If you sign payloads with a timestamp and receivers reject old ones (a common 5-minute tolerance), a retry carrying the original signature gets rejected.\n6. **Duplicates last longer than receivers expect.** A timeout doesn't mean the receiver didn't process the event, so duplicates will happen. Receivers would need to keep `Webhook-Id`s for more than 3 days plus however long replay is allowed, which few will do unless you tell them.\n7. **\"Never lost\" has a gap.** If the queue write happens after the business transaction commits, a crash between the two drops the event. An outbox table (writing the delivery in the same transaction) closes that gap.\n8. **Dead-lettering is silent.** Nothing tells the customer, there's no retention limit, and endpoints that fail forever are never turned off.\n9. **The count is unclear.** The schedule lists 8 delays, which means 9 attempts including the first. The section should say which it means.\n\nI've put six fixes on the cards. They aren't alternatives, so add any you agree with. I'd take **Ordering**, **Per-endpoint isolation** and **Retry-After limits** first, because those cause real incidents. Points 4, 6 and 9 aren't on the cards; they're short edits you can make in the existing bullets.",
+        "written": "1. Agree on the retry policy: which failures trigger a retry, how many attempts, the backoff timing and the maximum retry window.\n2. Write down what receivers must handle: an idempotency key on every delivery, and the headers that carry the attempt number.\n3. Build retries behind a feature flag that is off by default, and log every attempt and its outcome.\n4. Set up dashboards and alerts for delivery success rate, retry volume, queue depth and permanently failed deliveries.\n5. Test in staging against endpoints made to fail, time out and recover, and check the backoff and the final give-up.\n6. Tell integrators the date, the new headers and the duplicate-delivery behaviour before turning anything on in production.\n7. Turn the flag on for internal and test accounts in production and watch the metrics for a set soak period.\n8. Widen to a small share of customers, then step it up to everyone, checking the metrics at each step.\n9. Keep a rollback ready: turning the flag off stops new retries and lets in-flight retries drain or expire.\n10. Once it has been stable at 100%, remove the flag, record the final policy, and set up a way to replay deliveries that failed for good.",
+        "declined": []
+      }
+    },
+    {
+      "scenario": "hiring",
+      "run": 1,
+      "options": true,
+      "heading": true,
+      "several": true,
+      "workRule": true,
+      "wordedFirst": true,
+      "worded": true,
+      "scoped": true,
+      "keptOut": true,
+      "clean": false,
+      "nothingSent": true,
+      "notes": {
+        "decided": ["Senior hands-on PM", "Head of Product", "Early-career PM"],
+        "heading": "Seniority",
+        "parts": [
+          {
+            "several": true,
+            "titles": [
+              "Why now, and what the PM owns",
+              "Success at 30/90/180 days",
+              "Candidate profile and must-haves",
+              "Comp, level and budget",
+              "Interview loop and decision-maker",
+              "Onboarding readiness"
+            ]
+          }
+        ],
+        "noted": [
+          {
+            "quote": "Don't post anything or message candidates on LinkedIn or anywhere else; drafts only.",
+            "decision": "Hiring outreach drafted only, never posted.",
+            "concerns": "work",
+            "scope": "doc",
+            "confidence": 0.9,
+            "instead": "posting jobs or messaging candidates on LinkedIn, job boards or elsewhere"
+          }
+        ],
+        "refused": [],
+        "passedOver": ["Head of Product", "Early-career PM"],
+        "riskReply": "The most likely problem is unclear decision rights, not finding candidates. The section says the PM must be able to say no to founders, and also that founders keep the final calls. Strong candidates will ask which one wins. If you can't answer clearly, the good ones turn the role down. The ones who join anyway end up writing tickets and leave within about a year.\n\nNext most likely, in order:\n\n- **Screening by interview.** \"Screen for that hard\" doesn't say how. In conversation, founders tend to pick the most polished speaker, and that's often the big-company candidate the section warns against. A paid work sample shows much more.\n- **Title ceiling.** Holding back \"Head of Product\", and saying you might hire someone above them, puts off the strongest 5–8 year candidates. The ones who accept it are often weaker.\n- **No pay band.** The section names cost as a risk but gives no number. Without one, the first strong candidate's ask ends up setting it.\n\nI've put all four as cards with a fix for each, so you can add any as subsections. Decision rights is the one I'd add first, and settle before sourcing. I've also put \"Draft the PM work-sample exercise\" on the map as a separate task you can start with ▶ Run.",
+        "written": "Recruiter screen (30 min): motivation, timing, compensation range and whether they fit the role at a high level.\nHiring manager call (45 min): past product work, how they pick priorities, and why they want to be the first PM here.\nProduct sense (60 min): a live case on one of our real product problems, from finding the user need to scoping a first version.\nExecution and metrics (45 min): define success for a launch, read through an ambiguous data scenario and make tradeoff calls.\nCross-functional panel (60 min): engineering and design leads look at collaboration, technical depth and how they handle disagreement.\nTake-home or work sample (2–3 hrs, paid): a short PRD or strategy memo for a real problem, presented back to the team.\nFounder conversation (45 min): vision fit, ownership and how they would build the PM function from scratch.\nReferences (2–3 calls): former managers and engineering partners, focused on judgment and influence.\nDebrief and decision (within 48 hrs): the panel meets, scores against the rubric, and the team makes an offer or passes.",
+        "declined": []
+      }
+    },
+    {
+      "scenario": "research",
+      "run": 1,
+      "options": true,
+      "heading": true,
+      "several": true,
+      "workRule": true,
+      "wordedFirst": true,
+      "worded": true,
+      "scoped": true,
+      "keptOut": true,
+      "clean": true,
+      "nothingSent": true,
+      "notes": {
+        "decided": ["Desk study only", "Desk study, then pilot", "Hybrid pricing test"],
+        "heading": "Study scope",
+        "parts": [
+          {
+            "several": true,
+            "titles": [
+              "Decision and success",
+              "Who pays and why",
+              "Value metric",
+              "Willingness to pay",
+              "Packaging and tiers",
+              "Market and rollout"
+            ]
+          }
+        ],
+        "noted": [
+          {
+            "quote": "Only use what's in this folder for this; don't search the web.",
+            "decision": "Sources limited to this folder, no web.",
+            "concerns": "work",
+            "scope": "doc",
+            "instead": "web research",
+            "confidence": 0.85
+          }
+        ],
+        "refused": [],
+        "passedOver": ["Desk study only", "Desk study, then pilot"],
+        "riskReply": "I see seven places where the study could mislead you, roughly in order of how much damage they could do:\n\n1. **The back-test assumes customers won't change how they use the product.** It re-prices past usage as if behaviour stays the same under each price. In practice heavy users cut back under metered pricing, and accounts bunch just under the allowance. A static back-test will make usage and hybrid look more profitable than they are.\n2. **The hybrid has more settings, so it will probably win.** You can move its allowance and overage rate until it fits the history, which per-seat and pure usage can't do. Comparing them \"side by side\" can end up proving the hybrid only because it was tuned to the data.\n3. **The scope already leans toward the hybrid.** It says \"instead of a straight swap\" and pilots only the hybrid. Without a definition of what counts as \"better\" written down before the results come in, the results will tend to confirm that lean.\n4. **A pilot of only the hybrid can't compare anything.** There's no per-seat group to measure it against, and sales will likely pick the friendliest accounts. A short pilot also ends before renewals and the first overage bills, which is when churn and disputes show up.\n5. **The interviews skew toward agreement.** Current customers who stayed under per-seat will favour what they know. Explaining three pricing models in the abstract mostly measures which one sounds fair, not what buyers would actually sign.\n6. **The back-test only covers customers you already have.** Each model would attract and lose different customers, and that mix shift could matter more than re-pricing the current base.\n7. **Revenue is the wrong main measure.** Usage pricing shifts costs onto you and makes revenue harder to forecast. Margin and forecast accuracy belong in the score, alongside sales-cycle length and billing effort.\n\nI've offered five subsections you can add, each fixing one or more of these. If you only add two, I'd pick **Decision criteria** and **Pilot with a comparison**. They deal with the bias toward the hybrid (2 and 3) and the pilot design (4), and those are the hardest problems to fix after the results are in. The other three make the numbers more accurate but don't change which model the study is set up to favour.",
+        "written": "1. Set the question: which product, which customers, and what pricing decision this study must support.\n2. Collect the current price list, discounts and billing terms as they stand today.\n3. Pull revenue, volume and churn data by plan for the last 12 months.\n4. Split customers into segments by size, use case and willingness to pay.\n5. List competitor prices and packaging for comparison.\n6. Interview a sample of customers and lost prospects about value and price sensitivity.\n7. Run a willingness-to-pay survey on the main segments.\n8. Model revenue and margin under two or three candidate pricing options.\n9. Test the leading option with a limited cohort and track conversion and churn.\n10. Write up findings and a recommended price, with risks and a rollout plan.\n11. Review with stakeholders and decide.",
+        "declined": []
+      }
+    },
+    {
+      "scenario": "shouldnt-build",
+      "run": 1,
+      "options": true,
+      "heading": null,
+      "several": true,
+      "workRule": true,
+      "wordedFirst": true,
+      "worded": false,
+      "scoped": true,
+      "keptOut": true,
+      "clean": true,
+      "nothingSent": true,
+      "notes": {
+        "decided": ["Ask, then decide", "Log it and wait", "Build an opt-in export"],
+        "heading": null,
+        "parts": [
+          {
+            "several": true,
+            "titles": [
+              "Who is asking and why",
+              "What counts as a report",
+              "Charts, print and export",
+              "Usage evidence",
+              "Cost and trade-offs",
+              "How we'd judge success"
+            ]
+          }
+        ],
+        "noted": [
+          {
+            "quote": "Don't open tickets anywhere for this; keep it in this doc.",
+            "decision": "Dark mode work tracked only in this doc.",
+            "instead": "opening tickets in a tracker",
+            "concerns": "work",
+            "scope": "doc",
+            "confidence": 0.85
+          }
+        ],
+        "refused": [],
+        "passedOver": ["Log it and wait", "Build an opt-in export"],
+        "riskReply": "The call to learn before building holds up. These are the things that would make it wrong:\n\n1. **\"One request\" is a third of your customers.** The doc names three customers. One out of three isn't a weak signal. And \"revisit when a second customer asks\" could mean waiting forever, because there are only two others left to ask.\n2. **This customer may matter more than the others.** Counting requests treats every customer the same. If they bring in a big share of revenue or have a renewal coming up, waiting for a second request could cost more than building it.\n3. **It could be an accessibility need.** Light sensitivity, migraines or low vision would make this a requirement, not a nice-to-have. The current branches would file it as \"log it and revisit,\" which is the wrong place for it.\n4. **The reason for avoiding dark PDFs may not fit this customer.** \"PDFs get printed and forwarded\" is true in general. If this customer only reads reports on a tablet in a dark room, like a night shift or a control room, the toner point doesn't apply to them.\n5. **It might be cheap to build.** If the report renderer can already switch themes, an opt-in dark export might cost less than the call and the follow-up.\n6. **They may want the whole app dark.** Reports could just be where they noticed it first. If so, both \"in-app viewer\" and \"PDF\" are too narrow.\n7. **The opt-in setting could bring back the problem it's meant to avoid.** If it's set for the whole account, everyone who receives the file still gets dark. It should be set per user or per export.\n8. **The call questions suggest answers.** \"Are you reading at night?\" invites a yes. Asking about the last time it bothered them gets a truer answer.\n\nI've put two rewrites of the section on the cards:\n- **\"Add missing branches\"** handles points 3, 6, 7 and 8.\n- **\"Branches plus weight check\"** adds a short check before the call on how much this customer matters and how cheap the work is (points 1, 2 and 5).\n\nI'd pick the second. With only three customers, how much this one matters is the question most likely to change the decision, and it's quick to answer before the call.",
+        "written": "I can't write this yet. Nothing on record says what was decided about dark mode for reports, or why:\n\n- The section is empty apart from its heading. The doc has no other sections.\n- The doc folder is empty, so there's no `Dark Mode for Reports.md` file on disk.\n- Earlier threads left no inputs, and searching for \"dark mode\" across the folder found nothing.\n\nTell me the decision and the reason behind it, even in rough words, and I'll write the section text. For example: \"ship dark mode for reports in Q1, because most of our users have dark mode on and a white report breaks their workflow.\" I didn't want to make up a decision and present it as the team's.",
+        "declined": []
+      }
+    },
+    {
+      "scenario": "launch",
+      "run": 2,
+      "options": true,
+      "heading": true,
+      "several": true,
+      "workRule": true,
+      "wordedFirst": true,
+      "worded": true,
+      "scoped": true,
+      "keptOut": true,
+      "clean": true,
+      "nothingSent": true,
+      "notes": {
+        "decided": [
+          "Gated on sign-off",
+          "Keep Dec 3, go/no-go on Nov 25",
+          "Ship dark, switch on later"
+        ],
+        "heading": "Launch date",
+        "parts": [
+          {
+            "several": true,
+            "titles": [
+              "Program design & rewards",
+              "Product & engineering",
+              "Fraud & abuse controls",
+              "Legal, compliance & finance",
+              "Go-to-market & comms",
+              "Analytics & experimentation"
+            ]
+          },
+          {
+            "several": false,
+            "titles": ["Staged pilot", "Full launch", "Waitlist / invite-only"]
+          }
+        ],
+        "noted": [
+          {
+            "quote": "don't create anything in Linear or Gmail for this",
+            "decision": "Nothing created in Linear or Gmail.",
+            "concerns": "work",
+            "scope": "doc",
+            "confidence": 0.95
+          },
+          {
+            "quote": "keep task lists here in the doc",
+            "decision": "Task lists stay in this doc.",
+            "concerns": "work",
+            "scope": "doc",
+            "confidence": 0.95
+          }
+        ],
+        "refused": [],
+        "passedOver": ["Keep Dec 3, go/no-go on Nov 25", "Ship dark, switch on later"],
+        "riskReply": "**Biggest risk:** compliance sign-off has no date, no owner and no promised turnaround, so the launch date has no end point. \"Early December\" is already close. With 5 business days after sign-off, a launch on Fri 4 Dec needs written approval by about Fri 27 Nov. If your team observes US Thanksgiving (26–27 Nov), it really needs approval by **Wed 25 Nov**, four business days from today. If approval slips by a week or two, you go live in the middle of the holidays, when support and engineering cover is thin.\n\nThere's also a smaller risk inside the 5 days. They include \"final copy changes from the review,\" but approval covers \"all promotional copy.\" If you edit copy after approval and compliance wants to see it again, the 5-day count starts over. The section doesn't say which applies.\n\n**What to do first:** get the complete package to compliance (terms, disclosures and every piece of promotional copy) and ask for a committed review date. Ask in the same message whether edits made after approval need another review. That one answer tells you whether early December is realistic. Also do the reward-flow QA and the support briefing now, before approval. Then the 5 days after sign-off are spare time, not the critical path.\n\nI've added two things to the map:\n- **A choice under \"If sign-off slips\":** what happens if approval misses about 25 Nov. The options are a hard cutoff that moves the launch to January, a launch whenever approval lands, or a quiet December launch with promotion held until January. I'd pick the quiet launch: the program still goes live in December, and the email, banner and social push waits until January when people are back.\n- **A planned action, \"Draft compliance review request\":** an email that asks for the review date and the re-review question, ready for you to run.\n\nThe 25 Nov date assumes a US team that takes Thanksgiving off. If it doesn't, the latest approval date moves to Fri 27 Nov.",
+        "written": "- Generate a unique referral code and shareable link for every existing and new user account.\n- Build the referral landing page that reads the code from the link and pre-fills it at sign-up.\n- Add the \"Invite friends\" screen with copy-link, native share and referral count.\n- Record each referral by linking the referred user to the referrer at sign-up.\n- Set the qualifying event that turns a signed-up referral into a completed one.\n- Issue rewards to both referrer and referred user automatically when a referral completes.\n- Add fraud checks: block self-referrals, duplicate devices or emails, and cap rewards per user.\n- Send in-app and email notifications when a referral signs up and when a reward is earned.\n- Track analytics events for link shared, link opened, sign-up and reward issued.\n- Build an internal admin view to look up referrals, reverse rewards and adjust credits.\n- Put the whole feature behind a feature flag for a staged rollout.\n- Run end-to-end QA on the full referral flow on web, iOS and Android.\n- Write the referral terms page and link it from the invite screen.\n- Set up a launch-day dashboard and alerts for errors and reward volume.",
+        "declined": []
+      }
+    },
+    {
+      "scenario": "engineering",
+      "run": 2,
+      "options": true,
+      "heading": null,
+      "several": true,
+      "workRule": true,
+      "wordedFirst": false,
+      "worded": true,
+      "scoped": true,
+      "keptOut": true,
+      "clean": true,
+      "nothingSent": true,
+      "notes": {
+        "decided": ["In-process backoff", "Durable queue + dead letter", "Queue + endpoint health"],
+        "heading": null,
+        "parts": [
+          {
+            "several": true,
+            "titles": [
+              "Delivery log",
+              "Delivery worker",
+              "Backoff schedule",
+              "Idempotency and signing",
+              "Dead letters and replay",
+              "Endpoint health and alerts"
+            ]
+          },
+          {
+            "several": false,
+            "titles": ["About a day", "About three days", "Fixed short burst"]
+          }
+        ],
+        "noted": [
+          {
+            "quote": "Don't run or change any code in the repos for this; we're only planning here.",
+            "decision": "Repo code is never run or changed.",
+            "concerns": "work",
+            "scope": "doc",
+            "confidence": 0.85
+          }
+        ],
+        "refused": [
+          "\"Planning only; repo code stays untouched.\" holds two ideas. Record one decision per call, each a statement of at most 7 words."
+        ],
+        "passedOver": ["In-process backoff", "Queue + endpoint health"],
+        "riskReply": "The overall design holds up. Most of the risk is in what it leaves unsaid. Most important first:\n\n**1. The `Retry-After` rule works backwards.** \"Capped at the next step\" means a receiver that sends a `429` with `Retry-After: 3600` gets retried in 2 minutes. We'd keep hitting the services that are asking us to back off. I've offered three versions of this rule as cards. I'd pick **Floor, not cap**.\n\n**2. Events can still be lost before they reach the queue.** The plan stops losses after a delivery row exists. If the event is saved but writing its delivery row fails, the event is still dropped. Writing both in one transaction (the outbox pattern) closes that gap.\n\n**3. One dead endpoint can slow delivery for everyone else.** Every event for a down receiver gets all 8 attempts, and timeouts hold up workers the longest. When a big customer's endpoint goes down, it uses up worker capacity. When it comes back, every pending retry arrives at once. ±20% jitter doesn't prevent that. The fix is a circuit breaker per endpoint, plus a limit on in-flight requests per endpoint.\n\n**4. Timeouts cause duplicates.** A slow receiver may have handled the event even though we timed out, so we send it again. Deduping on `Webhook-Id` only helps receivers that actually do it, and many won't. The doc also doesn't set a request timeout. Worker crashes in the middle of a delivery cause duplicates too.\n\n**5. Out-of-order events are worse than they sound.** A retried `updated` can arrive after a `deleted`. \"Order by `created_at`\" means every receiver has to store state and handle ties. A dead-letter replay by time range brings very old events back in after newer ones.\n\n**6. Things fail quietly.** The metrics in the plan are ours. Receivers aren't told when their events go to dead letter. Also, `401`/`403`/`404` go straight to dead letter after one attempt. Those codes often come from a short-lived misconfiguration during a receiver's deploy. Without a notice, nobody knows to replay.\n\n**7. Smaller gaps:**\n- **Changed endpoints:** if a customer changes or deletes an endpoint during the retry window, it isn't clear whether retries go to the old URL.\n- **Other status codes:** `3xx` and `410` aren't covered.\n- **Retention:** neither the queue nor the dead-letter table has a retention period.\n- **Replays:** replaying by time range could overwhelm a receiver unless replays follow the same rate limits.\n- **Schedule length:** the schedule actually ends at about 20h43m, not 24h, so a receiver down overnight or over a weekend loses events to dead letter in under a day. Stripe retries for about 3 days. I've proposed the corrected window as a finding.\n\nThe fixes for 2, 3, 4 and 6, plus the endpoint changes from 7, are in a second set of cards. Each one you add becomes its own subsection. I'd take **Transactional enqueue** and **Endpoint circuit breaker** at least. Without the first, some events are still lost. Without the second, one outage slows delivery for every customer.",
+        "written": "1. Agree on the retry policy: which failures trigger a retry, the backoff schedule, the maximum number of attempts, and when an event goes to the dead-letter queue.\n2. Give every event an idempotency key and ask consumers to deduplicate on it before retries go live.\n3. Build the retry path behind a feature flag that is off by default.\n4. Add metrics and alerts for retry rate, attempts per event, delivery latency and dead-letter queue depth.\n5. Test in staging against endpoints that time out, return 5xx and return 4xx, and confirm each case behaves as the policy says.\n6. Turn the flag on for internal and test endpoints only, and watch it for a full day.\n7. Move to a small share of production endpoints, then a larger share, then all of them, checking the metrics at each stage.\n8. Stop and turn the flag off if retry volume, latency or duplicate deliveries go above the agreed limits.\n9. Tell integrators about the new retry behavior and the idempotency key before the flag reaches all endpoints.\n10. Once the rollout has been stable for a week, remove the flag and write runbooks for replaying events from the dead-letter queue.",
+        "declined": []
+      }
+    },
+    {
+      "scenario": "hiring",
+      "run": 2,
+      "options": true,
+      "heading": true,
+      "several": true,
+      "workRule": true,
+      "wordedFirst": true,
+      "worded": true,
+      "scoped": true,
+      "keptOut": true,
+      "clean": true,
+      "nothingSent": true,
+      "notes": {
+        "decided": ["Senior 0→1 PM", "Mid-level builder", "Early-career PM"],
+        "heading": "Seniority",
+        "parts": [
+          {
+            "several": true,
+            "titles": [
+              "Why now, and what it frees up",
+              "Scope and decision rights",
+              "Profile: archetype and must-haves",
+              "30/60/90 success outcomes",
+              "Interview loop and panel",
+              "Comp band and budget",
+              "Onboarding readiness",
+              "JD and sourcing plan"
+            ]
+          }
+        ],
+        "noted": [
+          {
+            "quote": "Don't post anything or message candidates on LinkedIn or anywhere else; drafts only.",
+            "decision": "Candidate outreach stays drafts, never sent.",
+            "concerns": "work",
+            "scope": "doc",
+            "confidence": 0.9
+          }
+        ],
+        "refused": [],
+        "passedOver": ["Mid-level builder", "Early-career PM"],
+        "riskReply": "The biggest risk isn't finding the right person. It's that the founders don't actually hand over control once that person starts. Here are the risks, most likely first:\n\n**1. The founders hire a senior PM but keep making the product calls.** This is the usual way a first-PM hire fails. You pay a premium for someone who \"owns discovery, roadmap and prioritisation from week one\" and \"can push back on founders.\" Then the founders overrule them on the first roadmap call that matters. A strong senior PM sees this within a quarter and leaves, or settles into executing the founders' ideas, which you could have hired more cheaply. The section already says to pick this route only if the founders want to hand off, but nothing makes them commit to it. Agree in writing, before the search starts, which decisions the PM owns.\n\n**2. Interviews favour polish, so you hire the big-company PM.** The section names this risk, but the hiring process tends to cause it:\n- Candidates with 6–10 years and big-company names have the most polished CVs, and they're good at talking about frameworks and process in interviews.\n- The \"early PM at a startup that went from zero to product-market fit\" requirement is easy to stretch. Someone who joined after the startup found its market, or whose startup never got there, can describe it as zero-to-one. You can only check it through backchannel references.\n- Without a hands-on exercise, you're judging how well they talk about product, not how they work.\n\n**3. The search runs long and you settle.** The pool is small: senior, has been through the zero-to-fit stage, and wants to be an employee rather than found their own company. People who fit often want a Head of Product or VP title and founder-level equity. If the search runs past 4–5 months, you're likely to lower the bar. You might hire someone who meets only one of the two requirements, or give a title that boxes in how you hire later.\n\n**4. No definition of success.** The section describes the role but not what good looks like by day 90. Without that, interviewers each score against their own idea of the job, and you won't know early on whether the hire is working.\n\nI'd tackle #1 first because it costs nothing and decides whether a senior hire is the right choice at all. If the founders won't commit to handing off ownership, a cheaper, more junior hire is the better option.\n\nI've added three follow-ups to the map, each with ▶ Run: write the list of decisions the PM owns, design a hands-on work sample, and draft a reference-check script that tests the zero-to-fit claim.",
+        "written": "1. **Recruiter screen (30 min):** Motivation, background, compensation expectations and logistics.\n2. **Founder conversation (45 min):** Product judgment, how they think about our users and why they want to be the first PM.\n3. **Product sense interview (60 min):** Design a feature end to end from a real problem we have, from defining the problem to setting priorities and choosing success metrics.\n4. **Execution and analytics interview (60 min):** Diagnose a drop in a metric, set goals, make tradeoffs under constraints and use data to decide.\n5. **Take-home or live case (90 min live, or a 3-hour cap on a take-home):** Write a short spec or strategy memo on a real problem, then present it and defend it.\n6. **Engineering and design partner panel (45 min):** How they work with engineers and designers, scope work, handle disagreement and communicate in writing.\n7. **Leadership and values interview (45 min):** Building process from zero, dealing with ambiguity, ownership and fit with how the team works.\n8. **Reference checks (2–3 calls):** At least one former manager and one engineering peer, focused on judgment and how they work with others.\n9. **Debrief and decision (30 min):** Each interviewer brings written feedback; the founder makes the final call within 48 hours.",
+        "declined": []
+      }
+    },
+    {
+      "scenario": "research",
+      "run": 2,
+      "options": true,
+      "heading": true,
+      "several": true,
+      "workRule": true,
+      "wordedFirst": true,
+      "worded": true,
+      "scoped": true,
+      "keptOut": false,
+      "clean": true,
+      "nothingSent": true,
+      "notes": {
+        "decided": ["Desk study only", "Study then pilot", "Hybrid launch as the test"],
+        "heading": "Study depth",
+        "parts": [
+          {
+            "several": true,
+            "titles": [
+              "Decision and scope",
+              "Willingness to pay",
+              "Value metric and packaging",
+              "Competitive benchmark",
+              "Unit economics",
+              "Existing customers"
+            ]
+          }
+        ],
+        "noted": [
+          {
+            "quote": "Only use what's in this folder for this; don't search the web.",
+            "decision": "Sources limited to this folder, no web.",
+            "instead": "searching the web",
+            "concerns": "work",
+            "scope": "doc",
+            "confidence": 0.85
+          }
+        ],
+        "refused": [],
+        "passedOver": ["Desk study only", "Study then pilot"],
+        "riskReply": "The plan can mislead you in six main ways. The doc has no other sections or earlier inputs, so this is based only on the plan as written.\n\n1. **There's nothing to compare against.** Every customer gets the usage charge at once. Any change in revenue or churn over the two quarters could come from seasonality, product releases or the market, and you can't separate those from the pricing change.\n2. **Seats plus overage is a different model from fully usage-based.** Overage on top of seats only charges heavy users more. Under fully usage-based pricing, light users pay less and nobody has seat costs to plan around. The test never shows that lost revenue from light users, so good hybrid results don't predict a good pure-usage outcome.\n3. **The included amount decides what you see.** If it's generous, overage revenue looks small and you'll conclude there's little demand. If it's tight, you get backlash and conclude customers hate usage pricing. Either way you're measuring the threshold, not the model.\n4. **Two quarters may be too short for churn to show.** Customers on annual contracts react at renewal, which may fall after the window. Two calm quarters can hide churn that's on its way.\n5. **Customers may cut usage to avoid overage.** If they stay just under the limit, overage revenue understates what they'd actually use. They'd also behave differently again under pure usage pricing.\n6. **\"Watch what it shows\" has no pass or fail line.** Without thresholds written down in advance, the result can be read to support whatever the team already believes. Complaints from a vocal group of heavy users can also drown out quiet customers who are planning to leave.\n\nI've put five fixes on the map as parts you can add to the doc, each as its own subsection. If you only add two, I'd pick the **holdout group** and the **decision criteria set in advance**. Those fix the problems that make the results impossible to interpret. The other three sharpen the reading but don't rescue it on their own.",
+        "written": "1. Define the question: what we are pricing, for whom, and which decision this study informs.\n2. Gather what we already have in this folder: current prices, past changes, sales and usage data.\n3. Split customers into segments by size, use case and willingness to pay.\n4. List the value drivers for each segment: what customers get and what they would pay more for.\n5. Choose the unit we charge on (seat, usage, flat fee) for each segment.\n6. Build two or three pricing models with tiers, price points and what each tier includes.\n7. Estimate revenue, conversion and churn for each model from our own data.\n8. Test the models with a small set of existing and prospective customers.\n9. Compare the results and recommend one model with its price points.\n10. Plan the rollout: who gets the new prices when, how existing customers move over, and what we will measure afterwards.",
+        "declined": []
+      }
+    },
+    {
+      "scenario": "shouldnt-build",
+      "run": 2,
+      "options": true,
+      "heading": null,
+      "several": true,
+      "workRule": true,
+      "wordedFirst": true,
+      "worded": true,
+      "scoped": true,
+      "keptOut": true,
+      "clean": true,
+      "nothingSent": true,
+      "notes": {
+        "decided": [
+          "Log it, don't build",
+          "Ask what they need first",
+          "Offer an opt-in dark theme"
+        ],
+        "heading": null,
+        "parts": [
+          {
+            "several": true,
+            "titles": [
+              "Demand and who asks",
+              "Where reports are read",
+              "Charts and data colors",
+              "Scope and effort",
+              "Success and risk"
+            ]
+          }
+        ],
+        "noted": [
+          {
+            "quote": "Don't open tickets anywhere for this; keep it in this doc.",
+            "decision": "Dark mode tracking stays in this doc.",
+            "instead": "opening tickets in an issue tracker",
+            "concerns": "work",
+            "scope": "doc",
+            "confidence": 0.9
+          }
+        ],
+        "refused": [],
+        "passedOver": ["Ask what they need first", "Offer an opt-in dark theme"],
+        "riskReply": "The decision only weighs how many customers asked. It never asks why this customer asked or what it would cost to build. These are the things that would make it wrong:\n\n1. **\"One request\" is a third of your customers.** With three customers, one ask is 33% of the base. If that customer is your biggest account or is close to renewal, how important the request is matters more than how many people made it.\n2. **The reason could be accessibility.** If the person who asked has light sensitivity, low vision or migraines, this isn't a feature request that needs a second vote. It's an accessibility problem, and waiting for someone else to ask would be the wrong rule. Right now the doc doesn't say why they asked.\n3. **The printing argument is our guess about how they use reports.** The section says PDFs are \"usually printed, forwarded or attached.\" That may be true in general, but this customer asked for dark mode, which suggests they read the reports on screen. Their own use is what matters here.\n4. **It could be cheap.** If reports come from HTML or CSS templates, an optional dark theme could take about a day. You could leave it off by default so printed and forwarded copies don't change. The decision doesn't say what it would cost.\n5. **The revisit trigger may never fire.** With two other customers, \"a second customer asks on their own\" could effectively mean never. That's fine if it's on purpose. But then telling the customer \"it's on our list\" is a bit misleading.\n6. **Silence isn't a no.** The other two customers' buyers may never have mentioned it, but the people who actually read the reports might want it. They just aren't the ones talking to you.\n\nThe quickest way to test the decision is to ask the requesting customer one question: why do you want it? That answer decides between points 2 and 3.\n\nI've put three versions of the revisit trigger up as options. **Ask why first** is the one I'd pick, because it tests the reason behind the request rather than counting votes. **Price it, then decide** fits if the work turns out to be small. Keeping **Second customer asks** is still a fair choice if you're fine with it never triggering, but then I'd soften the \"it's on our list\" message to the customer.",
+        "written": "I couldn't find the decision recorded anywhere. The section is empty apart from its heading, no earlier threads picked anything up, no other section mentions dark mode, and the folder has no other files. Rather than make up a decision, I've drafted three versions as cards for you to choose from:\n\n- **Ship dark mode:** reports always follow the app's theme.\n- **Dark on screen, light on export:** reports follow the theme on screen, but PDFs and printouts stay light.\n- **Not now: light only:** dark mode for reports is put off, because the charts would need a second colour scheme to design and check.\n\nIf you haven't already decided, I'd go with **Dark on screen, light on export**. It removes the jarring white page inside a dark app, and shared or printed reports stay readable. If you have decided and the reason differs from my draft, tell me the actual reason and I'll rewrite the text to match.",
+        "declined": []
+      }
+    }
+  ]
+}
