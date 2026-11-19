@@ -142,6 +142,15 @@ export function App() {
     setOutlineAt(at);
     markedAt.current = Date.now();
   }, []);
+  // The cursor was placed against the sections as they were; once they're
+  // read again (a heading renamed or added), it's placed again, so the
+  // section in focus is never one a longer or shorter heading pushed it into.
+  useEffect(() => {
+    const v = view.current;
+    if (!sections || !v) return;
+    const at = sectionAt(sections, v.state.selection.main.head)?.index ?? 0;
+    setCursorSection((i) => (i === at ? i : at));
+  }, [sections]);
   const [source, setSource] = useState(false);
   const [save, setSave] = useState<{ status: SaveStatus | null; detail: string | null }>({
     status: null,
