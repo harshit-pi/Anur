@@ -40,5 +40,5 @@ aws sso login --profile aws-anur
 
 ## The website
 
-- `site/` is the page at `https://spaces.hianur.com`: one `index.html`, the app icon and a favicon, with colours from `brand/tokens.css`. It has no analytics or cookies, and CloudFront and S3 keep no access logs, so "We don't collect any data" stays true; keep it that way.
+- `site/` is the page at `https://spaces.hianur.com`: one `index.html` in hianur.com's look (paper, Fraunces and Geist, served from `site/fonts/`), with a live preview of Spaces for teams drawn in the app's own colours from `brand/tokens.css`. It has no analytics or cookies, and CloudFront and S3 keep no access logs, so "We don't collect any data" stays true; keep it that way.
 - `pnpm site:publish` uploads it to the same bucket and clears the cache. CloudFront serves `index.html` for `/`.

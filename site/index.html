@@ -3,252 +3,982 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Anur · hianur</title>
+    <meta name="color-scheme" content="light" />
+    <title>Anur Spaces</title>
     <meta
       name="description"
-      content="Anur keeps the thinking behind your docs, so you and your teammates build your understanding together. A Mac app that works on your own files."
+      content="Build your understanding together with your teammates. Anur keeps the thinking behind every doc: each section's threads, who started them, and what was chosen. A Mac app on your own files."
     />
     <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="preload" href="/fonts/fraunces.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/geist.woff2" as="font" type="font/woff2" crossorigin />
     <style>
-      /* Colours and type from brand/tokens.css */
+      /* Fonts are served from this site: the page makes no request anywhere else. */
+      @font-face {
+        font-family: "Fraunces";
+        font-style: normal;
+        font-weight: 500;
+        font-display: swap;
+        src: url(/fonts/fraunces.woff2) format("woff2");
+      }
+      @font-face {
+        font-family: "Fraunces";
+        font-style: italic;
+        font-weight: 500;
+        font-display: swap;
+        src: url(/fonts/fraunces-italic.woff2) format("woff2");
+      }
+      @font-face {
+        font-family: "Geist";
+        font-style: normal;
+        font-weight: 400 600;
+        font-display: swap;
+        src: url(/fonts/geist.woff2) format("woff2");
+      }
+      @font-face {
+        font-family: "Geist Mono";
+        font-style: normal;
+        font-weight: 400 500;
+        font-display: swap;
+        src: url(/fonts/geist-mono.woff2) format("woff2");
+      }
+
       :root {
-        color-scheme: light dark;
-        --paper: light-dark(#eef1f4, #0e1420);
-        --sheet: light-dark(#ffffff, #151c2a);
-        --rule: light-dark(#d8dee6, #2a3446);
-        --ink: light-dark(#17223b, #e7ebf3);
-        --ink2: light-dark(#3a4560, #c4cbd9);
-        --graphite: light-dark(#656e7b, #8f99ab);
-        --blue: light-dark(#2a5bd7, #7fa2f5);
-        --blue-wash: light-dark(#e8eefc, #1c2a4a);
-        --green: light-dark(#24734b, #6ccb98);
-        --font-ui: "Avenir Next", "Avenir", system-ui, sans-serif;
-        --font-doc: "Charter", "Iowan Old Style", Georgia, serif;
-        --font-pen: "Iowan Old Style", "Charter", Georgia, serif;
+        color-scheme: light;
+        /* The page, as on hianur.com: a document on paper */
+        --paper: #f8f6f1;
+        --paper-2: #efece4;
+        --ink: #1f1b14;
+        --ink-2: #5c564a;
+        --ink-3: #8c8575;
+        --rule: rgba(31, 27, 20, 0.12);
+        --sans: "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+        --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+        --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+        /* The app inside the figure: Anur's own light tokens (brand/tokens.css) */
+        --a-paper: #eef1f4;
+        --a-sheet: #ffffff;
+        --a-hover: #f5f7fa;
+        --a-rule: #d8dee6;
+        --a-ink: #17223b;
+        --a-ink2: #3a4560;
+        --a-slate: #5b6578;
+        --a-graphite: #656e7b;
+        --a-pencil: #a9b1bd;
+        --a-blue: #2a5bd7;
+        --a-blue-wash: #e8eefc;
+        --a-green: #24734b;
+        --a-amber: #8a5a00;
+        --a-amber-wash: #fff4db;
+        --a-ui: "Avenir Next", "Avenir", "Geist", system-ui, sans-serif;
+        --a-doc: "Charter", "Iowan Old Style", Georgia, serif;
+        --a-pen: "Iowan Old Style", "Charter", Georgia, serif;
+
+        /* Teammates */
+        --maya: #c96442;
+        --ken: #2f6fe4;
+        --ana: #2a8a4f;
+        --you: #17223b;
       }
       * {
         box-sizing: border-box;
-      }
-      html,
-      body {
         margin: 0;
+        padding: 0;
       }
       body {
-        min-height: 100vh;
-        display: flex;
-        flex-direction: column;
         background: var(--paper);
         color: var(--ink);
-        font-family: var(--font-ui);
+        font: 16px/1.6 var(--sans);
         -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
       }
-      .wrap {
-        width: 100%;
-        max-width: 720px;
-        margin: 0 auto;
+      ::selection {
+        background: rgba(31, 27, 20, 0.14);
+      }
+      a {
+        color: inherit;
+      }
+      :focus-visible {
+        outline: 2px solid var(--ink);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+      .k {
+        font: 500 11px/1 var(--mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-3);
+      }
+
+      /* The frame: a sidebar and one column of text, like a paper; the figure spans both */
+      .page {
+        display: grid;
+        grid-template-columns: 208px minmax(0, 640px);
+        column-gap: 108px;
+        justify-content: center;
         padding: 0 24px;
       }
-      header .wrap {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        height: 72px;
+      aside {
+        grid-row: 1;
+        padding: 64px 0 0;
       }
       .brand {
         display: flex;
         align-items: center;
         gap: 10px;
-        color: var(--ink);
         text-decoration: none;
-        font-weight: 600;
-        letter-spacing: 0.01em;
-      }
-      .brand svg {
-        width: 18px;
-        height: 18px;
-      }
-      .brand .sub {
-        color: var(--graphite);
         font-weight: 500;
+        letter-spacing: -0.01em;
       }
-      .soon-pill {
-        font-size: 13px;
-        color: var(--graphite);
+      .brand i {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: var(--ink);
+        display: grid;
+        place-items: center;
       }
-      main {
-        flex: 1;
+      .brand i::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+        background: var(--paper);
+        transform: rotate(45deg);
+      }
+      .brand span {
+        color: var(--ink-3);
+      }
+      nav {
+        margin-top: 36px;
+      }
+      nav ol {
+        list-style: none;
+        margin-top: 14px;
+      }
+      nav a {
         display: flex;
         align-items: center;
+        gap: 12px;
+        text-decoration: none;
+        color: var(--ink-3);
+        font-size: 14px;
+        padding: 5px 0;
       }
-      .hero {
-        padding: 56px 24px 72px;
+      nav a::before {
+        content: "";
+        width: 12px;
+        height: 1px;
+        background: currentColor;
       }
-      .icon {
-        width: 72px;
-        height: 72px;
-        display: block;
-        margin-bottom: 28px;
+      nav a:hover {
+        color: var(--ink);
       }
-      .name {
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--graphite);
-        margin: 0 0 12px;
-        letter-spacing: 0.02em;
+
+      main {
+        grid-row: 1;
+        grid-column: 2;
+        padding: 64px 0 0;
       }
       h1 {
-        font-family: var(--font-doc);
-        font-weight: 400;
-        font-size: clamp(34px, 6vw, 52px);
-        line-height: 1.12;
-        letter-spacing: -0.01em;
-        margin: 0 0 22px;
+        font: 500 clamp(34px, 4.6vw, 44px) / 1.1 var(--serif);
+        letter-spacing: -0.02em;
+        margin-bottom: 20px;
         text-wrap: balance;
       }
       h1 em {
-        font-family: var(--font-pen);
-        color: var(--ink2);
+        font-style: italic;
+        color: var(--ink-2);
       }
       .lede {
-        font-size: 18px;
-        line-height: 1.6;
-        color: var(--ink2);
-        margin: 0 0 36px;
-        max-width: 560px;
+        font-size: 17px;
+        color: var(--ink-2);
+        margin-bottom: 28px;
+        max-width: 600px;
       }
-      .actions {
+      .get {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 14px 20px;
+        gap: 14px 22px;
       }
       .download {
         display: inline-flex;
         align-items: center;
         gap: 10px;
-        background: var(--blue);
-        color: var(--sheet);
+        background: var(--ink);
+        color: var(--paper);
         text-decoration: none;
-        font-weight: 600;
-        font-size: 16px;
-        padding: 13px 22px;
-        border-radius: 10px;
-        transition: transform 0.12s ease, box-shadow 0.12s ease;
+        font: 500 12px/1 var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 13px 18px;
+        border-radius: 7px;
       }
       .download:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 6px 18px -8px var(--blue);
-      }
-      .download:focus-visible {
-        outline: 2px solid var(--blue);
-        outline-offset: 3px;
+        background: #000;
       }
       .download svg {
-        width: 16px;
-        height: 16px;
+        width: 14px;
+        height: 14px;
       }
       .meta {
-        font-size: 14px;
-        color: var(--graphite);
+        font-size: 13px;
+        color: var(--ink-3);
         line-height: 1.5;
       }
-      .notes {
-        margin-top: 56px;
+
+      /* Figure 1 spans the sidebar and the column */
+      figure {
+        grid-row: 2;
+        grid-column: 1 / -1;
+        margin: 56px 0 0;
+      }
+      .fig-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .fig-bar .soon {
+        font: 500 11px/1 var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--ink);
+        border: 1px solid var(--rule);
+        background: var(--paper-2);
+        border-radius: 999px;
+        padding: 5px 9px;
+      }
+      .fig-bar .modes {
+        margin-left: auto;
+        display: flex;
+        gap: 4px;
+        background: var(--paper-2);
+        border-radius: 8px;
+        padding: 3px;
+      }
+      .fig-bar .modes button {
+        font: 500 12px/1 var(--sans);
+        border: 0;
+        background: none;
+        color: var(--ink-2);
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+      .fig-bar .modes button[aria-pressed="true"] {
+        background: #fff;
+        color: var(--ink);
+        box-shadow: 0 1px 2px rgba(31, 27, 20, 0.1);
+      }
+      figcaption {
+        font-size: 14px;
+        color: var(--ink-2);
+        margin-top: 14px;
+        max-width: 760px;
+      }
+      figcaption b {
+        color: var(--ink);
+        font-weight: 600;
+      }
+
+      .rest {
+        grid-row: 3;
+        grid-column: 2;
+        padding: 56px 0 0;
+      }
+      section + section {
+        margin-top: 44px;
+      }
+      h2 {
+        font: 500 24px/1.25 var(--serif);
+        letter-spacing: -0.01em;
+        margin: 10px 0 10px;
+      }
+      section p {
+        color: var(--ink-2);
+      }
+      section p + p {
+        margin-top: 10px;
+      }
+      footer {
+        grid-row: 4;
+        grid-column: 2;
+        margin: 72px 0 0;
+        padding: 22px 0 40px;
+        border-top: 1px solid var(--rule);
+        display: flex;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--ink-3);
+      }
+
+      /* ───────────── The app, drawn at 1180×720 and scaled to fit ───────────── */
+      .stage-wrap {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1180 / 720;
+        border-radius: 12px;
+        box-shadow:
+          0 0 0 1px rgba(31, 27, 20, 0.14),
+          0 30px 60px -30px rgba(31, 27, 20, 0.35),
+          0 12px 24px -12px rgba(31, 27, 20, 0.15);
+        overflow: hidden;
+        background: var(--a-paper);
+      }
+      .app {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1180px;
+        height: 720px;
+        transform-origin: 0 0;
+        font-family: var(--a-ui);
+        color: var(--a-ink);
+        background: var(--a-paper);
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 40px 1fr 26px;
+        user-select: none;
+      }
+      .tb {
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        gap: 10px;
+      }
+      .lights {
+        display: flex;
+        gap: 8px;
+        margin-right: 12px;
+      }
+      .lights i {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ff5f57;
+      }
+      .lights i:nth-child(2) {
+        background: #febc2e;
+      }
+      .lights i:nth-child(3) {
+        background: #28c840;
+      }
+      .ico {
+        width: 16px;
+        height: 16px;
+        color: var(--a-slate);
+        flex: none;
+      }
+      .tab {
+        background: var(--a-sheet);
+        border: 1px solid var(--a-rule);
+        border-radius: 7px;
+        padding: 4px 10px;
+        font-size: 13px;
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      .tab small {
+        color: var(--a-graphite);
+        font-size: 11px;
+      }
+      .tb .right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
         gap: 14px;
       }
-      .note {
-        background: var(--sheet);
-        border: 1px solid var(--rule);
-        border-radius: 12px;
-        padding: 18px 20px;
+      .seg {
+        display: flex;
+        gap: 2px;
+        font-size: 13px;
       }
-      .note h2 {
-        font-size: 15px;
-        font-weight: 600;
-        margin: 0 0 6px;
+      .seg span {
+        padding: 4px 11px;
+        border-radius: 6px;
+        color: var(--a-slate);
+      }
+      .seg span.on {
+        background: var(--a-sheet);
+        color: var(--a-ink);
+      }
+      .faces {
+        display: flex;
+        align-items: center;
+      }
+      .face {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        color: #fff;
+        font: 600 10px/22px var(--a-ui);
+        text-align: center;
+        border: 2px solid var(--a-paper);
+        margin-left: -6px;
+        flex: none;
+      }
+      .faces .face:first-child {
+        margin-left: 0;
+      }
+      .share {
+        font-size: 12px;
+        color: var(--a-blue);
+        border: 1px solid var(--a-rule);
+        background: var(--a-sheet);
+        padding: 3px 9px;
+        border-radius: 6px;
+      }
+
+      .body {
+        display: grid;
+        grid-template-columns: 40px 184px 1fr 252px;
+        min-height: 0;
+      }
+      .rail {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        padding-top: 12px;
+      }
+      .rail .on {
+        background: var(--a-sheet);
+        border-radius: 7px;
+        padding: 6px;
+        width: 28px;
+        height: 28px;
+      }
+      .side {
+        border-right: 1px solid var(--a-rule);
+        padding: 12px 10px;
+        font-size: 13px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        position: relative;
+      }
+      .side .row {
+        padding: 4px 8px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--a-ink2);
+      }
+      .side .row.on {
+        background: var(--a-blue-wash);
+        color: var(--a-ink);
+      }
+      .side .row .mini {
+        margin-left: auto;
+        display: flex;
+      }
+      .side .row .mini .face {
+        width: 14px;
+        height: 14px;
+        border-width: 1.5px;
+        font-size: 0;
+        margin-left: -4px;
+      }
+      .side .head {
+        font-size: 12px;
+        color: var(--a-graphite);
+        padding: 12px 8px 4px;
+      }
+      .side .space {
+        position: absolute;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        border-top: 1px solid var(--a-rule);
+        padding: 10px 8px 0;
         display: flex;
         align-items: center;
         gap: 8px;
-      }
-      .note p {
-        margin: 0;
-        font-size: 15px;
-        line-height: 1.55;
-        color: var(--ink2);
-      }
-      .tag {
-        font-size: 12px;
         font-weight: 600;
-        color: var(--blue);
-        background: var(--blue-wash);
+      }
+      .side .space b {
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+        background: var(--a-blue-wash);
+        color: var(--a-blue);
+        font-size: 10px;
+        display: grid;
+        place-items: center;
+      }
+      .side .space small {
+        margin-left: auto;
+        font-weight: 400;
+        color: var(--a-graphite);
+        font-size: 11px;
+      }
+
+      .center {
+        background: var(--a-sheet);
+        display: grid;
+        grid-template-rows: 40px 1fr;
+        min-width: 0;
+        position: relative;
+        overflow: hidden;
+      }
+      .crumbs {
+        border-bottom: 1px solid var(--a-rule);
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 16px;
+        font-size: 13px;
+        color: var(--a-ink2);
+      }
+      .crumbs .ico {
+        width: 13px;
+        color: var(--a-pencil);
+      }
+      .view {
+        position: relative;
+        overflow: hidden;
+      }
+      .mapv {
+        position: absolute;
+        inset: 0;
+        background-color: #fbfcfd;
+        background-image: radial-gradient(#d3d9e1 1px, transparent 1.2px);
+        background-size: 18px 18px;
+        transition: opacity 0.45s ease;
+      }
+      .pagev {
+        position: absolute;
+        inset: 0;
+        padding: 30px 56px;
+        opacity: 0;
+        transition: opacity 0.45s ease;
+        pointer-events: none;
+      }
+      .app[data-mode="page"] .mapv {
+        opacity: 0;
+      }
+      .app[data-mode="page"] .pagev {
+        opacity: 1;
+      }
+
+      /* Map marks, as the app draws them: sections solid, threads dashed and in pen */
+      .wires {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      .wires path {
+        fill: none;
+        stroke: #8a93a3;
+        stroke-width: 1.2;
+      }
+      .wires path.t {
+        stroke: var(--a-pencil);
+        stroke-dasharray: 3 3;
+      }
+      .wires path.link {
+        stroke: var(--a-blue);
+        stroke-dasharray: 4 3;
+      }
+      .wires path.new {
+        stroke-dashoffset: 0;
+        transition: opacity 0.4s;
+      }
+      .sec {
+        position: absolute;
+        background: var(--a-sheet);
+        border: 1.5px solid var(--a-ink);
+        border-radius: 4px;
+        padding: 8px 12px;
+        font-size: 13.5px;
+        line-height: 1.3;
+        white-space: nowrap;
+      }
+      .sec.root {
+        font: 700 14.5px/1.3 var(--a-doc);
+        padding: 10px 16px;
+        border-width: 2px;
+      }
+      .sec .here {
+        position: absolute;
+        top: -9px;
+        right: -7px;
+        display: flex;
+      }
+      .sec .here .face {
+        width: 18px;
+        height: 18px;
+        font-size: 8.5px;
+        line-height: 14px;
+        margin-left: -5px;
+        border-color: #fbfcfd;
+      }
+      .sec.lit {
+        box-shadow: 0 0 0 3px var(--ring, transparent);
+        transition: box-shadow 0.3s;
+      }
+      .thr {
+        position: absolute;
+        background: var(--a-sheet);
+        border: 1.3px dashed var(--a-pencil);
+        border-radius: 6px;
+        padding: 5px 9px 5px 6px;
+        font: italic 12px/1.3 var(--a-pen);
+        color: var(--a-ink2);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        transition:
+          opacity 0.4s,
+          transform 0.4s,
+          border-color 0.3s,
+          box-shadow 0.3s;
+      }
+      .thr .face {
+        width: 16px;
+        height: 16px;
+        border: 0;
+        margin: 0;
+        font: 600 8px/16px var(--a-ui);
+        font-style: normal;
+      }
+      .thr .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--a-blue);
+        margin-left: 2px;
+        transition: opacity 0.3s;
+      }
+      .thr .busy {
+        font: normal 10px/1 var(--a-ui);
+        color: var(--a-amber);
+        background: var(--a-amber-wash);
+        padding: 2px 5px;
+        border-radius: 4px;
+      }
+      .thr.sel {
+        border-style: solid;
+        border-color: var(--a-blue);
+        box-shadow: 0 0 0 3px var(--a-blue-wash);
+      }
+      .thr.hidden {
+        opacity: 0;
+        transform: translateY(4px) scale(0.97);
+      }
+      .file {
+        position: absolute;
+        background: var(--a-blue-wash);
+        border: 1.3px solid #b9c9f2;
+        border-radius: 6px;
+        padding: 6px 10px;
+        font-size: 12px;
+        line-height: 1.3;
+      }
+      .file small {
+        display: block;
+        color: var(--a-blue);
+        font-size: 10px;
+      }
+      .legend {
+        position: absolute;
+        left: 14px;
+        bottom: 12px;
+        background: var(--a-sheet);
+        border: 1px solid var(--a-rule);
+        border-radius: 8px;
+        padding: 6px 12px;
+        display: flex;
+        gap: 14px;
+        font-size: 11.5px;
+        color: var(--a-ink2);
+        align-items: center;
+      }
+      .legend i {
+        display: inline-block;
+        width: 16px;
+        height: 10px;
+        border-radius: 3px;
+        border: 1.5px solid var(--a-ink);
+        vertical-align: -1px;
+        margin-right: 5px;
+      }
+      .legend i.d {
+        border: 1.3px dashed var(--a-pencil);
+      }
+      .legend .face {
+        width: 14px;
+        height: 14px;
+        border: 0;
+        margin: 0 5px 0 0;
+        display: inline-block;
+        vertical-align: -2px;
+        font-size: 0;
+      }
+
+      /* Teammates' cursors, on the map and in the page */
+      .cur {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 5;
+        pointer-events: none;
+        transition: transform 1.1s cubic-bezier(0.45, 0.05, 0.25, 1);
+      }
+      .cur svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+        filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.2));
+      }
+      .cur span {
+        position: absolute;
+        left: 13px;
+        top: 13px;
+        color: #fff;
+        font: 600 10.5px/1 var(--a-ui);
+        padding: 3px 6px;
+        border-radius: 4px 9px 9px 9px;
+        white-space: nowrap;
+      }
+
+      /* Page mode: the doc with everyone's carets */
+      .pagev h3 {
+        font: 700 26px/1.2 var(--a-doc);
+        margin-bottom: 8px;
+      }
+      .pagev h4 {
+        font: 700 17px/1.3 var(--a-doc);
+        margin: 18px 0 4px;
+      }
+      .pagev p {
+        font: 15px/1.6 var(--a-doc);
+        color: var(--a-ink2);
+        position: relative;
+      }
+      .caret {
+        display: inline-block;
+        width: 2px;
+        height: 1.2em;
+        vertical-align: -0.2em;
+        margin: 0 -1px;
+        position: relative;
+        animation: blink 1.1s steps(1) infinite;
+      }
+      .caret b {
+        position: absolute;
+        bottom: 100%;
+        left: 0;
+        color: #fff;
+        font: 600 10px/1 var(--a-ui);
+        padding: 2px 5px;
+        border-radius: 3px 3px 3px 0;
+        white-space: nowrap;
+      }
+      @keyframes blink {
+        50% {
+          opacity: 0.35;
+        }
+      }
+      .hl {
+        background: rgba(47, 111, 228, 0.16);
+        border-radius: 2px;
+      }
+      .gutter {
+        position: absolute;
+        left: -22px;
+        top: 4px;
+      }
+      .gutter .face {
+        width: 14px;
+        height: 14px;
+        border: 0;
+        font-size: 0;
+      }
+
+      /* Think panel */
+      .think {
+        border-left: 1px solid var(--a-rule);
+        background: var(--a-sheet);
+        padding: 14px;
+        font-size: 12.5px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        min-width: 0;
+      }
+      .think h5 {
+        font: 600 15px/1.3 var(--a-ui);
+      }
+      .think .ask {
+        border: 1px solid var(--a-rule);
+        border-radius: 10px;
+        padding: 8px 10px;
+        color: var(--a-graphite);
+      }
+      .think .ask em {
+        display: inline-block;
+        font-style: normal;
+        color: var(--a-blue);
+        background: var(--a-blue-wash);
         border-radius: 999px;
         padding: 2px 8px;
+        margin-bottom: 6px;
+        font-size: 11.5px;
       }
-      .dot {
+      .think .lbl {
+        font-size: 11px;
+        color: var(--a-graphite);
+        margin-top: 2px;
+      }
+      .tcard {
+        border: 1.3px dashed var(--a-pencil);
+        border-radius: 8px;
+        padding: 8px 10px;
+        display: grid;
+        grid-template-columns: 18px 1fr;
+        gap: 2px 8px;
+        transition:
+          border-color 0.3s,
+          background 0.3s;
+      }
+      .tcard .face {
+        width: 18px;
+        height: 18px;
+        border: 0;
+        margin: 0;
+        font: 600 8.5px/18px var(--a-ui);
+        grid-row: span 2;
+      }
+      .tcard q {
+        font: italic 13px/1.3 var(--a-pen);
+        color: var(--a-ink);
+        quotes: none;
+      }
+      .tcard small {
+        color: var(--a-graphite);
+        font-size: 11px;
+      }
+      .tcard small.ready {
+        color: var(--a-blue);
+      }
+      .tcard small.busy {
+        color: var(--a-amber);
+      }
+      .tcard.sel {
+        border-style: solid;
+        border-color: var(--a-blue);
+        background: #fafcff;
+      }
+      .msg {
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--a-ink2);
+        padding-left: 26px;
+        transition: opacity 0.4s;
+      }
+      .msg b {
+        color: var(--a-ink);
+        font-weight: 600;
+      }
+
+      .status {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 0 14px;
+        font-size: 11.5px;
+        color: var(--a-graphite);
+      }
+      .status .ok::before {
+        content: "";
+        display: inline-block;
         width: 7px;
         height: 7px;
         border-radius: 50%;
-        background: var(--green);
+        background: var(--a-green);
+        margin-right: 6px;
       }
-      footer .wrap {
-        height: 64px;
+      .status .r {
+        margin-left: auto;
         display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-size: 13px;
-        color: var(--graphite);
-        border-top: 1px solid var(--rule);
+        gap: 16px;
       }
-      @media (max-width: 600px) {
-        .wrap {
+
+      @media (max-width: 960px) {
+        .page {
+          grid-template-columns: minmax(0, 640px);
           padding: 0 16px;
         }
-        .hero {
-          padding: 32px 16px 48px;
+        aside {
+          padding-top: 28px;
         }
-        .notes {
-          grid-template-columns: 1fr;
+        aside nav {
+          display: none;
         }
-        .lede {
-          font-size: 17px;
+        main,
+        .rest,
+        footer {
+          grid-column: 1;
+        }
+        main {
+          grid-row: 2;
+          padding-top: 36px;
+        }
+        figure {
+          grid-row: 3;
+          grid-column: 1;
+        }
+        .rest {
+          grid-row: 4;
+        }
+        footer {
+          grid-row: 5;
         }
       }
       @media (prefers-reduced-motion: reduce) {
-        .download {
+        .cur,
+        .thr,
+        .mapv,
+        .pagev {
           transition: none;
+        }
+        .caret {
+          animation: none;
         }
       }
     </style>
   </head>
   <body>
-    <header>
-      <div class="wrap">
-        <a class="brand" href="/" aria-label="hianur spaces">
-          <svg viewBox="0 0 100 100" aria-hidden="true">
-            <path
-              fill="currentColor"
-              d="M42.9 12.9a10 10 0 0 1 14.2 0l30 30a10 10 0 0 1 0 14.2l-30 30a10 10 0 0 1-14.2 0l-30-30a10 10 0 0 1 0-14.2z"
-            />
-          </svg>
-          <span>hianur <span class="sub">spaces</span></span>
-        </a>
-        <span class="soon-pill">For Mac</span>
-      </div>
-    </header>
+    <div class="page">
+      <aside>
+        <a class="brand" href="/"><i></i>Anur <span>Spaces</span></a>
+        <nav aria-label="On this page">
+          <div class="k">On this page</div>
+          <ol>
+            <li><a href="#top">Why</a></li>
+            <li><a href="#demo">Spaces for teams</a></li>
+            <li><a href="#data">Your data</a></li>
+            <li><a href="#get">Get it</a></li>
+          </ol>
+        </nav>
+      </aside>
 
-    <main>
-      <section class="wrap hero">
-        <img class="icon" src="/anur-icon.png" alt="Anur app icon" width="72" height="72" />
-        <p class="name">Anur</p>
-        <h1>Build your understanding, <em>together with your teammates.</em></h1>
+      <main id="top">
+        <h1>Build your understanding <em>together with your teammates.</em></h1>
         <p class="lede">
-          Anur keeps the thinking behind a doc. Each section gets its own threads with the AI agent
-          you already use, and the page holds only what you chose. Your docs stay plain Markdown
-          files in your own folders.
+          Anur keeps the thinking behind every doc. Each section gets its own threads with the AI
+          agent you already use, the page holds only what you chose, and the map shows how every
+          part was decided. Your docs stay plain Markdown files on your Mac.
         </p>
-        <div class="actions">
+        <div class="get" id="get">
           <a class="download" href="/apps/Anur.dmg" download>
             <svg viewBox="0 0 16 16" aria-hidden="true">
               <path
@@ -262,27 +992,324 @@
             </svg>
             Download for Mac
           </a>
-          <span class="meta">Free · Apple silicon and Intel<br />Runs on your Mac, no account</span>
+          <span class="meta">Free · Apple silicon and Intel<br />Works offline, no account</span>
+        </div>
+      </main>
+
+      <figure id="demo">
+        <div class="fig-bar">
+          <span class="soon">Coming soon</span>
+          <span class="k">Spaces for teams · a preview</span>
+          <div class="modes" role="group" aria-label="Show the map or the page">
+            <button type="button" data-mode="map" aria-pressed="true">Map</button>
+            <button type="button" data-mode="page" aria-pressed="false">Page</button>
+          </div>
         </div>
 
-        <div class="notes">
-          <div class="note">
-            <h2>Spaces for teams <span class="tag">Coming soon</span></h2>
-            <p>Share a space with your teammates, so everyone builds on the same reasons.</p>
-          </div>
-          <div class="note">
-            <h2><span class="dot" aria-hidden="true"></span>We don't collect any data</h2>
-            <p>No analytics, no tracking, no account. Your docs stay on your Mac.</p>
+        <div class="stage-wrap" aria-label="A preview of Anur with three teammates in one space">
+          <div class="app" data-mode="map" aria-hidden="true">
+            <!-- Title bar -->
+            <div class="tb">
+              <div class="lights"><i></i><i></i><i></i></div>
+              <svg class="ico" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 3v10" stroke="currentColor" stroke-width="1.3"/></svg>
+              <div class="tab">Failed-payment notifications <small>✕</small></div>
+              <svg class="ico" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              <div class="right">
+                <div class="seg"><span data-seg="page">Page</span><span data-seg="map" class="on">Map</span></div>
+                <div class="faces" title="In this space">
+                  <span class="face" style="background: var(--you)">Y</span>
+                  <span class="face" style="background: var(--maya)">M</span>
+                  <span class="face" style="background: var(--ken)">K</span>
+                  <span class="face" style="background: var(--ana)">A</span>
+                </div>
+                <span class="share">Share</span>
+                <svg class="ico" viewBox="0 0 16 16"><rect x="4.5" y="4.5" width="7" height="7" rx="1.5" transform="rotate(45 8 8)" fill="#a9b1bd"/></svg>
+                <svg class="ico" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M10 3v10" stroke="currentColor" stroke-width="1.3"/></svg>
+              </div>
+            </div>
+
+            <div class="body">
+              <!-- Rail -->
+              <div class="rail">
+                <svg class="ico on" viewBox="0 0 16 16"><path d="M2 4.5c0-.8.7-1.5 1.5-1.5h3l1.5 1.5h4.5c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9c-.8 0-1.5-.7-1.5-1.5z" fill="none" stroke="#17223b" stroke-width="1.3"/></svg>
+                <svg class="ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="m10.2 10.2 3.3 3.3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+              </div>
+
+              <!-- Files and outline -->
+              <div class="side">
+                <div class="row on">Failed-payment notifications<span class="mini"><span class="face" style="background: var(--maya)"></span><span class="face" style="background: var(--ken)"></span><span class="face" style="background: var(--ana)"></span></span></div>
+                <div class="row">Pricing</div>
+                <div class="row">Billing design doc<span class="mini"><span class="face" style="background: var(--ken)"></span></span></div>
+                <div class="row">Retry service RFC</div>
+                <div class="row">Personas</div>
+                <div class="head">▾ Outline</div>
+                <div class="row">Failed-payment notifications</div>
+                <div class="row" style="padding-left: 18px">Problem</div>
+                <div class="row" style="padding-left: 18px">Who it's for</div>
+                <div class="row" style="padding-left: 18px">Retry timing<span class="mini"><span class="face" style="background: var(--maya)"></span></span></div>
+                <div class="row" style="padding-left: 18px">Notification channel<span class="mini"><span class="face" style="background: var(--ana)"></span></span></div>
+                <div class="row" style="padding-left: 18px">Success metric<span class="mini"><span class="face" style="background: var(--ken)"></span></span></div>
+                <div class="space"><b>T</b>Tally<small>4 here</small></div>
+              </div>
+
+              <!-- The doc: map or page -->
+              <div class="center">
+                <div class="crumbs">
+                  <svg class="ico" viewBox="0 0 16 16"><path d="M13 8H3m4-4L3 8l4 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <svg class="ico" viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  Failed-payment notifications
+                </div>
+                <div class="view">
+                  <div class="mapv" id="map">
+                    <svg class="wires" id="wires"></svg>
+                    <!-- Sections -->
+                    <div class="sec root" id="s-root" style="left: 206px; top: 262px; white-space: normal; width: 150px">Failed-payment notifications</div>
+                    <div class="sec" id="s-problem" style="left: 410px; top: 96px">Problem</div>
+                    <div class="sec" id="s-who" style="left: 410px; top: 180px">Who it's for</div>
+                    <div class="sec lit" id="s-retry" style="left: 410px; top: 340px; --ring: rgba(201, 100, 66, 0.22)">Retry timing<span class="here"><span class="face" style="background: var(--maya)">M</span></span></div>
+                    <div class="sec lit" id="s-channel" style="left: 26px; top: 170px; --ring: rgba(42, 138, 79, 0.2)">Notification channel<span class="here"><span class="face" style="background: var(--ana)">A</span></span></div>
+                    <div class="sec lit" id="s-metric" style="left: 50px; top: 410px; --ring: rgba(47, 111, 228, 0.2)">Success metric<span class="here"><span class="face" style="background: var(--ken)">K</span></span></div>
+                    <!-- Another file -->
+                    <div class="file" id="f-persona" style="left: 548px; top: 150px"><small>Personas.md</small>Solo freelancer</div>
+                    <!-- Threads, each with its owner -->
+                    <div class="thr" id="t-payday" style="left: 532px; top: 282px"><span class="face" style="background: var(--maya)">M</span>Use the client's pay day?<span class="dot"></span></div>
+                    <div class="thr" id="t-stripe" style="left: 532px; top: 334px"><span class="face" style="background: var(--ken)">K</span>Stripe's defaults?<span class="busy">thinking</span></div>
+                    <div class="thr" id="t-history" style="left: 532px; top: 386px"><span class="face" style="background: var(--you)">Y</span>No payment history?</div>
+                    <div class="thr" id="t-sms" style="left: 14px; top: 100px"><span class="face" style="background: var(--ana)">A</span>Is SMS worth the cost?<span class="dot" id="sms-dot" style="opacity: 0"></span></div>
+                    <div class="thr hidden" id="t-first" style="left: 30px; top: 486px"><span class="face" style="background: var(--ken)">K</span><span id="t-first-text">Count only first retries?</span></div>
+
+                    <div class="legend">
+                      <span><i></i>Section</span>
+                      <span><i class="d"></i>Thread</span>
+                      <span><span class="face" style="background: var(--maya)"></span>Owner</span>
+                      <span><span style="color: var(--a-blue)">●</span> Preview ready</span>
+                    </div>
+                  </div>
+
+                  <div class="pagev" id="page">
+                    <h3>Failed-payment notifications</h3>
+                    <p>Tell the client within an hour; retry on a schedule.</p>
+                    <h4>Problem</h4>
+                    <p>1 in 25 card payments fails the first try.</p>
+                    <h4>Who it's for</h4>
+                    <p>Solo freelancers, 5 to 30 clients.</p>
+                    <h4>Retry timing</h4>
+                    <p><span class="gutter"><span class="face" style="background: var(--maya)"></span></span><span id="typed">Retry after 1, 3 and 7 days.</span><span class="caret" style="background: var(--maya)"><b style="background: var(--maya)">Maya</b></span></p>
+                    <h4>Notification channel</h4>
+                    <p><span class="gutter"><span class="face" style="background: var(--ana)"></span></span>Email the client<span class="caret" style="background: var(--ana)"><b style="background: var(--ana)">Ana</b></span> within an hour.</p>
+                    <h4>Success metric</h4>
+                    <p><span class="gutter"><span class="face" style="background: var(--ken)"></span></span>Recovered <span class="hl">payments within 7 days</span><span class="caret" style="background: var(--ken)"><b style="background: var(--ken)">Ken</b></span>.</p>
+                  </div>
+
+                  <!-- Cursors (map mode) -->
+                  <div class="cur" id="c-maya"><svg viewBox="0 0 16 16"><path d="M2 1.5 13 7.2l-4.8 1.3L6 13.3z" fill="var(--maya)" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg><span style="background: var(--maya)">Maya</span></div>
+                  <div class="cur" id="c-ken"><svg viewBox="0 0 16 16"><path d="M2 1.5 13 7.2l-4.8 1.3L6 13.3z" fill="var(--ken)" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg><span style="background: var(--ken)">Ken</span></div>
+                  <div class="cur" id="c-ana"><svg viewBox="0 0 16 16"><path d="M2 1.5 13 7.2l-4.8 1.3L6 13.3z" fill="var(--ana)" stroke="#fff" stroke-width="1.2" stroke-linejoin="round"/></svg><span style="background: var(--ana)">Ana</span></div>
+                </div>
+              </div>
+
+              <!-- Think: the threads on the section in view, with their owners -->
+              <div class="think">
+                <h5 id="think-title">Retry timing</h5>
+                <div class="ask"><em>Retry timing</em><br />Ask about this section…</div>
+                <div class="lbl">3 threads on this section</div>
+                <div class="tcard sel" id="k-payday"><span class="face" style="background: var(--maya)">M</span><q>Use the client's pay day?</q><small class="ready">Maya · preview ready</small></div>
+                <div class="msg" id="m1"><b>Claude</b> Retrying on the client's pay day recovers more than a fixed day 3. Preview: retry on pay day, then after 3 and 7 days.</div>
+                <div class="tcard" id="k-stripe"><span class="face" style="background: var(--ken)">K</span><q>Stripe's defaults?</q><small class="busy">Ken · Claude is thinking</small></div>
+                <div class="tcard" id="k-history"><span class="face" style="background: var(--you)">Y</span><q>No payment history?</q><small>You · 2 replies</small></div>
+              </div>
+            </div>
+
+            <div class="status">
+              <span class="ok">Claude Code connected</span>
+              <span>Saved</span>
+              <span class="r"><span id="stat">Synced with 3 teammates</span><span>4 threads · 2 previews</span></span>
+            </div>
           </div>
         </div>
-      </section>
-    </main>
+        <figcaption>
+          <b>Figure 1.</b> Spaces for teams, as it will look in the Mac app. On the map, each thread
+          sits under the section it's about, with the person who started it; teammates' cursors and
+          where each one is working show live. On the page, everyone types in the same file, each
+          with their own caret.
+        </figcaption>
+      </figure>
 
-    <footer>
-      <div class="wrap">
+      <div class="rest">
+        <section>
+          <div class="k">Coming soon</div>
+          <h2>Spaces for teams</h2>
+          <p>
+            Share a space with your teammates. Everyone sees the same map: whose thread is whose,
+            what is being thought through, and which previews are ready to apply. A new teammate
+            reads why each section says what it says, without asking the person who wrote it.
+          </p>
+          <p>Each person still runs their own agent, on their own Mac, signed in themselves.</p>
+        </section>
+        <section id="data">
+          <div class="k">Your data</div>
+          <h2>We don't collect any data.</h2>
+          <p>
+            No analytics, no tracking, no account. Your docs stay as Markdown files in your own
+            folders, and AI runs through your own agent. This site sets no cookies and loads
+            nothing from anywhere else.
+          </p>
+        </section>
+      </div>
+
+      <footer>
         <span>© 2026 hianur</span>
         <span>spaces.hianur.com</span>
-      </div>
-    </footer>
+      </footer>
+    </div>
+
+    <script>
+      (() => {
+        const W = 1180;
+        const app = document.querySelector(".app");
+        const wrap = document.querySelector(".stage-wrap");
+        const fit = () => (app.style.transform = `scale(${wrap.clientWidth / W})`);
+        new ResizeObserver(fit).observe(wrap);
+        fit();
+
+        // Wires from each section or thread to its parent, drawn from the boxes' places.
+        const map = document.getElementById("map");
+        const wires = document.getElementById("wires");
+        const box = (id) => {
+          const el = document.getElementById(id);
+          return { l: el.offsetLeft, t: el.offsetTop, r: el.offsetLeft + el.offsetWidth, m: el.offsetTop + el.offsetHeight / 2, el };
+        };
+        const edges = [
+          ["s-root", "s-problem", ""],
+          ["s-root", "s-who", ""],
+          ["s-root", "s-retry", ""],
+          ["s-root", "s-channel", ""],
+          ["s-root", "s-metric", ""],
+          ["s-retry", "t-payday", "t"],
+          ["s-retry", "t-stripe", "t"],
+          ["s-retry", "t-history", "t"],
+          ["s-channel", "t-sms", "t"],
+          ["s-metric", "t-first", "t new"],
+          ["s-who", "f-persona", "link"],
+        ];
+        const draw = () => {
+          wires.innerHTML = edges
+            .map(([a, b, cls]) => {
+              const p = box(a), c = box(b);
+              const right = c.l >= p.r - 4;
+              const x1 = right ? p.r : p.l, x2 = right ? c.l : c.r;
+              const y1 = p.m, y2 = c.m, dx = (x2 - x1) / 2;
+              const hidden = c.el.classList.contains("hidden") ? ' style="opacity:0"' : "";
+              return `<path class="${cls}"${hidden} d="M${x1} ${y1}C${x1 + dx} ${y1} ${x2 - dx} ${y2} ${x2} ${y2}"/>`;
+            })
+            .join("");
+        };
+        draw();
+        document.fonts?.ready.then(draw);
+
+        // Cursors move to points on the map, given relative to the view.
+        const cur = (id) => document.getElementById(id);
+        const at = (id, x, y) => (cur(id).style.transform = `translate(${x}px, ${y}px)`);
+        const near = (boxId, fx = 0.7, fy = 0.6) => {
+          const b = box(boxId);
+          return [b.l + (b.r - b.l) * fx, b.t + (b.el.offsetHeight) * fy];
+        };
+        const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        const el = (id) => document.getElementById(id);
+        const select = (thr, card) => {
+          document.querySelectorAll(".thr.sel, .tcard.sel").forEach((n) => n.classList.remove("sel"));
+          thr && el(thr).classList.add("sel");
+          card && el(card).classList.add("sel");
+        };
+        const setMode = (mode) => {
+          app.dataset.mode = mode;
+          document.querySelectorAll("[data-seg]").forEach((s) => s.classList.toggle("on", s.dataset.seg === mode));
+          document.querySelectorAll(".modes button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === mode)));
+          document.querySelectorAll(".cur").forEach((c) => (c.style.opacity = mode === "map" ? 1 : 0));
+        };
+
+        // The page: Maya rewrites Retry timing as the preview she applied.
+        const typed = el("typed");
+        const before = "Retry after 1, 3 and 7 days.";
+        const after = "Retry on the client's pay day, then after 3 and 7 days.";
+        let typing;
+        const type = () => {
+          clearInterval(typing);
+          typed.textContent = "Retry ";
+          let i = 6;
+          typing = setInterval(() => {
+            typed.textContent = after.slice(0, ++i);
+            if (i >= after.length) clearInterval(typing);
+          }, 55);
+        };
+
+        const reset = () => {
+          clearInterval(typing);
+          typed.textContent = before;
+          el("t-first").classList.add("hidden");
+          el("t-first-text").textContent = "Count only first retries?";
+          el("sms-dot").style.opacity = 0;
+          el("stat").textContent = "Synced with 3 teammates";
+          select("t-payday", "k-payday");
+          draw();
+          at("c-maya", ...near("s-retry", 0.5, 1.4));
+          at("c-ken", ...near("s-root", 0.4, 1.6));
+          at("c-ana", ...near("s-channel", 0.6, 1.5));
+        };
+
+        // One loop of the story, about 18 seconds.
+        const steps = [
+          [0, () => { setMode("map"); reset(); }],
+          [900, () => at("c-maya", ...near("t-payday", 0.8, 0.7))],
+          [1500, () => at("c-ken", ...near("s-metric", 0.6, 1.4))],
+          [2000, () => select("t-payday", "k-payday")],
+          [2400, () => at("c-ana", ...near("t-sms", 0.6, 0.7))],
+          [3000, () => { el("t-first").classList.remove("hidden"); draw(); at("c-ken", ...near("t-first", 0.85, 0.7)); }],
+          [4200, () => { el("sms-dot").style.opacity = 1; el("stat").textContent = "Ana's preview is ready"; }],
+          [5200, () => { at("c-maya", ...near("t-stripe", 0.5, 0.7)); select("t-stripe", "k-stripe"); }],
+          [6800, () => { at("c-maya", ...near("t-payday", 0.6, 0.7)); select("t-payday", "k-payday"); }],
+          [7600, () => at("c-ana", ...near("s-channel", 0.4, 0.6))],
+          [9200, () => { setMode("page"); el("stat").textContent = "Maya is editing Retry timing"; }],
+          [10000, type],
+          [15800, () => { el("stat").textContent = "Synced with 3 teammates"; }],
+        ];
+        const LOOP = 17500;
+        let timers = [];
+        let manual = false;
+        const run = () => {
+          timers.forEach(clearTimeout);
+          timers = steps.map(([t, f]) => setTimeout(f, t));
+          timers.push(setTimeout(() => !manual && run(), LOOP));
+        };
+
+        document.querySelectorAll(".modes button").forEach((b) =>
+          b.addEventListener("click", () => {
+            manual = true;
+            timers.forEach(clearTimeout);
+            setMode(b.dataset.mode);
+            if (b.dataset.mode === "page") type();
+          }),
+        );
+
+        if (reduce) {
+          setMode("map");
+          reset();
+          el("t-first").classList.remove("hidden");
+          el("sms-dot").style.opacity = 1;
+          draw();
+        } else {
+          // Start the story when the figure is on screen.
+          const io = new IntersectionObserver((es) => {
+            if (es.some((e) => e.isIntersecting)) {
+              io.disconnect();
+              run();
+            }
+          });
+          reset();
+          io.observe(wrap);
+        }
+      })();
+    </script>
   </body>
 </html>
