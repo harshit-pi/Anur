@@ -11,8 +11,8 @@ port.on("message", (e: { data: ToIndex }) => {
   sectionsFor(m.folder, m.plugins, (folder) => {
     port.postMessage({ type: "changed", folder } satisfies FromIndex);
   }).then(
-    (sources) => {
-      port.postMessage({ type: "sections", id: m.id, sources } satisfies FromIndex);
+    (read) => {
+      port.postMessage({ type: "sections", id: m.id, read } satisfies FromIndex);
     },
     (err: unknown) => {
       const reason = err instanceof Error ? err.message : String(err);

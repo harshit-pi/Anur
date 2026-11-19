@@ -6,6 +6,9 @@
  */
 import { readFileSync } from "node:fs";
 
+/** Starts Anur's own questions to the agent, such as naming groups: never a task to report. */
+export const INTERNAL_MARK = "[anur:internal]";
+
 /** Added to each prompt in an opened folder, so the reply ends with its choices. */
 export const CHOICES_ASK =
   'Anur: when you finish this task, if you made choices nobody asked for (a value, a default, a behaviour, a library), end your reply with a line "Choices:" and one short "- " bullet per choice. Leave it out when there were none.';

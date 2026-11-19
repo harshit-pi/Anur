@@ -79,3 +79,16 @@ describe("the review of the system (20.6)", () => {
     expect(parseProposals("no json", known)).toEqual([]);
   });
 });
+
+describe("hidden and confirmed edges (22.3)", () => {
+  it("stay as the person left them, whatever a rescan finds", () => {
+    const s = reviewState([
+      { kind: "edge-hidden", edge: "e1", at },
+      { kind: "edge-hidden", edge: "e2", at },
+      { kind: "edge-shown", edge: "e2", at },
+      { kind: "edge-confirmed", edge: "e3", at },
+    ]);
+    expect([...s.hiddenEdges]).toEqual(["e1"]);
+    expect([...s.confirmedEdges]).toEqual(["e3"]);
+  });
+});
