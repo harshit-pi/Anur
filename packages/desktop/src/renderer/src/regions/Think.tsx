@@ -442,7 +442,15 @@ function Composer({
   onUnattach,
   inserted = null,
   chip = null,
+  queue = [],
+  onQueue,
+  onUnqueue,
 }: {
+  /** Messages sent while the agent works, waiting their turn (as in Claude chat). */
+  queue?: readonly Queued[];
+  /** Given: Enter while busy queues the message instead of doing nothing. */
+  onQueue?: (text: string) => void;
+  onUnqueue?: (i: number) => void;
   /** What a new thread is about, as a chip above the box (Mock: Think scope). */
   chip?: React.ReactNode;
   placeholder: string;
@@ -467,119 +475,206 @@ function Composer({
     setText((t) => (t && !/\s$/.test(t) ? `${t} ${inserted.text}` : t + inserted.text));
     box.current?.focus();
   }, [inserted]);
+  const canQueue = busy && Boolean(onQueue);
   const send = () => {
     const t = text.trim();
-    if (!t || busy || disabled) return;
+    if (!t || disabled) return;
+    if (busy) {
+      if (!onQueue) return;
+      onQueue(t);
+      setText("");
+      return;
+    }
     void onSend(t).then((ok) => {
       if (ok) setText("");
     });
   };
+  const edit = (i: number) => {
+    const q = queue[i];
+    if (!q) return;
+    onUnqueue?.(i);
+    if (q.files.length) onAttach?.(q.files.map((f) => f.path));
+    setText((t) => (t.trim() ? `${t.trimEnd()}\n\n${q.text}` : q.text));
+    box.current?.focus();
+  };
+  const stop = () => {
+    // Stopping takes back what's queued too: it returns to the box, unsent.
+    for (let i = queue.length - 1; i >= 0; i--) edit(i);
+    onStop?.();
+  };
   return (
-    <div className="think-composer">
-      {chip ? <div className="think-scope-row">{chip}</div> : null}
-      {attached.length > 0 ? (
-        <ul className="think-attachments" aria-label="Attached">
-          {attached.map((a) => (
-            <li key={a.path}>
-              <FileCard
-                path={a.path}
-                onRemove={() => {
-                  onUnattach?.(a.path);
-                }}
-              />
-            </li>
+    <>
+      {queue.length > 0 ? (
+        <div className="think-queue" aria-label="Queued messages">
+          <span className="think-queue-label">Queued · sends when this reply is done</span>
+          {queue.map((q, i) => (
+            <div className="think-queued" key={q.id}>
+              <span className="think-queued-actions">
+                <button
+                  type="button"
+                  aria-label="Edit"
+                  title="Edit: back into the box"
+                  onClick={() => {
+                    edit(i);
+                  }}
+                >
+                  <Icon name="edit" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Remove"
+                  title="Remove from the queue"
+                  onClick={() => {
+                    onUnqueue?.(i);
+                  }}
+                >
+                  <Icon name="close" />
+                </button>
+              </span>
+              {q.text}
+              {q.files.length ? (
+                <span className="think-queued-files">{q.files.map((f) => f.name).join(", ")}</span>
+              ) : null}
+            </div>
           ))}
-        </ul>
+        </div>
       ) : null}
-      <textarea
-        ref={box}
-        onPaste={(e) => {
-          // Files copied in Finder paste as attachments; text pastes as text.
-          const files = [...e.clipboardData.files].map((f) => anur.pathOf(f)).filter(Boolean);
-          if (files.length === 0 || !onAttach) return;
-          e.preventDefault();
-          onAttach(files);
-        }}
-        className="think-input"
-        placeholder={placeholder}
-        aria-label={placeholder}
-        value={text}
-        rows={2}
-        disabled={disabled}
-        onChange={(e) => {
-          setText(e.target.value);
-          // Grows with what's typed, up to a point, instead of a resize handle.
-          const el = e.currentTarget;
-          el.style.height = "auto";
-          el.style.height = `${String(Math.min(el.scrollHeight, 220))}px`;
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            send();
-          }
-        }}
-      />
-      <div className="think-composer-foot">
-        {onAttach ? (
-          <button
-            type="button"
-            className="think-attach"
-            aria-label="Attach files or folders"
-            title="Attach files or folders (or drop them here)"
-            disabled={disabled}
-            onClick={() => {
-              onAttach(null);
-            }}
-          >
-            <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
-              <path
-                d="M13.5 7.5 8 13a3.5 3.5 0 0 1-5-5l6-6a2.3 2.3 0 0 1 3.3 3.3L6.4 11.2a1.2 1.2 0 0 1-1.7-1.7L10 4.2"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
+      <div className="think-composer">
+        {chip ? <div className="think-scope-row">{chip}</div> : null}
+        {attached.length > 0 ? (
+          <ul className="think-attachments" aria-label="Attached">
+            {attached.map((a) => (
+              <li key={a.path}>
+                <FileCard
+                  path={a.path}
+                  onRemove={() => {
+                    onUnattach?.(a.path);
+                  }}
+                />
+              </li>
+            ))}
+          </ul>
         ) : null}
-        <div className="think-pickers">{pickers}</div>
-        {busy && onStop ? (
-          <button
-            type="button"
-            className="think-send think-stop"
-            aria-label="Stop"
-            title="Stop (Esc)"
-            onClick={onStop}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
-              <rect x="1" y="1" width="10" height="10" rx="2" fill="currentColor" />
-            </svg>
-          </button>
-        ) : (
-          <button
-            type="button"
-            className={`think-send${text.trim() && !disabled ? " ready" : ""}`}
-            aria-label={sendLabel}
-            title={`${sendLabel} (Enter)`}
-            disabled={disabled || text.trim() === ""}
-            onClick={send}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-              <path
-                d="M7 12V2M2.5 6.5 7 2l4.5 4.5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-        )}
+        <textarea
+          ref={box}
+          onPaste={(e) => {
+            // Files copied in Finder paste as attachments; text pastes as text.
+            const files = [...e.clipboardData.files].map((f) => anur.pathOf(f)).filter(Boolean);
+            if (files.length === 0 || !onAttach) return;
+            e.preventDefault();
+            onAttach(files);
+          }}
+          className="think-input"
+          placeholder={placeholder}
+          aria-label={placeholder}
+          value={text}
+          rows={2}
+          disabled={disabled}
+          onChange={(e) => {
+            setText(e.target.value);
+            // Grows with what's typed, up to a point, instead of a resize handle.
+            const el = e.currentTarget;
+            el.style.height = "auto";
+            el.style.height = `${String(Math.min(el.scrollHeight, 220))}px`;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              send();
+            }
+          }}
+        />
+        <div className="think-composer-foot">
+          {onAttach ? (
+            <button
+              type="button"
+              className="think-attach"
+              aria-label="Attach files or folders"
+              title="Attach files or folders (or drop them here)"
+              disabled={disabled}
+              onClick={() => {
+                onAttach(null);
+              }}
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M13.5 7.5 8 13a3.5 3.5 0 0 1-5-5l6-6a2.3 2.3 0 0 1 3.3 3.3L6.4 11.2a1.2 1.2 0 0 1-1.7-1.7L10 4.2"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          ) : null}
+          <div className="think-pickers">{pickers}</div>
+          {busy && onStop && !(canQueue && text.trim()) ? (
+            <button
+              type="button"
+              className="think-send think-stop"
+              aria-label="Stop"
+              title="Stop (Esc)"
+              onClick={stop}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                <rect x="1" y="1" width="10" height="10" rx="2" fill="currentColor" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={`think-send${text.trim() && !disabled ? " ready" : ""}`}
+              aria-label={canQueue ? "Queue" : sendLabel}
+              title={
+                canQueue ? "Queue: sends when this reply is done (Enter)" : `${sendLabel} (Enter)`
+              }
+              disabled={disabled || text.trim() === ""}
+              onClick={send}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                <path
+                  d="M7 12V2M2.5 6.5 7 2l4.5 4.5"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
       </div>
-    </div>
+    </>
+  );
+}
+
+/** A message waiting for the agent to finish, with the files attached when it was queued. */
+export type Queued = { id: number; text: string; files: Attachment[] };
+
+/** The icons under a reply and on a queued message. */
+function Icon({ name }: { name: "copy" | "copied" | "branch" | "use" | "edit" | "close" }) {
+  const d = {
+    copy: "M10.5 5V3.6A1.6 1.6 0 0 0 8.9 2H3.6A1.6 1.6 0 0 0 2 3.6v5.3A1.6 1.6 0 0 0 3.6 10.5H5M6.6 5h5.3A1.6 1.6 0 0 1 13.5 6.6v5.3a1.6 1.6 0 0 1-1.6 1.6H6.6A1.6 1.6 0 0 1 5 11.9V6.6A1.6 1.6 0 0 1 6.6 5Z",
+    copied: "M3 8.5 6.5 12 13 4.5",
+    branch:
+      "M4.5 5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm0 0v6m0 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Zm7-4a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm0 0c0 2.5-2 3-5.5 4.2",
+    use: "M9.5 2H4.2A1.2 1.2 0 0 0 3 3.2v9.6A1.2 1.2 0 0 0 4.2 14h7.6a1.2 1.2 0 0 0 1.2-1.2V5.5L9.5 2ZM8 7v4.5M5.8 9.3 8 11.5l2.2-2.2",
+    edit: "M10.8 2.7a1.6 1.6 0 0 1 2.3 2.3L6 12.1 3 13l.9-3 6.9-7.3Z",
+    close: "M4 4l8 8M12 4l-8 8",
+  }[name];
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d={d}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -736,6 +831,10 @@ export function Think({
   } | null>(null);
   /** Files and folders waiting in the composer, sent with the next message (10.4). */
   const [attached, setAttached] = useState<Attachment[]>([]);
+  /** Each thread's messages sent while it worked, sent in order once it's done. */
+  const [queued, setQueued] = useState<Record<string, Queued[]>>({});
+  const queuedN = useRef(0);
+  const sendingQueued = useRef(new Set<string>());
   /** A link dropped on the panel goes into the message, as text. */
   const [inserted, setInserted] = useState<{ text: string; n: number } | null>(null);
   const attach = useCallback((paths: string[] | null) => {
@@ -753,6 +852,46 @@ export function Think({
         add(files);
       });
   }, []);
+  /** A reply sent to a thread: shown at once, the thread marked working; false if refused. */
+  const sendReply = async (id: string, message: string, files: readonly Attachment[]) => {
+    setError(null);
+    if (!docPath) return false;
+    const r = await anur.call("thread:send", {
+      thread: id,
+      path: docPath,
+      text: docText(),
+      message,
+      ...(files.length ? { files: files.map((a) => a.path) } : {}),
+    });
+    if (r.kind === "refused") {
+      setError(r.reason);
+      return false;
+    }
+    setThreads((ts) =>
+      ts.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              busy: true,
+              items: [...t.items, { kind: "message", turn: "", role: "person", text: message }],
+            }
+          : t,
+      ),
+    );
+    return true;
+  };
+  // A thread that's done sends the next message queued while it worked.
+  useEffect(() => {
+    for (const t of threads) {
+      const next = queued[t.id]?.[0];
+      if (!next || t.busy || sendingQueued.current.has(t.id)) continue;
+      sendingQueued.current.add(t.id);
+      setQueued((q) => ({ ...q, [t.id]: (q[t.id] ?? []).slice(1) }));
+      void sendReply(t.id, next.text, next.files).finally(() => {
+        sendingQueued.current.delete(t.id);
+      });
+    }
+  }, [threads, queued]);
   const composerAttach = {
     attached,
     inserted,
@@ -1970,36 +2109,28 @@ export function Think({
               if (!thread.id.startsWith("starting:"))
                 void anur.call("thread:stop", { thread: thread.id });
             }}
-            onSend={async (message) => {
-              setError(null);
-              const sent = attached;
-              const r = await anur.call("thread:send", {
-                thread: thread.id,
-                path: docPath,
-                text: docText(),
-                message,
-                ...(sent.length ? { files: sent.map((a) => a.path) } : {}),
-              });
-              if (r.kind === "refused") {
-                setError(r.reason);
-                return false;
-              }
+            queue={queued[thread.id] ?? []}
+            onQueue={(message) => {
+              const files = attached;
               setAttached([]);
-              setThreads((ts) =>
-                ts.map((t) =>
-                  t.id === thread.id
-                    ? {
-                        ...t,
-                        busy: true,
-                        items: [
-                          ...t.items,
-                          { kind: "message", turn: "", role: "person", text: message },
-                        ],
-                      }
-                    : t,
-                ),
-              );
-              return true;
+              setQueued((q) => ({
+                ...q,
+                [thread.id]: [
+                  ...(q[thread.id] ?? []),
+                  { id: ++queuedN.current, text: message, files },
+                ],
+              }));
+            }}
+            onUnqueue={(i) => {
+              setQueued((q) => ({
+                ...q,
+                [thread.id]: (q[thread.id] ?? []).filter((_, j) => j !== i),
+              }));
+            }}
+            onSend={async (message) => {
+              const ok = await sendReply(thread.id, message, attached);
+              if (ok) setAttached([]);
+              return ok;
             }}
           />
         )}
@@ -2851,6 +2982,8 @@ function AgentReply({
       <div className="think-reply-actions">
         <button
           type="button"
+          aria-label={copied ? "Copied" : "Copy"}
+          title={copied ? "Copied" : "Copy"}
           onClick={() => {
             void anur.call("clipboard:write", { text }).then(() => {
               setCopied(true);
@@ -2860,24 +2993,26 @@ function AgentReply({
             });
           }}
         >
-          {copied ? "Copied" : "Copy"}
+          <Icon name={copied ? "copied" : "copy"} />
         </button>
         {onBranch ? (
           <button
             type="button"
-            title="A new thread that knows this chat up to this reply, and nothing after it"
+            aria-label="Branch from here"
+            title="Branch from here: a new thread that knows this chat up to this reply"
             onClick={onBranch}
           >
-            Branch from here
+            <Icon name="branch" />
           </button>
         ) : null}
         {onUse ? (
           <button
             type="button"
-            title="Add this reply at the end of the thread's section; ⌘Z takes it back"
+            aria-label="Use in doc"
+            title="Use in doc: add this reply at the end of the thread's section; ⌘Z takes it back"
             onClick={onUse}
           >
-            Use in doc
+            <Icon name="use" />
           </button>
         ) : null}
       </div>
