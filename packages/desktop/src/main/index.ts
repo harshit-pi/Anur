@@ -31,7 +31,7 @@ import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts
 import { mergeConflict, planConflict } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
-import { findDrawing, sceneOf, withScene } from "./drawings/drawing-file.ts";
+import { emptyDrawing, findDrawing, sceneOf, withScene } from "./drawings/drawing-file.ts";
 import { listDocs } from "./folder/list-docs.ts";
 import { ClaudeSkill, claudeHome } from "./claude-skill/install.ts";
 import { terminalHandler, writeTerminalFile } from "./claude-skill/terminal.ts";
@@ -706,6 +706,33 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const scene = text === null ? null : sceneOf(text, found);
     if (scene === null) return { kind: "failed", reason: `${found} has no drawing in it.` };
     return { kind: "drawing", path: found, scene, editable: folder.mode === "writable" };
+  },
+  "drawing:create": async ({ near, name, scene }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || folder.mode !== "writable")
+      return { kind: "failed", reason: "This folder is read-only." };
+    const dir = near.includes("/") ? near.slice(0, near.lastIndexOf("/") + 1) : "";
+    const base =
+      name
+        .replace(/[\\/:*?"<>|#^[\]]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim() || "Drawing";
+    const taken = new Set(folder.docs.map((d) => d.toLowerCase()));
+    let rel = `${dir}${base}.excalidraw.md`;
+    for (let n = 2; taken.has(rel.toLowerCase()); n++)
+      rel = `${dir}${base} ${String(n)}.excalidraw.md`;
+    const full = path.resolve(folder.path, rel);
+    if (!full.startsWith(path.resolve(folder.path) + path.sep))
+      return { kind: "failed", reason: "That's outside this folder." };
+    try {
+      await writeFile(full, withScene(emptyDrawing(), rel, scene), { flag: "wx" });
+    } catch (e) {
+      return { kind: "failed", reason: (e as Error).message };
+    }
+    const now = await folders.refresh(webContentsId);
+    const win = windows.get(webContentsId);
+    if (win && now) send(win, "folder:changed", now);
+    return { kind: "created", path: rel };
   },
   "drawing:save": async ({ path: rel, scene }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

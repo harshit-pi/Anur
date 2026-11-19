@@ -4,6 +4,8 @@ import type { PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
 import { anur } from "../bridge.ts";
 import { useFeatures } from "../features.ts";
 import { changeSummary } from "../layout/change-summary.ts";
+import { mapSkeleton } from "../layout/map-drawing.ts";
+import "../editor/drawings/assets.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
 
 /**
@@ -162,6 +164,55 @@ export function MapView({
   const userMoved = useRef(false);
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
   /** Naming a new box: where it goes, and its parent when it was drawn from a box. */
+  const [makingDrawing, setMakingDrawing] = useState(false);
+  /** The map as an Excalidraw drawing beside the doc, opened in a tab. */
+  const openAsDrawing = async (newTab: boolean) => {
+    const sameDocLinks = tree.sections.flatMap((s) =>
+      [...new Set(s.linksOut.filter((l) => l.sameDoc).map((l) => l.targetIndex))]
+        .filter((t): t is number => t !== null && t !== s.index)
+        .map((t) => ({ from: idOf(s.index), to: idOf(t) })),
+    );
+    const skeleton = mapSkeleton(
+      boxes.map((b) => ({
+        id: b.id,
+        kind: b.kind,
+        x: b.x,
+        y: b.y,
+        w: b.w,
+        h: b.h,
+        heading: b.kind === "link" ? `→ ${b.heading}` : b.heading,
+        sub: b.sub,
+        parent: b.parent,
+      })),
+      sameDocLinks,
+    );
+    // Excalidraw's own types don't resolve here: the calls used, typed.
+    const ex = (await import("@excalidraw/excalidraw")) as unknown as {
+      convertToExcalidrawElements: (s: unknown[], o: { regenerateIds: boolean }) => unknown[];
+      serializeAsJSON: (e: unknown[], a: Record<string, unknown>, f: unknown, t: "local") => string;
+      exportToSvg: (o: Record<string, unknown>) => Promise<SVGSVGElement>;
+    };
+    // Labels are sized as they're made: draw them once first, so Excalidraw has
+    // its hand-drawn font loaded and measures with it, not a narrower stand-in.
+    // The picture carries Excalifont as a data URL: in the page a moment, the
+    // window has the font, and the labels below are measured with it.
+    const probe = await ex.exportToSvg({
+      elements: ex.convertToExcalidrawElements(skeleton, { regenerateIds: false }),
+      appState: {},
+      files: {},
+    });
+    probe.style.cssText = "position:absolute;left:-10000px;top:0;visibility:hidden";
+    document.body.appendChild(probe);
+    await document.fonts.load('18px "Excalifont"').catch(() => undefined);
+    await document.fonts.ready;
+    probe.remove();
+    const elements = ex.convertToExcalidrawElements(skeleton, { regenerateIds: false });
+    const scene = ex.serializeAsJSON(elements, { viewBackgroundColor: "#ffffff" }, {}, "local");
+    const name = `${(docPath.split("/").pop() ?? docPath).replace(/\.md$/i, "")} - Map`;
+    const r = await anur.call("drawing:create", { near: docPath, name, scene });
+    if (r.kind === "created")
+      window.dispatchEvent(new CustomEvent("anur:open-path", { detail: { path: r.path, newTab } }));
+  };
   /** The section being renamed in its box, by index. */
   const [renaming, setRenaming] = useState<number | null>(null);
   const [adding, setAdding] = useState<{ at: Pos; screen: Pos; parent?: number } | null>(null);
@@ -1338,6 +1389,21 @@ export function MapView({
           }}
         >
           Tidy
+        </button>
+        <button
+          type="button"
+          className="map-tool"
+          title="Make an Excalidraw drawing of this map, to sketch on (⌘-click: open it in a new tab)"
+          disabled={!writable || makingDrawing}
+          onClick={(e) => {
+            const newTab = e.metaKey || e.ctrlKey;
+            setMakingDrawing(true);
+            void openAsDrawing(newTab).finally(() => {
+              setMakingDrawing(false);
+            });
+          }}
+        >
+          Drawing
         </button>
         <span className="map-zoom quiet">{Math.round(v.z * 100)}%</span>
       </div>

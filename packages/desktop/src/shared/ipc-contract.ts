@@ -395,6 +395,20 @@ export const ipcContract = {
       z.object({ kind: z.literal("failed"), reason: z.string() }),
     ]),
   },
+  /** A new drawing beside a doc, named as given (a number added if taken), holding this scene. */
+  "drawing:create": {
+    request: z
+      .object({
+        near: z.string().max(4096),
+        name: z.string().max(200),
+        scene: z.string().max(50_000_000),
+      })
+      .strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("created"), path: z.string() }),
+      z.object({ kind: z.literal("failed"), reason: z.string() }),
+    ]),
+  },
   /** A drawing's new scene, written back in the file's own format. */
   "drawing:save": {
     request: z.object({ path: z.string().max(4096), scene: z.string().max(50_000_000) }).strict(),

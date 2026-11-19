@@ -99,6 +99,28 @@ export function DrawingView({ path }: { path: string }) {
             files: (state.scene.files ?? {}) as never,
             scrollToContent: true,
           }}
+          excalidrawAPI={(api) => {
+            // Labels measured before the hand-drawn font loaded come out clipped:
+            // once it has, measure them again (a drawing from the map, or older files).
+            void (async () => {
+              await document.fonts.load('20px "Excalifont"').catch(() => undefined);
+              await document.fonts.ready;
+              const { restoreElements } = (await import("@excalidraw/excalidraw")) as unknown as {
+                restoreElements: (
+                  e: readonly unknown[],
+                  l: null,
+                  o: { refreshDimensions: boolean },
+                ) => unknown[];
+              };
+              const a = api as unknown as {
+                getSceneElements: () => readonly unknown[];
+                updateScene: (s: { elements: unknown[] }) => void;
+              };
+              a.updateScene({
+                elements: restoreElements(a.getSceneElements(), null, { refreshDimensions: true }),
+              });
+            })();
+          }}
           theme={isDark() ? "dark" : "light"}
           viewModeEnabled={!state.editable}
           onChange={(elements, appState, files) => {
