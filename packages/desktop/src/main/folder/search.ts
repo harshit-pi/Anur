@@ -1,6 +1,6 @@
 import { readFile, stat, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { normalizeDocPath } from "@anur/core";
+import { normalizeDocPath, withCreatedProperties, type CreatedProperties } from "@anur/core";
 import type { FolderState } from "../../shared/ipc-contract.ts";
 
 /**
@@ -105,6 +105,8 @@ export async function searchFolder(
 export async function createDoc(
   folder: FolderState,
   requested: string,
+  /** Who made it and when, as the doc's properties (people); none, as for a test. */
+  created: CreatedProperties | null = null,
 ): Promise<{ kind: "created"; path: string } | { kind: "failed"; reason: string }> {
   if (folder.mode !== "writable") return { kind: "failed", reason: "This folder is read-only." };
   let rel: string;
@@ -129,7 +131,8 @@ export async function createDoc(
   const title = path.basename(rel).replace(/\.md$/i, "");
   try {
     await mkdir(path.dirname(full), { recursive: true });
-    await writeFile(full, `# ${title}\n\n`, { flag: "wx" });
+    const text = `# ${title}\n\n`;
+    await writeFile(full, created ? withCreatedProperties(text, created) : text, { flag: "wx" });
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
     return {

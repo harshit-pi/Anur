@@ -27,6 +27,8 @@ import {
   DocId,
   decisionWordingProblem,
   scopeFromWords,
+  withCreatedProperties,
+  type CreatedProperties,
   type PreviewPart,
   type KnownThreadLine,
   type SectionId,
@@ -208,6 +210,8 @@ export type ThreadDeps = {
   liveParts?: () => ReadonlySet<string> | null;
   /** Who uses each device, and this person's own name, to show who started others' threads. */
   people?: () => Promise<{ me: string | null; byDevice: ReadonlyMap<string, string> }>;
+  /** Who made a new doc and when, as its properties (people); none leaves it as written. */
+  createdBy?: () => Promise<CreatedProperties>;
   /** Plugins switched on for this folder (group 19): their IDs, for the MCP server, and their context lines. */
   plugins?: {
     ids: () => string[];
@@ -1568,8 +1572,7 @@ export class Threads {
       if (decided === null) {
         // A doc the agent made (15.6): nothing to propose against, so it's
         // kept in the folder as made, and noted in the thread with Undo.
-        await this.keepCreated(thread, live, rel, copy);
-        live.merged.set(rel, copy);
+        live.merged.set(rel, await this.keepCreated(thread, live, rel, copy));
         continue;
       }
       const start = own ? (live.copyStart ?? decided) : decided;
@@ -3236,13 +3239,25 @@ export class Threads {
     };
   }
 
-  /** A new doc from the agent's working copies, written into the folder once. */
-  private async keepCreated(thread: string, live: Live, rel: string, text: string): Promise<void> {
-    if (live.created?.has(rel)) return;
+  /**
+   * A new doc from the agent's working copies, written into the folder once,
+   * with who made it and when as its properties; its copy gets them too, so a
+   * later edit by the agent keeps them. Returns what was written.
+   */
+  private async keepCreated(
+    thread: string,
+    live: Live,
+    rel: string,
+    written: string,
+  ): Promise<string> {
+    if (live.created?.has(rel)) return written;
     const full = path.join(this.d.folder, rel);
     if (!full.startsWith(this.d.folder + path.sep) || rel.split("/").some((p) => p.startsWith(".")))
-      return;
-    if ((await readFile(full, "utf8").catch(() => null)) !== null) return;
+      return written;
+    if ((await readFile(full, "utf8").catch(() => null)) !== null) return written;
+    const by = await this.d.createdBy?.().catch(() => null);
+    const text = by ? withCreatedProperties(written, by) : written;
+    if (text !== written) await writeFile(path.join(this.copiesOf(thread), rel), text);
     await mkdir(path.dirname(full), { recursive: true });
     this.ownWrite(rel, text);
     await writeFileAtomic(full, text);
@@ -3251,6 +3266,7 @@ export class Threads {
     (live.created ??= new Map()).set(rel, undo);
     await this.append(live.doc, thread, { kind: "created", doc: rel, undo });
     this.d.filesChanged?.();
+    return text;
   }
 
   private async reviseCreated(undo: string, rel: string, text: string, live: Live): Promise<void> {

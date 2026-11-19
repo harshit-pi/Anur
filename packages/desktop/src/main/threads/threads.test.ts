@@ -848,6 +848,29 @@ describe("Threads", () => {
     expect(await readdir(folder)).not.toContain("FAQ.md");
   });
 
+  it("gives a doc the agent makes its owner and day, kept through the agent's later edits", async () => {
+    const {
+      folder,
+      support,
+      threads: t,
+      reply,
+    } = await setup({
+      createdBy: () => Promise.resolve({ owner: "harshit-pi", created: "2026-11-19" }),
+    });
+    const r = await t.start("plan.md", DOC, risks, "-", undefined, [], "build");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const copies = path.join(support, "agent", "copies", r.thread.id);
+    await writeFile(path.join(copies, "FAQ.md"), "# FAQ\n");
+    await reply(r.thread.id, "Made FAQ.md.");
+    const made = "---\nowner: [harshit-pi]\ncreated: 2026-11-19\n---\n\n# FAQ\n";
+    expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe(made);
+    // Its copy has them too, so the agent's next edit keeps them.
+    expect(await readFile(path.join(copies, "FAQ.md"), "utf8")).toBe(made);
+    await writeFile(path.join(copies, "FAQ.md"), `${made}\nOne question.\n`);
+    await new Promise((res) => setTimeout(res, 1500));
+    expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe(`${made}\nOne question.\n`);
+  });
+
   it("shows nothing for a doc changed outside Anur during the turn", async () => {
     const { folder, threads: t, reply } = await setup();
     await writeFile(path.join(folder, "plan.md"), DOC);

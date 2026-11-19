@@ -280,6 +280,11 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - A thread on the whole folder hangs on a virtual doc, as the system map's do (29.1): one section, the folder, whose text lists the folder's docs. It runs in the folder, has no working copy of its own, edits other docs through the same working copies any thread uses, and a decision kept in it is kept for the whole folder.
 - Under the section's own threads, Recent lists every thread in the folder newest first, each with where it lives, so a thread never seems to vanish when the cursor moves. A click opens it where it lives: this doc, another doc, or the folder. Page/Home tabs were mocked and passed over: a second place to learn, and threads would still hide by where they live.
 
+## People, and who owns a doc
+
+- One person across their Macs: each device writes `.anur/people/<device>.json` (its person's handle, name and the time), committed with the folder, so a teammate's clone knows every name. The handle is the same key as their decisions file: GitHub login, else their email's hash. People with one handle are one person, named as they last set it on any Mac. Names used to live only in `.anur/open/<device>.json`, which stays on each Mac (18.10), so a teammate's clone lost them; a test now clones a committed folder and checks the names arrive.
+- A doc Anur creates (New doc, `/anur doc`, a doc an agent makes in a thread) gets `owner: [<handle>]` and `created: <day>` as properties, once, at creation. Keys a doc already has are kept, and docs made elsewhere are never given any. The file keeps the handle, which never changes; the page shows the name. Editing `owner` suggests the folder's other people, by name, and adds their handle.
+
 ## The carry eval (18.7)
 
 - `pnpm eval:carry [runs] [--no-model]` (`evals/carry/`): a workspace with two repos and 200 committed decisions and findings, and a thread on `docs/plan.md › Pricing`. 100 reach that section; the other 100 are on other sections, docs, folders and repos, lapsed, dropped, replaced, on a section that's gone, or lines that aren't decisions. It runs Anur's own reader and bundle, then twelve questions through Claude Code, scored by script.

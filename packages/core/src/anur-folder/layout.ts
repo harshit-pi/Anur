@@ -46,6 +46,8 @@ export const anurPaths = {
   decisions: (person: string) => `decisions/${seg("person", person)}.jsonl`,
   ignore: () => ".ignore",
   open: (device: string) => `open/${seg("device", device)}.json`,
+  /** Who uses a device: their handle and name, committed so teammates see names (people). */
+  person: (device: string) => `people/${seg("device", device)}.json`,
   settings: (device: string) => `settings/${seg("device", device)}.json`,
   snapshot: (hash: string) => `snapshots/${seg("hash", hash)}`,
   deletedSnapshots: (device: string) => `snapshots/deleted/${seg("device", device)}.jsonl`,

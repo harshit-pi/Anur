@@ -3,6 +3,7 @@ import path from "node:path";
 import { ANUR_DIR, anurPaths } from "@anur/core";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { IMAGE_TYPES } from "./images.ts";
+import { namesByDevice } from "./people.ts";
 import { readFile } from "../../vault/anur-copy.ts";
 
 /**
@@ -61,10 +62,14 @@ export async function noteName(folder: string, device: string, name: string | nu
   await writeFileAtomic(file, `${JSON.stringify({ ...note, name })}\n`);
 }
 
-/** Each device's person, by device ID, from every device's note. */
+/**
+ * Each device's person, by device ID: from `.anur/people/`, committed, so a
+ * teammate's clone has them; a device that only ever wrote its name in its
+ * `open/` note, before people notes, is read from there on this Mac.
+ */
 export async function namesOf(folder: string): Promise<Map<string, string>> {
-  const dir = path.join(folder, ANUR_DIR, "open");
   const out = new Map<string, string>();
+  const dir = path.join(folder, ANUR_DIR, "open");
   for (const n of await readdir(dir).catch(() => [] as string[])) {
     if (!n.endsWith(".json")) continue;
     try {
@@ -74,6 +79,7 @@ export async function namesOf(folder: string): Promise<Map<string, string>> {
       // A note being synced: its device shows without a name for now.
     }
   }
+  for (const [device, name] of await namesByDevice(folder)) out.set(device, name);
   return out;
 }
 
