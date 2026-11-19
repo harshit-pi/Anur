@@ -7,6 +7,7 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 - [`docs/decisions.md`](docs/decisions.md): the engineering decisions made so far, each with why.
 - [`docs/patterns.md`](docs/patterns.md): how things are done here: IPC channels, changing the doc, widgets, the agent layer, checking a change in the real app, tests, and gotchas.
 - [`docs/thread-context.md`](docs/thread-context.md): what a thread's agent sees and must never see (`.anur/`, other threads' working copies), and how the hook holds it; read it before changing the bundle, the hook, working copies or MCP tools.
+- [`docs/anur-folder.md`](docs/anur-folder.md): vaults, homes and `.anur/`, which are three different things; what each file in `.anur/` is and whether it's committed. Read it before changing how folders open, what's committed, or what a plugin acts on. A `.anur/` never by itself means a vault.
 - [`docs/maps.md`](docs/maps.md): what the doc map and the system map draw, what each mark means, and what they leave out; read it before changing either map.
 - [`docs/what-anur-reads.md`](docs/what-anur-reads.md): every language, framework and file the engineering plugin reads, and what it doesn't yet; check it before calling a miss a bug.
 - Before changing what gets kept as a decision, read "What counts as a decision" in `docs/decisions.md`: a decision is what a person said should hold, or their correction of the agent; never a pick (the page holds it) or the agent's own assumption.

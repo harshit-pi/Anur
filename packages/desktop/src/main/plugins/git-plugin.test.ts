@@ -45,6 +45,11 @@ function open(folder: string, name: string, values: Record<string, string | bool
   return { plugin, act, statuses, changed: () => changed, settings };
 }
 const settle = () => new Promise((r) => setTimeout(r, 1500));
+/** Waits until `ok` holds, for slow machines and busy test runs; up to 15 s. */
+async function until(ok: () => boolean) {
+  for (let waited = 0; !ok() && waited < 15_000; waited += 100)
+    await new Promise((r) => setTimeout(r, 100));
+}
 
 describe("the Git plugin", () => {
   it("names a repo and a commit as a person reads them", () => {
@@ -115,6 +120,29 @@ describe("the Git plugin", () => {
       "just now",
     );
   }, 60_000);
+
+  it("never makes a vault that holds repos into a repo, nor syncs one inside another repo", async () => {
+    // ~/workspace with a code repo inside: Git leaves it alone.
+    const workspace = temp("anur-git-holds-");
+    mkdirSync(path.join(workspace, "api"));
+    git(path.join(workspace, "api"), "init", "-q");
+    const a = open(workspace, "Sam");
+    await until(() => a.statuses.at(-1)?.text === "Holds repos");
+    expect(existsSync(path.join(workspace, ".git"))).toBe(false);
+    expect(a.statuses.at(-1)).toMatchObject({ text: "Holds repos", tone: "warn" });
+    expect(await a.act("createRepo")).toMatch(/holds repos, so Git won't make it one/);
+    // A vault inside a repo: no commit lands in the repo around it.
+    const outer = temp("anur-git-outer-");
+    git(outer, "init", "-q");
+    const inner = path.join(outer, "docs");
+    mkdirSync(inner);
+    writeFileSync(path.join(inner, "plan.md"), "# Plan\n");
+    const b = open(inner, "Sam");
+    await until(() => b.statuses.at(-1)?.text === "In another repo");
+    expect(b.statuses.at(-1)).toMatchObject({ text: "In another repo" });
+    expect(await b.act("syncNow")).toMatch(/inside the repo at/);
+    expect(() => git(outer, "log", "-1")).toThrow();
+  });
 
   it("waits in iCloud Drive until the person says to go ahead", async () => {
     const folder = path.join(temp("anur-git-icloud-"), "Library", "Mobile Documents", "docs");

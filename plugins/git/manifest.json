@@ -2,7 +2,7 @@
   "id": "git",
   "name": "Git",
   "what": "Put this folder on GitHub and keep it in sync, so teammates see the same docs, threads and decisions.",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "apiVersion": 1,
   "kind": "standard",
   "settings": [

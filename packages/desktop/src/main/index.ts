@@ -108,6 +108,7 @@ import { loadDeviceId } from "../device/device-id.ts";
 import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
 import { readRecent } from "./folder/recent.ts";
+import { onGitHub, vaultsIn } from "./folder/vaults.ts";
 import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
 import { buildMenu } from "./menu.ts";
@@ -914,6 +915,14 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
     }
     folderWatch.start(target.webContents.id, outcome.folder.path);
     if (outcome.folder.mode === "writable") void plugins.startFolder(outcome.folder.path);
+    // Asked for a folder inside a vault: the vault opened; say so once, once the page listens.
+    if (outcome.inside) {
+      const text = `${path.basename(outcome.inside)} is part of the ${outcome.folder.name} vault, opened there.`;
+      const shown = target;
+      void whenLoaded(shown).then(() => {
+        send(shown, "app:notice", { text });
+      });
+    }
     target.setTitle(outcome.folder.name);
     target.setRepresentedFilename(outcome.folder.path);
     send(target, "folder:changed", outcome.folder);
@@ -1658,6 +1667,22 @@ const handlers: { [C in Channel]: Handler<C> } = {
     // The plugin it came from is on for it at once, so it syncs from the start.
     if (opened) await plugins.setOn(opened, plugin, true).catch(() => undefined);
     return { error: outcome.kind === "opened" ? null : "Anur couldn't open the cloned folder." };
+  },
+  "vaults:list": async () => {
+    const roots = await vaultsIn(await readRecent(app.getPath("userData")).catch(() => []));
+    return {
+      vaults: await Promise.all(
+        roots.map(async (p) => ({ path: p, name: path.basename(p), github: await onGitHub(p) })),
+      ),
+    };
+  },
+  "vaults:open": async ({ path: at }, { webContentsId }) => {
+    const win = windows.get(webContentsId);
+    if (!win) return { error: "The window closed." };
+    const outcome = await openFolderIn(win, at);
+    if (outcome.kind === "refused") return { error: outcome.reason };
+    if (outcome.kind === "elsewhere") windows.get(outcome.windowId)?.focus();
+    return { error: null };
   },
   "people:list": async (_, { webContentsId }) => {
     const folder = folders.current(webContentsId);

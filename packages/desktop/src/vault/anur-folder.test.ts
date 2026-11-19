@@ -30,7 +30,7 @@ describe("opening .anur/", () => {
     expect(opened).toMatchObject({ mode: "writable", format: 1, created: true });
     expect(JSON.parse(read("format.json"))).toEqual({ format: 1 });
     expect(read(".gitignore")).toBe(
-      "# Kept on each Mac, never committed\nopen/\nsystem/last-read.json\n",
+      "# Kept on each Mac, never committed\nopen/\nsystem/last-read.json\nvault.json\n",
     );
     expect(read(".gitattributes")).toBe("** linguist-generated=true\n");
     expect(read(".ignore")).toBe("*\n");
@@ -57,12 +57,12 @@ describe("opening .anur/", () => {
     writeFileSync(anur(".gitattributes"), "*.jsonl -diff\n");
     await openAnurFolder(root);
     expect(read(".gitignore")).toBe(
-      "scratch/\n# Kept on each Mac, never committed\nopen/\nsystem/last-read.json\n",
+      "scratch/\n# Kept on each Mac, never committed\nopen/\nsystem/last-read.json\nvault.json\n",
     );
     expect(read(".gitattributes")).toBe("*.jsonl -diff\n");
     await openAnurFolder(root);
     expect(read(".gitignore")).toBe(
-      "scratch/\n# Kept on each Mac, never committed\nopen/\nsystem/last-read.json\n",
+      "scratch/\n# Kept on each Mac, never committed\nopen/\nsystem/last-read.json\nvault.json\n",
     );
   });
 

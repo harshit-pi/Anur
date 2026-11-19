@@ -122,6 +122,15 @@ export function App() {
   const [sections, setSections] = useState<SectionTree | null>(null);
   /** The section the cursor is in, by index: what the Think panel is about. */
   const [cursorSection, setCursorSection] = useState(0);
+  /** "Launch is part of the anur-product vault, opened there." (vaults) */
+  const [vaultNotice, setVaultNotice] = useState<string | null>(null);
+  useEffect(
+    () =>
+      anur.on("app:notice", ({ text }) => {
+        setVaultNotice(text);
+      }),
+    [],
+  );
   /** What a new thread in Think is about: this section, this doc, or the whole folder. */
   const [scope, setScope] = useState<Scope>("section");
   /** The section the outline marks: the cursor's, the map's pick, or the one scrolled to. */
@@ -1270,6 +1279,8 @@ export function App() {
       />
       <LeftSidebar
         folder={shown}
+        onNewVault={newFolder}
+        onOpenFolder={openFolder}
         system={
           engineeringOn
             ? {
@@ -1362,6 +1373,7 @@ export function App() {
         opening={opening}
         docNote={doc?.note ?? null}
         docError={docError ?? save.detail}
+        vaultNotice={vaultNotice}
         onOpenFolder={openFolder}
         onNewFolder={newFolder}
         onFirstDoc={firstDoc}
@@ -1407,7 +1419,7 @@ export function App() {
               request={threadRequest}
               onJump={jumpTo}
               page={wholeFolder ? () => null : pageView}
-              noun={wholeFolder ? "folder" : scope === "doc" ? "doc" : "section"}
+              noun={wholeFolder ? "vault" : scope === "doc" ? "doc" : "section"}
               scope={
                 folder
                   ? {

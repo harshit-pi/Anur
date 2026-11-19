@@ -6,6 +6,7 @@ import { AGENTS } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { FileTree, type FileActions, type MakeRequest } from "./FileTree.tsx";
 import { OpenFromButtons, PluginStatusItem, usePluginStatuses } from "./PluginUI.tsx";
+import { VaultList, VaultSwitcher } from "./Vaults.tsx";
 import { NoticeBar } from "./NoticeBar.tsx";
 import { SORTS, type Sort } from "../layout/file-tree.ts";
 import {
@@ -130,6 +131,8 @@ export function LeftSidebar({
   makeDoc = 0,
   outline = null,
   system = null,
+  onNewVault,
+  onOpenFolder: onOpenVaultFolder,
 }: {
   /** The folder's system map, when Engineering is on: a row above the files. */
   system?: {
@@ -155,6 +158,9 @@ export function LeftSidebar({
   notice?: FileNotice | null;
   /** Bumped to start a new doc, as an empty folder's page asks. */
   makeDoc?: number;
+  /** The vault switcher's New vault and Open folder as vault. */
+  onNewVault?: () => void;
+  onOpenFolder?: () => void;
 }) {
   const [collapse, setCollapse] = useState(0);
   // The repos a system found sit under Repos, closed until opened: code
@@ -217,9 +223,8 @@ export function LeftSidebar({
   return (
     <aside className="left-sidebar" aria-label="Files" hidden={hidden}>
       <div className="sidebar-head">
-        <p className="sidebar-title truncate" title={folder.path}>
-          {folder.name}
-        </p>
+        {/* The vault's name sits at the foot, in its switcher (Vaults mock). */}
+        <span className="sidebar-title" />
         {editable ? (
           <>
             <button
@@ -371,6 +376,12 @@ export function LeftSidebar({
         <p className="quiet">This folder has more files than Anur lists; some are left out.</p>
       ) : null}
       {outline}
+      <VaultSwitcher
+        name={folder.name}
+        path={folder.path}
+        onNewVault={() => onNewVault?.()}
+        onOpenFolder={() => onOpenVaultFolder?.()}
+      />
     </aside>
   );
 }
@@ -443,6 +454,7 @@ export function Center({
   opening,
   docNote,
   docError,
+  vaultNotice = null,
   onOpenFolder,
   onNewFolder,
   onFirstDoc,
@@ -471,6 +483,8 @@ export function Center({
   opening: string | null;
   docNote: string | null;
   docError: string | null;
+  /** A note about the vault, shown once: a folder asked for opened as part of its vault. */
+  vaultNotice?: string | null;
   onOpenFolder: () => void;
   onNewFolder: () => void;
   /** Start the first doc in an empty folder. */
@@ -598,6 +612,16 @@ export function Center({
           {docNote}
         </NoticeBar>
       ) : null}
+      {vaultNotice && !closedNow.has(vaultNotice) ? (
+        <NoticeBar
+          tone="info"
+          onClose={() => {
+            close(vaultNotice);
+          }}
+        >
+          {vaultNotice}
+        </NoticeBar>
+      ) : null}
       {docError && !closedNow.has(docError) ? (
         <NoticeBar
           tone="warn"
@@ -639,24 +663,25 @@ export function Center({
         </div>
       ) : (
         <div className="page-empty">
-          <h1>Start with a folder</h1>
+          <h1>Open a vault</h1>
           <p>
             Think beside your docs with your own agent. Each section gets its own threads, which
             start from that section, the rules it links to and what earlier threads settled.
           </p>
           <p>
-            Make a new folder, or open one you already have. Your docs stay plain Markdown files
-            that open in any editor.
+            A vault is a folder of Markdown docs you work in and share, with what Anur keeps about
+            them inside it. Your docs stay plain files that open in any editor.
           </p>
           <div className="page-empty-buttons">
             <button className="primary-button" type="button" onClick={onNewFolder}>
-              New folder
+              New vault
             </button>
             <button className="secondary-button" type="button" onClick={onOpenFolder}>
-              Open folder <span className="kbd">⌘O</span>
+              Open folder as vault <span className="kbd">⌘O</span>
             </button>
             <OpenFromButtons />
           </div>
+          <VaultList />
         </div>
       )}
     </main>
