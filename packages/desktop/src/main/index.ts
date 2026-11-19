@@ -8,7 +8,7 @@ import {
   boxCounts,
 } from "./threads/system-doc.ts";
 import { chmodSync, mkdtempSync, mkdirSync } from "node:fs";
-import { readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -2263,12 +2263,35 @@ const whenLoaded = (win: BrowserWindow) =>
 /** A Markdown file opened from Finder: open the folder it belongs to, then the doc. */
 async function openMarkdownFile(chosen: string) {
   const file = await realpath(chosen).catch(() => chosen);
+  // A folder handed over by macOS opens as the folder, in a window of its own
+  // unless one already has it.
+  if (
+    await stat(file).then(
+      (s) => s.isDirectory(),
+      () => false,
+    )
+  ) {
+    const id = folders.windowFor(file);
+    const open = id === null ? undefined : windows.get(id);
+    if (open) {
+      if (open.isMinimized()) open.restore();
+      open.focus();
+      return;
+    }
+    const win = focusedOrNew();
+    await whenLoaded(win);
+    await openFolderIn(win, file);
+    return;
+  }
   const open = [...windows.keys()].flatMap((id) => folders.current(id)?.path ?? []);
   const recent = await readRecent(app.getPath("userData")).catch(() => []);
   const folder = await folderFor(file, open, recent, homedir());
   const id = folders.windowFor(folder);
   let target = id === null ? undefined : windows.get(id);
+  /** The folder was opened just now: its page needs a moment before it can open a doc. */
+  let fresh = false;
   if (!target) {
+    fresh = true;
     const win = focusedOrNew();
     await whenLoaded(win);
     const outcome = await openFolderIn(win, folder);
@@ -2283,6 +2306,14 @@ async function openMarkdownFile(chosen: string) {
   const root = target ? folders.current(target.webContents.id)?.path : undefined;
   if (!target || !root) return;
   await whenLoaded(target);
+  // A file made a moment ago, as one saved and opened at once, isn't in the
+  // folder's list until it's read again: read it now, so the doc opens.
+  const now = await folders.refresh(target.webContents.id);
+  if (now) send(target, "folder:changed", now);
+  if (fresh)
+    await new Promise((resolve) => {
+      setTimeout(resolve, 800);
+    });
   if (target.isMinimized()) target.restore();
   target.focus();
   const rel = path.relative(root, file).split(path.sep).join("/");

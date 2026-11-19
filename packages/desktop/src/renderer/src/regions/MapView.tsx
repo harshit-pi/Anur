@@ -619,10 +619,32 @@ export function MapView({
   // itself again, unless the person has panned or zoomed it.
   const count = boxes.length;
   const lastCount = useRef(count);
+  const lastIds = useRef(new Set(boxes.map((b) => b.id)));
   useEffect(() => {
+    const fresh = boxes.filter((b) => !lastIds.current.has(b.id));
+    lastIds.current = new Set(boxes.map((b) => b.id));
     // Only a map already framed is framed again: while the first fit is
     // pending, clearing the view here would undo it in the same commit.
-    if (count > lastCount.current && !userMoved.current && view !== null) setView(null);
+    if (count > lastCount.current && view !== null) {
+      const el = host.current;
+      const r = el?.getBoundingClientRect();
+      // After a pan the map holds still, unless every new box landed out of
+      // sight, as a whole new outline does: then it fits again.
+      const unseen =
+        !!r &&
+        fresh.length > 0 &&
+        fresh.every((b) => {
+          const left = (b.x + b.w / 2) * view.z + view.x;
+          const right = (b.x - b.w / 2) * view.z + view.x;
+          const top = (b.y + b.h / 2) * view.z + view.y;
+          const bottom = (b.y - b.h / 2) * view.z + view.y;
+          return left < 0 || right > r.width || top < 0 || bottom > r.height;
+        });
+      if (!userMoved.current || unseen) {
+        userMoved.current = false;
+        setView(null);
+      }
+    }
     lastCount.current = count;
   }, [count]);
 
@@ -851,6 +873,12 @@ export function MapView({
       window.dispatchEvent(
         new CustomEvent("anur:open-thread", { detail: { thread: b.thread.id } }),
       );
+      // An option: its card in the thread, once the thread has drawn.
+      const option = b.kind === "option" ? b.option?.id : undefined;
+      if (option)
+        window.setTimeout(() => {
+          window.dispatchEvent(new CustomEvent("anur:show-option", { detail: { option } }));
+        }, 250);
       return;
     }
     onSelect(b.index);

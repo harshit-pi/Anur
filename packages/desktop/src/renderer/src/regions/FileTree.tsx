@@ -191,9 +191,20 @@ export function FileTree({
   makeNow.current = make;
   const focusedNow = useRef(focused);
   focusedNow.current = focused;
+  const listed = useRef<{ docs: readonly string[]; files: readonly string[] }>({ docs, files: [] });
+  listed.current = { docs, files };
   useEffect(() => {
     if (!request) return;
-    const at = focusedNow.current;
+    // Only a row of this folder counts: a task report or the system map has
+    // a tab path that is no file, and its "folder" must never be made.
+    const was = focusedNow.current;
+    const at =
+      was !== null &&
+      (folderSet.has(was) ||
+        listed.current.docs.includes(was) ||
+        listed.current.files.includes(was))
+        ? was
+        : null;
     void makeNow.current(request.kind, folderOf(at, at !== null && folderSet.has(at)));
     // Only a new request: a changed folder list must not make another.
   }, [request]);

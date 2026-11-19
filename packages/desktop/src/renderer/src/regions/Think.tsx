@@ -605,6 +605,26 @@ export function Think({
   onJump: (index: number) => void;
 }) {
   const features = useFeatures();
+  // An option picked on the map: its card in the open thread comes into view,
+  // marked for a moment, so Use this is one click away.
+  useEffect(() => {
+    const onOption = (e: Event) => {
+      const { option } = (e as CustomEvent<{ option: string }>).detail;
+      const card = document.querySelector<HTMLElement>(
+        `.think-offer[data-option="${CSS.escape(option)}"]`,
+      );
+      if (!card) return;
+      card.scrollIntoView({ block: "center", behavior: "smooth" });
+      card.classList.add("flash");
+      window.setTimeout(() => {
+        card.classList.remove("flash");
+      }, 1600);
+    };
+    window.addEventListener("anur:show-option", onOption);
+    return () => {
+      window.removeEventListener("anur:show-option", onOption);
+    };
+  }, []);
   const { threads, setThreads, prompts, setPrompts, reload, loading } = useThreads(
     docPath,
     docText,
@@ -1324,6 +1344,7 @@ export function Think({
                   {item.options.map((o) => (
                     <div
                       key={o.id}
+                      data-option={o.id}
                       className={`think-offer${item.used === o.id ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
                     >
                       <div className="think-offer-head">
