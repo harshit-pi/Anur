@@ -192,5 +192,6 @@ export {
   sectionScope,
   type CommittedEntry,
 } from "./decisions/committed.ts";
+export { BLOCK_BEGIN, BLOCK_END, renderBlock, withBlock } from "./decisions/claude-md.ts";
 export * from "./plugins/api.ts";
 export { PluginHost, PluginRefused } from "./plugins/host.ts";
