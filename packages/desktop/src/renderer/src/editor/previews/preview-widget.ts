@@ -18,6 +18,7 @@ import type { PreviewView } from "../../../../shared/ipc-contract.ts";
 import { inlineRuns } from "../../layout/inline-markdown.ts";
 import { UNSAVED_EDIT } from "../../../../shared/agents.ts";
 import { pagePath } from "../bases/base-widget.ts";
+import { cellText, parseTable } from "../table/table-model.ts";
 
 /**
  * A preview in place (task 3.8; Mock 5): under the section's heading, a
@@ -347,11 +348,46 @@ function drawChanges(el: HTMLElement, part: PreviewPart, reject: (i: number) => 
   });
 }
 
-/** The proposed text, drawn as the page draws it: headings, lists and inline styles. */
+const DELIMITER = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+
+/** A Markdown table, drawn as the page draws one, scrolling sideways when wide. */
+function drawTable(el: HTMLElement, rows: string[]) {
+  const t = parseTable(rows.join("\n"));
+  if (!t) return;
+  const wrap = document.createElement("div");
+  wrap.className = "cm-preview-table-wrap";
+  const table = document.createElement("table");
+  table.className = "cm-preview-table";
+  t.rows.forEach((row, r) => {
+    const tr = document.createElement("tr");
+    row.cells.forEach((cell, c) => {
+      const td = document.createElement(r === 0 ? "th" : "td");
+      const align = t.align[c];
+      if (align) td.style.textAlign = align;
+      inline(td, cellText(cell));
+      tr.append(td);
+    });
+    table.append(tr);
+  });
+  wrap.append(table);
+  el.append(wrap);
+}
+
+/** The proposed text, drawn as the page draws it: headings, lists, tables and inline styles. */
 function drawMarkdown(el: HTMLElement, text: string) {
   for (const block of text.split(/\n{2,}/)) {
     if (!block.trim()) continue;
     const lines = block.split("\n");
+    // A table anywhere in the block: the lines around it are drawn on their own.
+    const at = lines.findIndex((l, i) => l.includes("|") && DELIMITER.test(lines[i + 1] ?? ""));
+    if (at >= 0) {
+      let end = at + 2;
+      while (end < lines.length && (lines[end] ?? "").includes("|")) end++;
+      if (at > 0) drawMarkdown(el, lines.slice(0, at).join("\n"));
+      drawTable(el, lines.slice(at, end));
+      if (end < lines.length) drawMarkdown(el, lines.slice(end).join("\n"));
+      continue;
+    }
     const heading = /^(#{1,6})\s/.exec(block);
     if (heading) {
       const h = document.createElement("div");
@@ -424,6 +460,21 @@ const previewTheme = EditorView.baseTheme({
   },
   ".cm-preview-content p": { margin: "0 0 10px" },
   ".cm-preview-content ul": { margin: "0 0 10px", paddingLeft: "22px" },
+  ".cm-preview-table-wrap": { overflowX: "auto", margin: "0 0 10px" },
+  ".cm-preview-table": {
+    borderCollapse: "collapse",
+    fontSize: "15px",
+    lineHeight: "1.45",
+    minWidth: "60%",
+  },
+  ".cm-preview-table th, .cm-preview-table td": {
+    border: "1px solid var(--rule)",
+    padding: "6px 10px",
+    textAlign: "left",
+    verticalAlign: "top",
+    background: "var(--sheet)",
+  },
+  ".cm-preview-table th": { fontWeight: "650", backgroundColor: "var(--hover)" },
   ".cm-preview-h": { fontWeight: "650", margin: "6px 0 8px" },
   ".cm-preview-h3": { fontSize: "1.1em" },
   ".cm-preview-content .md-bold": { fontWeight: "650" },
