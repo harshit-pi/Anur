@@ -1101,7 +1101,7 @@ export function Think({
   const useOption = (
     t: ThreadView,
     option: { id: string; title: string; text: string },
-    how: "replace" | "subsection",
+    how: "replace" | "subsection" | "also",
     heading: string | null = null,
   ) => {
     const main = page();
@@ -1114,7 +1114,8 @@ export function Think({
     // into the one already there, nearest first at any depth, else a new one.
     let node = section;
     let put = option;
-    let mode = how;
+    // "Also": beside the option already picked, as its own subsection.
+    let mode: "replace" | "subsection" = how === "also" ? "subsection" : how;
     if (heading) {
       const name = heading.trim().toLowerCase();
       const own = tree?.sections
@@ -1127,7 +1128,7 @@ export function Think({
         .sort((a, b) => a.path.length - b.path.length)[0];
       if (own) {
         node = own;
-        mode = "replace";
+        mode = how === "also" ? "subsection" : "replace";
       } else {
         put = { ...option, title: heading };
         mode = "subsection";
@@ -1142,7 +1143,7 @@ export function Think({
       path: docPath,
       text: main.state.doc.toString(),
       option: option.id,
-      how: mode,
+      how: how === "also" ? "also" : mode,
     });
   };
 
@@ -1482,7 +1483,7 @@ export function Think({
                     >
                       <div className="think-offer-head">
                         <strong>{o.title}</strong>
-                        {item.used === o.id || (item.several && item.added.includes(o.id)) ? (
+                        {item.used === o.id || item.added.includes(o.id) ? (
                           <span className="quiet">In the doc</span>
                         ) : item.explored.includes(o.id) ? (
                           <span className="quiet">Explored</span>
@@ -1503,7 +1504,10 @@ export function Think({
                             Add
                           </button>
                         </div>
-                      ) : writable && !item.several && item.used !== o.id ? (
+                      ) : writable &&
+                        !item.several &&
+                        item.used !== o.id &&
+                        !item.added.includes(o.id) ? (
                         <div className="think-offer-actions">
                           <button
                             type="button"
@@ -1512,9 +1516,21 @@ export function Think({
                               useOption(thread, o, "replace", item.heading);
                             }}
                           >
-                            Use
+                            {item.used ? "Use instead" : "Use"}
                           </button>
-                          {item.heading ? null : (
+                          {item.used ? (
+                            <button
+                              type="button"
+                              className="think-more"
+                              title="Keep the option already picked and add this one beside it"
+                              onClick={() => {
+                                useOption(thread, o, "also", item.heading);
+                              }}
+                            >
+                              Also add
+                            </button>
+                          ) : null}
+                          {item.heading || item.used ? null : (
                             <button
                               type="button"
                               className="think-more"

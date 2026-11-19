@@ -720,10 +720,16 @@ export class Threads {
     const used = new Map<string, string>();
     const undone = new Set(lines.flatMap((l) => (l.kind === "auto-undone" ? [l.used] : [])));
     const explored = new Set<string>();
-    for (const l of lines) {
-      if (l.kind === "option-used") used.set(l.option, l.how);
+    // When each option was last used: a choice switched to another option shows the latest.
+    const usedAt = new Map<string, number>();
+    lines.forEach((l, n) => {
+      if (l.kind === "option-used") {
+        used.set(l.option, l.how);
+        // Added beside the pick isn't the pick: only a use in its place is.
+        if (l.how !== "also") usedAt.set(l.option, n);
+      }
       if (l.kind === "option-explored") explored.add(l.option);
-    }
+    });
     const ran = new Map(
       lines.flatMap((l) => (l.kind === "action-run" ? [[l.action, l.thread] as const] : [])),
     );
@@ -823,12 +829,19 @@ export class Threads {
           kind: "options",
           turn: l.turn,
           options: l.options,
-          used: l.several ? null : (l.options.find((o) => used.has(o.id))?.id ?? null),
+          used: l.several
+            ? null
+            : (l.options
+                .filter((o) => usedAt.has(o.id))
+                .sort((a, b) => (usedAt.get(b.id) ?? 0) - (usedAt.get(a.id) ?? 0))[0]?.id ?? null),
           explored: l.options.filter((o) => explored.has(o.id)).map((o) => o.id),
           within: l.within ?? null,
           heading: l.heading ?? null,
           several: l.several ?? false,
-          added: l.options.filter((o) => used.has(o.id)).map((o) => o.id),
+          // A set of parts: every one added. A choice: those added beside its pick.
+          added: l.options
+            .filter((o) => (l.several ? used.has(o.id) : used.get(o.id) === "also"))
+            .map((o) => o.id),
         });
     }
     // A narrower option picked settles the set it was explored from too.
@@ -2783,7 +2796,7 @@ export class Threads {
     text: string,
     thread: string,
     option: string,
-    how: "replace" | "subsection",
+    how: "replace" | "subsection" | "also",
   ): Promise<boolean> {
     const at = await this.d.locate(rel, text);
     if (!at) return false;

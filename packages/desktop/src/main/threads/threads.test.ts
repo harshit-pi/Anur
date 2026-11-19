@@ -363,6 +363,37 @@ describe("Threads", () => {
     expect(check.claims.map((c) => c.about)).toEqual(["fact", "wording"]);
   });
 
+  it("shows the option used last when a choice is switched to another", async () => {
+    const { threads: t, reply } = await setup();
+    const a = await t.start("plan.md", DOC, risks, "How do we host it?");
+    if (a.kind !== "started") throw new Error(a.reason);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    await tool(a.thread.id, "anur_offer_options", {
+      heading: "Host",
+      options: [
+        { title: "Fly", text: "Run it on Fly." },
+        { title: "Render", text: "Run it on Render." },
+      ],
+    });
+    await reply(a.thread.id, "Two hosts.");
+    const offer = async () =>
+      (await t.list("plan.md", DOC))
+        .find((x) => x.id === a.thread.id)
+        ?.items.flatMap((i) => (i.kind === "options" ? [i] : []))[0];
+    const [fly, render] = (await offer())?.options ?? [];
+    if (!fly || !render) throw new Error("no options");
+    await t.useOption("plan.md", DOC, a.thread.id, render.id, "subsection");
+    await t.useOption("plan.md", DOC, a.thread.id, fly.id, "replace");
+    expect((await offer())?.used).toBe(fly.id);
+    await t.useOption("plan.md", DOC, a.thread.id, render.id, "replace");
+    expect((await offer())?.used).toBe(render.id);
+    // Added beside the pick: both are in the doc, and the pick stays.
+    await t.useOption("plan.md", DOC, a.thread.id, fly.id, "also");
+    expect(await offer()).toMatchObject({ used: render.id, added: [fly.id] });
+  });
+
   it("carries a kept finding to new threads on the section, and never an unkept one", async () => {
     const { threads: t, sent, reply } = await setup();
     const a = await t.start("plan.md", DOC, risks, "What does the host cost?");

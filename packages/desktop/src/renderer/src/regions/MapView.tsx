@@ -715,7 +715,10 @@ export function MapView({
           if (picked) {
             // The rest, folded: a chip that opens to them, still to explore or switch to.
             const rest = family.flatMap((x) => x.options.filter((o) => o.id !== x.used));
-            const usedIds = new Set(family.flatMap((x) => (x.used ? [x.used] : [])));
+            // The pick and any added beside it are in the doc; the rest fold.
+            const usedIds = new Set(
+              family.flatMap((x) => [...(x.used ? [x.used] : []), ...x.added]),
+            );
             const left = rest.filter((o) => !usedIds.has(o.id));
             if (left.length === 0) continue;
             const fid = `f:${f.options[0]?.id ?? t.id}`;

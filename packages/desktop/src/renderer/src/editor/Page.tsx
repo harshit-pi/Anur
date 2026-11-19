@@ -331,7 +331,10 @@ export function Page({
     };
     const actions: PreviewActions = {
       apply: (thread, part, force) => {
-        void applyPreviewPart(thread, part, force);
+        // Used: its thread opens beside the page, with the choices and actions that came with it.
+        void applyPreviewPart(thread, part, force).then((ok) => {
+          if (ok) window.dispatchEvent(new CustomEvent("anur:open-thread", { detail: { thread } }));
+        });
       },
       refresh: (thread, part) => {
         const section = part.path.at(-1) ?? "the section";
