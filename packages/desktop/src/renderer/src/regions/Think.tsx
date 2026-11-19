@@ -506,14 +506,13 @@ function Composer({
     <>
       {queue.length > 0 ? (
         <div className="think-queue" aria-label="Queued messages">
-          <span className="think-queue-label">Queued · sends when this reply is done</span>
           {queue.map((q, i) => (
             <div className="think-queued" key={q.id}>
               <span className="think-queued-actions">
                 <button
                   type="button"
                   aria-label="Edit"
-                  title="Edit: back into the box"
+                  title="Edit"
                   onClick={() => {
                     edit(i);
                   }}
@@ -523,7 +522,7 @@ function Composer({
                 <button
                   type="button"
                   aria-label="Remove"
-                  title="Remove from the queue"
+                  title="Remove"
                   onClick={() => {
                     onUnqueue?.(i);
                   }}
@@ -626,9 +625,7 @@ function Composer({
               type="button"
               className={`think-send${text.trim() && !disabled ? " ready" : ""}`}
               aria-label={canQueue ? "Queue" : sendLabel}
-              title={
-                canQueue ? "Queue: sends when this reply is done (Enter)" : `${sendLabel} (Enter)`
-              }
+              title={canQueue ? "Queue (Enter)" : `${sendLabel} (Enter)`}
               disabled={disabled || text.trim() === ""}
               onClick={send}
             >

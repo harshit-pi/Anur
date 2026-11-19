@@ -62,6 +62,7 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 - Not supporting something yet is fine. Removing or blocking something those tools already let people do is not.
 - Get the core working and strong before adding features. Prefer fixing what exists to adding a new button, mark or panel.
 - It should feel intuitive at first use. Mock a screen before building it, and drop anything a person would have to learn.
+- No words explaining what people already know from those tools: no caption on a queued message, no banner saying what just happened, no mark saying a thing is done. If Claude Code or Google Docs shows it without words, so does Anur. Check every mock for such text before showing it.
 
 ## Brand
 

@@ -6705,11 +6705,6 @@ button.file-card-name:hover {
   margin: 0 0 8px;
 }
 
-.think-queue-label {
-  color: var(--graphite);
-  font: 11.5px var(--font-ui);
-}
-
 .think-queued {
   position: relative;
   max-width: 85%;
