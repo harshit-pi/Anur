@@ -47,11 +47,11 @@ export type SystemMap = { nodes: MapNode[]; lines: MapLine[]; width: number; hei
 
 const BOX_W = 210;
 const BOX_H = 64;
-const HEAD = 34;
-const PAD = 14;
-const GAP = 12;
-const COL_GAP = 110;
-const ROW_GAP = 26;
+const HEAD = 38;
+const PAD = 20;
+const GAP = 24;
+const COL_GAP = 150;
+const ROW_GAP = 40;
 
 const plural = (n: number, one: string) => `${String(n)} ${n === 1 ? one : `${one}s`}`;
 

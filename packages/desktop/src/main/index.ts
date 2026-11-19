@@ -105,6 +105,7 @@ import { offerMoveToApplications } from "./move-to-applications.ts";
 import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
 import { IndexProcess, indexEntry } from "./index-process/client.ts";
 import type { FolderRead } from "./index-process/protocol.ts";
+import { loadRead, saveRead } from "./system-saved.ts";
 import { TaskHooks } from "./claude-plugin/task-hooks.ts";
 import { ReportWatch, listReports, readReport } from "./task-reports.ts";
 import { codeRepos } from "./engineering-offer.ts";
@@ -181,10 +182,14 @@ function versionsFor(folder: FolderState): SectionVersions | null {
  * kept until a watcher sees a change or the person's review changes.
  */
 const systemReads = new Map<string, { plugins: string; read: Promise<FolderRead> }>();
-const systemChanged = (changed: string) => {
-  systemReads.delete(changed);
+/** Tell a folder's windows to read the system again. */
+const systemNotify = (changed: string) => {
   for (const win of windows.values())
     if (folders.current(win.webContents.id)?.path === changed) send(win, "system:changed", {});
+};
+const systemChanged = (changed: string) => {
+  systemReads.delete(changed);
+  systemNotify(changed);
 };
 const indexProcess = new IndexProcess(indexEntry(here), systemChanged);
 /** New task reports in a folder reach its windows (group 21). */
@@ -906,19 +911,39 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder || !on.includes("engineering")) return { kind: "off" };
     try {
       const key = on.join(",");
-      let cached = systemReads.get(folder.path);
+      const cached = systemReads.get(folder.path);
+      let updating = false;
+      let read: FolderRead;
       if (cached?.plugins !== key) {
-        cached = { plugins: key, read: indexProcess.sections(folder.path, on) };
-        systemReads.set(folder.path, cached);
-        // A failed read is read again next time, not kept.
-        cached.read.catch(() => systemReads.delete(folder.path));
-      }
-      const read = await cached.read;
+        const fresh = indexProcess.sections(folder.path, on);
+        systemReads.set(folder.path, { plugins: key, read: fresh });
+        const where = folder.path;
+        fresh.then(
+          (r) => {
+            saveRead(where, key, r);
+          },
+          // A failed read is read again next time, not kept.
+          () => systemReads.delete(where),
+        );
+        // On launch, the last saved read draws at once; the fresh one follows.
+        const saved = loadRead(folder.path, key);
+        if (saved) {
+          updating = true;
+          read = saved;
+          void fresh.then(
+            () => {
+              systemNotify(where);
+            },
+            () => undefined,
+          );
+        } else read = await fresh;
+      } else read = await cached.read;
       const sections = read.sources.flatMap((s) => s.sections);
       const edgeState = reviewState(readReview(folder.path));
       return {
         kind: "ok",
         folder: folder.path,
+        updating,
         sections,
         edges: read.edges.map((e) => ({
           ...e,

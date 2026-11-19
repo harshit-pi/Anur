@@ -2084,7 +2084,8 @@ body.resizing * {
 /* The system as a map (24.4): repos as frames, lines from code. */
 .system-map {
   overflow: auto;
-  max-height: 70vh;
+  /* The map takes the tab's height; past that it scrolls both ways inside. */
+  height: max(420px, calc(100vh - 210px));
   margin-bottom: 8px;
   border: 1px solid var(--rule);
   border-radius: 10px;

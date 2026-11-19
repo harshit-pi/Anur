@@ -347,3 +347,9 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - Resources sit inside their stack on the map; opening a stack shows them with their links. More than three outside ends of one kind fold into one box. A lone line's name shows on hover; counts print.
 - On the team's workspace: 338 resources and 436 links in 1.9 s, among them PiDataServiceProcessor's Lambdas writing the Copying table PiTradingClientNodeJS creates (24 found) and PiAuthService naming 51 of PiTradingClientNodeJS's Lambdas (guessed).
 - The `base_path` route-tree rule stays, marked Partly in docs/what-anur-reads.md, until links proposed by Claude with checked evidence replace it; removing it now would lose the 67 found PiTrade → PiAuthService calls.
+
+## The System tab opens at once, and its map has room
+
+- Each read of a folder's system is saved in `.anur/system/last-read.json` (written beside, then renamed). On launch the tab draws the saved read at once, with "Updating…" beside Rescan, while a fresh read runs; the fresh one replaces it when it finishes. Only a folder's first open shows "Reading the repos…".
+- Opened frames join the trail (pitrade-official › PiDataServiceProcessor › Storage): a crumb goes back to that level, and Esc closes the frame opened last.
+- The map takes the tab's height and scrolls both ways inside; frames have wider gaps, so lines run between boxes.

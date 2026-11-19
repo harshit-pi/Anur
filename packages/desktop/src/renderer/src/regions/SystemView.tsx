@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { anur } from "../bridge.ts";
 import { SystemMap } from "./SystemMap.tsx";
 import { taskTitle, type TaskReport } from "../layout/task-report.ts";
@@ -56,6 +56,7 @@ type Shown =
   | {
       kind: "ok";
       folder: string;
+      updating: boolean;
       sections: SystemSection[];
       review: Review;
       edges: SystemEdge[];
@@ -105,6 +106,12 @@ function RecentTasks({ onOpen }: { onOpen: (id: string) => void }) {
   );
 }
 
+/** Whether one section is inside another, for the Esc handler, set from the latest read. */
+let isInsideId: (id: string, outer: string) => boolean = () => false;
+
+const nameIn = (all: readonly SystemSection[], id: string) =>
+  all.find((x) => x.id === id)?.path.at(-1) ?? id;
+
 /** The last read, kept while the tab is closed, so coming back draws it at once. */
 let lastRead: Extract<Shown, { kind: "ok" }> | null = null;
 
@@ -126,6 +133,26 @@ export function SystemView({
   /** Frames opened on the map, and the line whose calls the list shows. */
   const [openFrames, setOpenFrames] = useState<ReadonlySet<string>>(new Set());
   const [focus, setFocus] = useState<string | null>(null);
+  // Esc goes up a level: it closes the frame opened last, and what's open inside it.
+  const framesNow = useRef(openFrames);
+  framesNow.current = openFrames;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const t = e.target;
+      if (t instanceof HTMLElement && t.closest("input, textarea, [contenteditable]")) return;
+      const last = [...framesNow.current].at(-1);
+      if (!last) return;
+      e.preventDefault();
+      setOpenFrames(
+        new Set([...framesNow.current].filter((x) => x !== last && !isInsideId(x, last))),
+      );
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, []);
   const read = useCallback(() => {
     setShown((s) => (s.kind === "ok" ? s : { kind: "reading" }));
     void anur.call("system:sections", {}).then((r) => {
@@ -165,6 +192,14 @@ export function SystemView({
   const level = at && all.some((s) => s.id === at) ? at : null;
   const trail = trailTo(all, level);
   const boxes = boxesAt(all, level);
+  // The open frames the person is in: the last one opened, and the open frames around it.
+  const lastOpen = [...openFrames].at(-1);
+  const frameTrail = lastOpen
+    ? [...openFrames]
+        .filter((x) => x === lastOpen || isInside(all, lastOpen, x))
+        .sort((a, b) => Number(isInside(all, a, b)) - Number(isInside(all, b, a)))
+    : [];
+  isInsideId = (x, outer) => isInside(all, x, outer);
   // Several GitHub owners: pick one first, and its system is the map.
   const showOwners = !level && all.some((x) => x.id.startsWith("org:"));
   // Group names apply on their own, Claude's or the rule's; a rename is the person's last word.
@@ -175,11 +210,12 @@ export function SystemView({
   return (
     <div className="system-view">
       <nav className="system-trail" aria-label="Where you are">
-        {level ? (
+        {level || frameTrail.length ? (
           <button
             type="button"
             onClick={() => {
               setAt(null);
+              setOpenFrames(new Set());
             }}
           >
             All repos
@@ -192,17 +228,39 @@ export function SystemView({
             <span className="system-sep" aria-hidden="true">
               ›
             </span>
-            {i < trail.length - 1 ? (
+            {i < trail.length - 1 || frameTrail.length ? (
               <button
                 type="button"
                 onClick={() => {
                   setAt(s.id);
+                  setOpenFrames(new Set());
                 }}
               >
                 {s.path.at(-1)}
               </button>
             ) : (
               <span aria-current="page">{s.path.at(-1)}</span>
+            )}
+          </span>
+        ))}
+        {frameTrail.map((id, i) => (
+          <span key={id} className="system-step">
+            <span className="system-sep" aria-hidden="true">
+              ›
+            </span>
+            {i < frameTrail.length - 1 ? (
+              <button
+                type="button"
+                title="Go back to this level"
+                onClick={() => {
+                  // Closes what's open inside this frame; the frame stays open.
+                  setOpenFrames((o) => new Set([...o].filter((x) => !isInside(all, x, id))));
+                }}
+              >
+                {nameIn(all, id)}
+              </button>
+            ) : (
+              <span aria-current="page">{nameIn(all, id)}</span>
             )}
           </span>
         ))}
@@ -219,6 +277,11 @@ export function SystemView({
               Choose repos
             </button>
           )}
+          {shown.updating ? (
+            <span className="quiet" role="status">
+              Updating…
+            </span>
+          ) : null}
           <button type="button" title="Read the repos again" onClick={read}>
             Rescan
           </button>
