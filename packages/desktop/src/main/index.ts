@@ -112,9 +112,17 @@ import type { FolderRead } from "./index-process/protocol.ts";
 import { loadRead, saveRead } from "./system-saved.ts";
 import { TaskHooks } from "./claude-plugin/task-hooks.ts";
 import { ReportWatch, listReports, readReport } from "./task-reports.ts";
-import { codeRepos } from "./engineering-offer.ts";
+import { codeRepos, looksLikeCode } from "./engineering-offer.ts";
 import { SystemReview } from "./system-review.ts";
-import { appendReview, excludedRepos, findRepoDirs, readReview, reviewState } from "@anur/system";
+import {
+  appendReview,
+  excludedRepos,
+  findRepoDirs,
+  findRepos,
+  includedRepoDirs,
+  readReview,
+  reviewState,
+} from "@anur/system";
 import { AgentChoices } from "./threads/agent-choices.ts";
 import { AnurSocket } from "./threads/anur-socket.ts";
 import { Threads } from "./threads/threads.ts";
@@ -993,7 +1001,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
         misses: read.misses,
         repos: (() => {
           const out = excludedRepos(folder.path);
-          return findRepoDirs(folder.path).map((dir) => ({ dir, included: !out.has(dir) }));
+          const copyOf = new Map(findRepos(folder.path).copies.map((c) => [c.dir, c.of]));
+          return findRepoDirs(folder.path).map((dir) => ({
+            dir,
+            included: !out.has(dir),
+            copyOf: copyOf.get(dir) ?? null,
+          }));
         })(),
         review: systemReview.view(folder.path, sections, (prompt) => {
           const t = threadsFor(folder);
@@ -1698,6 +1711,17 @@ const handlers: { [C in Channel]: Handler<C> } = {
     } catch (e) {
       return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
     }
+  },
+  "system:repoDirs": (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder || !pluginsOn(folder.path).includes("engineering")) return { repos: [] };
+    // Code repos only: a notes or docs repo stays in the tree with the other folders.
+    const copyOf = new Map(findRepos(folder.path).copies.map((c) => [c.dir, c.of]));
+    return {
+      repos: includedRepoDirs(folder.path)
+        .filter((d) => d !== "." && looksLikeCode(path.join(folder.path, d)))
+        .map((dir) => ({ dir, copyOf: copyOf.get(dir) ?? null })),
+    };
   },
   "anur:publicRepo": async (_, { webContentsId }) => {
     const folder = folders.current(webContentsId);

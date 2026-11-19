@@ -158,7 +158,7 @@ export function repoIdOf(
 export function findRepos(
   folder: string,
   opts: { pin?: boolean } = {},
-): { repos: Repo[]; problems: ScanProblem[] } {
+): { repos: Repo[]; problems: ScanProblem[]; copies: { dir: string; of: string }[] } {
   const problems: ScanProblem[] = [];
   const all: Repo[] = [];
   for (const dir of findRepoDirs(folder)) {
@@ -185,13 +185,14 @@ export function findRepos(
     if (!b || better(r, b)) best.set(r.id, r);
   }
   const repos = all.filter((r) => !r.id || best.get(r.id) === r);
-  for (const r of all)
-    if (r.id && best.get(r.id) !== r)
-      problems.push({
-        where: r.dir,
-        what: `A second clone of ${best.get(r.id)?.dir ?? ""}; shown once`,
-      });
-  return { repos, problems };
+  const copies: { dir: string; of: string }[] = [];
+  for (const r of all) {
+    const of = r.id ? best.get(r.id) : undefined;
+    if (!of || of === r) continue;
+    copies.push({ dir: r.dir, of: of.dir });
+    problems.push({ where: r.dir, what: `A second clone of ${of.dir}; shown once` });
+  }
+  return { repos, problems, copies };
 }
 
 /** A short stable hash, for part IDs. */

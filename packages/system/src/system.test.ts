@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { generateSystem, git, makeRepo, twoRepoSystem } from "./fixtures.ts";
+import { findRepos } from "./repos.ts";
 import { scanSystem } from "./system.ts";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "anur-system-"));
@@ -106,6 +107,28 @@ describe("part IDs survive change (Internals §1)", () => {
     const clone = scanSystem(shallow);
     expect(clone.problems).toEqual([]);
     expect(idOf(clone, "@acme/app")).toBe(idOf(full, "@acme/app"));
+  });
+});
+
+describe("a second clone of a repo", () => {
+  it("is named as a copy of the folder the map reads, the one named as on GitHub", () => {
+    const dir = tmp();
+    makeRepo(
+      path.join(dir, "PiTrade"),
+      { "package.json": "{}" },
+      "https://github.com/acme/PiTrade.git",
+    );
+    git(dir, "clone", "-q", path.join(dir, "PiTrade"), path.join(dir, "search-analytics"));
+    git(
+      path.join(dir, "search-analytics"),
+      "remote",
+      "set-url",
+      "origin",
+      "https://github.com/acme/PiTrade.git",
+    );
+    const found = findRepos(dir);
+    expect(found.repos.map((r) => r.dir)).toEqual(["PiTrade"]);
+    expect(found.copies).toEqual([{ dir: "search-analytics", of: "PiTrade" }]);
   });
 });
 

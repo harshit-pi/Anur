@@ -304,6 +304,26 @@ export function App() {
     read();
     return anur.on("tasks:changed", read);
   }, [engineeringOn, folderPath]);
+  // The system's repos, gathered under Repos in the files panel, closed until opened.
+  const [repoDirs, setRepoDirs] = useState<{ dir: string; copyOf: string | null }[]>([]);
+  useEffect(() => {
+    if (!engineeringOn) {
+      setRepoDirs([]);
+      return;
+    }
+    let current = true;
+    const read = () => {
+      void anur.call("system:repoDirs", {}).then((r) => {
+        if (current) setRepoDirs(r.repos);
+      });
+    };
+    read();
+    const off = anur.on("system:changed", read);
+    return () => {
+      current = false;
+      off();
+    };
+  }, [engineeringOn, folderPath]);
   const openSystem = useCallback(() => {
     setTabs((t) => showSystem(t));
   }, []);
@@ -1214,6 +1234,7 @@ export function App() {
             ? {
                 open: selected === SYSTEM_TAB,
                 onOpen: openSystem,
+                repos: repoDirs,
                 tasks: recentTasks.map((r) => ({
                   id: r.id,
                   title: taskTitle(r),

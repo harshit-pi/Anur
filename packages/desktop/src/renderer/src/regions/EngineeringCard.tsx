@@ -86,7 +86,7 @@ export function EngineeringCard() {
       <strong>
         Opened as a code system: {shown.repos} {shown.repos === 1 ? "repo" : "repos"} found
       </strong>
-      <p>You see the System map, with the links between repos found in code.</p>
+      <p>Repos opens a map of them, with the links between them found in code.</p>
       {shown.hooks ? (
         <p className="quiet">
           For a report after each Claude Code task, add Anur's plugin to Claude Code, once for this
