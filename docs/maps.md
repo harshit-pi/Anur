@@ -1,0 +1,66 @@
+# Maps
+
+What Anur's maps draw, what each mark means, and what they deliberately leave out. Read this before changing `MapView.tsx`, `SystemMap.tsx` or their layouts. A map change keeps to these rules, and a rule changes only with a dated entry here and its why.
+
+## The rule
+
+A map shows three kinds of thing, one shape and one meaning each (Mock 11).
+
+```
+Section   solid box            in the doc
+Choice    dashed rounded card  not in the doc yet
+Work      capsule in a lane    an action under its section
+Thread    italic text on a line, or 💬 N on a box
+```
+
+- Dashes mean a choice, and only a choice: never an outside service, a link or a muted box.
+- Colour carries state only on work (needs you, running, done, failed). A section is just its name.
+- Anything else stays off the map, in the thread panel or the page. The map is read at a glance; every extra mark costs that.
+
+## The doc map (`renderer/src/regions/MapView.tsx`)
+
+| Piece                     | What it is                                                                                                                       | Click                                                          |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Title and sections        | The doc's headings, laid out from the title (mind map) or top down (tree)                                                        | Selects it; Think shows its threads                            |
+| Choice card               | An option or proposed edit from a thread, not used yet; filled in once explored                                                  | Opens its thread at that card                                  |
+| "N not picked"            | The options passed over once one was used, folded; opening it keeps the view still                                               | Opens or folds them                                            |
+| Lane under a section      | The section's work: one capsule each for what's running, waiting or failed; planned and done fold into "▶ N planned", "✓ N done" | A capsule opens its thread at its card; Run, Stop, Approve act |
+| Service mark on a capsule | Where the work acts (Gmail, Linear, GitHub), from its steps, or for planned work from its title                                  | —                                                              |
+| Thread label              | Italic text on the line to a thread's choices; a choice's own name when a thread asks two                                        | Opens the thread                                               |
+| 💬 N on a box             | Threads on that section with no choices or work                                                                                  | Opens the first                                                |
+| → N on a box              | Links from that section to other docs                                                                                            | Lists them                                                     |
+| A box from another doc    | A section another doc links to, drawn with its doc's name                                                                        | Opens that doc                                                 |
+
+- Each choice hangs off the subsection of its name when the doc has one, else under a label of its name.
+- A choice raised by a running action hangs under its own label, never loose round the section.
+- Fit frames the sections and the choices waiting at the top level, never below 60% (`FIT_MIN`), centred on what it frames (30.27). Opening a map centres on the title at 75% or more (`READABLE`).
+- A new box appears from Tab, Enter, double-clicking empty space, or dragging a box's handle onto empty space. Moving a box never changes the file.
+
+## What the doc map leaves out
+
+- **Links within the doc.** A `[[#Heading]]` in a section's text is not drawn as an arrow, and dragging a handle onto another box no longer writes one. Removed 2026-11-19: the arrows ran across the mind map, ended short of their boxes, and their labels ("section 1") said nothing. The link still works on the page; the map shows structure, choices and work.
+- Another thread's chat, history or decisions. Decisions show as counts in the panel, not on the map.
+
+## The system map (`renderer/src/regions/SystemMap.tsx`, `layout/system-map.ts`)
+
+| Piece             | What it is                                                                     |
+| ----------------- | ------------------------------------------------------------------------------ |
+| Repo, group, part | Solid boxes from the code; a repo opens in place to its parts                  |
+| Resource          | A table, queue or bucket a part uses, with its icon                            |
+| Outside service   | Grey and solid, never dashed                                                   |
+| Line              | Calls or links found in the code, labelled "N calls"; a guessed one is lighter |
+| N decided         | Decisions on that box or line; amber when two disagree                         |
+
+- By default the system map shows only what's true: the code and its decisions. Choices, threads and work belong to a task or project. They live in the panel, and a Work lens to show them on the map is designed (App 6, "Workflow" frames) but not built.
+- The three kinds on the system map are on the branch `task/system-map-three-kinds`, not merged, pending that lens.
+
+## How to check a change
+
+- `pnpm check`, then package Anur Dev and open a real map: `anur-scenarios/churn-winback` has every kind of piece; `webhook-retries` has choices raised by an action.
+- Click each kind of piece in the table above and check it does what its row says.
+- A map change that adds a mark adds its row here, or it doesn't ship.
+
+## History
+
+- 2026-11-19: links within a doc no longer drawn; Fit frames what matters at a readable zoom (30.27); dashes kept for choices only.
+- 2026-11-19: three kinds on the doc map (Mock 11), choices you can switch or add beside (Anur PR 248).
