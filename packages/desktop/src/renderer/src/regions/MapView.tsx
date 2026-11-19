@@ -1606,7 +1606,10 @@ export function MapView({
                 <span className={`map-action-state ${b.act.state}`}>
                   {ACTION_STATE[b.act.state]}
                 </span>
-                <span className="map-action-detail truncate">{b.act.detail}</span>
+                {/* A few words only where they tell something new: the step under way, why it failed. */}
+                <span className="map-action-detail truncate">
+                  {b.act.state === "running" || b.act.state === "failed" ? b.act.detail : ""}
+                </span>
                 {writable ? (
                   <ActionControl
                     act={b.act}
