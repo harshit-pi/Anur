@@ -1085,14 +1085,20 @@ export function Think({
       return;
     }
     // A decision with its own name goes under a subsection of that name:
-    // into the one already there, else a new one.
+    // into the one already there, nearest first at any depth, else a new one.
     let node = section;
     let put = option;
     let mode = how;
     if (heading) {
-      const own = tree?.sections.find(
-        (x) => x.parent === section.index && x.path.at(-1)?.toLowerCase() === heading.toLowerCase(),
-      );
+      const name = heading.trim().toLowerCase();
+      const own = tree?.sections
+        .filter(
+          (x) =>
+            x.path.length > section.path.length &&
+            samePath(x.path.slice(0, section.path.length), section.path) &&
+            x.path.at(-1)?.trim().toLowerCase() === name,
+        )
+        .sort((a, b) => a.path.length - b.path.length)[0];
       if (own) {
         node = own;
         mode = "replace";

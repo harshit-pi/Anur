@@ -3842,6 +3842,12 @@ function actionOf(
     return { state: "stopped", detail: `At step ${String(tools.length)}`, ask: null };
   if (why.startsWith("error:"))
     return { state: "failed", detail: why.slice(6).trim().slice(0, 40) || "It failed", ask: null };
+  // It stopped on a choice the person hasn't made: it waits on them, it isn't done.
+  const open = items.find(
+    (i) => i.kind === "options" && i.used === null && !(i.several && i.added.length > 0),
+  );
+  if (open?.kind === "options")
+    return { state: "needs", detail: `Pick: ${open.heading ?? "an option"}`, ask: null };
   return { state: "done", detail: did || `${String(tools.length)} steps`, ask: null };
 }
 

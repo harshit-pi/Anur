@@ -67,8 +67,13 @@ type Box = {
   /** For a section: its lane of work, and the lane's height under the box. */
   lane?: LanePill[];
   laneH?: number;
+  /** For a section whose lane is wider than it: its own width, and where the lane starts. */
+  boxW?: number;
+  laneX?: number;
   /** For a section: threads with nothing drawn off them yet, shown as a 💬 count. */
   chats?: ThreadView[];
+  /** For a label naming one of a thread's choices: that choice's heading, shown instead of the thread's title. */
+  label?: string;
   /** The chip folding a made choice's other options, and whether it's open. */
   fold?: { open: boolean; count: number };
   /** The box's second line: what's under it, or what sets it apart. */
@@ -589,8 +594,22 @@ export function MapView({
         if (own && pills.length) {
           own.lane = pills;
           own.laneH = pills.length * LANE_ROW + 6;
+          // Its widest pill, so a lane opened by name doesn't run into the next box.
+          const laneW = Math.max(
+            ...pills.map((pl) =>
+              pl.kind === "group"
+                ? 110
+                : Math.min(280, Math.round(pl.item.title.length * 7 + 70)) + (pl.indent ? 16 : 0),
+            ),
+          );
           const node = nodes.find((n) => n.id === id);
-          if (node) node.h += own.laneH;
+          if (node) {
+            node.h += own.laneH;
+            if (laneW + 10 > node.w) {
+              own.boxW = node.w;
+              node.w = laneW + 10;
+            }
+          }
         }
       }
       // Each thread's option sets, one family per choice: a first set and the
@@ -640,9 +659,40 @@ export function MapView({
             parent: parentId,
           });
         };
+        // Two or more choices in one thread: each hangs under its own name, so
+        // "Who we target first" and "What we offer" don't read as one list.
+        const named = firsts.filter((f) => !f.several && f.heading).length > 1;
         for (const f of firsts) {
           const family = offers.filter((x) => familyOf(x) === f);
-          const tid = `t:${t.id}`;
+          let tid = `t:${t.id}`;
+          // A choice whose subsection is in the doc hangs off that box, under its name.
+          const name = f.heading?.trim().toLowerCase();
+          // A thread exploring an option keeps its choices under that option.
+          const home =
+            name && !f.several && !t.explores
+              ? tree.sections.find(
+                  (x) =>
+                    x.path.length > s.path.length &&
+                    samePath(x.path.slice(0, s.path.length), s.path) &&
+                    x.path.at(-1)?.trim().toLowerCase() === name,
+                )
+              : undefined;
+          if (f.heading && !f.several && (named || home)) {
+            const did = `d:${t.id}:${f.options[0]?.id ?? f.heading}`;
+            const at = home ? idOf(home.index) : tid;
+            // Under its own box, the line names the thread; elsewhere, the choice.
+            nodes.push({ id: did, parent: at, ...pill(home ? t.title : f.heading, 0) });
+            info.set(did, {
+              id: did,
+              kind: "thread",
+              index: home?.index ?? s.index,
+              thread: t,
+              ...(home ? {} : { label: f.heading }),
+              heading: f.heading,
+              parent: at,
+            });
+            tid = did;
+          }
           if (f.several) {
             for (const o of f.options) if (!f.added.includes(o.id)) optionBox(o, tid);
             continue;
@@ -738,6 +788,7 @@ export function MapView({
     const near = (n: MapNode) =>
       Number(
         n.id.startsWith("t:") ||
+          n.id.startsWith("d:") ||
           n.id.startsWith("o:") ||
           n.id.startsWith("p:") ||
           n.id.startsWith("l:"),
@@ -746,7 +797,16 @@ export function MapView({
     // A box whose parent isn't drawn, such as a thread exploring an option now folded away,
     // hangs off its section instead.
     // A thread with nothing drawn off it isn't a box: it's counted on its section as 💬.
-    const hasChild = new Set(nodes.flatMap((n) => (n.parent ? [n.parent] : [])));
+    const childOf = () => new Set(nodes.flatMap((n) => (n.parent ? [n.parent] : [])));
+    // A choice's name with all its options added has nothing under it: it goes.
+    const named = childOf();
+    for (let k = nodes.length - 1; k >= 0; k--) {
+      const n = nodes[k];
+      if (!n?.id.startsWith("d:") || named.has(n.id)) continue;
+      nodes.splice(k, 1);
+      info.delete(n.id);
+    }
+    const hasChild = childOf();
     for (let k = nodes.length - 1; k >= 0; k--) {
       const n = nodes[k];
       if (!n?.id.startsWith("t:") || hasChild.has(n.id)) continue;
@@ -785,11 +845,16 @@ export function MapView({
       if (!i) continue;
       // A section with a lane: its box sits at the top of its slot, the lane below it.
       const lane = i.laneH ?? 0;
+      // A lane wider than its box: the box keeps its width at the slot's inner edge.
+      const own = i.boxW !== undefined && i.boxW < p.w ? i.boxW : p.w;
+      const x =
+        p.side === 1 ? p.x - p.w / 2 + own / 2 : p.side === -1 ? p.x + p.w / 2 - own / 2 : p.x;
       out.push({
         ...i,
-        x: p.x,
+        x,
         y: p.y - lane / 2,
-        w: p.w,
+        w: own,
+        ...(own < p.w ? { laneX: p.x - p.w / 2 + 10 } : {}),
         h: p.h - lane,
         side: p.side,
         ...(p.row !== undefined ? { row: p.row } : {}),
@@ -1683,23 +1748,21 @@ export function MapView({
               type="button"
               className={`map-thread${b.thread.busy ? " busy" : ""}`}
               style={{ left: b.x - b.w / 2, top: b.y - b.h / 2, width: b.w, height: b.h }}
-              title={b.thread.title}
+              title={b.label ?? b.thread.title}
               onPointerDown={(e) => {
                 onBoxDown(e, b);
               }}
             >
               {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed /> : null}
               {/* The services it acted in, such as Linear or Gmail, by their marks. */}
-              {servicesUsed(b.thread.items)
+              {servicesUsed(b.label ? [] : b.thread.items)
                 .slice(0, MARKS_SHOWN)
                 .map((sv) => (
                   <span key={sv.name} title={sv.name} className="map-thread-mark">
                     <ServiceIcon service={sv} />
                   </span>
                 ))}
-              <span className="truncate">
-                <ThreadName thread={b.thread} />
-              </span>
+              <span className="truncate">{b.label ?? <ThreadName thread={b.thread} />}</span>
               {previewed.has(b.thread.id) ? (
                 <span className="map-dot" aria-label="Has a preview" />
               ) : null}
@@ -1870,7 +1933,7 @@ export function MapView({
             <div
               key={`lane:${b.id}`}
               className="map-lane"
-              style={{ left: b.x - b.w / 2 + 10, top: b.y + b.h / 2 + 6 }}
+              style={{ left: b.laneX ?? b.x - b.w / 2 + 10, top: b.y + b.h / 2 + 6 }}
             >
               {b.lane.map((pl) =>
                 pl.kind === "group" ? (
