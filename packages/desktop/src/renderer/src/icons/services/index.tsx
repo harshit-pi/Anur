@@ -115,3 +115,14 @@ export function ServiceIcon({ service }: { service: Service | null }) {
     </svg>
   );
 }
+
+/** The services a thread acted in, in the order it first used them: what its map chip shows. */
+export function servicesUsed(items: readonly { kind: string; title?: string }[]): Service[] {
+  const seen = new Map<string, Service>();
+  for (const i of items) {
+    if (i.kind !== "tool" || !i.title) continue;
+    const s = serviceOf(i.title);
+    if (s && !seen.has(s.name)) seen.set(s.name, { key: s.key, name: s.name, mark: s.mark });
+  }
+  return [...seen.values()];
+}

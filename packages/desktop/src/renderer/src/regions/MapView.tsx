@@ -1,3 +1,4 @@
+import { ServiceIcon, servicesUsed } from "../icons/services/index.tsx";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   boxSize,
@@ -76,10 +77,12 @@ type Box = {
 const READABLE = 0.75;
 
 /** A thread's pill: as wide as its name needs, within bounds. */
-const pill = (title: string) => ({
-  w: Math.max(150, Math.min(280, Math.round(title.length * 7.8 + 44))),
+const pill = (title: string, marks = 0) => ({
+  w: Math.max(150, Math.min(320, Math.round(title.length * 7.8 + 44 + marks * 18))),
   h: 36,
 });
+/** At most this many service marks on a thread's chip. */
+const MARKS_SHOWN = 3;
 
 /** A line of Markdown as plain words, for a box's second line. */
 const plainLine = (text: string) =>
@@ -428,7 +431,11 @@ export function MapView({
         const tid = `t:${t.id}`;
         const from = t.branchedFrom?.thread;
         const parent = from && onSection.has(from) ? `t:${from}` : id;
-        nodes.push({ id: tid, parent, ...pill(t.title) });
+        nodes.push({
+          id: tid,
+          parent,
+          ...pill(t.title, Math.min(MARKS_SHOWN, servicesUsed(t.items).length)),
+        });
         info.set(tid, {
           id: tid,
           kind: "thread",
@@ -1510,6 +1517,14 @@ export function MapView({
               }}
             >
               {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed /> : null}
+              {/* The services it acted in, such as Linear or Gmail, by their marks. */}
+              {servicesUsed(b.thread.items)
+                .slice(0, MARKS_SHOWN)
+                .map((sv) => (
+                  <span key={sv.name} title={sv.name} className="map-thread-mark">
+                    <ServiceIcon service={sv} />
+                  </span>
+                ))}
               <span className="truncate">
                 <ThreadName thread={b.thread} />
               </span>

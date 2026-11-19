@@ -5754,3 +5754,13 @@ button.file-card-name:hover {
 .service-icon.action {
   fill: var(--graphite);
 }
+
+/* A thread chip's service marks sit tight before its name. */
+.map-thread-mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.map-thread-mark .service-icon {
+  margin-right: 4px;
+}
