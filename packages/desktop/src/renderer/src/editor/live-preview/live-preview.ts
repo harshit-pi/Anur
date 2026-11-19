@@ -197,12 +197,30 @@ export function buildLivePreview(state: EditorState, focused = true): Decoration
           return false;
         case "FencedCode":
         case "CodeBlock":
-          // A Mermaid diagram draws as its picture, unless the cursor is in its source.
-          if (name === "FencedCode" && !isActive(from, to)) {
+          // A Mermaid diagram draws as its picture; with the cursor in its source, the
+          // source shows with the diagram still drawn under it, following the typing.
+          if (name === "FencedCode") {
             const info = children(node, "CodeInfo")[0];
             const marks = children(node, "CodeMark");
             const close = marks.length > 1 ? marks.at(-1) : undefined;
-            if (info && /^mermaid$/i.test(text(info.from, info.to).trim()) && close) {
+            if (
+              info &&
+              /^mermaid$/i.test(text(info.from, info.to).trim()) &&
+              close &&
+              isActive(from, to)
+            ) {
+              const body = text(
+                doc.lineAt(from).to + 1,
+                Math.max(doc.lineAt(from).to + 1, close.from),
+              );
+              out.push(
+                Decoration.widget({
+                  widget: new MermaidWidget(body.replace(/\n$/, ""), doc.lineAt(from).to + 1, true),
+                  block: true,
+                  side: 1,
+                }).range(to),
+              );
+            } else if (info && /^mermaid$/i.test(text(info.from, info.to).trim()) && close) {
               const body = text(
                 doc.lineAt(from).to + 1,
                 Math.max(doc.lineAt(from).to + 1, close.from),

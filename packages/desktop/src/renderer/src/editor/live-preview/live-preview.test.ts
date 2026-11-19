@@ -196,10 +196,12 @@ describe("live preview", () => {
     expect(gaps(doc.indexOf("Para two") - 1)).toEqual([4, 10]);
   });
 
-  it("draws a mermaid block as its diagram, and shows its source with the cursor in it", () => {
+  it("draws a mermaid block as its diagram, and its source over a live diagram with the cursor in it", () => {
     const doc = "Intro.\n\n```mermaid\ngraph TD\n  A --> B\n```\n\nend";
     expect(widgetOf(doc, MermaidWidget)?.source).toBe("graph TD\n  A --> B");
-    expect(widgetOf(doc, MermaidWidget, doc.indexOf("A -->"))).toBeUndefined();
+    // Being edited: the source shows, with the diagram drawn live under it.
+    expect(widgetOf(doc, MermaidWidget, doc.indexOf("A -->"))?.live).toBe(true);
+    expect(widgetOf(doc, MermaidWidget)?.live).toBe(false);
     expect(widgetOf("```js\nlet a = 1;\n```\n\nend", MermaidWidget)).toBeUndefined();
   });
 

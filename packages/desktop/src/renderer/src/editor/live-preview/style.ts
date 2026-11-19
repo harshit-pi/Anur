@@ -78,6 +78,7 @@ export const livePreviewTheme = EditorView.theme({
     overflowX: "auto",
   },
   ".cm-lp-mermaid svg": { maxWidth: "100%", height: "auto" },
+  ".cm-lp-mermaid-live": { marginTop: "4px", borderStyle: "dashed", cursor: "text" },
   ".cm-lp-mermaid-error": {
     color: "var(--red)",
     fontFamily: "var(--font-ui)",

@@ -32,11 +32,13 @@ export class MermaidWidget extends WidgetType {
     readonly source: string,
     /** Where the block's source starts, for the cursor on a click. */
     readonly at: number,
+    /** Drawn under the source while it's being edited, following the typing. */
+    readonly live = false,
   ) {
     super();
   }
   override eq(other: MermaidWidget) {
-    return other.source === this.source && other.at === this.at;
+    return other.source === this.source && other.at === this.at && other.live === this.live;
   }
   override get estimatedHeight() {
     return 260;
@@ -47,11 +49,13 @@ export class MermaidWidget extends WidgetType {
     wrap.className = "cm-lp-mermaid";
     wrap.contentEditable = "false";
     wrap.title = "Click to edit the diagram's source";
+    if (this.live) wrap.classList.add("cm-lp-mermaid-live");
     wrap.textContent = "Drawing the diagram…";
     wrap.addEventListener("mousedown", (e) => {
       e.preventDefault();
-      view.dispatch({ selection: { anchor: this.at } });
+      // Into the source, which shows just above the diagram while the cursor is in it.
       view.focus();
+      view.dispatch({ selection: { anchor: this.at }, scrollIntoView: true });
     });
     const id = `anur-mermaid-${String(++ids)}`;
     void mermaid(isDark())
@@ -71,7 +75,9 @@ export class MermaidWidget extends WidgetType {
     return wrap;
   }
 
+  // The widget's own click puts the cursor in the source; CodeMirror mustn't
+  // move it again to where it thinks the click landed (the block's end).
   override ignoreEvent() {
-    return false;
+    return true;
   }
 }

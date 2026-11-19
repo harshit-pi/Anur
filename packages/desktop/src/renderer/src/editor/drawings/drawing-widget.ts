@@ -14,6 +14,9 @@ const isDark = () => {
   return forced ? forced === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
 };
 
+/** Each drawn picture's focus listener, removed when it leaves the page. */
+const listeners = new WeakMap<HTMLElement, () => void>();
+
 export class DrawingWidget extends WidgetType {
   constructor(readonly target: string) {
     super();
@@ -81,9 +84,23 @@ export class DrawingWidget extends WidgetType {
         wrap.classList.add("missing");
       });
     };
-    window.addEventListener("focus", draw);
+    // Back to the window: drawn again, at most every few seconds, and only while on the page.
+    let last = 0;
+    const again = () => {
+      if (!wrap.isConnected || Date.now() - last < 5000) return;
+      last = Date.now();
+      draw();
+    };
+    window.addEventListener("focus", again);
+    listeners.set(wrap, again);
+    last = Date.now();
     draw();
     return wrap;
+  }
+
+  override destroy(dom: HTMLElement) {
+    const on = listeners.get(dom);
+    if (on) window.removeEventListener("focus", on);
   }
 
   override ignoreEvent() {
