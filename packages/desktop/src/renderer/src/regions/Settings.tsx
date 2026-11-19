@@ -448,11 +448,11 @@ function TaskHooksRow() {
   const detail = !s.claude
     ? "Claude Code isn't installed on this computer."
     : s.added
-      ? "Added to Claude Code. After each task in a folder opened in Anur, a report of what it changed across the repos. Elsewhere it does nothing."
-      : "Adds Anur's plugin to Claude Code: after each task in a folder opened in Anur, a report of what it changed across the repos, ranked. Elsewhere it does nothing.";
+      ? "Added to Claude Code, for every folder on this Mac. After each task in a folder opened in Anur, a report of what it changed across the repos. Elsewhere it does nothing."
+      : "Adds Anur's plugin to Claude Code, once for this Mac: after each task in a folder opened in Anur, a report of what it changed across the repos, ranked. Elsewhere it does nothing.";
   return (
     <>
-      <Row title="Task reports in Claude Code" detail={detail}>
+      <Row title="Task reports in Claude Code, on this Mac" detail={detail}>
         {s.claude ? (
           <button
             type="button"
@@ -498,6 +498,9 @@ function PluginRows({ folder }: { folder: FolderState | null }) {
               void anur.call("plugins:set", { id: p.id, on }).then((r) => {
                 if (r.kind === "refused") setNote(r.reason);
                 setN((x) => x + 1);
+                // Engineering on: show what it does at once, in the System tab.
+                if (r.kind === "ok" && on && p.id === "engineering")
+                  window.dispatchEvent(new CustomEvent("anur:engineering-on"));
               });
             }}
           />

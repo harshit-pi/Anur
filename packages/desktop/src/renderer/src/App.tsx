@@ -72,6 +72,7 @@ import {
 } from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
 import { SkillCard } from "./regions/SkillCard.tsx";
+import { EngineeringCard } from "./regions/EngineeringCard.tsx";
 import { UpdateCard } from "./regions/UpdateCard.tsx";
 import { OpenerCard } from "./regions/OpenerCard.tsx";
 import { Tour } from "./regions/Tour.tsx";
@@ -250,11 +251,20 @@ export function App() {
   }, [tabs, folderPath]);
   // The system tab shows while Engineering is on for the folder (group 20).
   const [engineeringOn, setEngineeringOn] = useState(false);
+  /** The folder the System tab was last brought forward for on opening; once per opening. */
+  const systemShownFor = useRef<string | null>(null);
   useEffect(() => {
     if (!folderPath || settings) return;
     let current = true;
     void anur.call("plugins:list", {}).then((r) => {
-      if (current) setEngineeringOn(r.plugins.some((p) => p.id === "engineering" && p.on));
+      if (!current) return;
+      const on = r.plugins.some((p) => p.id === "engineering" && p.on);
+      setEngineeringOn(on);
+      // A folder opened with Engineering on starts on its System tab.
+      if (on && systemShownFor.current !== folderPath) {
+        systemShownFor.current = folderPath;
+        setTabs((t) => showSystem(t));
+      }
     });
     return () => {
       current = false;
@@ -263,6 +273,18 @@ export function App() {
   const openSystem = useCallback(() => {
     setTabs((t) => showSystem(t));
   }, []);
+  // Engineering switched on, from Settings or the card: the System tab at once.
+  useEffect(() => {
+    const on = () => {
+      setSettings(null);
+      setEngineeringOn(true);
+      openSystem();
+    };
+    window.addEventListener("anur:engineering-on", on);
+    return () => {
+      window.removeEventListener("anur:engineering-on", on);
+    };
+  }, [openSystem]);
   const openDocNow = useRef<(path: string, inNewTab: boolean) => void>(() => undefined);
   const openDoc = useCallback((path: string, inNewTab: boolean) => {
     setTabs((t) => openInTab(t, path, inNewTab));
@@ -1305,6 +1327,7 @@ export function App() {
         // One card at a time in the corner, the most pressing first.
         <div className="corner-cards">
           <UpdateCard />
+          <EngineeringCard />
           <OpenerCard />
           <SkillCard />
           <StarPrompt />

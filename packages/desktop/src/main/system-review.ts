@@ -42,11 +42,13 @@ export type ReviewView = {
   pending: { group: string; name: string; merge: string[] }[];
   reviewed: string[];
   asking: boolean;
+  /** When the ask began, for the tab's seconds counter. */
+  askingSince: string | null;
   failed: string | null;
 };
 
 export class SystemReview {
-  private readonly asking = new Set<string>();
+  private readonly asking = new Map<string, string>();
   private readonly failed = new Map<string, string>();
 
   constructor(
@@ -74,6 +76,7 @@ export class SystemReview {
       pending: state.pending.filter((p) => live.has(p.group)),
       reviewed: [...state.reviewed],
       asking: this.asking.has(folder),
+      askingSince: this.asking.get(folder) ?? null,
       failed: this.failed.get(folder) ?? null,
     };
   }
@@ -117,7 +120,7 @@ export class SystemReview {
   ) {
     const pending = ask(proposalPrompt(briefsFrom(sections, unasked)));
     if (!pending) return; // No agent for this folder yet: asked next time.
-    this.asking.add(folder);
+    this.asking.set(folder, new Date().toISOString());
     const parentOf = new Map(sections.map((s) => [s.id, s.parent]));
     pending
       .then((reply) => {

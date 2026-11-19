@@ -578,6 +578,7 @@ export const ipcContract = {
           ),
           reviewed: z.array(z.string()),
           asking: z.boolean(),
+          askingSince: z.string().nullable(),
           failed: z.string().nullable(),
         }),
       }),
@@ -1407,6 +1408,11 @@ export const ipcContract = {
   "tasks:get": {
     request: z.object({ id: z.string().max(200) }).strict(),
     response: z.object({ report: TaskReportView.nullable() }),
+  },
+  /** Whether to offer Engineering for this window's folder: its code repos, and whether it's on. */
+  "engineering:offer": {
+    request: z.object({}).strict(),
+    response: z.object({ folder: z.string().nullable(), repos: z.number(), on: z.boolean() }),
   },
   /** The `anur` plugin's task hooks in the person's Claude Code (group 21). */
   "taskHooks:status": {

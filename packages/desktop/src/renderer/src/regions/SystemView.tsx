@@ -10,7 +10,39 @@ import {
 } from "../layout/system-levels.ts";
 
 type Proposal = { group: string; name: string; merge: string[] };
-type Review = { pending: Proposal[]; reviewed: string[]; asking: boolean; failed: string | null };
+type Review = {
+  pending: Proposal[];
+  reviewed: string[];
+  asking: boolean;
+  askingSince: string | null;
+  failed: string | null;
+};
+
+/**
+ * While Claude names the groups: a bar that moves without a percentage, since
+ * the answer comes whole, and the seconds so far, so a long ask reads as running.
+ */
+function Asking({ since }: { since: string | null }) {
+  const start = since ? Date.parse(since) : Date.now();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => {
+      clearInterval(t);
+    };
+  }, []);
+  const secs = Math.max(0, Math.round((now - start) / 1000));
+  return (
+    <div className="system-asking" role="status">
+      <span className="quiet">Claude is suggesting names for the groups… {secs} s</span>
+      <div className="system-bar" aria-hidden="true">
+        <span />
+      </div>
+    </div>
+  );
+}
 
 type Shown =
   | { kind: "reading" }
@@ -162,15 +194,21 @@ export function SystemView({
           </span>
         ))}
         <span className="system-actions">
-          {level && unseen.length ? (
+          {unseen.length ? (
             <button
               type="button"
-              title="Count every part on this level as seen"
+              title={
+                level
+                  ? "Count every part on this level as seen"
+                  : "Count every part in every repo as seen"
+              }
               onClick={() => {
                 void anur.call("system:reviewed", { parts: unseen });
               }}
             >
-              Mark {unseen.length} reviewed
+              {level
+                ? `Mark ${String(unseen.length)} reviewed`
+                : `Mark all ${String(unseen.length)} reviewed`}
             </button>
           ) : null}
           <button type="button" title="Read the repos again" onClick={read}>
@@ -180,9 +218,7 @@ export function SystemView({
       </nav>
       {level ? null : <RecentTasks onOpen={onOpenTask} />}
       {review.asking ? (
-        <p className="system-note quiet" role="status">
-          Claude is suggesting names for the groups…
-        </p>
+        <Asking since={review.askingSince} />
       ) : review.failed ? (
         <p className="system-note quiet" role="status">
           Claude couldn't suggest names: {review.failed}{" "}
