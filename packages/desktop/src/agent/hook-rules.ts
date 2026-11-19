@@ -150,8 +150,11 @@ export function decideShell(
   // Other threads' working copies (30.14): named outright, or under a recursive
   // read from a folder that holds them, as "find ~ -exec cat" or "rg secret ~"
   // would be. The path is read as the shell would see it: "~" is home, and
-  // "Application\ Support" one word.
-  const plain = cmd.replace(/\\ /g, " ").replace(/(^|[\s'"=])~(?=\/|\s|$)/g, `$1${homedir()}`);
+  // "Application\ Support" one word, and $HOME the home folder.
+  const plain = cmd
+    .replace(/\\ /g, " ")
+    .replace(/\$\{HOME\}|\$HOME\b/g, homedir())
+    .replace(/(^|[\s'"=])~(?=\/|\s|$)/g, `$1${homedir()}`);
   const listsOnly = /^\s*(du|ls|stat)\b/.test(cmd);
   if (!listsOnly && namesOtherCopy(plain, config)) return MESSAGES.otherCopy;
   const searches =

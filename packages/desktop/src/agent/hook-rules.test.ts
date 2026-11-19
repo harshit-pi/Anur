@@ -82,7 +82,7 @@ describe("the hook's shell rules", () => {
     expect(call("mcp__x__read", { path: "/support/copies/t2/a.md" })).toBe(MESSAGES.otherCopy);
   });
 
-  it("reads a path the way the shell does: home for ~, an escaped space as part of the name", () => {
+  it("reads a path the way the shell does: home for ~ and $HOME, an escaped space as part of the name", () => {
     const home = path.join(homedir(), "Library/Application Support/Anur/copies");
     const c = { ...config, copiesRoot: home, copies: path.join(home, "t1") };
     const sh = (command: string) =>
@@ -92,6 +92,12 @@ describe("the hook's shell rules", () => {
       MESSAGES.otherCopy,
     );
     expect(sh("cat ~/Library/Application\\ Support/Anur/copies/t1/plan.md")).toBeNull();
+    expect(sh('cat "$HOME/Library/Application Support/Anur/copies/t2/plan.md"')).toBe(
+      MESSAGES.otherCopy,
+    );
+    expect(sh("cat ${HOME}/Library/Application\\ Support/Anur/copies/t2/plan.md")).toBe(
+      MESSAGES.otherCopy,
+    );
   });
 
   it("lets rg and git grep search, since they skip .anur/ by its ignore files", () => {
