@@ -15,7 +15,7 @@ import {
 
 export type MapNode = {
   id: string;
-  kind: "repo" | "group" | "part" | "stub";
+  kind: "repo" | "group" | "part" | "resource" | "stub";
   name: string;
   /** A second line: what it holds, or its build file. */
   line: string;
@@ -114,18 +114,41 @@ export function layoutMap(
   type Agg = { from: string; to: string; edges: SystemEdge[] };
   const agg = new Map<string, Agg>();
   const stubs = new Map<string, string>();
-  for (const e of edges) {
-    if (e.state === "hidden") continue;
-    if (!inScope.has(e.from) && !inScope.has(e.to)) continue;
+  // Many outside ends fold into one box each, "Outside services" and "Not in
+  // these repos", so a long tail of tables doesn't crowd the map.
+  const shown = edges.filter(
+    (e) => e.state !== "hidden" && (inScope.has(e.from) || inScope.has(e.to)),
+  );
+  const outsideEnds = new Set(
+    shown.filter((e) => e.to.startsWith("stub:outside:")).map((e) => e.to),
+  );
+  const missingEnds = new Set(
+    shown.filter((e) => e.to.startsWith("stub:not-cloned:")).map((e) => e.to),
+  );
+  const fold = (id: string) =>
+    id.startsWith("stub:outside:") && outsideEnds.size > 3
+      ? "stub:many:outside"
+      : id.startsWith("stub:not-cloned:") && missingEnds.size > 3
+        ? "stub:many:not-cloned"
+        : id;
+  for (const e of shown) {
     const isStub = e.to.startsWith("stub:");
     const from = inScope.has(e.from) ? visibleOf(e.from) : `ext:${endName(all, e.from).name}`;
     const to = isStub
-      ? e.to
+      ? fold(e.to)
       : inScope.has(e.to)
         ? visibleOf(e.to)
         : `ext:${endName(all, e.to).name}`;
     if (from === to) continue;
-    if (isStub) stubs.set(e.to, endName(all, e.to).name);
+    if (isStub)
+      stubs.set(
+        to,
+        to === "stub:many:outside"
+          ? `${String(outsideEnds.size)} outside services`
+          : to === "stub:many:not-cloned"
+            ? `${String(missingEnds.size)} not in these repos`
+            : endName(all, e.to).name,
+      );
     if (from.startsWith("ext:")) stubs.set(from, from.slice(4));
     if (to.startsWith("ext:")) stubs.set(to, to.slice(4));
     const key = `${from}→${to}`;
@@ -156,26 +179,31 @@ export function layoutMap(
   const place = (s: Sized, x: number, y: number, parent: string | null) => {
     const sec = byId.get(s.id);
     const kids = childrenOf(all, s.id);
+    const isRes = s.id.startsWith("res:");
     const isPart = s.id.startsWith("part:");
-    const parts = isPart ? 1 : partIdsUnder(all, s.id).length;
-    const groups = kids.filter((k) => !k.id.startsWith("part:")).length;
+    const parts = isPart || isRes ? 1 : partIdsUnder(all, s.id).length;
+    const groups = kids.filter((k) => !k.id.startsWith("part:") && !k.id.startsWith("res:")).length;
     nodes.push({
       id: s.id,
-      kind: s.id.startsWith("repo:") ? "repo" : isPart ? "part" : "group",
+      kind: s.id.startsWith("repo:") ? "repo" : isRes ? "resource" : isPart ? "part" : "group",
       name: sec?.path.at(-1) ?? s.id,
-      line: isPart
+      line: isRes
         ? (sec?.text ?? "")
-        : !kids.length
-          ? "No build file"
-          : groups
-            ? `${plural(parts, "part")} in ${plural(groups, "group")}`
-            : plural(parts, "part"),
+        : isPart
+          ? kids.length
+            ? plural(kids.length, "resource")
+            : (sec?.text ?? "")
+          : !kids.length
+            ? "No build file"
+            : groups
+              ? `${plural(parts, "part")} in ${plural(groups, "group")}`
+              : plural(parts, "part"),
       x,
       y,
       w: s.w,
       h: s.h,
       open: open.has(s.id) && s.kids.length > 0,
-      opens: !isPart && kids.length > 0,
+      opens: !isRes && kids.length > 0,
       grey: false,
       parent,
     });
@@ -232,11 +260,16 @@ export function layoutMap(
         id,
         kind: "stub",
         name,
-        line: id.startsWith("stub:not-cloned")
-          ? "not cloned"
-          : id.startsWith("ext:")
-            ? "another system"
-            : "outside",
+        line:
+          id === "stub:many:outside"
+            ? "outside"
+            : id === "stub:many:not-cloned"
+              ? "created in no repo here"
+              : id.startsWith("stub:not-cloned")
+                ? "not cloned"
+                : id.startsWith("ext:")
+                  ? "another system"
+                  : "outside",
         x,
         y,
         w: BOX_W,
@@ -298,7 +331,7 @@ export function layoutMap(
         ? a.edges[0]?.label === "/"
           ? ""
           : (a.edges[0]?.label ?? "")
-        : plural(a.edges.length, "call"),
+        : plural(a.edges.length, a.edges.every((e) => e.kind === "http") ? "call" : "link"),
     grey: !!(greyOf.get(a.from) || greyOf.get(a.to)),
     guessed: a.edges.some((e) => e.how === "guessed" && e.state === "shown"),
   }));

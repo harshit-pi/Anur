@@ -64,3 +64,14 @@ export {
   type Edge as SystemEdge,
 } from "./edges.ts";
 export { INTERNAL_MARK } from "./choices.ts";
+export {
+  AWS_MISSES,
+  appWiring,
+  awsIn,
+  awsLinks,
+  type AwsAction,
+  type AwsKind,
+  type AwsLink,
+  type AwsResource,
+  type AwsUse,
+} from "./aws.ts";

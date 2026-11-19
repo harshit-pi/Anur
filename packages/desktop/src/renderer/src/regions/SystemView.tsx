@@ -366,9 +366,13 @@ function EdgeList({
   }, [focus]);
   const [showHidden, setShowHidden] = useState(false);
   const [menu, setMenu] = useState<string | null>(null);
-  const live = edges.filter((e) => e.state !== "hidden");
-  const hidden = edges.filter((e) => e.state === "hidden");
-  const groups = edgeGroups(sections, showHidden ? edges : live, within);
+  // The list is for lines between repos; links inside a repo show on the map when it's open.
+  const between = edges.filter(
+    (e) => endName(sections, e.from).name !== endName(sections, e.to).name,
+  );
+  const live = between.filter((e) => e.state !== "hidden");
+  const hidden = between.filter((e) => e.state === "hidden");
+  const groups = edgeGroups(sections, showHidden ? between : live, within);
   if (!edges.length) return null;
   const act = (edge: string, action: "hide" | "show" | "confirm") => {
     void anur.call("system:edge", { edge, action });
@@ -392,7 +396,14 @@ function EdgeList({
               {g.stub ? <span className="edge-stub"> {g.stub}</span> : null}
             </span>
             <span className="quiet">
-              {g.edges.length} {g.edges.length === 1 ? "call" : "calls"}
+              {g.edges.length}{" "}
+              {g.edges.every((e) => e.kind === "http")
+                ? g.edges.length === 1
+                  ? "call"
+                  : "calls"
+                : g.edges.length === 1
+                  ? "link"
+                  : "links"}
               {g.edges.some((e) => e.how === "guessed") ? ", some guessed" : ""}{" "}
               {open === g.key ? "▴" : "▾"}
             </span>
@@ -407,36 +418,19 @@ function EdgeList({
                     {e.declared ? <span className="quiet"> → {e.declared}</span> : null}
                   </span>
                   <span className="edge-acts">
-                    {e.how === "guessed" && e.state === "shown" ? (
-                      // Several repos declare this route: the one thing worth asking.
-                      <span className="edge-ask">
-                        Is it {endName(sections, e.to).name}?{" "}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            act(e.id, "confirm");
-                            for (const o of edges)
-                              if (
-                                o.id !== e.id &&
-                                o.from === e.from &&
-                                o.evidence === e.evidence &&
-                                o.how === "guessed"
-                              )
-                                act(o.id, "hide");
-                          }}
-                        >
-                          Yes
-                        </button>{" "}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            act(e.id, "hide");
-                          }}
-                        >
-                          No
-                        </button>
+                    {e.how === "guessed" ? (
+                      <span
+                        className="edge-guessed"
+                        title={
+                          e.kind === "http"
+                            ? "Several repos declare this route; this is one of them."
+                            : "The name matches a resource another repo creates; no construct call joins them."
+                        }
+                      >
+                        guessed
                       </span>
-                    ) : e.state === "hidden" ? (
+                    ) : null}
+                    {e.state === "hidden" ? (
                       <button
                         type="button"
                         onClick={() => {
@@ -487,7 +481,8 @@ function EdgeList({
           </button>
         ) : null}
         {hidden.length ? " · " : null}
-        Found from HTTP calls in code. Misses {misses.join("; ")}.
+        Found from HTTP calls and AWS resources in code; guessed lines are drawn faint. Misses{" "}
+        {misses.join("; ")}.
       </p>
     </section>
   );

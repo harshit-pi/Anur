@@ -1,7 +1,9 @@
 import { API_VERSION, type Edge, type Plugin, type SourcedSection } from "@anur/core";
 import {
+  AWS_MISSES,
   HTTP_MISSES,
   applyReview,
+  awsLinks,
   edgesIn,
   findRepoDirs,
   groupParts,
@@ -50,6 +52,12 @@ export const engineering: Plugin = {
       id: "http",
       misses: HTTP_MISSES,
       edges: (folder) => Promise.resolve(systemEdges(folder)),
+    });
+    // Lambdas, tables, queues, topics and buckets, within a repo and across (22.6).
+    api.registerEdgeDetector({
+      id: "aws",
+      misses: AWS_MISSES,
+      edges: (folder) => Promise.resolve(awsEdges(folder)),
     });
   },
 };
@@ -121,6 +129,17 @@ export function systemSections(folder: string): SourcedSection[] {
       : null;
     if (groups) place(groups, repoId, []);
     for (const p of [...left]) partSection(p.name, repoId);
+    // Inside each stack: the Lambdas, tables, queues, topics and buckets it creates (22.6).
+    const stackPart = new Map(
+      parts.filter((p) => p.kind === "stack").map((p) => [p.name, `part:${p.id}`]),
+    );
+    for (const res of awsOf(folder).resources.filter((x) => x.repo === r.dir))
+      out.push({
+        id: `res:${res.key}`,
+        path: [r.dir, res.name],
+        text: KIND_WORD[res.kind],
+        parent: res.stacks.map((st) => stackPart.get(st)).find(Boolean) ?? repoId,
+      });
   }
   return out;
 }
@@ -152,5 +171,48 @@ export function systemEdges(folder: string): Edge[] {
     how: e.how,
     evidence: e.evidence,
     declared: e.declared,
+  }));
+}
+
+const KIND_WORD = {
+  function: "Lambda",
+  table: "table",
+  queue: "queue",
+  topic: "topic",
+  bucket: "bucket",
+} as const;
+
+/** One read of the folder's AWS resources, shared by sections and edges read together. */
+const awsMemo = new Map<string, { at: number; value: ReturnType<typeof awsLinks> }>();
+function awsOf(folder: string): ReturnType<typeof awsLinks> {
+  const hit = awsMemo.get(folder);
+  if (hit && Date.now() - hit.at < 5000) return hit.value;
+  const scan = scanSystem(folder);
+  const value = awsLinks(
+    folder,
+    scan.repos.map((r) => r.dir),
+  );
+  awsMemo.set(folder, { at: Date.now(), value });
+  return value;
+}
+
+/**
+ * AWS links as edges: from the function that acts (or, for a name that merely
+ * matches, the repo that names it) to the resource, which is a stub when no
+ * repo here creates it.
+ */
+export function awsEdges(folder: string): Edge[] {
+  const scan = scanSystem(folder);
+  const repoId = (dir: string) => `repo:${scan.repos.find((r) => r.dir === dir)?.id ?? dir}`;
+  const { links } = awsOf(folder);
+  return links.map((l) => ({
+    id: l.id,
+    from: l.from.created ? `res:${l.from.key}` : repoId(l.from.repo),
+    to: l.to.created ? `res:${l.to.key}` : `stub:not-cloned:${KIND_WORD[l.to.kind]} ${l.to.name}`,
+    kind: "aws",
+    label: `${l.action} ${l.to.name}`,
+    how: l.how,
+    evidence: l.evidence,
+    declared: l.to.created ? `${l.to.file}:${String(l.to.line)}` : null,
   }));
 }

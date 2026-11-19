@@ -59,7 +59,8 @@ export function SystemMap({
   }, []);
   const fullW = map.width + PAD * 2;
   const fullH = map.height + PAD * 2;
-  const scale = paneW > 0 ? Math.min(1, paneW / fullW) : 1;
+  // Never below three quarters: past that, the map scrolls sideways instead.
+  const scale = paneW > 0 ? Math.max(0.75, Math.min(1, paneW / fullW)) : 1;
   const frames = map.nodes.filter((n) => n.open);
   const boxes = map.nodes.filter((n) => !n.open);
   const node = (n: MapNode) => {
@@ -130,9 +131,13 @@ export function SystemMap({
                 >
                   <path d={p.d} className="map-line-hit" />
                   <path d={p.d} className="map-line-path" />
-                  <text x={p.mx} y={p.my - 6} textAnchor="middle" className="map-line-label">
-                    {l.label}
-                  </text>
+                  <title>{l.label}</title>
+                  {/* Counts print; a lone link's name shows on hover, so labels don't pile up. */}
+                  {l.count > 1 || map.lines.length <= 12 ? (
+                    <text x={p.mx} y={p.my - 6} textAnchor="middle" className="map-line-label">
+                      {l.label}
+                    </text>
+                  ) : null}
                 </g>
               );
             })}

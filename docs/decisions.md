@@ -337,3 +337,13 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - A click on a repo or group opens it in place: its groups and parts inside the frame, lines moving to the part that calls or serves when the code says which, and everything not joined to it grey. A click on a line opens its calls in the list below.
 - The layout is a pure function of the sections, the edges and what's open, so the same code always draws the same map. It scales down to fit the pane's width, never up.
 - Known limit: when a repo's CDK stacks share one `cdk.json`, a route can't yet be tied to one stack, so the line ends on the repo; reading CDK (22.6) fixes it.
+
+## AWS resources and their links (22.6, early)
+
+- The engineering plugin reads AWS resources from CDK source, in TypeScript and Python, by AWS's own constructs: Lambdas, tables, queues, topics and buckets created or imported, grants, event sources and environment references, following a stack's props through the app file. Any CDK team's code reads the same way; nothing is specific to one team.
+- A resource is joined across repos by its physical name: the repo that creates it owns it. A resource imported but created in no repo here is a "not cloned" stub.
+- A string in one repo equal to a resource another repo creates (six characters or more, with a capital) is a guessed link, with that line as evidence. It catches names passed through a team's own config, such as an API whose route config names the Lambdas it invokes.
+- A guessed line never asks anything: it's drawn faint and dashed, with why on hover, and the list says "guessed".
+- Resources sit inside their stack on the map; opening a stack shows them with their links. More than three outside ends of one kind fold into one box. A lone line's name shows on hover; counts print.
+- On the team's workspace: 338 resources and 436 links in 1.9 s, among them PiDataServiceProcessor's Lambdas writing the Copying table PiTradingClientNodeJS creates (24 found) and PiAuthService naming 51 of PiTradingClientNodeJS's Lambdas (guessed).
+- The `base_path` route-tree rule stays, marked Partly in docs/what-anur-reads.md, until links proposed by Claude with checked evidence replace it; removing it now would lose the 67 found PiTrade → PiAuthService calls.

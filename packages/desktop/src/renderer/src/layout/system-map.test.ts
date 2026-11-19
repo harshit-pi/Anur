@@ -81,3 +81,20 @@ describe("the system as a map (24.4)", () => {
     );
   });
 });
+
+describe("a long tail of outside ends", () => {
+  it("folds more than three into one box", () => {
+    const many = ["A", "B", "C", "D"].map((n, i) => ({
+      ...edge(`t${String(i)}`, "part:app1", `stub:not-cloned:table ${n}`),
+      kind: "aws",
+    }));
+    const m = layoutMap(all, many, null, new Set());
+    const stubs = m.nodes.filter((n) => n.kind === "stub");
+    expect(stubs.map((n) => [n.name, n.line])).toEqual([
+      ["4 not in these repos", "created in no repo here"],
+    ]);
+    expect(m.lines.map((l) => [l.from, l.to, l.label])).toEqual([
+      ["repo:app", "stub:many:not-cloned", "4 links"],
+    ]);
+  });
+});
