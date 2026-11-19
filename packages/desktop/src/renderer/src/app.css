@@ -6120,3 +6120,57 @@ button.file-card-name:hover {
 .map-key.thread::before {
   content: "Italic";
 }
+
+/*
+ * Mock 11 in the thread panel: the same three looks as the map.
+ * A choice (an option or a proposed edit) is a dashed blue card until it's in the doc.
+ */
+.think-offer {
+  border: 1.5px dashed var(--blue);
+  border-radius: 12px;
+  background: var(--blue-wash);
+}
+
+.think-offer.used {
+  border-style: solid;
+  background: var(--sheet);
+}
+
+.think-offer.explored {
+  border-style: solid;
+}
+
+/* A proposed action: a pill-like card, its state as an icon. */
+.think-proposed-action {
+  border: none;
+  border-radius: 14px;
+  background: var(--hover);
+}
+
+/* An action thread's state in a thread list: an icon, the word on hover. */
+.thread-state {
+  display: inline-block;
+  width: 14px;
+  margin-right: 6px;
+  color: var(--graphite);
+  font-weight: 700;
+  text-align: center;
+}
+
+.thread-state.running {
+  color: var(--blue);
+}
+
+.thread-state.needs {
+  color: var(--amber);
+}
+
+.thread-state.failed {
+  color: var(--red, #c0392b);
+}
+
+.think-branch-path {
+  padding-left: 0;
+  background: transparent;
+  color: var(--graphite);
+}

@@ -397,7 +397,7 @@ function EditCard({
       aria-label={`Proposed edit to ${part.path.at(-1) ?? ""}`}
     >
       <div className="think-offer-head">
-        <strong>Edit to {part.path.at(-1)}</strong>
+        <strong>± Edit {part.path.at(-1)}</strong>
         <span className="quiet">Not in the doc yet</span>
       </div>
       <div className="think-offer-text">
@@ -406,7 +406,7 @@ function EditCard({
       <div className="think-offer-actions">
         {writable ? (
           <button type="button" className="think-button primary" onClick={onUse}>
-            Use this
+            Use
           </button>
         ) : null}
         <button type="button" className="think-more" onClick={onShow}>
@@ -1244,6 +1244,11 @@ export function Think({
             ) : (
               <span className="think-where quiet">its section is gone</span>
             )}
+            {thread.explores ? (
+              <span className="think-where quiet think-branch-path">
+                {exploresPath(thread, threads).join(" › ")}
+              </span>
+            ) : null}
             {thread.by ? (
               <span className="think-where quiet think-started-by">
                 started by {thread.by}
@@ -1475,7 +1480,7 @@ export function Think({
                               useOption(thread, o, "replace", item.heading);
                             }}
                           >
-                            Use this
+                            Use
                           </button>
                           {item.heading ? null : (
                             <button
@@ -1695,9 +1700,9 @@ export function Think({
                   aria-label="Proposed action"
                 >
                   <div className="think-offer-head">
-                    <span className="think-action-tag">BUILD</span>
-                    <strong>{item.title}</strong>
-                    <span className="quiet">{item.run ? "Ran" : "Planned"}</span>
+                    <strong>
+                      <span className="map-pill-icon">{item.run ? "✓" : "▶"}</span> {item.title}
+                    </strong>
                   </div>
                   <div className="think-offer-text">
                     <Markdown text={item.what} />
@@ -3708,12 +3713,49 @@ export function ThreadName({ thread }: { thread: ThreadView }) {
   const title = thread.title.startsWith(`${tag}: `)
     ? thread.title.slice(tag.length + 2)
     : thread.title;
+  const state = thread.action?.state ?? "running";
   return (
     <>
-      <span className="thread-tag">{tag}</span>
+      <span className={`thread-state ${state}`} title={`${tag} · ${STATE_WORD[state]}`}>
+        {STATE_MARK[state]}
+      </span>
       {title}
     </>
   );
+}
+
+const STATE_MARK = { running: "⟳", needs: "!", done: "✓", failed: "×", stopped: "■" } as const;
+const STATE_WORD = {
+  running: "Running",
+  needs: "Needs you",
+  done: "Done",
+  failed: "Failed",
+  stopped: "Stopped",
+} as const;
+
+/**
+ * Where a branch thread sits: the decision it started from, then each option
+ * it narrows, oldest first ("Activation event › Dashboard saved on own data").
+ */
+export function exploresPath(thread: ThreadView, threads: ThreadView[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  let up = thread.explores ?? null;
+  while (up && !seen.has(up.thread)) {
+    seen.add(up.thread);
+    const option = up.option;
+    const from = threads.find((t) => t.id === up?.thread);
+    if (!from) break;
+    const offer = from.items.find(
+      (x) => x.kind === "options" && x.options.some((o) => o.id === option),
+    );
+    if (offer?.kind !== "options") break;
+    const o = offer.options.find((x) => x.id === option);
+    if (o) out.unshift(o.title);
+    up = from.explores ?? null;
+    if (!up) out.unshift(offer.heading ?? from.title);
+  }
+  return out;
 }
 
 function ThreadList({
