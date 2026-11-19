@@ -130,6 +130,8 @@ export type ThreadDeps = {
   mcp?: { socket: AnurSocket; script: string } | null;
   /** A session reported its agent's choices: the defaults for the next new thread. */
   rememberOptions?: (agent: AgentId, options: SessionOption[]) => void;
+  /** An agent's last known choices, for a thread with no session open yet. */
+  knownOptions?: (agent: AgentId) => SessionOption[];
 };
 
 /** The agent a session line names; a line from before agents were recorded is Claude Code's. */
@@ -186,6 +188,8 @@ type Live = {
   carried?: Carried[];
   /** The edits still waiting when this turn started, and those gone since: for the change note (4.6). */
   waiting?: { still: string[]; gone: string[] } | null;
+  /** This turn's prompt has gone to the agent; before that it's still being prepared. */
+  sent?: boolean;
 };
 
 /** How long after a turn its working copies are watched for background edits. */
@@ -672,7 +676,7 @@ export class Threads {
       changeSet: await this.changeSetOf(thread, rel, text),
       reads,
       items,
-      options: this.options.get(thread) ?? [],
+      options: this.optionsOf(thread, this.agentOf(thread, lines)),
       agent: this.agentOf(thread, lines),
       tokens: tokensOf(lines),
       purpose: start.purpose ?? null,
@@ -827,6 +831,7 @@ export class Threads {
     const turn = newTurnId();
     live.turn = turn;
     live.turnAt = Date.now();
+    live.sent = false;
     live.text = "";
     live.tools = new Map();
     live.written = new Set();
@@ -916,12 +921,11 @@ export class Threads {
         });
       this.fromHost.set(thread, next);
     });
-    this.d.hub.send({
-      type: "prompt",
-      spec: await this.spec(thread, agent, resume),
-      turn,
-      text: prompt,
-    });
+    const spec = await this.spec(thread, agent, resume);
+    // Stopped while it was being prepared: nothing goes to the agent.
+    if (live.turn !== turn) return { kind: "sent" };
+    live.sent = true;
+    this.d.hub.send({ type: "prompt", spec, turn, text: prompt });
     this.later(this.refresh(rel, text, thread));
     return { kind: "sent" };
   }
@@ -1072,6 +1076,13 @@ export class Threads {
 
   stop(thread: string): void {
     this.d.hub.send({ type: "cancel", thread });
+    const live = this.live.get(thread);
+    if (!live) return;
+    // Still being prepared, so the agent has nothing to cancel: the turn ends here.
+    if (live.turn && !live.sent)
+      void this.endTurn(thread, live, "cancelled").catch(() => undefined);
+    // Already over, but the page missed it: show it as it is.
+    else if (!live.turn) void this.refresh(live.rel, live.docText, thread).catch(() => undefined);
   }
 
   /**
@@ -1264,8 +1275,15 @@ export class Threads {
   }
 
   /** The person picked a mode or model for the thread. */
+  /** A thread's mode and model: its session's, else the agent's last known, so a reopened thread can pick. */
+  private optionsOf(thread: string, agent: AgentId): SessionOption[] {
+    return this.options.get(thread) ?? this.d.knownOptions?.(agent) ?? [];
+  }
+
   setOption(thread: string, id: string, value: string): void {
-    const now = this.options.get(thread);
+    const now =
+      this.options.get(thread) ??
+      this.d.knownOptions?.(this.picked.get(thread) ?? this.d.defaultAgent());
     if (now)
       this.options.set(
         thread,
@@ -1791,6 +1809,13 @@ export class Threads {
     const node = at.tree.sections[index];
     if (!node) return { linked: [], broken: [] };
     const out = await this.links.linksOut(rel, node.path, text);
+    // Read at once: an offloaded iCloud file waits on its download, and one by one those add up.
+    const bodies = new Map(
+      [...new Set(out.flatMap((l) => (l.doc && l.doc !== rel ? [l.doc] : [])))].map((d) => [
+        d,
+        readFile(path.join(this.d.folder, d), "utf8").catch(() => null),
+      ]),
+    );
     const linked: { label: string; path: string; text: string; nameOnly?: boolean }[] = [];
     const broken: string[] = [];
     const seen = new Set<string>();
@@ -1803,7 +1828,7 @@ export class Threads {
         broken.push(l.written);
         continue;
       }
-      const body = await readFile(path.join(this.d.folder, l.doc), "utf8").catch(() => null);
+      const body = (await bodies.get(l.doc)) ?? null;
       if (body === null) continue;
       const tree = buildSectionTree(body, { fileName: path.basename(l.doc) });
       if (l.heading === null) {

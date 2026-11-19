@@ -341,13 +341,22 @@ function SizeMeter({
 function ContextRing({ tokens }: { tokens: { context: number; window: number | null } }) {
   if (!tokens.window) return null;
   const share = Math.min(1, tokens.context / tokens.window);
-  // Words, not a ring: a ring beside the pickers read as something still loading.
+  const r = 6;
+  const around = 2 * Math.PI * r;
+  const label = `${String(Math.round(share * 100))}% context: ${formatTokens(tokens.context)} of ${formatTokens(tokens.window)}`;
   return (
-    <span
-      className="think-context"
-      title={`Context ${formatTokens(tokens.context)} of ${formatTokens(tokens.window)}`}
-    >
-      {`${String(Math.round(share * 100))}% context`}
+    <span className="think-ring" title={label} aria-label={label} role="img">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+        <circle className="think-ring-track" cx="8" cy="8" r={r} />
+        <circle
+          className="think-ring-fill"
+          cx="8"
+          cy="8"
+          r={r}
+          strokeDasharray={`${String(around * Math.max(share, 0.02))} ${String(around)}`}
+          transform="rotate(-90 8 8)"
+        />
+      </svg>
     </span>
   );
 }
@@ -526,8 +535,16 @@ function Composer({
         ) : null}
         <div className="think-pickers">{pickers}</div>
         {busy && onStop ? (
-          <button type="button" className="think-button" onClick={onStop}>
-            Stop
+          <button
+            type="button"
+            className="think-send think-stop"
+            aria-label="Stop"
+            title="Stop (Esc)"
+            onClick={onStop}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+              <rect x="1" y="1" width="10" height="10" rx="2" fill="currentColor" />
+            </svg>
           </button>
         ) : (
           <button
