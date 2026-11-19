@@ -483,7 +483,12 @@ export function MapView({
       for (const t of [...here].sort((a, b) => depth(a) - depth(b))) {
         const tid = `t:${t.id}`;
         const from = t.branchedFrom?.thread;
-        const parent = from && onSection.has(from) ? `t:${from}` : id;
+        // A thread exploring an option hangs off that option's box (fixed up below if it isn't drawn).
+        const parent = t.explores
+          ? `o:${t.explores.option}`
+          : from && onSection.has(from)
+            ? `t:${from}`
+            : id;
         // A Build or Check is an action box; any other thread, a chip.
         if (t.purpose && t.action) {
           nodes.push({ id: tid, parent, w: ACTION_W, h: ACTION_H });
@@ -601,7 +606,16 @@ export function MapView({
             for (const o of f.options) if (!f.added.includes(o.id)) optionBox(o, tid);
             continue;
           }
-          const picked = family.some((x) => x.used);
+          // Picked here, or in a thread exploring one of these options.
+          const familyIds = new Set(family.flatMap((x) => x.options.map((o) => o.id)));
+          const picked =
+            family.some((x) => x.used) ||
+            threads.some(
+              (th) =>
+                th.explores &&
+                familyIds.has(th.explores.option) &&
+                th.items.some((x) => x.kind === "options" && x.used !== null),
+            );
           if (picked) {
             // The rest, folded: a chip that opens to them, still to explore or switch to.
             const rest = family.flatMap((x) => x.options.filter((o) => o.id !== x.used));
@@ -688,6 +702,16 @@ export function MapView({
           n.id.startsWith("l:"),
       );
     nodes.sort((a, b) => near(b) - near(a));
+    // A box whose parent isn't drawn, such as a thread exploring an option now folded away,
+    // hangs off its section instead.
+    const drawn = new Set(nodes.map((n) => n.id));
+    for (const n of nodes) {
+      if (n.parent === null || drawn.has(n.parent)) continue;
+      const i = info.get(n.id);
+      const section = i ? idOf(i.index) : null;
+      n.parent = section && section !== n.id ? section : null;
+      if (i) i.parent = n.parent;
+    }
     const ordered = [
       nodes.find((n) => n.parent === null),
       ...nodes.filter((n) => n.parent !== null),

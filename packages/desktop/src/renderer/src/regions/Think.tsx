@@ -909,7 +909,12 @@ export function Think({
   useEffect(() => {
     if (lastSection.current === sectionKey) return;
     lastSection.current = sectionKey;
-    if (thread && section && !samePath(thread.path, section.path) && !thread.busy) setOpen(null);
+    // Close the thread that was open, but never one opened in the same moment, as when a
+    // click on the map picks a box on another section and opens its thread together.
+    if (thread && section && !samePath(thread.path, section.path) && !thread.busy) {
+      const was = thread.id;
+      setOpen((o) => (o === was ? null : o));
+    }
   }, [sectionKey, section, thread]);
 
   const start = useCallback(
@@ -1487,7 +1492,6 @@ export function Think({
                             <button
                               type="button"
                               className="think-more"
-                              disabled={thread.busy}
                               onClick={() => {
                                 setError(null);
                                 void anur
@@ -1498,7 +1502,16 @@ export function Think({
                                     option: o.id,
                                   })
                                   .then((r) => {
-                                    if (r.kind === "refused") setError(r.reason);
+                                    if (r.kind === "refused") {
+                                      setError(r.reason);
+                                      return;
+                                    }
+                                    // Exploring starts its own thread, clean of the other options.
+                                    setThreads((ts) => [
+                                      ...ts.filter((t) => t.id !== r.thread.id),
+                                      r.thread,
+                                    ]);
+                                    setOpen(r.thread.id);
                                   });
                               }}
                             >
