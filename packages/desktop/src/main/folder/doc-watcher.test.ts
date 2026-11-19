@@ -25,7 +25,7 @@ beforeEach(async () => {
   file = path.join(dir, "Plan.md");
   writeFileSync(file, "# Plan\n");
   seen = [];
-  watcher = new DocWatcher((_id, change) => seen.push(change), 50);
+  watcher = new DocWatcher((_id, change) => seen.push(change), 50, 300);
   watcher.watch(1, dir, "Plan.md", hashBytes(bytes("# Plan\n")));
   // macOS delivers events to a new watcher only once it is running.
   await new Promise((r) => setTimeout(r, 250));
@@ -68,6 +68,14 @@ describe("watching the open doc", () => {
     rmSync(file);
     await seenOne();
     expect(seen).toEqual([{ kind: "gone", path: "Plan.md" }]);
+  });
+
+  it("stays quiet when the file is back a moment later, as when iCloud swaps it", async () => {
+    rmSync(file);
+    await new Promise((r) => setTimeout(r, 120));
+    writeFileSync(file, "# Plan\n");
+    await new Promise((r) => setTimeout(r, 700));
+    expect(seen).toEqual([]);
   });
 
   it("ignores other files in the folder", async () => {

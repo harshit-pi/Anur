@@ -31,6 +31,8 @@ export class DocWatcher {
   constructor(
     private readonly report: (windowId: number, change: OutsideChange) => void,
     private readonly settleMs = 120,
+    /** iCloud and some editors swap a file out for a moment: look again before calling it gone. */
+    private readonly goneMs = 1500,
   ) {}
 
   /** Watch `rel` in `folder` for `windowId`, replacing whatever it watched before. */
@@ -73,16 +75,23 @@ export class DocWatcher {
     for (const id of [...this.byWindow.keys()]) this.stop(id);
   }
 
-  private async check(windowId: number): Promise<void> {
+  private async check(windowId: number, again = false): Promise<void> {
     const w = this.byWindow.get(windowId);
     if (!w) return;
     let bytes: Uint8Array;
     try {
       bytes = new Uint8Array(await readFile(w.file));
     } catch (e) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") {
-        this.report(windowId, { kind: "gone", path: w.rel });
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") return;
+      if (again) {
+        if (this.byWindow.get(windowId) === w) this.report(windowId, { kind: "gone", path: w.rel });
+        return;
       }
+      if (w.timer) clearTimeout(w.timer);
+      w.timer = setTimeout(() => {
+        w.timer = null;
+        void this.check(windowId, true);
+      }, this.goneMs);
       return;
     }
     const hash = hashBytes(bytes);
