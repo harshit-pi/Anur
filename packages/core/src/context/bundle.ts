@@ -113,6 +113,8 @@ export type BundleInput = {
     when?: string | null;
     instead?: string | null;
     until?: string | null;
+    /** Another decision here that goes against this one (18.4): neither holds until a person picks. */
+    disputed?: { claim: string; who: string | null } | null;
   }[];
 };
 
@@ -364,7 +366,7 @@ export function buildBundle({
       "",
       ...decided.map(
         (f) =>
-          `- Decided by ${f.who ?? "a teammate"}${f.when ? ` (${f.when})` : ""}: ${f.claim}${f.instead ? ` Instead of: ${f.instead}.` : ""}${f.until ? ` Until: ${f.until}.` : ""}${f.section ? ` [on ${f.section}]` : ""}`,
+          `- Decided by ${f.who ?? "a teammate"}${f.when ? ` (${f.when})` : ""}: ${f.claim}${f.instead ? ` Instead of: ${f.instead}.` : ""}${f.until ? ` Until: ${f.until}.` : ""}${f.section ? ` [on ${f.section}]` : ""}${f.disputed ? ` [Disagrees with ${f.disputed.who ?? "a teammate"}'s "${f.disputed.claim}": neither holds yet. Don't rely on either; ask the person which holds.]` : ""}`,
       ),
       ...(allDecided.length > decided.length
         ? [

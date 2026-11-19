@@ -2,7 +2,7 @@ import { chmod, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promis
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { DecisionScope, settleRule } from "@anur/core";
+import { DecisionScope, decisionNamed, settleRule } from "@anur/core";
 import { aboutFiles, filesFrom, type About } from "@anur/system";
 import type { ToolAnswer } from "../threads/anur-socket.ts";
 import type { CommittedDecisions, KeptEntry } from "../committed-decisions.ts";
@@ -64,7 +64,7 @@ export type TerminalDeps = {
     section: string,
   ) => Promise<string[] | null>;
   /** Decisions and kept findings committed where the session works (23.4), from `base`. */
-  committed: (base: string) => Pick<CommittedDecisions, "keep" | "keepFor" | "drop">;
+  committed: (base: string) => Pick<CommittedDecisions, "keep" | "keepFor" | "drop" | "all">;
   /** The person's name, as decisions show it. */
   me: () => Promise<string | null>;
   /** The session's transcript; Claude Code's own file for that folder unless given. */
@@ -342,6 +342,19 @@ async function decisionTool(
       return {
         text: `Not recorded yet: ${rule.why === "question" ? "their words read as a question" : "it may be a one-off"}. Ask the person in one line whether to keep "${decision}" as a decision; if they say yes, call again with confirmed: true.`,
       };
+    // Going against one already kept here (18.4), named by its words as listed.
+    const againstWords = str(args.against);
+    let against: string | null = null;
+    if (againstWords) {
+      const kept = (await store.all(dir ? [dir] : [])).flatMap((e) =>
+        e.kind === "decision" ? [{ id: e.id, claim: e.decision }] : [],
+      );
+      against = decisionNamed(againstWords, kept);
+      if (!against)
+        return {
+          error: `No decision kept here reads "${againstWords}" alone. Give its words as CLAUDE.md lists them.`,
+        };
+    }
     entry = {
       kind: "decision",
       decision: decision.slice(0, 400),
@@ -349,6 +362,7 @@ async function decisionTool(
       instead: str(args.instead)?.slice(0, 300) ?? null,
       until: str(args.until)?.slice(0, 200) ?? null,
       who: await d.me(),
+      ...(against ? { against } : {}),
     };
   } else {
     const claim = str(args.claim);
@@ -372,7 +386,11 @@ async function decisionTool(
       error:
         "Anur couldn't tell whose file to write: set git's user.email in this repo, then try again.",
     };
+  const disputes =
+    entry.kind === "decision" && entry.against
+      ? " It disagrees with the decision you named, so neither holds until someone picks one in Anur: tell the person both stand, and don't rely on either."
+      : "";
   return {
-    text: `Recorded on ${where}, in .anur/decisions/ so it's committed with the code and reaches the team's agents. Tell the person in one line. To take it back, call anur_drop_decision with id ${ref}.`,
+    text: `Recorded on ${where}, in .anur/decisions/ so it's committed with the code and reaches the team's agents.${disputes} Tell the person in one line. To take it back, call anur_drop_decision with id ${ref}.`,
   };
 }

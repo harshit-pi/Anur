@@ -241,6 +241,8 @@ export const FindingLine = LineEnvelope.extend({
   until: z.string().nullable().optional(),
   /** How far the agent judged it reaches, from the person's words (18.3); the section when left out. */
   scope: DecisionScope.optional(),
+  /** The kept decision this one goes against (18.4), by its ID: neither wins until someone picks. */
+  against: z.string().max(64).optional(),
 });
 
 /** A person's decision on a finding: kept (perhaps reworded), or dropped. */

@@ -95,6 +95,34 @@ describe("decisions from a plain Claude Code session (23.4, 23.11)", () => {
     expect("text" in onRepo && onRepo.text).toContain("Recorded on this repo");
   });
 
+  it("records one going against a kept decision as disagreeing, named by its words (18.4)", async () => {
+    const { api, call } = setup(said("three retries, not infinite", "no, five retries now"));
+    await call("anur_note_decision", {
+      quote: "three retries, not infinite",
+      decision: "Three retries, not infinite.",
+      confidence: 0.9,
+      _cwd: api,
+    });
+    const wrong = await call("anur_note_decision", {
+      quote: "no, five retries now",
+      decision: "Five retries.",
+      against: "Seven retries",
+      confidence: 0.9,
+      _cwd: api,
+    });
+    expect("error" in wrong && wrong.error).toContain("No decision kept here");
+    const r = await call("anur_note_decision", {
+      quote: "no, five retries now",
+      decision: "Five retries.",
+      against: "Three retries, not infinite.",
+      confidence: 0.9,
+      _cwd: api,
+    });
+    expect("text" in r && r.text).toContain("neither holds");
+    const [first, second] = lines(path.join(api, ".anur/decisions/sam.jsonl"));
+    expect(second).toMatchObject({ decision: "Five retries.", against: first?.id });
+  });
+
   it("refuses words the person never typed, and asks first when unsure or for a finding", async () => {
     const { api, call } = setup(said("should we retry three times?"));
     const made = await call("anur_note_decision", {
