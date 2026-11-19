@@ -720,10 +720,16 @@ export class Threads {
     const used = new Map<string, string>();
     const undone = new Set(lines.flatMap((l) => (l.kind === "auto-undone" ? [l.used] : [])));
     const explored = new Set<string>();
-    for (const l of lines) {
-      if (l.kind === "option-used") used.set(l.option, l.how);
+    // When each option was last used: a choice switched to another option shows the latest.
+    const usedAt = new Map<string, number>();
+    lines.forEach((l, n) => {
+      if (l.kind === "option-used") {
+        used.set(l.option, l.how);
+        // Added beside the pick isn't the pick: only a use in its place is.
+        if (l.how !== "also") usedAt.set(l.option, n);
+      }
       if (l.kind === "option-explored") explored.add(l.option);
-    }
+    });
     const ran = new Map(
       lines.flatMap((l) => (l.kind === "action-run" ? [[l.action, l.thread] as const] : [])),
     );
@@ -823,12 +829,19 @@ export class Threads {
           kind: "options",
           turn: l.turn,
           options: l.options,
-          used: l.several ? null : (l.options.find((o) => used.has(o.id))?.id ?? null),
+          used: l.several
+            ? null
+            : (l.options
+                .filter((o) => usedAt.has(o.id))
+                .sort((a, b) => (usedAt.get(b.id) ?? 0) - (usedAt.get(a.id) ?? 0))[0]?.id ?? null),
           explored: l.options.filter((o) => explored.has(o.id)).map((o) => o.id),
           within: l.within ?? null,
           heading: l.heading ?? null,
           several: l.several ?? false,
-          added: l.options.filter((o) => used.has(o.id)).map((o) => o.id),
+          // A set of parts: every one added. A choice: those added beside its pick.
+          added: l.options
+            .filter((o) => (l.several ? used.has(o.id) : used.get(o.id) === "also"))
+            .map((o) => o.id),
         });
     }
     // A narrower option picked settles the set it was explored from too.
@@ -2746,10 +2759,17 @@ export class Threads {
     const heading = str(a.section, 200);
     let sectionPath: string[] | null = null;
     if (heading) {
-      const at = await this.d.locate(live.rel, live.docText);
-      const tree = at ? Threads.spans(at) : null;
-      const found =
-        tree?.find((p) => p.path.at(-1)?.toLowerCase() === heading.toLowerCase()) ?? null;
+      // The agent's own copy first: a plan it wrote this turn names sections
+      // that are only a proposed edit until the person uses it.
+      const copy = await readFile(path.join(this.copiesOf(thread), live.rel), "utf8").catch(
+        () => null,
+      );
+      const find = async (text: string) => {
+        const at = await this.d.locate(live.rel, text);
+        const tree = at ? Threads.spans(at) : null;
+        return tree?.find((p) => p.path.at(-1)?.toLowerCase() === heading.toLowerCase()) ?? null;
+      };
+      const found = (copy !== null ? await find(copy) : null) ?? (await find(live.docText));
       if (!found)
         return {
           error: `No section is headed "${heading}". Name one that exists, or leave section out.`,
@@ -2776,7 +2796,7 @@ export class Threads {
     text: string,
     thread: string,
     option: string,
-    how: "replace" | "subsection",
+    how: "replace" | "subsection" | "also",
   ): Promise<boolean> {
     const at = await this.d.locate(rel, text);
     if (!at) return false;
@@ -3842,8 +3862,22 @@ function actionOf(
     return { state: "stopped", detail: `At step ${String(tools.length)}`, ask: null };
   if (why.startsWith("error:"))
     return { state: "failed", detail: why.slice(6).trim().slice(0, 40) || "It failed", ask: null };
+  // It stopped on a choice the person hasn't made: it waits on them, it isn't done.
+  const open = items.find(
+    (i) => i.kind === "options" && i.used === null && !(i.several && i.added.length > 0),
+  );
+  if (open?.kind === "options")
+    return { state: "needs", detail: `Pick: ${open.heading ?? "an option"}`, ask: null };
+  // It ended saying it couldn't do the work: a ✓ would claim what isn't there.
+  const last = [...items].reverse().find((i) => i.kind === "message" && i.role === "agent");
+  if (last?.kind === "message" && COULD_NOT.test(last.text))
+    return { state: "needs", detail: "Didn't finish", ask: null };
   return { state: "done", detail: did || `${String(tools.length)} steps`, ask: null };
 }
+
+/** An agent's closing reply that opens by saying the work wasn't done ("I couldn't build the funnel…"). */
+const COULD_NOT =
+  /^\W*(?:I\s+)?(?:couldn['’]t|could not|can['’]t|cannot|wasn['’]t able|was unable|haven['’]t|have not|didn['’]t|did not)\b/i;
 
 /** A step as a person reads it on a box: "PostHog: exec", not "mcp__claude_ai_PostHog__exec". */
 function stepName(title: string): string {
@@ -3854,6 +3888,10 @@ function stepName(title: string): string {
     return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
   }
   const m = /^mcp__(?:claude_ai_)?([A-Za-z0-9-]+?)__([A-Za-z0-9_-]+)/.exec(title);
-  const name = m ? `${(m[1] ?? "").replace(/_/g, " ")}: ${(m[2] ?? "").replace(/_/g, " ")}` : title;
-  return name.slice(0, 40);
+  if (m)
+    return `${(m[1] ?? "").replace(/_/g, " ")}: ${(m[2] ?? "").replace(/_/g, " ")}`.slice(0, 40);
+  // A tool's own title reads as a step ("Read Plan.md"); a shell command is
+  // just its text, which means nothing on a map pill.
+  if (/^[A-Z][a-z]+(?:\s|$)/.test(title)) return title.slice(0, 40);
+  return "Running a command";
 }

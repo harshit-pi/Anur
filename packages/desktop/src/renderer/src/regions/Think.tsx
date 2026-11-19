@@ -397,7 +397,7 @@ function EditCard({
       aria-label={`Proposed edit to ${part.path.at(-1) ?? ""}`}
     >
       <div className="think-offer-head">
-        <strong>Edit to {part.path.at(-1)}</strong>
+        <strong>± Edit {part.path.at(-1)}</strong>
         <span className="quiet">Not in the doc yet</span>
       </div>
       <div className="think-offer-text">
@@ -406,7 +406,7 @@ function EditCard({
       <div className="think-offer-actions">
         {writable ? (
           <button type="button" className="think-button primary" onClick={onUse}>
-            Use this
+            Use
           </button>
         ) : null}
         <button type="button" className="think-more" onClick={onShow}>
@@ -611,14 +611,18 @@ export function Think({
   // marked for a moment, so Use this is one click away.
   useEffect(() => {
     const onOption = (e: Event) => {
-      const { option } = (e as CustomEvent<{ option: string }>).detail;
+      const { option, action } = (e as CustomEvent<{ option?: string; action?: string }>).detail;
+      const selector = option
+        ? `.think-offer[data-option="${CSS.escape(option)}"]`
+        : action
+          ? `.think-proposed-action[data-action="${CSS.escape(action)}"]`
+          : null;
+      if (!selector) return;
       // The thread may still be drawing when the map asks: look again a few
       // times before giving up.
       let tries = 0;
       const find = () => {
-        const card = document.querySelector<HTMLElement>(
-          `.think-offer[data-option="${CSS.escape(option)}"]`,
-        );
+        const card = document.querySelector<HTMLElement>(selector);
         if (!card) {
           if (++tries < 12) window.setTimeout(find, 150);
           return;
@@ -768,10 +772,32 @@ export function Think({
     return anur.on("agent:status", noteStatus);
   }, [noteStatus]);
 
-  const onSection = useMemo(
-    () => (section ? threads.filter((t) => samePath(t.path, section.path)) : []),
-    [threads, section],
-  );
+  // A section's threads: those on it, and those whose choices or planned
+  // actions the map draws under it, so the panel never says "no threads"
+  // beside a box with choices hanging off it.
+  const onSection = useMemo(() => {
+    if (!section) return [];
+    const name = section.path.at(-1)?.trim().toLowerCase();
+    const under = (t: ThreadView) =>
+      t.path !== null &&
+      section.path.length > t.path.length &&
+      samePath(section.path.slice(0, t.path.length), t.path);
+    return threads.filter(
+      (t) =>
+        samePath(t.path, section.path) ||
+        t.items.some(
+          (it) =>
+            (it.kind === "proposed-action" &&
+              it.path !== null &&
+              samePath(it.path, section.path)) ||
+            (it.kind === "options" &&
+              !it.several &&
+              !t.explores &&
+              it.heading?.trim().toLowerCase() === name &&
+              under(t)),
+        ),
+    );
+  }, [threads, section]);
   const here = useMemo(() => onSection.filter((t) => !t.closed), [onSection]);
   const closedHere = useMemo(() => onSection.filter((t) => t.closed), [onSection]);
   /** Every other thread in the doc, in the order of their sections, the latest first within one. */
@@ -1075,8 +1101,10 @@ export function Think({
   const useOption = (
     t: ThreadView,
     option: { id: string; title: string; text: string },
-    how: "replace" | "subsection",
+    how: "replace" | "subsection" | "also",
     heading: string | null = null,
+    /** For "also": the option already picked, which moves into its own subsection. */
+    picked: { title: string } | null = null,
   ) => {
     const main = page();
     const section = tree?.sections.find((x) => t.path && samePath(t.path, x.path));
@@ -1085,23 +1113,30 @@ export function Think({
       return;
     }
     // A decision with its own name goes under a subsection of that name:
-    // into the one already there, else a new one.
+    // into the one already there, nearest first at any depth, else a new one.
     let node = section;
     let put = option;
-    let mode = how;
+    // "Also": beside the option already picked, as its own subsection.
+    let mode: "replace" | "subsection" | "beside" = how === "also" ? "beside" : how;
     if (heading) {
-      const own = tree?.sections.find(
-        (x) => x.parent === section.index && x.path.at(-1)?.toLowerCase() === heading.toLowerCase(),
-      );
+      const name = heading.trim().toLowerCase();
+      const own = tree?.sections
+        .filter(
+          (x) =>
+            x.path.length > section.path.length &&
+            samePath(x.path.slice(0, section.path.length), section.path) &&
+            x.path.at(-1)?.trim().toLowerCase() === name,
+        )
+        .sort((a, b) => a.path.length - b.path.length)[0];
       if (own) {
         node = own;
-        mode = "replace";
+        mode = how === "also" ? "beside" : "replace";
       } else {
         put = { ...option, title: heading };
         mode = "subsection";
       }
     }
-    if (!putOption(main, docPath.split("/").pop() ?? docPath, node, put, mode)) {
+    if (!putOption(main, docPath.split("/").pop() ?? docPath, node, put, mode, picked)) {
       setError("This thread's section is gone, so the option has nowhere to go.");
       return;
     }
@@ -1110,7 +1145,7 @@ export function Think({
       path: docPath,
       text: main.state.doc.toString(),
       option: option.id,
-      how: mode,
+      how: how === "also" ? "also" : mode === "beside" ? "subsection" : mode,
     });
   };
 
@@ -1244,6 +1279,11 @@ export function Think({
             ) : (
               <span className="think-where quiet">its section is gone</span>
             )}
+            {thread.explores ? (
+              <span className="think-where quiet think-branch-path">
+                {exploresPath(thread, threads).join(" › ")}
+              </span>
+            ) : null}
             {thread.by ? (
               <span className="think-where quiet think-started-by">
                 started by {thread.by}
@@ -1445,7 +1485,7 @@ export function Think({
                     >
                       <div className="think-offer-head">
                         <strong>{o.title}</strong>
-                        {item.used === o.id || (item.several && item.added.includes(o.id)) ? (
+                        {item.used === o.id || item.added.includes(o.id) ? (
                           <span className="quiet">In the doc</span>
                         ) : item.explored.includes(o.id) ? (
                           <span className="quiet">Explored</span>
@@ -1466,7 +1506,10 @@ export function Think({
                             Add
                           </button>
                         </div>
-                      ) : writable && !item.several && item.used !== o.id ? (
+                      ) : writable &&
+                        !item.several &&
+                        item.used !== o.id &&
+                        !item.added.includes(o.id) ? (
                         <div className="think-offer-actions">
                           <button
                             type="button"
@@ -1475,9 +1518,27 @@ export function Think({
                               useOption(thread, o, "replace", item.heading);
                             }}
                           >
-                            Use this
+                            {item.used ? "Use instead" : "Use"}
                           </button>
-                          {item.heading ? null : (
+                          {item.used ? (
+                            <button
+                              type="button"
+                              className="think-more"
+                              title="Keep the option already picked and add this one beside it"
+                              onClick={() => {
+                                useOption(
+                                  thread,
+                                  o,
+                                  "also",
+                                  item.heading,
+                                  item.options.find((x) => x.id === item.used) ?? null,
+                                );
+                              }}
+                            >
+                              Also add
+                            </button>
+                          ) : null}
+                          {item.heading || item.used ? null : (
                             <button
                               type="button"
                               className="think-more"
@@ -1691,13 +1752,14 @@ export function Think({
                 <div
                   key={i}
                   className="think-proposed-action"
+                  data-action={item.id}
                   role="group"
                   aria-label="Proposed action"
                 >
                   <div className="think-offer-head">
-                    <span className="think-action-tag">BUILD</span>
-                    <strong>{item.title}</strong>
-                    <span className="quiet">{item.run ? "Ran" : "Planned"}</span>
+                    <strong>
+                      <span className="map-pill-icon">{item.run ? "✓" : "▶"}</span> {item.title}
+                    </strong>
                   </div>
                   <div className="think-offer-text">
                     <Markdown text={item.what} />
@@ -3708,12 +3770,49 @@ export function ThreadName({ thread }: { thread: ThreadView }) {
   const title = thread.title.startsWith(`${tag}: `)
     ? thread.title.slice(tag.length + 2)
     : thread.title;
+  const state = thread.action?.state ?? "running";
   return (
     <>
-      <span className="thread-tag">{tag}</span>
+      <span className={`thread-state ${state}`} title={`${tag} · ${STATE_WORD[state]}`}>
+        {STATE_MARK[state]}
+      </span>
       {title}
     </>
   );
+}
+
+const STATE_MARK = { running: "⟳", needs: "!", done: "✓", failed: "×", stopped: "■" } as const;
+const STATE_WORD = {
+  running: "Running",
+  needs: "Needs you",
+  done: "Done",
+  failed: "Failed",
+  stopped: "Stopped",
+} as const;
+
+/**
+ * Where a branch thread sits: the decision it started from, then each option
+ * it narrows, oldest first ("Activation event › Dashboard saved on own data").
+ */
+export function exploresPath(thread: ThreadView, threads: ThreadView[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  let up = thread.explores ?? null;
+  while (up && !seen.has(up.thread)) {
+    seen.add(up.thread);
+    const option = up.option;
+    const from = threads.find((t) => t.id === up?.thread);
+    if (!from) break;
+    const offer = from.items.find(
+      (x) => x.kind === "options" && x.options.some((o) => o.id === option),
+    );
+    if (offer?.kind !== "options") break;
+    const o = offer.options.find((x) => x.id === option);
+    if (o) out.unshift(o.title);
+    up = from.explores ?? null;
+    if (!up) out.unshift(offer.heading ?? from.title);
+  }
+  return out;
 }
 
 function ThreadList({

@@ -86,6 +86,29 @@ describe("a picked option", () => {
     );
   });
 
+  it("adds a second option beside the pick: each becomes its own subsection", () => {
+    const hook = "# Plan\n\n## Hook\n\nLive demos.\n\n## Next\n\nLater.\n";
+    const p = page(hook);
+    const picked = { title: "Live demo stations" };
+    putOption(p, "doc.md", section(hook, "Hook"), option, "beside", picked);
+    expect(p.state.doc.toString()).toBe(
+      "# Plan\n\n## Hook\n\n### Live demo stations\n\nLive demos.\n\n### Smart retry\n\nRetry when the card is likely to pass.\n\n## Next\n\nLater.\n",
+    );
+    // A third goes after them; the pick has already moved.
+    const now = p.state.doc.toString();
+    putOption(
+      p,
+      "doc.md",
+      section(now, "Hook"),
+      { title: "Swag", text: "Stickers." },
+      "beside",
+      picked,
+    );
+    expect(p.state.doc.toString()).toContain(
+      "Retry when the card is likely to pass.\n\n### Swag\n\nStickers.\n\n## Next",
+    );
+  });
+
   it("can go in as a subsection, after everything under the section", () => {
     const p = page(doc);
     putOption(p, "doc.md", section(doc, "Retry"), option, "subsection");

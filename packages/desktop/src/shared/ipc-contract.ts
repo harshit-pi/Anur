@@ -1302,7 +1302,7 @@ export const ipcContract = {
         path: z.string().max(4096),
         text: z.string(),
         option: z.string().max(100),
-        how: z.enum(["replace", "subsection"]),
+        how: z.enum(["replace", "subsection", "also"]),
       })
       .strict(),
     response: z.object({ ok: z.boolean() }),

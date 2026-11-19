@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { serviceOf } from "./index.tsx";
+import { serviceOf, servicesNamed } from "./index.tsx";
 
 describe("the service a step acts in", () => {
   it("reads it from the tool's name, with a mark where one exists", () => {
@@ -18,5 +18,17 @@ describe("the service a step acts in", () => {
   it("leaves Anur's own tools and plain steps alone", () => {
     expect(serviceOf("mcp__anur__anur_offer_options")).toBeNull();
     expect(serviceOf("Read notes.md")).toBeNull();
+  });
+});
+
+describe("the services a planned action names", () => {
+  it("finds them as whole words in its title", () => {
+    expect(servicesNamed("File Linear issues per week").map((s) => s.name)).toEqual(["Linear"]);
+    expect(servicesNamed("Draft win-back emails in Gmail").map((s) => s.name)).toEqual(["Gmail"]);
+    expect(servicesNamed("Post the recap in Slack")).toMatchObject([{ name: "Slack", mark: null }]);
+  });
+  it("names none for work that names no service", () => {
+    expect(servicesNamed("Draft the follow-up emails")).toEqual([]);
+    expect(servicesNamed("Linearly ramp the retries")).toEqual([]);
   });
 });

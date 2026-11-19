@@ -136,11 +136,14 @@ export const OptionsLine = LineEnvelope.extend({
   several: z.boolean().optional(),
 });
 
-/** The person picked an option: its text replaced the section's, or became a subsection. */
+/**
+ * The person picked an option: its text replaced the section's, or became a
+ * subsection; "also" adds it beside the option already picked.
+ */
 export const OptionUsedLine = LineEnvelope.extend({
   kind: z.literal("option-used"),
   option: z.string().min(1),
-  how: z.enum(["replace", "subsection"]),
+  how: z.enum(["replace", "subsection", "also"]),
 });
 
 /**

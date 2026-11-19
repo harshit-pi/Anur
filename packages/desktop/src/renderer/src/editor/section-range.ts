@@ -67,11 +67,35 @@ export function putOption(
   fileName: string,
   section: SectionNode,
   option: { title: string; text: string },
-  how: "replace" | "subsection",
+  how: "replace" | "subsection" | "beside",
+  /** For "beside": the option already picked, whose text is the section's own. */
+  picked: { title: string } | null = null,
 ): boolean {
   const s = sectionNow(main.state, fileName, section);
   if (!s) return false;
   const text = option.text.trim();
+  const level = Math.min(6, Math.max(2, s.level + 1));
+  const hashes = "#".repeat(level);
+  // A second option beside the pick: each is its own subsection, the pick's
+  // text moving under its name in place, the new one after everything else.
+  if (how === "beside") {
+    const r = bodyRange(main.state, fileName, section);
+    if (!r) return false;
+    const own = main.state.doc.sliceString(r.from, r.to).trim();
+    const at = s.subtreeRange.to;
+    const before = main.state.doc.sliceString(Math.max(0, at - 2), at);
+    const lead =
+      at === 0 ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
+    const tail = at < main.state.doc.length ? "\n\n" : "\n";
+    const changes = [
+      ...(own && picked
+        ? [{ from: r.from, to: r.to, insert: `${hashes} ${picked.title}\n\n${own}` }]
+        : []),
+      { from: at, insert: `${lead}${hashes} ${option.title}\n\n${text}${tail}` },
+    ];
+    main.dispatch({ changes, userEvent: "input.option" });
+    return true;
+  }
   if (how === "replace") {
     const r = bodyRange(main.state, fileName, section);
     if (!r) return false;
@@ -83,13 +107,12 @@ export function putOption(
     });
     return true;
   }
-  const level = Math.min(6, Math.max(2, s.level + 1));
   const at = s.subtreeRange.to;
   const before = main.state.doc.sliceString(Math.max(0, at - 2), at);
   const lead = at === 0 ? "" : before.endsWith("\n\n") ? "" : before.endsWith("\n") ? "\n" : "\n\n";
   const tail = at < main.state.doc.length ? "\n\n" : "\n";
   main.dispatch({
-    changes: { from: at, insert: `${lead}${"#".repeat(level)} ${option.title}\n\n${text}${tail}` },
+    changes: { from: at, insert: `${lead}${hashes} ${option.title}\n\n${text}${tail}` },
     userEvent: "input.option",
   });
   return true;
