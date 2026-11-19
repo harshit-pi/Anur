@@ -171,6 +171,9 @@ let device: string | null = null;
 const shownDoc = new Map<number, string>();
 /** Section IDs and versions (2.21), one writer per open folder; none for a read-only folder. */
 const versions = new Map<string, HomeVersions>();
+/** The folder a doc's map layout and ink live in: its home's, once located (18.15.4). */
+const homeDir = (folder: string, ids: HomeVersions, doc: string) =>
+  path.join(folder, ids.homeOfDoc(doc));
 /** Section IDs and history, kept in each doc's home beneath the folder (18.15.2). */
 function versionsFor(folder: FolderState): HomeVersions | null {
   if (!device || folder.mode !== "writable") return null;
@@ -1388,7 +1391,10 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder || !ids || !device || !folder.docs.includes(doc)) return { ids: [], positions: {} };
     const at = await ids.locate(doc, text);
     if (!at) return { ids: [], positions: {} };
-    return { ids: at.ids, positions: await new MapLayouts(folder.path, device).read(at.doc) };
+    return {
+      ids: at.ids,
+      positions: await new MapLayouts(homeDir(folder.path, ids, doc), device).read(at.doc),
+    };
   },
   "map:ink": async ({ path: doc, text }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -1396,7 +1402,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder || !ids || !device || !folder.docs.includes(doc)) return { strokes: [] };
     const at = await ids.locate(doc, text);
     if (!at) return { strokes: [] };
-    return { strokes: await new MapInk(folder.path, device).read(at.doc) };
+    return { strokes: await new MapInk(homeDir(folder.path, ids, doc), device).read(at.doc) };
   },
   "map:ink-change": async ({ path: doc, text, add, erase }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -1405,7 +1411,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
       return { ok: false };
     const at = await ids.locate(doc, text);
     if (!at) return { ok: false };
-    await new MapInk(folder.path, device).change(at.doc, add, erase);
+    await new MapInk(homeDir(folder.path, ids, doc), device).change(at.doc, add, erase);
     return { ok: true };
   },
   "map:save": async ({ path: doc, text, positions }, { webContentsId }) => {
@@ -1414,7 +1420,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder || !ids || !device || !folder.docs.includes(doc)) return { ok: false };
     const at = await ids.locate(doc, text);
     if (!at) return { ok: false };
-    await new MapLayouts(folder.path, device).write(at.doc, positions);
+    await new MapLayouts(homeDir(folder.path, ids, doc), device).write(at.doc, positions);
     return { ok: true };
   },
   "agent:status": async ({ connect, agent }) => {

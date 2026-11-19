@@ -11,6 +11,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { HomeVersions } from "./home-versions.ts";
+import { MapInk } from "./map-ink.ts";
+import { MapLayouts } from "./map-layout.ts";
 
 const DOC = "# Plan\n\nIntro.\n\n## Risks\n\nThe host is untested.\n";
 const README = "# Api\n\nHow to run it.\n\n## Setup\n\nnpm install\n";
@@ -136,5 +138,54 @@ describe("section IDs and history in each doc's home (18.15.2)", () => {
     expect(v.homeOfDoc("api/design/a.md")).toBe("api/design");
     expect(v.homeOfDoc("api/README.md")).toBe("api");
     expect(v.homeOfDoc("notes/plan.md")).toBe("");
+  });
+});
+
+describe("map layout and ink in each doc's home (18.15.4)", () => {
+  it("keeps a repo doc's moved boxes and pen strokes in the repo, read the same with the repo opened alone", async () => {
+    const ws = workspace();
+    const v = new HomeVersions(ws, "dev1");
+    const at = await v.locate("api/README.md", README);
+    if (!at) throw new Error("not located");
+    const home = path.join(ws, v.homeOfDoc("api/README.md"));
+    expect(home).toBe(path.join(ws, "api"));
+    const box = at.ids[1] ?? "";
+    await new MapLayouts(home, "dev1").write(at.doc, { [box]: { x: 40, y: 80 } });
+    await new MapInk(home, "dev1").change(
+      at.doc,
+      [
+        {
+          id: "s1",
+          anchor: box,
+          pts: [
+            [0, 0],
+            [5, 5],
+          ],
+          color: "ink",
+        },
+      ],
+      [],
+    );
+    expect(existsSync(path.join(ws, "api", ".anur", "docs", at.doc, "layout"))).toBe(true);
+    expect(existsSync(path.join(ws, "api", ".anur", "docs", at.doc, "ink"))).toBe(true);
+    expect(existsSync(path.join(ws, ".anur", "docs"))).toBe(false);
+    // Opened at the repo: the same doc, the same layout and ink.
+    const repo = path.join(ws, "api");
+    const again = await new HomeVersions(repo, "dev2").locate("README.md", README);
+    expect(again?.doc).toBe(at.doc);
+    expect(await new MapLayouts(repo, "dev2").read(at.doc)).toEqual({ [box]: { x: 40, y: 80 } });
+    expect((await new MapInk(repo, "dev2").read(at.doc)).map((x) => x.id)).toEqual(["s1"]);
+  });
+
+  it("keeps a loose doc's layout in the opened folder, as before", async () => {
+    const ws = workspace();
+    const v = new HomeVersions(ws, "dev1");
+    const at = await v.locate("notes/plan.md", DOC);
+    if (!at) throw new Error("not located");
+    expect(v.homeOfDoc("notes/plan.md")).toBe("");
+    await new MapLayouts(path.join(ws, v.homeOfDoc("notes/plan.md")), "dev1").write(at.doc, {
+      [at.ids[0] ?? ""]: { x: 1, y: 2 },
+    });
+    expect(existsSync(path.join(ws, ".anur", "docs", at.doc, "layout"))).toBe(true);
   });
 });
