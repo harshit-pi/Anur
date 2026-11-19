@@ -386,6 +386,37 @@ export const UpdateState = z.discriminatedUnion("kind", [
 ]);
 export type UpdateState = z.infer<typeof UpdateState>;
 
+/** A plugin as the marketplace shows it (Plugins and Git mock). */
+const MarketPlugin = z.object({
+  id: z.string(),
+  name: z.string(),
+  what: z.string(),
+  version: z.string(),
+  settings: z.array(
+    z.object({
+      type: z.enum(["toggle", "choice", "text"]),
+      key: z.string(),
+      label: z.string(),
+      detail: z.string().optional(),
+      choices: z.array(z.object({ value: z.string(), label: z.string() })).optional(),
+    }),
+  ),
+  actions: z.array(z.object({ id: z.string(), label: z.string() })),
+  openFrom: z.object({ label: z.string() }).nullable(),
+});
+export type MarketPlugin = z.infer<typeof MarketPlugin>;
+
+/** A plugin's item in the status bar and the panel a click opens. */
+const PluginStatusSchema = z.object({
+  text: z.string(),
+  tone: z.enum(["ok", "busy", "warn"]).optional(),
+  lines: z
+    .array(z.object({ label: z.string(), value: z.string(), href: z.string().optional() }))
+    .optional(),
+  actions: z.array(z.object({ id: z.string(), label: z.string() })).optional(),
+});
+export type PluginStatusView = z.infer<typeof PluginStatusSchema>;
+
 export const ipcContract = {
   "app:info": {
     request: z.object({}).strict(),
@@ -828,6 +859,80 @@ export const ipcContract = {
     response: z.object({}),
   },
   /** Search the folder's docs, case ignored: each matching line (2.26). */
+  /**
+   * Plugins from Anur's feed (Plugins and Git mock): the feed's list, those
+   * installed here, which are on for this folder, and whether they update
+   * themselves. `error` says why the feed couldn't be read.
+   */
+  "market:list": {
+    request: z.object({ fresh: z.boolean().optional() }).strict(),
+    response: z.object({
+      feed: z.array(MarketPlugin),
+      installed: z.array(MarketPlugin),
+      on: z.array(z.string()),
+      autoUpdate: z.boolean(),
+      error: z.string().nullable(),
+      inICloud: z.boolean(),
+    }),
+  },
+  "market:install": {
+    request: z.object({ id: z.string() }).strict(),
+    response: z.object({ error: z.string().nullable() }),
+  },
+  "market:uninstall": {
+    request: z.object({ id: z.string() }).strict(),
+    response: z.object({ error: z.string().nullable() }),
+  },
+  "market:set": {
+    request: z
+      .object({
+        id: z.string().optional(),
+        on: z.boolean().optional(),
+        autoUpdate: z.boolean().optional(),
+      })
+      .strict(),
+    response: z.object({ error: z.string().nullable() }),
+  },
+  /** One plugin's settings for this folder, as values by key. */
+  "plugin:settings": {
+    request: z.object({ id: z.string() }).strict(),
+    response: z.object({ values: z.record(z.string(), z.union([z.string(), z.boolean()])) }),
+  },
+  "plugin:set-setting": {
+    request: z
+      .object({ id: z.string(), key: z.string(), value: z.union([z.string(), z.boolean()]) })
+      .strict(),
+    response: z.object({}),
+  },
+  "plugin:action": {
+    request: z.object({ id: z.string(), action: z.string() }).strict(),
+    response: z.object({ message: z.string().nullable() }),
+  },
+  /** Every plugin's status-bar item for this window's folder, as last reported. */
+  "plugin:statuses": {
+    request: z.object({}).strict(),
+    response: z.object({
+      items: z.array(z.object({ plugin: z.string(), status: PluginStatusSchema })),
+    }),
+  },
+  /** Folders installed plugins can open from elsewhere, such as GitHub. */
+  "open-from:list": {
+    request: z.object({}).strict(),
+    response: z.object({
+      sources: z.array(
+        z.object({
+          plugin: z.string(),
+          label: z.string(),
+          items: z.array(z.object({ id: z.string(), label: z.string(), detail: z.string() })),
+        }),
+      ),
+      error: z.string().nullable(),
+    }),
+  },
+  "open-from:open": {
+    request: z.object({ plugin: z.string(), id: z.string() }).strict(),
+    response: z.object({ error: z.string().nullable() }),
+  },
   /** Everyone who works in the open folder (people): their handle and the name they go by. */
   "people:list": {
     request: z.object({}).strict(),
@@ -1705,6 +1810,14 @@ export const ipcContract = {
 export const ipcEvents = {
   /** This window's folder changed, as when opened from the menu. */
   "folder:changed": FolderState.nullable(),
+  /** A plugin's item in the status bar, and its panel; null removes it. */
+  "plugin:status": z.object({ plugin: z.string(), status: PluginStatusSchema.nullable() }),
+  /** A note from a plugin, shown once. */
+  "plugin:notify": z.object({
+    plugin: z.string(),
+    text: z.string(),
+    tone: z.enum(["info", "warn"]),
+  }),
   /** Someone's people note changed in the open folder, this Mac's own included: read the list again. */
   "people:changed": z.object({}),
   /** The open doc changed outside Anur: its new text, or that it is gone or no longer readable. */

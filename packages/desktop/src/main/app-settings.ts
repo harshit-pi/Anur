@@ -32,6 +32,8 @@ export type AppSettings = {
   name: string | null;
   /** Plugins switched on, by folder path (group 19). */
   plugins: Record<string, string[]>;
+  /** Downloaded plugins update themselves; on by default, unlike Obsidian. */
+  autoUpdatePlugins: boolean;
 };
 
 const DEFAULTS: AppSettings = {
@@ -42,6 +44,7 @@ const DEFAULTS: AppSettings = {
   sessionLimit: 8,
   name: null,
   plugins: {},
+  autoUpdatePlugins: true,
 };
 
 /** The limits Settings offers; anything else saved reads as the default. */
@@ -71,6 +74,7 @@ export class AppSettingsStore {
         sessionLimit: sessionLimitOf(raw.sessionLimit),
         name: typeof raw.name === "string" && raw.name.trim() ? raw.name.trim().slice(0, 80) : null,
         plugins: pluginsFrom(raw.plugins),
+        autoUpdatePlugins: raw.autoUpdatePlugins !== false,
       };
     } catch {
       this.current = { ...DEFAULTS };

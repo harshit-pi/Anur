@@ -5,6 +5,7 @@ import type { AgentStatus, FolderState } from "../../../shared/ipc-contract.ts";
 import { AGENTS } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { FileTree, type FileActions, type MakeRequest } from "./FileTree.tsx";
+import { OpenFromButtons, PluginStatusItem, usePluginStatuses } from "./PluginUI.tsx";
 import { NoticeBar } from "./NoticeBar.tsx";
 import { SORTS, type Sort } from "../layout/file-tree.ts";
 import {
@@ -654,6 +655,7 @@ export function Center({
             <button className="secondary-button" type="button" onClick={onOpenFolder}>
               Open folder <span className="kbd">⌘O</span>
             </button>
+            <OpenFromButtons />
           </div>
         </div>
       )}
@@ -834,6 +836,7 @@ export function StatusBar({
             : ""}
         </span>
       ) : null}
+      <PluginStatuses folder={folder?.path ?? null} />
       <span className="status-spacer" />
       {docMode && docMode !== "plain-text" ? (
         <button
@@ -856,5 +859,17 @@ export function StatusBar({
       ) : null}
       {version ? <span className="status-item quiet">Anur {version}</span> : null}
     </footer>
+  );
+}
+
+/** Each plugin's item in the status bar, such as Git's sync state. */
+function PluginStatuses({ folder }: { folder: string | null }) {
+  const items = usePluginStatuses(folder);
+  return (
+    <>
+      {items.map(([plugin, status]) => (
+        <PluginStatusItem key={plugin} plugin={plugin} status={status} />
+      ))}
+    </>
   );
 }

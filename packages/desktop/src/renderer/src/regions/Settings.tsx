@@ -512,6 +512,283 @@ function PluginRows({ folder }: { folder: FolderState | null }) {
   );
 }
 
+type MarketData = Awaited<ReturnType<typeof anur.call<"market:list">>>;
+type MarketPlugin = MarketData["installed"][number];
+
+/**
+ * Plugins (Plugins and Git mock): the ones installed, switched on per folder,
+ * with their settings; and the feed's, to Install, which turns one on at once.
+ * They update themselves unless that's switched off.
+ */
+function Market({ folder }: { folder: FolderState | null }) {
+  const [tab, setTab] = useState<"installed" | "browse">("installed");
+  const [data, setData] = useState<MarketData | null>(null);
+  const [query, setQuery] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    void anur.call("market:list", { fresh: tab === "browse" }).then(setData);
+  }, [folder?.path, n, tab]);
+  const reload = () => {
+    setN((x) => x + 1);
+  };
+  const q = query.trim().toLowerCase();
+  const matches = (p: MarketPlugin) =>
+    !q || p.name.toLowerCase().includes(q) || p.what.toLowerCase().includes(q);
+  const installedIds = new Set((data?.installed ?? []).map((p) => p.id));
+  return (
+    <>
+      <div className="market-tabs" role="tablist">
+        {(["installed", "browse"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            className={tab === t ? "on" : ""}
+            onClick={() => {
+              setTab(t);
+            }}
+          >
+            {t === "installed" ? "Installed" : "Browse"}
+          </button>
+        ))}
+      </div>
+      {tab === "browse" ? (
+        <>
+          <input
+            className="settings-input market-search"
+            placeholder="Search plugins…"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+            }}
+          />
+          {data?.error ? <p className="settings-row-detail">{data.error}</p> : null}
+          {(data?.feed ?? []).filter(matches).map((p) => (
+            <Row
+              key={p.id}
+              title={`${p.name} · Standard`}
+              detail={`${p.what} v${p.version}, signed by Anur.`}
+            >
+              {installedIds.has(p.id) ? (
+                <span className="settings-row-detail">Installed</span>
+              ) : (
+                <button
+                  type="button"
+                  className="settings-button primary"
+                  disabled={busy !== null}
+                  onClick={() => {
+                    setBusy(p.id);
+                    setNote(null);
+                    void anur
+                      .call("market:install", { id: p.id })
+                      .then((r) => {
+                        if (r.error) setNote(r.error);
+                        else setTab("installed");
+                        reload();
+                      })
+                      .finally(() => {
+                        setBusy(null);
+                      });
+                  }}
+                >
+                  {busy === p.id ? "Installing…" : "Install"}
+                </button>
+              )}
+            </Row>
+          ))}
+          {data && !data.error && data.feed.filter(matches).length === 0 ? (
+            <div className="settings-empty">No plugins match.</div>
+          ) : null}
+        </>
+      ) : (
+        <>
+          <PluginRows folder={folder} />
+          {(data?.installed ?? []).map((p) => (
+            <InstalledPlugin
+              key={p.id}
+              plugin={p}
+              folder={folder}
+              on={data?.on.includes(p.id) ?? false}
+              onChanged={reload}
+              onNote={setNote}
+            />
+          ))}
+          {data && data.installed.length === 0 ? (
+            <div className="settings-empty">
+              Nothing installed from the feed yet. Browse to add Git and others.
+            </div>
+          ) : null}
+          <Row
+            title="Update plugins by themselves"
+            detail="New versions install in the background, checked against Anur's signature. On by default."
+          >
+            <Switch
+              on={data?.autoUpdate ?? true}
+              label="Update plugins by themselves"
+              onChange={(on) => {
+                void anur.call("market:set", { autoUpdate: on }).then(reload);
+              }}
+            />
+          </Row>
+        </>
+      )}
+      {note ? <p className="settings-row-detail">{note}</p> : null}
+    </>
+  );
+}
+
+function InstalledPlugin({
+  plugin: p,
+  folder,
+  on,
+  onChanged,
+  onNote,
+}: {
+  plugin: MarketPlugin;
+  folder: FolderState | null;
+  on: boolean;
+  onChanged: () => void;
+  onNote: (note: string | null) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [values, setValues] = useState<Record<string, string | boolean>>({});
+  const [said, setSaid] = useState<string | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
+  useEffect(() => {
+    if (open && on)
+      void anur.call("plugin:settings", { id: p.id }).then((r) => {
+        setValues(r.values);
+      });
+  }, [open, on, p.id, folder?.path]);
+  const set = (key: string, value: string | boolean) => {
+    setValues((v) => ({ ...v, [key]: value }));
+    void anur.call("plugin:set-setting", { id: p.id, key, value });
+  };
+  return (
+    <div className="market-plugin">
+      <Row
+        title={p.name}
+        detail={`${p.what} v${p.version}, updates itself.${folder ? "" : " Open a folder to switch it on."}`}
+      >
+        <Switch
+          on={on}
+          label={`${p.name} for this folder`}
+          disabled={!folder}
+          onChange={(next) => {
+            onNote(null);
+            void anur.call("market:set", { id: p.id, on: next }).then((r) => {
+              if (r.error) onNote(r.error);
+              onChanged();
+            });
+          }}
+        />
+      </Row>
+      <div className="market-plugin-links">
+        {on ? (
+          <button
+            type="button"
+            className="think-more"
+            aria-expanded={open}
+            onClick={() => {
+              setOpen((o) => !o);
+            }}
+          >
+            {open ? "Hide settings" : "Settings"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="think-more danger"
+          onClick={() => {
+            if (!window.confirm(`Uninstall ${p.name}? Its settings for every folder go too.`))
+              return;
+            void anur.call("market:uninstall", { id: p.id }).then((r) => {
+              if (r.error) onNote(r.error);
+              onChanged();
+            });
+          }}
+        >
+          Uninstall
+        </button>
+      </div>
+      {open && on ? (
+        <div className="market-plugin-settings">
+          {p.settings.map((x) =>
+            x.type === "toggle" ? (
+              <Row key={x.key} title={x.label} detail={x.detail ?? ""}>
+                <Switch
+                  on={values[x.key] === true}
+                  label={x.label}
+                  onChange={(v) => {
+                    set(x.key, v);
+                  }}
+                />
+              </Row>
+            ) : x.type === "choice" ? (
+              <Row key={x.key} title={x.label} detail={x.detail ?? ""}>
+                <select
+                  className="settings-select"
+                  value={String(values[x.key] ?? "")}
+                  onChange={(e) => {
+                    set(x.key, e.target.value);
+                  }}
+                >
+                  {(x.choices ?? []).map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+              </Row>
+            ) : (
+              <Row key={x.key} title={x.label} detail={x.detail ?? ""}>
+                <input
+                  className="settings-input"
+                  value={String(values[x.key] ?? "")}
+                  onChange={(e) => {
+                    setValues((v) => ({ ...v, [x.key]: e.target.value }));
+                  }}
+                  onBlur={(e) => {
+                    set(x.key, e.target.value);
+                  }}
+                />
+              </Row>
+            ),
+          )}
+          <div className="market-plugin-actions">
+            {p.actions.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                className="settings-button"
+                disabled={acting !== null}
+                onClick={() => {
+                  setActing(a.id);
+                  setSaid(null);
+                  void anur
+                    .call("plugin:action", { id: p.id, action: a.id })
+                    .then((r) => {
+                      setSaid(r.message);
+                    })
+                    .finally(() => {
+                      setActing(null);
+                    });
+                }}
+              >
+                {acting === a.id ? "Working…" : a.label}
+              </button>
+            ))}
+          </div>
+          {said ? <p className="settings-row-detail">{said}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Settings({
   section,
   onSection,
@@ -817,12 +1094,10 @@ export function Settings({
           <>
             <h2>Plugins</h2>
             <p className="settings-lede">
-              Plugins Anur ships, each switched on for one folder. Anur's core works without them.
+              Each is switched on for one folder; Anur's core works without them. Plugins from
+              others come later, once each can run in its own sandbox.
             </p>
-            <PluginRows folder={folder} />
-            <div className="settings-empty">
-              Plugins from others come later, once each can run in its own sandbox.
-            </div>
+            <Market folder={folder} />
           </>
         );
     }
