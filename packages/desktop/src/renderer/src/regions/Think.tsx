@@ -1103,6 +1103,8 @@ export function Think({
     option: { id: string; title: string; text: string },
     how: "replace" | "subsection" | "also",
     heading: string | null = null,
+    /** For "also": the option already picked, which moves into its own subsection. */
+    picked: { title: string } | null = null,
   ) => {
     const main = page();
     const section = tree?.sections.find((x) => t.path && samePath(t.path, x.path));
@@ -1115,7 +1117,7 @@ export function Think({
     let node = section;
     let put = option;
     // "Also": beside the option already picked, as its own subsection.
-    let mode: "replace" | "subsection" = how === "also" ? "subsection" : how;
+    let mode: "replace" | "subsection" | "beside" = how === "also" ? "beside" : how;
     if (heading) {
       const name = heading.trim().toLowerCase();
       const own = tree?.sections
@@ -1128,13 +1130,13 @@ export function Think({
         .sort((a, b) => a.path.length - b.path.length)[0];
       if (own) {
         node = own;
-        mode = how === "also" ? "subsection" : "replace";
+        mode = how === "also" ? "beside" : "replace";
       } else {
         put = { ...option, title: heading };
         mode = "subsection";
       }
     }
-    if (!putOption(main, docPath.split("/").pop() ?? docPath, node, put, mode)) {
+    if (!putOption(main, docPath.split("/").pop() ?? docPath, node, put, mode, picked)) {
       setError("This thread's section is gone, so the option has nowhere to go.");
       return;
     }
@@ -1143,7 +1145,7 @@ export function Think({
       path: docPath,
       text: main.state.doc.toString(),
       option: option.id,
-      how: how === "also" ? "also" : mode,
+      how: how === "also" ? "also" : mode === "beside" ? "subsection" : mode,
     });
   };
 
@@ -1524,7 +1526,13 @@ export function Think({
                               className="think-more"
                               title="Keep the option already picked and add this one beside it"
                               onClick={() => {
-                                useOption(thread, o, "also", item.heading);
+                                useOption(
+                                  thread,
+                                  o,
+                                  "also",
+                                  item.heading,
+                                  item.options.find((x) => x.id === item.used) ?? null,
+                                );
                               }}
                             >
                               Also add
