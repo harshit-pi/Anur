@@ -21,7 +21,7 @@ const IDENTITY = "Harshit Khandelwal (D3YY6RV4C3)";
 const NOTARY_PROFILE = "anur-notary";
 const BUCKET = "anur-releases";
 const DISTRIBUTION = "EVKBSGJARHF1U";
-const SITE = "https://do7t8q39ulre5.cloudfront.net";
+const SITE = "https://spaces.hianur.com";
 const AWS = { ...process.env, AWS_PROFILE: "aws-anur" };
 
 const here = path.dirname(new URL(import.meta.url).pathname);

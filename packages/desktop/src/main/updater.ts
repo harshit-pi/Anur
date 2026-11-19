@@ -9,7 +9,7 @@ import { notesFrom } from "../shared/release-notes.ts";
  * says one is available and downloads when asked. Anur never restarts by
  * itself. Anur Dev never updates.
  */
-export const FEED_URL = "https://do7t8q39ulre5.cloudfront.net/";
+export const FEED_URL = "https://spaces.hianur.com/";
 const EVERY_MS = 4 * 60 * 60 * 1000;
 
 const { autoUpdater } = electronUpdater;
