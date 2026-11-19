@@ -31,8 +31,11 @@ export function renderBlock(entries: readonly CommittedEntry[]): string | null {
   const decisions = sorted.flatMap((e) => (e.kind === "decision" ? [e] : []));
   const findings = sorted.flatMap((e) => (e.kind === "finding" ? [e] : []));
   if (!decisions.length && !findings.length) return null;
+  // Shaped as Prettier formats Markdown, so a repo that runs Prettier on
+  // commit leaves it as written and every Mac's bytes stay the same.
   const lines = [
     BLOCK_BEGIN,
+    "",
     "## Decisions",
     "",
     "Made by Anur from `.anur/decisions/`; edits between these markers are replaced.",
@@ -40,7 +43,7 @@ export function renderBlock(entries: readonly CommittedEntry[]): string | null {
   ];
   if (decisions.length) {
     lines.push(
-      "People working on this repo decided these. Follow them. When your work relies on one, say so in one line. If a task can't be done without going against one, don't: say which, and ask.",
+      "People working on this repo decided these. Follow them. When your work relies on one, say so in one line. If a task can't be done without going against one, don't: say which, and ask. Never edit `.anur/decisions/` yourself; a person changes a decision.",
       "",
     );
     for (const d of decisions) {

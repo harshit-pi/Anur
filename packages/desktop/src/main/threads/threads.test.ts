@@ -8,7 +8,7 @@ import { SectionVersions } from "../folder/versions.ts";
 import { HomeVersions } from "../folder/home-versions.ts";
 import { execFileSync } from "node:child_process";
 import type { AgentHub } from "./hub.ts";
-import { Threads, linksIn } from "./threads.ts";
+import { Threads, appliesTo, linksIn } from "./threads.ts";
 
 const DOC = `# Plan
 
@@ -871,5 +871,55 @@ describe("threads in each doc's home (18.15.2)", () => {
     };
     expect(config.anurDirs).toEqual(["", "api", "web"].map((h) => path.join(folder, h, ".anur")));
     expect(prompt.spec.guard.anurDirs).toEqual(config.anurDirs);
+  });
+});
+
+describe("where a committed decision reaches (23.4)", () => {
+  it("a section's reaches it and below; a repo's or folder's reaches every doc inside", () => {
+    expect(appliesTo("section:README.md#Api", "api", "api/README.md", ["Api", "Setup"])).toBe(
+      "Api",
+    );
+    expect(
+      appliesTo("section:README.md#Api › Other", "api", "api/README.md", ["Api", "Setup"]),
+    ).toBeNull();
+    expect(appliesTo("repo", "api", "api/docs/x.md", [])).toBe("all of api");
+    expect(appliesTo("repo", "api", "web/README.md", [])).toBeNull();
+    expect(appliesTo("repo", "api", "apix/README.md", [])).toBeNull();
+    expect(appliesTo("repo", "", "notes/plan.md", [])).toBe("the whole folder");
+    expect(appliesTo("folder:docs", "api", "api/docs/x.md", [])).toBe("all of api/docs");
+    expect(appliesTo("folder:docs", "api", "api/src/x.md", [])).toBeNull();
+    expect(appliesTo("part:abc", "api", "api/README.md", [])).toBeNull();
+  });
+
+  it("carries a decision made from a terminal for a whole repo into a thread on any doc in it", async () => {
+    const repoWide = {
+      id: "d0000000-0000-4000-8000-000000000009",
+      at: "2026-11-18T10:00:00.000Z",
+      dev: "mac-b",
+      seq: 0,
+      kind: "decision" as const,
+      scope: "repo",
+      ref: "term-1",
+      decision: "Three retries, never infinite.",
+      quote: "three retries",
+      instead: null,
+      until: null,
+      who: "Priya",
+      person: "priya",
+      home: "",
+    };
+    const { threads: t, sent } = await setup({
+      committed: {
+        keep: () => Promise.resolve(null),
+        drop: () => Promise.resolve(),
+        collected: () => Promise.resolve([repoWide]),
+      },
+    });
+    const r = await t.start("plan.md", DOC, risks, "Plan the retries.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const asked = sent.find((m) => m.type === "prompt");
+    expect(asked?.type === "prompt" ? asked.text : "").toMatch(
+      /Decided by Priya .*Three retries, never infinite\. \[on the whole folder\]/,
+    );
   });
 });

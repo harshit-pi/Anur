@@ -55,15 +55,20 @@ export function hookFileFor(repo: string): { file: string; kind: "git" | "hooks-
   return { file: path.join(path.resolve(repo, hooks), "pre-commit"), kind: "git" };
 }
 
-/** The hook's text with Anur's lines in it, once, replacing an older copy of them. */
+/** The hook's text with Anur's lines in it, once, first, replacing an older copy of them. */
 export function withHookLines(current: string | null): string {
   if (current === null) return `#!/bin/sh\n${HOOK_LINES}\n`;
   const begin = current.indexOf(HOOK_BEGIN);
   const end = begin >= 0 ? current.indexOf(HOOK_END, begin) : -1;
   if (begin >= 0 && end >= 0)
     return current.slice(0, begin) + HOOK_LINES + current.slice(end + HOOK_END.length);
-  const body = current.endsWith("\n") || current === "" ? current : `${current}\n`;
-  return `${body}\n${HOOK_LINES}\n`;
+  // First, right after the shebang: a hook that ends by exec'ing another
+  // program, as pre-commit's and lefthook's do, never reaches lines after it.
+  // Anur's step only adds the block and never fails, so it's safe to run first.
+  const shebang = /^#![^\n]*\n/.exec(current);
+  const head = shebang ? shebang[0] : "";
+  const rest = current.slice(head.length);
+  return `${head}${HOOK_LINES}\n\n${rest}`;
 }
 
 /** Put Anur's lines in the repo's pre-commit hook; whether anything changed. */
@@ -79,7 +84,9 @@ export function installPreCommit(repo: string): { file: string; changed: boolean
   if (next === now) return { file, changed: false };
   mkdirSync(path.dirname(file), { recursive: true });
   writeFileSync(file, next);
-  chmodSync(file, 0o755);
+  // A new hook is made runnable; an existing one keeps its mode, so a
+  // committed husky file doesn't pick up a mode change in the commit.
+  if (now === null) chmodSync(file, 0o755);
   return { file, changed: true };
 }
 
