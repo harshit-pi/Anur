@@ -63,8 +63,9 @@ export class FolderService {
 
     try {
       const anur = await openAnurFolder(folder);
-      // Opened, it's a vault; one inside it stops being one, as this takes over.
-      if (anur.mode === "writable") await markVault(folder);
+      // Opened, it's a vault; one inside it stops being one, as this takes over. The marker
+      // is written at once; the walk for vaults inside runs after, so opening never waits on it.
+      if (anur.mode === "writable") await markVault(folder, new Date(), "later");
       const state = await this.describe(folder, anur.mode === "read-only" ? anur.reason : null);
       await this.close(windowId);
       this.byWindow.set(windowId, { state, release: lock.release });

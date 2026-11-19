@@ -9,6 +9,11 @@ import { isVault, markVault, vaultAbove } from "./vaults.ts";
 
 const temp = (p: string) => realpathSync(mkdtempSync(path.join(tmpdir(), p)));
 const vaultFile = (d: string) => path.join(d, ".anur", "vault.json");
+/** Waits until `ok` holds: the walk for vaults inside runs after a folder opens. */
+async function until(ok: () => Promise<boolean>) {
+  for (let waited = 0; !(await ok()) && waited < 10_000; waited += 50)
+    await new Promise((r) => setTimeout(r, 50));
+}
 
 describe("vaults (docs/anur-folder.md)", () => {
   it("are marked by vault.json, never by a .anur/ alone, as every repo has one", async () => {
@@ -50,6 +55,15 @@ describe("vaults (docs/anur-folder.md)", () => {
     await folders.close(2);
   });
 
+  it("open an existing vault without walking it again", async () => {
+    const root = temp("anur-vault-again-");
+    expect(await markVault(root)).toEqual([]);
+    // A marker planted inside after the fact isn't looked for: opening it would open the parent.
+    mkdirSync(path.join(root, "inner", ".anur"), { recursive: true });
+    writeFileSync(vaultFile(path.join(root, "inner")), "{}\n");
+    expect(await markVault(root)).toEqual([]);
+  });
+
   it("make the opened parent the vault over child vaults, with no question asked", async () => {
     const root = temp("anur-vault-parent-");
     const child = path.join(root, "Launch");
@@ -62,6 +76,7 @@ describe("vaults (docs/anur-folder.md)", () => {
     const parent = await folders.open(2, root);
     expect(parent.kind === "opened" && parent.folder.path).toBe(root);
     expect(await isVault(root)).toBe(true);
+    await until(async () => !(await isVault(child)));
     expect(await isVault(child)).toBe(false);
     await folders.close(2);
   });

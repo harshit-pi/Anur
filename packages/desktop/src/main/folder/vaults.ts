@@ -40,17 +40,31 @@ export async function vaultAbove(folder: string): Promise<string | null> {
  * it, and come back to life if it's opened on its own again. Returns the
  * vaults taken over, as paths from `root`.
  */
-export async function markVault(root: string, now = new Date()): Promise<string[]> {
+export async function markVault(
+  root: string,
+  now = new Date(),
+  /** "later": the walk for vaults inside runs after this resolves, as opening a folder does. */
+  walk: "now" | "later" = "now",
+): Promise<string[]> {
+  // Already one: nothing inside can have become a vault since, as opening it opens this.
+  if (await isVault(root)) return [];
+  await mkdir(path.join(root, ANUR_DIR), { recursive: true });
+  await writeFileAtomic(marker(root), `${JSON.stringify({ since: now.toISOString() })}\n`);
+  if (walk === "later") {
+    void takeOver(root).catch(() => undefined);
+    return [];
+  }
+  return takeOver(root);
+}
+
+/** The vaults inside `root` stop being vaults; a walk of the folder, so it's never waited on when opening. */
+export async function takeOver(root: string): Promise<string[]> {
   const taken: string[] = [];
   for (const home of await findHomes(root)) {
     const inner = path.join(root, home);
     if (!(await isVault(inner))) continue;
     await rm(marker(inner), { force: true });
     taken.push(home);
-  }
-  if (!(await isVault(root))) {
-    await mkdir(path.join(root, ANUR_DIR), { recursive: true });
-    await writeFileAtomic(marker(root), `${JSON.stringify({ since: now.toISOString() })}\n`);
   }
   return taken;
 }
