@@ -1,0 +1,178 @@
+import { execFileSync } from "node:child_process";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { describe, expect, it } from "vitest";
+import { BLOCK_BEGIN } from "@anur/core";
+import {
+  HOOK_BEGIN,
+  HOOK_LINES,
+  hookFileFor,
+  installPreCommit,
+  preCommitInstalled,
+  withHookLines,
+} from "./pre-commit.ts";
+
+const ROOT = path.resolve(import.meta.dirname, "../../..");
+const CLI = path.join(ROOT, "packages", "system", "src", "cli.ts");
+const HUSKY = path.join(ROOT, "node_modules", "husky", "bin.js");
+
+/** A home with Anur's pre-commit script in it, running the real CLI with Node, as the app's does with Electron. */
+function home(script?: string) {
+  const dir = mkdtempSync(path.join(tmpdir(), "anur-home-"));
+  const bin = path.join(dir, ".anur", "bin");
+  mkdirSync(bin, { recursive: true });
+  const shim = path.join(bin, "anur-pre-commit");
+  writeFileSync(
+    shim,
+    script ??
+      `#!/bin/sh\n"${process.execPath}" "${CLI}" claude-md "$(git rev-parse --show-toplevel)" --stage >/dev/null 2>&1 || true\nexit 0\n`,
+  );
+  chmodSync(shim, 0o755);
+  return dir;
+}
+const run = (dir: string, env: Record<string, string>, ...args: string[]) =>
+  execFileSync("git", ["-C", dir, ...args], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ...env,
+      GIT_AUTHOR_NAME: "T",
+      GIT_AUTHOR_EMAIL: "t@example.com",
+      GIT_COMMITTER_NAME: "T",
+      GIT_COMMITTER_EMAIL: "t@example.com",
+    },
+  });
+function repo() {
+  const dir = mkdtempSync(path.join(tmpdir(), "anur-precommit-"));
+  execFileSync("git", ["-C", dir, "init", "-q", "-b", "main"]);
+  writeFileSync(path.join(dir, "CLAUDE.md"), "# Api\n\nRun the tests first.\n");
+  execFileSync("git", ["-C", dir, "add", "-A"]);
+  run(dir, {}, "commit", "-q", "-m", "First");
+  return dir;
+}
+const decide = (dir: string, person: string, id: string, text: string) => {
+  mkdirSync(path.join(dir, ".anur", "decisions"), { recursive: true });
+  writeFileSync(
+    path.join(dir, ".anur", "decisions", `${person}.jsonl`),
+    `${JSON.stringify({ id, at: "2026-11-18T10:00:00.000Z", dev: "mac-a", seq: 0, kind: "decision", scope: "repo", ref: null, decision: text, quote: text, instead: null, until: null, who: person })}\n`,
+  );
+};
+const committed = (dir: string) => run(dir, {}, "show", "HEAD:CLAUDE.md");
+
+describe("the pre-commit hook's lines (23.6)", () => {
+  it("go in once, keep what was there, and replace an older copy of themselves", () => {
+    expect(withHookLines(null)).toBe(`#!/bin/sh\n${HOOK_LINES}\n`);
+    const theirs = "#!/bin/sh\nnpm run lint\n";
+    const once = withHookLines(theirs);
+    expect(once).toBe(`${theirs}\n${HOOK_LINES}\n`);
+    expect(withHookLines(once)).toBe(once);
+    const older = `${theirs}\n${HOOK_BEGIN}\nold line\n# anur:pre-commit end\n`;
+    expect(withHookLines(older)).toBe(`${theirs}\n${HOOK_LINES}\n`);
+  });
+
+  it("are installed executable in .git/hooks, once", () => {
+    const dir = repo();
+    const first = installPreCommit(dir);
+    expect(first.file).toBe(path.join(dir, ".git", "hooks", "pre-commit"));
+    expect(first.changed).toBe(true);
+    expect(statSync(first.file).mode & 0o111).not.toBe(0);
+    expect(installPreCommit(dir).changed).toBe(false);
+    expect(preCommitInstalled(dir)).toBe(true);
+  });
+});
+
+describe("a commit from a terminal writes the block (23.6)", () => {
+  it("rebuilds the block from the staged decisions and commits it with them", () => {
+    const dir = repo();
+    installPreCommit(dir);
+    decide(dir, "sam", "d-0000001", "Three retries, not infinite.");
+    run(dir, {}, "add", ".anur/decisions/sam.jsonl");
+    run(dir, { HOME: home() }, "commit", "-q", "-m", "A decision");
+    const text = committed(dir);
+    expect(text).toContain(BLOCK_BEGIN);
+    expect(text).toContain("- Three retries, not infinite. (sam)");
+    expect(text.startsWith("# Api\n\nRun the tests first.\n")).toBe(true);
+    // The working file matches what was committed: nothing left to stage.
+    expect(run(dir, {}, "status", "--porcelain")).toBe("");
+  });
+
+  it("stages only the block, never the person's own unstaged edits to CLAUDE.md", () => {
+    const dir = repo();
+    installPreCommit(dir);
+    writeFileSync(path.join(dir, "CLAUDE.md"), "# Api\n\nRun the tests first.\nMy draft line.\n");
+    decide(dir, "sam", "d-0000001", "Three retries.");
+    run(dir, {}, "add", ".anur/decisions/sam.jsonl");
+    run(dir, { HOME: home() }, "commit", "-q", "-m", "A decision");
+    const text = committed(dir);
+    expect(text).toContain("- Three retries. (sam)");
+    expect(text).not.toContain("My draft line.");
+    const working = readFileSync(path.join(dir, "CLAUDE.md"), "utf8");
+    expect(working).toContain("My draft line.");
+    expect(working).toContain("- Three retries. (sam)");
+  });
+
+  it("never stops a commit: without Anur, or when Anur's step fails", () => {
+    const dir = repo();
+    installPreCommit(dir);
+    decide(dir, "sam", "d-0000001", "Three retries.");
+    run(dir, {}, "add", "-A");
+    const noAnur = mkdtempSync(path.join(tmpdir(), "anur-home-"));
+    run(dir, { HOME: noAnur }, "commit", "-q", "-m", "Without Anur");
+    expect(committed(dir)).not.toContain(BLOCK_BEGIN);
+    writeFileSync(path.join(dir, "notes.txt"), "x\n");
+    run(dir, {}, "add", "-A");
+    run(dir, { HOME: home("#!/bin/sh\nexit 1\n") }, "commit", "-q", "-m", "Anur failing");
+    expect(run(dir, {}, "log", "--oneline").trim().split("\n")).toHaveLength(3);
+  });
+});
+
+describe("joining a hook that's already set up (23.7)", () => {
+  it("adds to a core.hooksPath folder's hook, leaving its own steps", () => {
+    const dir = repo();
+    mkdirSync(path.join(dir, "tools", "hooks"), { recursive: true });
+    writeFileSync(
+      path.join(dir, "tools", "hooks", "pre-commit"),
+      "#!/bin/sh\necho own >> own.log\n",
+    );
+    chmodSync(path.join(dir, "tools", "hooks", "pre-commit"), 0o755);
+    run(dir, {}, "config", "core.hooksPath", "tools/hooks");
+    expect(hookFileFor(dir)).toEqual({
+      file: path.join(dir, "tools", "hooks", "pre-commit"),
+      kind: "hooks-path",
+    });
+    installPreCommit(dir);
+    decide(dir, "sam", "d-0000001", "Three retries.");
+    run(dir, {}, "add", ".anur/decisions/sam.jsonl");
+    run(dir, { HOME: home() }, "commit", "-q", "-m", "A decision");
+    expect(committed(dir)).toContain("- Three retries. (sam)");
+    expect(existsSync(path.join(dir, "own.log"))).toBe(true);
+  });
+
+  it("with husky installed, adds to .husky/pre-commit, not husky's own generated folder, and a terminal commit writes the block", () => {
+    const dir = repo();
+    writeFileSync(path.join(dir, "package.json"), '{"name":"api","private":true}\n');
+    execFileSync(process.execPath, [HUSKY], { cwd: dir, stdio: "ignore" });
+    expect(run(dir, {}, "config", "--get", "core.hooksPath").trim()).toBe(".husky/_");
+    writeFileSync(path.join(dir, ".husky", "pre-commit"), "echo team-hook >> team.log\n");
+    const generated = readFileSync(path.join(dir, ".husky", "_", "pre-commit"), "utf8");
+    const { file, changed } = installPreCommit(dir);
+    expect(file).toBe(path.join(dir, ".husky", "pre-commit"));
+    expect(changed).toBe(true);
+    expect(readFileSync(file, "utf8").startsWith("echo team-hook >> team.log\n")).toBe(true);
+    expect(readFileSync(path.join(dir, ".husky", "_", "pre-commit"), "utf8")).toBe(generated);
+    decide(dir, "sam", "d-0000001", "Three retries.");
+    run(dir, {}, "add", "-A");
+    run(dir, { HOME: home() }, "commit", "-q", "-m", "A decision, through husky");
+    expect(committed(dir)).toContain("- Three retries. (sam)");
+    expect(existsSync(path.join(dir, "team.log"))).toBe(true);
+  });
+});

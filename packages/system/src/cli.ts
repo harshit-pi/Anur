@@ -5,10 +5,10 @@
  *
  *   anur-system scan <folder> [--json] [--pin] [--known <file>]
  *   anur-system hook [--folder <folder>]   (Claude Code's UserPromptSubmit and Stop, on stdin)
- *   anur-system claude-md <repo> [--staged]  (the CLAUDE.md block from the repo's decisions, 23.5)
+ *   anur-system claude-md <repo> [--staged | --stage]  (the CLAUDE.md block, 23.5; --stage writes it into the commit, 23.6)
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { writeClaudeMd } from "./claude-md.ts";
+import { stageClaudeMd, writeClaudeMd } from "./claude-md.ts";
 import { handleHook, type HookInput } from "./hook.ts";
 import { scanSystem } from "./system.ts";
 import type { KnownPart } from "./parts.ts";
@@ -39,13 +39,16 @@ if (cmd === "hook") {
 }
 if (cmd === "claude-md") {
   const repo = folder ?? process.cwd();
-  const changed = writeClaudeMd(repo, { staged: args.includes("--staged") });
+  // --stage: the pre-commit hook's step, writing the block into the commit itself (23.6).
+  const changed = args.includes("--stage")
+    ? stageClaudeMd(repo)
+    : writeClaudeMd(repo, { staged: args.includes("--staged") });
   process.stdout.write(changed ? "anur: CLAUDE.md block updated\n" : "");
   process.exit(0);
 }
 if (cmd !== "scan" || !folder) {
   process.stderr.write(
-    "Usage: anur-system scan <folder> [--json] [--pin] [--known <file>]\n       anur-system hook [--folder <folder>]\n       anur-system claude-md <repo> [--staged]\n",
+    "Usage: anur-system scan <folder> [--json] [--pin] [--known <file>]\n       anur-system hook [--folder <folder>]\n       anur-system claude-md <repo> [--staged | --stage]\n",
   );
   process.exit(2);
 }

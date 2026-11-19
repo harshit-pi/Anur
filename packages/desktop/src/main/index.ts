@@ -68,6 +68,7 @@ import { suggestMatch } from "./folder/orphans.ts";
 import { personName } from "./folder/people.ts";
 import { CommittedDecisions } from "./committed-decisions.ts";
 import { publicRepoFor } from "./public-repo.ts";
+import { writeShim } from "./pre-commit-shim.ts";
 import { PluginHost, PluginRefused } from "@anur/core";
 import { FIRST_PARTY, pluginById } from "../plugins/index.ts";
 import {
@@ -279,6 +280,14 @@ async function startClaudeSkill(): Promise<void> {
       args: [path.join(here, "mcp-server.js")],
       env: { ELECTRON_RUN_AS_NODE: "1", ANUR_TERMINAL: terminalFile },
     },
+  });
+  // The script repos' pre-commit hooks call, pointing at this app (23.6).
+  void writeShim({
+    app: process.execPath,
+    cli: path.join(here, "system-cli.js"),
+    release: isRelease,
+  }).catch((e: unknown) => {
+    console.error("Anur couldn't write its pre-commit script:", e);
   });
   taskHooks = new TaskHooks({
     dir: path.join(support, "claude-plugin"),

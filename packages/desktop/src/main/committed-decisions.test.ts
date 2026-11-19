@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -114,5 +114,21 @@ describe("the opened folder's one reader (18.14)", () => {
       ["", "Three retries", "section:plan.md#Plan"],
       ["api", "Use Stripe", "section:notes.md#Checkout"],
     ]);
+  });
+});
+
+describe("the pre-commit hook comes with the first decision (23.6)", () => {
+  it("puts Anur's lines in a repo's hook when a decision lands there, and in no plain folder", async () => {
+    const folder = mkdtempSync(path.join(tmpdir(), "anur-dec-"));
+    const api = path.join(folder, "api");
+    repo(api);
+    writeFileSync(path.join(folder, "plan.md"), "# Plan\n");
+    const store = new CommittedDecisions(folder, "mac-a", () => Promise.resolve("sam"));
+    await store.keep("api/notes.md", "Checkout", "fnd-00000010", decision);
+    expect(readFileSync(path.join(api, ".git", "hooks", "pre-commit"), "utf8")).toContain(
+      "# anur:pre-commit begin",
+    );
+    await store.keep("plan.md", "Plan", "fnd-00000011", decision);
+    expect(existsSync(path.join(folder, ".git"))).toBe(false);
   });
 });
