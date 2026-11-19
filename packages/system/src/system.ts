@@ -44,3 +44,8 @@ export function scanSystem(
   const { parts, lines } = assignPartIds(found, repoIds, opts.known ?? []);
   return { repos, parts, problems, lines, known: knownFrom(parts, repoIds) };
 }
+
+/** Each repo's ID by its folder, for naming lines the same on every Mac (`edgesIn`). */
+export function repoIdsOf(scan: Pick<SystemScan, "repos">): Map<string, string> {
+  return new Map(scan.repos.flatMap((r) => (r.id ? [[r.dir, r.id] as const] : [])));
+}

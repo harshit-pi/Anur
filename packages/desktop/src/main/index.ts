@@ -492,7 +492,13 @@ const systemShapes = new Map<string, SystemShape>();
 
 function shapeOf(
   sections: readonly { id: string; path: string[]; text: string; parent: string | null }[],
-  edges: readonly { id: string; from: string; to: string; label: string }[],
+  edges: readonly {
+    id: string;
+    from: string;
+    to: string;
+    label: string;
+    aliases?: string[] | undefined;
+  }[],
 ): SystemShape {
   const parents = new Map(sections.map((x) => [x.id, x.parent] as const));
   const byId = new Map(sections.map((x) => [x.id, x] as const));
@@ -512,7 +518,13 @@ function shapeOf(
     repoDir,
     names: new Map(sections.map((x) => [x.id, x.path.at(-1) ?? x.id] as const)),
     dirs,
-    edges: edges.map((e) => ({ id: e.id, from: e.from, to: e.to, label: e.label })),
+    edges: edges.map((e) => ({
+      id: e.id,
+      from: e.from,
+      to: e.to,
+      label: e.label,
+      aliases: e.aliases ?? [],
+    })),
   };
 }
 
@@ -1205,15 +1217,19 @@ const handlers: { [C in Channel]: Handler<C> } = {
         folder: folder.path,
         updating,
         sections,
-        edges: read.edges.map((e) => ({
-          ...e,
-          state: edgeState.hiddenEdges.has(e.id)
-            ? ("hidden" as const)
-            : edgeState.confirmedEdges.has(e.id)
-              ? ("confirmed" as const)
-              : ("shown" as const),
-          decisions: onEdges.get(e.id) ?? [],
-        })),
+        edges: read.edges.map(({ aliases, ...e }) => {
+          // A line's choices and decisions, saved under its ID or an earlier one.
+          const ids = [e.id, ...(aliases ?? [])];
+          return {
+            ...e,
+            state: ids.some((x) => edgeState.hiddenEdges.has(x))
+              ? ("hidden" as const)
+              : ids.some((x) => edgeState.confirmedEdges.has(x))
+                ? ("confirmed" as const)
+                : ("shown" as const),
+            decisions: ids.flatMap((x) => onEdges.get(x) ?? []),
+          };
+        }),
         misses: read.misses,
         hooks: hookTroubles(folder.path),
         counts,
@@ -1249,7 +1265,16 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder || !pluginsOn(folder.path).includes("engineering")) return { ok: false };
     const kind =
       action === "hide" ? "edge-hidden" : action === "show" ? "edge-shown" : "edge-confirmed";
-    appendReview(folder.path, [{ kind, edge, at: new Date().toISOString() }]);
+    // Shown again under every ID the line had, so one hidden by its earlier ID comes back.
+    const ids = [
+      edge,
+      ...(systemShapes.get(folder.path)?.edges.find((e) => e.id === edge)?.aliases ?? []),
+    ];
+    const at = new Date().toISOString();
+    appendReview(
+      folder.path,
+      ids.map((id) => ({ kind, edge: id, at })),
+    );
     systemChanged(folder.path);
     return { ok: true };
   },

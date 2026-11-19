@@ -16,7 +16,7 @@ import {
 } from "./choices.ts";
 import { edgesIn } from "./edges.ts";
 import { readReview, reviewState } from "./review.ts";
-import { scanSystem } from "./system.ts";
+import { repoIdsOf, scanSystem } from "./system.ts";
 import {
   CATEGORY_ORDER,
   folderFor,
@@ -95,7 +95,8 @@ function addCalls(folder: string, report: TaskReport, scan: ReturnType<typeof sc
     folder,
     scan.repos.map((r) => r.dir),
     scan.parts,
-  ).filter((e) => !hidden.has(e.id));
+    repoIdsOf(scan),
+  ).filter((e) => ![e.id, ...(e.aliases ?? [])].some((x) => hidden.has(x)));
   for (const line of report.lines) {
     const mine = edges.filter((e) => e.evidence.startsWith(`${line.file}:`));
     if (!mine.length) continue;

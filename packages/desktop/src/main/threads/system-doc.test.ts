@@ -61,4 +61,17 @@ describe("a box on the system map as a section (29.1, 29.8)", () => {
     expect(counts["repo:api1"]).toEqual({ decided: 4, disagree: 2 });
     expect(counts["repo:web1"]).toEqual({ decided: 1, disagree: 0 });
   });
+
+  it("finds a line by an ID it had before lines were named by repo IDs (23.12)", () => {
+    const renamed: typeof shape = {
+      ...shape,
+      edges: shape.edges.map((e) => ({
+        ...e,
+        id: "repoW/|repoA/chk|http|/v1/checkout",
+        aliases: [e.id],
+      })),
+    };
+    const old = decision("edge:web/|api/|http|/v1/checkout", "web", "web → Checkout");
+    expect(systemReach(old, "part:chk", renamed)?.reach).toBe(2);
+  });
 });

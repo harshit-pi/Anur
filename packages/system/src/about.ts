@@ -1,6 +1,6 @@
 import path from "node:path";
 import { edgesIn } from "./edges.ts";
-import { scanSystem } from "./system.ts";
+import { repoIdsOf, scanSystem } from "./system.ts";
 import type { Part } from "./parts.ts";
 import { partOf } from "./tasks.ts";
 
@@ -75,6 +75,7 @@ export function aboutFiles(folder: string, files: readonly string[]): About | nu
     folder,
     scan.repos.map((r) => r.dir),
     scan.parts,
+    repoIdsOf(scan),
   ).filter(
     (e) =>
       "repo" in e.to && ((ends(e.from, a) && ends(e.to, b)) || (ends(e.from, b) && ends(e.to, a))),

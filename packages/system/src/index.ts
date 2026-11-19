@@ -18,7 +18,7 @@ export {
   type Part,
   type PartKind,
 } from "./parts.ts";
-export { scanSystem, type SystemScan } from "./system.ts";
+export { repoIdsOf, scanSystem, type SystemScan } from "./system.ts";
 export { MAX, groupParts, wordsOf, type PartGroup } from "./groups.ts";
 export { mattersForParts, watchSystem } from "./watch.ts";
 export {

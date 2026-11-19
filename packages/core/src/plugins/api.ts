@@ -85,6 +85,8 @@ export type Edge = {
   evidence: string | null;
   /** Where the provider declares it, when known. */
   declared: string | null;
+  /** Earlier IDs of the same line, that saved decisions and choices may still use. */
+  aliases?: string[];
 };
 
 export type EdgeDetector = {
