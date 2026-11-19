@@ -483,6 +483,14 @@
         font-size: 0;
         margin-left: -4px;
       }
+      .side .outline {
+        margin-top: auto;
+        margin-bottom: 44px;
+        border-top: 1px solid var(--a-rule);
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
       .side .head {
         font-size: 12px;
         color: var(--a-graphite);
@@ -1042,13 +1050,15 @@
                 <div class="row">Billing design doc<span class="mini"><span class="face" style="background: var(--ken)"></span></span></div>
                 <div class="row">Retry service RFC</div>
                 <div class="row">Personas</div>
+                <div class="outline">
                 <div class="head">▾ Outline</div>
-                <div class="row">Failed-payment notifications</div>
+                <div class="row on">Failed-payment notifications</div>
                 <div class="row" style="padding-left: 18px">Problem</div>
                 <div class="row" style="padding-left: 18px">Who it's for</div>
                 <div class="row" style="padding-left: 18px">Retry timing<span class="mini"><span class="face" style="background: var(--maya)"></span></span></div>
                 <div class="row" style="padding-left: 18px">Notification channel<span class="mini"><span class="face" style="background: var(--ana)"></span></span></div>
                 <div class="row" style="padding-left: 18px">Success metric<span class="mini"><span class="face" style="background: var(--ken)"></span></span></div>
+                </div>
                 <div class="space"><b>T</b>Tally<small>4 here</small></div>
               </div>
 
