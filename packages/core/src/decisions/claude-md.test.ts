@@ -1,3 +1,4 @@
+import { format } from "prettier";
 import { describe, expect, it } from "vitest";
 import type { CommittedEntry } from "./committed.ts";
 import { BLOCK_BEGIN, BLOCK_END, renderBlock, withBlock } from "./claude-md.ts";
@@ -48,11 +49,12 @@ describe("the CLAUDE.md block (23.5)", () => {
     expect(block).toBe(
       [
         BLOCK_BEGIN,
+        "",
         "## Decisions",
         "",
         "Made by Anur from `.anur/decisions/`; edits between these markers are replaced.",
         "",
-        "People working on this repo decided these. Follow them. When your work relies on one, say so in one line. If a task can't be done without going against one, don't: say which, and ask.",
+        "People working on this repo decided these. Follow them. When your work relies on one, say so in one line. If a task can't be done without going against one, don't: say which, and ask. Never edit `.anur/decisions/` yourself; a person changes a decision.",
         "",
         "- Three retries, not infinite. Instead of: infinite retries. Until: 4.8 ships. (Sam)",
         "- Use Stripe for payments. (Priya, on docs/pay.md › Providers)",
@@ -108,5 +110,16 @@ describe("the block in CLAUDE.md (23.5)", () => {
     expect(withBlock(null, block)).toBe(`${block}\n`);
     expect(withBlock(mine, null)).toBe(mine);
     expect(withBlock(withBlock(null, block), null)).toBe("");
+  });
+});
+
+describe("the block under a repo's Prettier", () => {
+  it("is left exactly as written, so a repo formatting Markdown on commit never rewrites it", async () => {
+    const block = renderBlock([
+      decision("d1", "Three retries, not infinite.", { instead: "infinite retries" }),
+      finding("f1", "The job runs at 2am.", "cron.ts:4"),
+    ]);
+    const file = withBlock("# Api\n\nRun the tests first.\n", block) ?? "";
+    expect(await format(file, { parser: "markdown" })).toBe(file);
   });
 });

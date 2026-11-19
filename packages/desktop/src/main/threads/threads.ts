@@ -84,6 +84,33 @@ type Located = {
 
 /** A section's place in the tree by its ID, following aliases and Reattaches. */
 const indexIn = (at: Located, id: SectionId): number => at.ids.indexOf(at.canon?.get(id) ?? id);
+
+/**
+ * Whether a committed decision reaches a doc's section, and what it's on, by
+ * name: a section's own scope reaches it and the sections below; a decision
+ * for a whole repo or a folder in it, as one made from a terminal session
+ * (23.4), reaches every doc inside. Null when it doesn't reach this one.
+ */
+export function appliesTo(
+  scope: string,
+  home: string,
+  rel: string,
+  here: readonly string[],
+): string | null {
+  const section = sectionScope(scope, home);
+  if (section)
+    return section.doc === rel && section.path.every((p, i) => here[i] === p)
+      ? (section.path.at(-1) ?? "this doc")
+      : null;
+  const inside = (dir: string) => !dir || rel.startsWith(`${dir}/`);
+  if (scope === "repo") return inside(home) ? (home ? `all of ${home}` : "the whole folder") : null;
+  const folder = /^folder:(.+)$/.exec(scope)?.[1];
+  if (folder) {
+    const dir = home ? `${home}/${folder}` : folder;
+    return inside(dir) ? `all of ${dir}` : null;
+  }
+  return null;
+}
 const canonIn = (at: Located, id: SectionId) => at.canon?.get(id) ?? id;
 
 export type ThreadDeps = {
@@ -1606,15 +1633,15 @@ export class Threads {
     const out: KeptFinding[] = [];
     for (const e of await collected().catch(() => [])) {
       if (e.ref && seen.has(e.ref)) continue;
-      const s = sectionScope(e.scope, e.home);
-      if (s?.doc !== rel || s.path.some((p, i) => here[i] !== p)) continue;
+      const label = appliesTo(e.scope, e.home, rel, here);
+      if (label === null) continue;
       const decision = e.kind === "decision";
       out.push({
         id: e.id,
         thread: "",
         claim: decision ? e.decision : e.claim,
         source: decision ? null : e.source,
-        section: s.path.at(-1) ?? "this doc",
+        section: label,
         at: e.at,
         by: decision ? "person" : "source",
         quote: decision ? e.quote : null,
