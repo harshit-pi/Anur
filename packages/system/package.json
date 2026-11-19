@@ -10,5 +10,8 @@
   },
   "bin": {
     "anur-system": "./src/cli.ts"
+  },
+  "dependencies": {
+    "@anur/core": "workspace:*"
   }
 }

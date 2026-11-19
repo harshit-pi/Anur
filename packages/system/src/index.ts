@@ -75,3 +75,4 @@ export {
   type AwsResource,
   type AwsUse,
 } from "./aws.ts";
+export { claudeMdFor, decisionFiles, writeClaudeMd } from "./claude-md.ts";

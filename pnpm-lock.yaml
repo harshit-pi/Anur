@@ -317,7 +317,11 @@ importers:
         specifier: 4.6.7
         version: 4.6.7
 
-  packages/system: {}
+  packages/system:
+    dependencies:
+      '@anur/core':
+        specifier: workspace:*
+        version: link:../core
 
 packages:
 
