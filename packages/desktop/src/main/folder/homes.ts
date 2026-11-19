@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { keepAnurFiles } from "../../vault/anur-folder.ts";
 
 /**
  * Homes (18.15.1): where Anur keeps what it knows about a doc. A home is the
@@ -104,7 +105,7 @@ export function fromHome(home: string, inHome: string): string {
 /**
  * A home's own ID, kept in `.anur/home-id` and committed with it, so a doc's
  * ID is the same on every clone and at every level it's opened from. Made
- * the first time it's asked for, with the `.ignore` that keeps searches out.
+ * the first time it's asked for, with the files that say how `.anur/` is treated.
  */
 export async function homeIdOf(home: string): Promise<string> {
   const dir = path.join(home, ".anur");
@@ -112,9 +113,7 @@ export async function homeIdOf(home: string): Promise<string> {
   const known = (await readFile(file, "utf8").catch(() => "")).trim();
   if (/^[a-f0-9]{32}$/.test(known)) return known;
   const id = randomUUID().replace(/-/g, "");
-  await mkdir(dir, { recursive: true });
+  await keepAnurFiles(dir);
   await writeFile(file, `${id}\n`);
-  const ignore = path.join(dir, ".ignore");
-  if ((await readFile(ignore, "utf8").catch(() => null)) === null) await writeFile(ignore, "*\n");
   return id;
 }

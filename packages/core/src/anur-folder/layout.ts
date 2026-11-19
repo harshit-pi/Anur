@@ -41,6 +41,7 @@ const seg = segment;
 export const anurPaths = {
   format: () => "format.json",
   gitignore: () => ".gitignore",
+  attributes: () => ".gitattributes",
   /** A person's committed decisions and kept findings (23.2). */
   decisions: (person: string) => `decisions/${seg("person", person)}.jsonl`,
   ignore: () => ".ignore",
@@ -65,6 +66,40 @@ export const anurPaths = {
 
 /** Both ignore files hold "*": git and ripgrep skip the whole folder, and nothing at the folder root changes. */
 export const IGNORE_ALL = "*\n";
+
+/** What one Mac keeps for itself in `.anur/`: never committed, even when the rest is (18.10). */
+export const DEVICE_ONLY = ["open/", "system/last-read.json"];
+
+const DEVICE_ONLY_NOTE = "# Kept on each Mac, never committed";
+
+/** True when the folder keeps `.anur/` out of git: its `.gitignore` has a "*" line. */
+export function keepsAnurOut(gitignore: string | null): boolean {
+  return gitignore?.split("\n").some((r) => r.trim() === "*") ?? false;
+}
+
+/**
+ * `.anur/.gitignore` with the per-device files listed, the person's own
+ * lines kept as they are; null when it needs no change.
+ */
+export function gitignoreWithDeviceOnly(current: string | null): string | null {
+  const rows = (current ?? "").split("\n").map((r) => r.trim());
+  const missing = DEVICE_ONLY.filter((d) => !rows.includes(d));
+  if (!missing.length) return null;
+  const body = !current ? "" : current.endsWith("\n") ? current : `${current}\n`;
+  const note = rows.includes(DEVICE_ONLY_NOTE) ? [] : [DEVICE_ONLY_NOTE];
+  return body + [...note, ...missing].join("\n") + "\n";
+}
+
+/** `.anur/` committed or kept out: the "*" line added or taken away, every other line kept. */
+export function gitignoreCommitting(current: string | null, commit: boolean): string {
+  const rows = (current ?? "").split("\n").filter((r) => r.trim() !== "*");
+  const kept = rows.join("\n").replace(/^\n+|\n+$/g, "");
+  const text = commit ? kept : ["*", kept].filter(Boolean).join("\n");
+  return text ? `${text}\n` : "";
+}
+
+/** `.anur/.gitattributes`: GitHub collapses everything in `.anur/` in a PR's diff (18.12). */
+export const GENERATED_ATTRIBUTES = "** linguist-generated=true\n";
 
 /**
  * `format.json`. Changes within one format number only add fields, so unknown
