@@ -72,6 +72,7 @@ import {
 } from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
 import { SkillCard } from "./regions/SkillCard.tsx";
+import { EngineeringCard } from "./regions/EngineeringCard.tsx";
 import { UpdateCard } from "./regions/UpdateCard.tsx";
 import { OpenerCard } from "./regions/OpenerCard.tsx";
 import { Tour } from "./regions/Tour.tsx";
@@ -263,6 +264,18 @@ export function App() {
   const openSystem = useCallback(() => {
     setTabs((t) => showSystem(t));
   }, []);
+  // Engineering switched on, from Settings or the card: the System tab at once.
+  useEffect(() => {
+    const on = () => {
+      setSettings(null);
+      setEngineeringOn(true);
+      openSystem();
+    };
+    window.addEventListener("anur:engineering-on", on);
+    return () => {
+      window.removeEventListener("anur:engineering-on", on);
+    };
+  }, [openSystem]);
   const openDocNow = useRef<(path: string, inNewTab: boolean) => void>(() => undefined);
   const openDoc = useCallback((path: string, inNewTab: boolean) => {
     setTabs((t) => openInTab(t, path, inNewTab));
@@ -1305,6 +1318,7 @@ export function App() {
         // One card at a time in the corner, the most pressing first.
         <div className="corner-cards">
           <UpdateCard />
+          <EngineeringCard />
           <OpenerCard />
           <SkillCard />
           <StarPrompt />

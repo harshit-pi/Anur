@@ -105,6 +105,7 @@ import { AgentHub, hookEntry, hostEntry } from "./threads/hub.ts";
 import { IndexProcess, indexEntry } from "./index-process/client.ts";
 import { TaskHooks } from "./claude-plugin/task-hooks.ts";
 import { ReportWatch, listReports, readReport } from "./task-reports.ts";
+import { codeRepos } from "./engineering-offer.ts";
 import { SystemReview } from "./system-review.ts";
 import { AgentChoices } from "./threads/agent-choices.ts";
 import { AnurSocket } from "./threads/anur-socket.ts";
@@ -1526,6 +1527,15 @@ const handlers: { [C in Channel]: Handler<C> } = {
     } catch (e) {
       return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
     }
+  },
+  "engineering:offer": (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    if (!folder) return { folder: null, repos: 0, on: false };
+    return {
+      folder: folder.path,
+      repos: codeRepos(folder.path),
+      on: pluginsOn(folder.path).includes("engineering"),
+    };
   },
   "tasks:list": (_, { webContentsId }) => {
     const folder = folders.current(webContentsId);
