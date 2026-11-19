@@ -1649,7 +1649,22 @@ const handlers: { [C in Channel]: Handler<C> } = {
     }
   },
   "open-from:open": async ({ plugin, id }, { webContentsId }) => {
-    const r = await plugins.openFrom(plugin, id);
+    // Where it goes is the person's choice, starting at ~/Anur, as Obsidian asks.
+    const owner = windows.get(webContentsId);
+    const name = id.split("/").pop() ?? id;
+    const options: Electron.OpenDialogOptions = {
+      title: `Choose where to put ${name}`,
+      buttonLabel: "Clone here",
+      message: `${name} goes in a new folder inside the one you choose.`,
+      defaultPath: path.join(homedir(), "Anur"),
+      properties: ["openDirectory", "createDirectory"],
+    };
+    const picked = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options);
+    const base = picked.canceled ? undefined : picked.filePaths[0];
+    if (!base) return { error: null };
+    const r = await plugins.openFrom(plugin, id, base);
     if ("error" in r) return { error: r.error };
     const win = windows.get(webContentsId);
     if (!win) return { error: "The window closed." };
