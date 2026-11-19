@@ -21,7 +21,6 @@ import { formatTokens } from "../layout/tokens.ts";
 import { SectionEditor } from "../editor/section-editor.tsx";
 import { putOption, renameSection } from "../editor/section-range.ts";
 import type { EditorView } from "@codemirror/view";
-import { createPortal } from "react-dom";
 import { inlineRuns } from "../layout/inline-markdown.ts";
 
 /**
@@ -2148,12 +2147,6 @@ export function Think({
         {!thread.busy ? (
           <ChangeSet thread={thread} writable={writable} autoApply={editsLand(thread.options)} />
         ) : null}
-        {editsLand(thread.options) ? (
-          <p className="think-state">
-            In this mode, edits apply as they land, each with Undo. Pick Ask in the mode menu to
-            review them first.
-          </p>
-        ) : null}
         {signedOut(thread.agent) ?? (
           <Composer
             placeholder="Reply in this thread"
@@ -2251,7 +2244,7 @@ export function Think({
 
   const body = bodyOf(docText(), section);
   return (
-    <div className={`think${dropOver ? " think-drop" : ""}`} {...dropProps()}>
+    <div className={`think think-home${dropOver ? " think-drop" : ""}`} {...dropProps()}>
       <h2
         className="think-section"
         // The heading is the section's name: edit it here as on the page.
@@ -2579,77 +2572,9 @@ export function Think({
         ) : null}
         {extra}
       </SectionFooter>
-      {notConnected(newAgent)}
-      {error ? <p className="think-error">{error}</p> : null}
-      {signedOut(newAgent) ?? (
-        <Composer
-          placeholder={
-            !writable
-              ? "Threads need a folder Anur can write to"
-              : scope?.value === "folder"
-                ? `Ask about everything in ${scope.folderName}…`
-                : scope?.value === "doc" || section.index === 0
-                  ? "Ask about this doc…"
-                  : `Ask about this ${noun}…`
-          }
-          chip={scope ? <ScopeChip scope={scope} section={section} disabled={!!branch} /> : null}
-          sendLabel="Start thread"
-          {...composerAttach}
-          pickers={
-            <>
-              <AgentPicker value={newAgent} disabled={!writable} onChange={setNewAgent} />
-              {newChoices.map((o) => (
-                <OptionPicker
-                  key={o.id}
-                  option={o}
-                  disabled={!writable}
-                  onChange={(value) => {
-                    setNewChoices((all) =>
-                      all.map((x) => (x.id === o.id ? { ...x, current: value } : x)),
-                    );
-                  }}
-                />
-              ))}
-            </>
-          }
-          busy={false}
-          disabled={!writable || !AGENTS[newAgent].runsThreads}
-          onSend={(m) => start(m)}
-        />
-      )}
-      {features.actions &&
-      writable &&
-      docPath !== FOLDER_DOC &&
-      AGENTS[newAgent].runsThreads &&
-      !signedOut(newAgent) ? (
-        <div className="think-actions" role="group" aria-label="Actions">
-          <button
-            type="button"
-            className="think-more"
-            title={`The agent does what this ${noun} describes, with its own tools, in the mode picked below${buildMode ? ` (${buildMode})` : ""}: Plan shows its plan first, Auto acts at once`}
-            onClick={() => {
-              void start("-", "build");
-            }}
-          >
-            Build this {noun}
-          </button>
-          <button
-            type="button"
-            className="think-more"
-            title="The agent tests each claim here against what the section links or names, changing nothing"
-            onClick={() => {
-              void start("-", "check");
-            }}
-          >
-            Check this {noun}
-          </button>
-        </div>
-      ) : null}
       {here.length === 0 && loading ? (
         <h3 className="think-subhead think-loading">Loading threads…</h3>
-      ) : here.length === 0 ? (
-        <h3 className="think-subhead">No threads on this {noun} yet</h3>
-      ) : (
+      ) : here.length === 0 ? null : (
         <GroupedThreads threads={here} stateOf={stateOf} onOpen={setOpen} />
       )}
       {closedHere.length > 0 ? (
@@ -2725,6 +2650,74 @@ export function Think({
           onChanged={reload}
         />
       ) : null}
+      <div className="think-foot">
+        {notConnected(newAgent)}
+        {error ? <p className="think-error">{error}</p> : null}
+        {features.actions &&
+        writable &&
+        docPath !== FOLDER_DOC &&
+        AGENTS[newAgent].runsThreads &&
+        !signedOut(newAgent) ? (
+          <div className="think-actions" role="group" aria-label="Actions">
+            <button
+              type="button"
+              className="think-more"
+              title={`The agent does what this ${noun} describes, with its own tools, in the mode picked below${buildMode ? ` (${buildMode})` : ""}: Plan shows its plan first, Auto acts at once`}
+              onClick={() => {
+                void start("-", "build");
+              }}
+            >
+              Build this {noun}
+            </button>
+            <button
+              type="button"
+              className="think-more"
+              title="The agent tests each claim here against what the section links or names, changing nothing"
+              onClick={() => {
+                void start("-", "check");
+              }}
+            >
+              Check this {noun}
+            </button>
+          </div>
+        ) : null}
+        {signedOut(newAgent) ?? (
+          <Composer
+            placeholder={
+              !writable
+                ? "Threads need a folder Anur can write to"
+                : scope?.value === "folder"
+                  ? `Ask about everything in ${scope.folderName}…`
+                  : scope?.value === "doc" || section.index === 0
+                    ? "Ask about this doc…"
+                    : `Ask about this ${noun}…`
+            }
+            chip={scope ? <ScopeChip scope={scope} section={section} disabled={!!branch} /> : null}
+            sendLabel="Start thread"
+            {...composerAttach}
+            pickers={
+              <>
+                <AgentPicker value={newAgent} disabled={!writable} onChange={setNewAgent} />
+                {newChoices.map((o) => (
+                  <OptionPicker
+                    key={o.id}
+                    option={o}
+                    disabled={!writable}
+                    onChange={(value) => {
+                      setNewChoices((all) =>
+                        all.map((x) => (x.id === o.id ? { ...x, current: value } : x)),
+                      );
+                    }}
+                  />
+                ))}
+              </>
+            }
+            busy={false}
+            disabled={!writable || !AGENTS[newAgent].runsThreads}
+            onSend={(m) => start(m)}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -3951,7 +3944,6 @@ function ChangeSet({
  * inputs and its history. Folded by default; the fold is remembered.
  */
 function SectionFooter({ children }: { children: React.ReactNode }) {
-  const [el, setEl] = useState<HTMLElement | null>(null);
   const [open, setOpenState] = useState(() => {
     try {
       return window.localStorage.getItem("anur.sectionContext") === "open";
@@ -3959,13 +3951,9 @@ function SectionFooter({ children }: { children: React.ReactNode }) {
       return false;
     }
   });
-  useEffect(() => {
-    setEl(document.getElementById("right-footer"));
-  }, []);
-  if (!el) return null;
-  return createPortal(
+  return (
     <details
-      className="right-footer-panel"
+      className="think-context"
       open={open}
       onToggle={(e) => {
         const now = e.currentTarget.open;
@@ -3979,8 +3967,7 @@ function SectionFooter({ children }: { children: React.ReactNode }) {
     >
       <summary className="left-outline-head">Context and history</summary>
       <div className="right-footer-body">{children}</div>
-    </details>,
-    el,
+    </details>
   );
 }
 
