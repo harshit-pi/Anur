@@ -443,6 +443,11 @@ export const ipcContract = {
     request: z.object({ path: z.string().max(4096) }).strict(),
     response: z.object({ error: z.string().nullable() }),
   },
+  /** The space this window is opening now, by name, as at launch; null when none is. */
+  "folder:opening": {
+    request: z.object({}).strict(),
+    response: z.object({ name: z.string().nullable() }),
+  },
   "folder:current": {
     request: z.object({}).strict(),
     response: FolderState.nullable(),
@@ -1834,6 +1839,8 @@ export const ipcContract = {
 export const ipcEvents = {
   /** This window's folder changed, as when opened from the menu. */
   "folder:changed": FolderState.nullable(),
+  /** A space starts or finishes opening in this window: its name, or null once it's open. */
+  "folder:opening": z.object({ name: z.string().nullable() }),
   /** A note for the person about the space, shown once: as a folder that opened as part of one. */
   "app:notice": z.object({ text: z.string() }),
   /** A plugin's item in the status bar, and its panel; null removes it. */

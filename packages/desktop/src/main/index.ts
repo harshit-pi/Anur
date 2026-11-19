@@ -893,13 +893,22 @@ function send<E extends EventName>(win: BrowserWindow, event: E, payload: EventP
   if (!win.isDestroyed()) win.webContents.send(event, payload);
 }
 
+/** The space each window is opening now, by name, so its page says so instead of the start page. */
+const openingIn = new Map<number, string>();
+
 /** Open a folder: in its own window if it is open already, in a new window if this one has a folder. */
 async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOutcome> {
   // iCloud may have offloaded the folder's files; fetch them now, not one by one as they're read.
   void fetchOffloaded(folder).catch(() => undefined);
   let target = win;
   if (folders.current(win.webContents.id)) target = createWindow();
-  const outcome = await folders.open(target.webContents.id, folder);
+  const id = target.webContents.id;
+  openingIn.set(id, path.basename(folder));
+  send(target, "folder:opening", { name: path.basename(folder) });
+  const outcome = await folders.open(id, folder).finally(() => {
+    openingIn.delete(id);
+    send(target, "folder:opening", { name: null });
+  });
   if (outcome.kind === "opened") {
     // 11.4: other devices hold off Clean up while this one has the folder open.
     if (device && outcome.folder.mode === "writable") {
@@ -991,6 +1000,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     formatVersion: FORMAT_VERSION,
     platform: process.platform as "darwin" | "win32" | "linux",
   }),
+  "folder:opening": (_req, { webContentsId }) => ({ name: openingIn.get(webContentsId) ?? null }),
   "folder:current": (_req, { webContentsId }) => folders.current(webContentsId),
   "folder:choose": async (_req, { webContentsId }) => {
     const win = windows.get(webContentsId);

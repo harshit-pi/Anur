@@ -122,6 +122,16 @@ export function App() {
   const [sections, setSections] = useState<SectionTree | null>(null);
   /** The section the cursor is in, by index: what the Think panel is about. */
   const [cursorSection, setCursorSection] = useState(0);
+  /** The space opening in this window, as at launch: the page says so instead of the start page. */
+  const [spaceOpening, setSpaceOpening] = useState<string | null>(null);
+  useEffect(() => {
+    void anur.call("folder:opening", {}).then((r) => {
+      setSpaceOpening(r.name);
+    });
+    return anur.on("folder:opening", ({ name }) => {
+      setSpaceOpening(name);
+    });
+  }, []);
   /** "Launch is part of the anur-product space, opened there." (spaces) */
   const [spaceNotice, setSpaceNotice] = useState<string | null>(null);
   useEffect(
@@ -1280,6 +1290,7 @@ export function App() {
       <LeftSidebar
         folder={shown}
         onNewSpace={newFolder}
+        opening={spaceOpening !== null}
         onOpenFolder={openFolder}
         system={
           engineeringOn
@@ -1374,6 +1385,7 @@ export function App() {
         docNote={doc?.note ?? null}
         docError={docError ?? save.detail}
         spaceNotice={spaceNotice}
+        spaceOpening={spaceOpening}
         onOpenFolder={openFolder}
         onNewFolder={newFolder}
         onFirstDoc={firstDoc}
