@@ -386,16 +386,10 @@ export function MapView({
     for (const s of tree.sections) {
       const id = idOf(s.index);
       const heading = s.path.at(-1) ?? "";
-      // The second line: what's under the box, its sections and threads.
+      // The second line: the box's threads. Its sections show as its branches.
       const here = threads.filter((t) => samePath(t.path, s.path));
       const count = here.length;
-      const kids = tree.sections.filter((x) => x.parent === s.index).length;
-      const sub = [
-        kids > 0 ? plural(kids, "section") : "",
-        count > 0 ? plural(count, "thread") : "",
-      ]
-        .filter(Boolean)
-        .join(", ");
+      const sub = count > 0 ? plural(count, "thread") : "";
       // What happened here, on the box (mock 9).
       const status = boxStatus(here, here.filter((t) => previewed.has(t.id)).length);
       nodes.push({
