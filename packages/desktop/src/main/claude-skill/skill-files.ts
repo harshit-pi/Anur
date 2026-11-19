@@ -11,7 +11,7 @@ description: Turn this chat into a doc in Anur, start a doc of headings in Anur,
 
 # Anur
 
-Anur is the person's app for docs that are thought through section by section. It is open on their computer, with a folder of Markdown docs. Reach it through its MCP tools, whose names start with \`anur_\`. If a tool says Anur isn't open, ask the person to open Anur, then try again.
+Anur is the person's app for docs that are thought through section by section. It is open on their computer, with a folder of Markdown docs. Reach it through its MCP tools, whose names start with \`anur_\`. If a tool says Anur isn't open, ask the person to open Anur, then try again. Recording a decision or finding works with Anur closed too.
 
 ## /anur doc
 
@@ -44,10 +44,10 @@ While the person works in a doc, these help:
 
 Whatever you're working on, record what should outlast this session, so the team's agents follow it. It's committed with the code in \`.anur/decisions/\`.
 
-- When the person makes a lasting decision, such as a choice about the work or a correction of what you did ("no, three retries, not infinite"), call \`anur_note_decision\` with their exact words as the quote, the decision in under 15 words, and how sure you are it's lasting. Leave out \`doc\` for the repo you're working in, and pass the files the work touched as \`about\`, so it lands on that part of the system. If it reverses a decision already in \`CLAUDE.md\`, pass that decision's words as \`against\`: both then stand until someone picks. If Anur says to check, ask the person in one line, and call again with \`confirmed: true\` only if they agree.
+- When the person makes a lasting decision, such as a choice about the work or a correction of what you did ("no, three retries, not infinite"), call \`anur_note_decision\` with their exact words as the quote, the decision as a statement of at most 7 words, in no one's voice, and how sure you are it's lasting. Leave out \`doc\` for the repo you're working in, and pass the files the work touched as \`about\`, so it lands on that part of the system. If it reverses a decision already in \`CLAUDE.md\`, pass that decision's words as \`against\`: both then stand until someone picks. If Anur says to check, ask the person in one line, and call again with \`confirmed: true\` only if they agree.
 - When you establish a fact later work here should know, ask the person whether to keep it, and if they agree, call \`anur_propose_finding\` with \`confirmed: true\` and its source.
 - Tell the person in one line what was recorded. If they want it gone, call \`anur_drop_decision\` with the id Anur gave.
-- Don't record one-off instructions for this task, questions you answered, or your own choices.
+- Don't record one-off instructions for this task, questions you answered, or your own choices or assumptions: a decision is what the person said should hold, or their correction of what you did.
 `;
 
 /** Each file, by its path under the skill's folder. */

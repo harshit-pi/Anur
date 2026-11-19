@@ -217,6 +217,7 @@ export {
 } from "./decisions/claude-md.ts";
 export { untilDate, untilPassed } from "./decisions/until.ts";
 export { decisionNamed } from "./decisions/against.ts";
+export { DECISION_WORDS, decisionWordingProblem, scopeFromWords } from "./decisions/wording.ts";
 export * from "./plugins/api.ts";
 export { PluginHost, PluginRefused } from "./plugins/host.ts";
 

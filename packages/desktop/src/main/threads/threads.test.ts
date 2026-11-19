@@ -370,6 +370,39 @@ describe("Threads", () => {
     expect(check.claims.map((c) => c.about)).toEqual(["fact", "wording"]);
   });
 
+  it("refuses a decision that's long or in someone's voice, and narrows a folder nobody named", async () => {
+    const { threads: t, sent } = await setup();
+    const a = await t.start(
+      "plan.md",
+      DOC,
+      risks,
+      "Don't deploy anything, for this launch or later.",
+    );
+    if (a.kind !== "started") throw new Error(a.reason);
+    expect(sent.length).toBeGreaterThan(0);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    const quote = "Don't deploy anything, for this launch or later.";
+    const long = (await tool(a.thread.id, "anur_note_decision", {
+      quote,
+      decision: "We never deploy anything at all for this launch or any later one.",
+      confidence: 0.9,
+      concerns: "work",
+    })) as { error?: string };
+    expect(long.error).toMatch(/at most 7 words/);
+    await tool(a.thread.id, "anur_note_decision", {
+      quote,
+      decision: "No deploys for this launch.",
+      confidence: 0.9,
+      concerns: "work",
+      scope: "folder",
+    });
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === a.thread.id);
+    const d = (view?.items ?? []).find((i) => i.kind === "finding");
+    expect(d).toMatchObject({ claim: "No deploys for this launch.", scope: "doc" });
+  });
+
   it("shows the option used last when a choice is switched to another", async () => {
     const { threads: t, reply } = await setup();
     const a = await t.start("plan.md", DOC, risks, "How do we host it?");

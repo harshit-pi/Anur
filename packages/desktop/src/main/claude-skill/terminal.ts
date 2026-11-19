@@ -2,7 +2,13 @@ import { chmod, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promis
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { DecisionScope, decisionNamed, settleRule } from "@anur/core";
+import {
+  DecisionScope,
+  decisionNamed,
+  decisionWordingProblem,
+  scopeFromWords,
+  settleRule,
+} from "@anur/core";
 import { aboutFiles, filesFrom, type About } from "@anur/system";
 import type { ToolAnswer } from "../threads/anur-socket.ts";
 import type { CommittedDecisions, KeptEntry } from "../committed-decisions.ts";
@@ -302,7 +308,10 @@ async function decisionTool(
     if (at === null) return { error: `There's no section "${section ?? ""}" in ${rel}.` };
     doc = { rel, path: at };
   }
-  const everywhere = DecisionScope.safeParse(args.scope).data === "everywhere";
+  // Everywhere only when the person's words say so (2026-11-19 review).
+  const everywhere =
+    DecisionScope.safeParse(args.scope).data === "everywhere" &&
+    scopeFromWords(str(args.quote) ?? "", "everywhere", undefined) === "everywhere";
   // The part or line the files are about (23.1); the repo when they name none.
   const files = Array.isArray(args.about)
     ? args.about.filter((f): f is string => typeof f === "string")
@@ -335,6 +344,8 @@ async function decisionTool(
     const quote = str(args.quote);
     const decision = str(args.decision);
     if (!quote || !decision) return { error: "Give the person's exact words and the decision." };
+    const wording = decisionWordingProblem(decision);
+    if (wording) return { error: wording };
     const said = personSaid(cwd ? await (d.transcript ?? latestTranscript)(cwd) : null);
     const rule = settleRule(quote, typeof args.confidence === "number" ? args.confidence : 0, said);
     if (rule.kind === "refuse") return { error: rule.reason };
@@ -373,8 +384,13 @@ async function decisionTool(
       };
     entry = { kind: "finding", claim: claim.slice(0, 600), source: str(args.source) };
   }
-  // How far it reaches (18.3): the repo by default, a doc's section with a doc, or everywhere.
-  const scope = DecisionScope.safeParse(args.scope).data;
+  // How far it reaches (18.3): the repo by default; with a doc, the doc unless the person's
+  // words keep it to a section; or everywhere.
+  const asked = DecisionScope.safeParse(args.scope).data;
+  const scope =
+    doc && entry.kind === "decision"
+      ? scopeFromWords(str(args.quote) ?? "", asked, undefined)
+      : asked;
   const id =
     scope === "everywhere"
       ? await store.keep(doc ? doc.rel : path.join(dir, ".anur-here"), "", ref, entry, "everywhere")

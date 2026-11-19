@@ -157,6 +157,26 @@ describe("decisions from a plain Claude Code session (23.4, 23.11)", () => {
     ]);
   });
 
+  it("holds a plain session to the same wording, and keeps everywhere for words that say so (2026-11-19)", async () => {
+    const { api, call } = setup(said("no, three retries, not infinite, and never retry forever"));
+    const long = await call("anur_note_decision", {
+      quote: "no, three retries, not infinite, and never retry forever",
+      decision: "We retry three times and never retry forever, anywhere.",
+      confidence: 0.9,
+      _cwd: api,
+    });
+    expect("error" in long && long.error).toMatch(/someone's voice|at most 7 words/);
+    const ok = await call("anur_note_decision", {
+      quote: "no, three retries, not infinite",
+      decision: "Three retries, not infinite.",
+      confidence: 0.9,
+      scope: "everywhere",
+      _cwd: api,
+    });
+    // "Everywhere" wasn't in their words: it stays on this repo.
+    expect("text" in ok && ok.text).toContain("Recorded on this repo");
+  });
+
   it("reads only what the person typed from a transcript", () => {
     const t = [
       JSON.stringify({
