@@ -272,6 +272,8 @@ export const FindingLine = LineEnvelope.extend({
   scope: DecisionScope.optional(),
   /** The kept decision this one goes against (18.4), by its ID: neither wins until someone picks. */
   against: z.string().max(64).optional(),
+  /** The option this decision is the pick of (Use): picking another in its place drops it. */
+  option: z.string().min(1).optional(),
 });
 
 /** A person's decision on a finding: kept (perhaps reworded), or dropped. */

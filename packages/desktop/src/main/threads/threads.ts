@@ -25,6 +25,8 @@ import {
   withPreview,
   settleRule,
   DocId,
+  decisionWordingProblem,
+  scopeFromWords,
   type PreviewPart,
   type KnownThreadLine,
   type SectionId,
@@ -2362,6 +2364,14 @@ export class Threads {
     );
     const rule = settleRule(quote, confidence, said);
     if (rule.kind === "refuse") return { error: rule.reason };
+    const wording = decisionWordingProblem(decision);
+    if (wording) return { error: wording };
+    // Never wider than the person's words: a folder they didn't name is the doc.
+    const scope = scopeFromWords(
+      quote,
+      DecisionScope.safeParse(a.scope).data,
+      a.concerns === "work" ? "work" : undefined,
+    );
     // Going against one already kept (18.4): named by its words as listed.
     const againstWords = str(a.against, 600);
     const decidedHere = (live.findings ?? []).filter((f) => f.by === "person");
@@ -2386,7 +2396,7 @@ export class Threads {
       instead: str(a.instead, 300),
       until: str(a.until, 200),
       ...(a.concerns === "work" ? { concerns: "work" as const } : {}),
-      ...(DecisionScope.safeParse(a.scope).success ? { scope: DecisionScope.parse(a.scope) } : {}),
+      scope,
       ...(against ? { against } : {}),
     });
     if (rule.kind === "settle")
@@ -2912,8 +2922,77 @@ export class Threads {
     const at = await this.d.locate(rel, text);
     if (!at) return false;
     await this.append(at.doc, thread, { kind: "option-used", option, how });
+    await this.keepPick(at.doc, thread, option, how);
     await this.refresh(rel, text, thread);
     return true;
+  }
+
+  /**
+   * A pick is a decision (2026-11-19): kept on the thread's section or box,
+   * with the options passed over as what it was decided instead of, so later
+   * threads follow it. A pick in place of an earlier one drops that one; a
+   * part added to a set isn't a decision.
+   */
+  private async keepPick(
+    doc: Located["doc"],
+    thread: string,
+    option: string,
+    how: "replace" | "subsection" | "also",
+  ) {
+    const lines = await this.linesOf(doc, thread);
+    const set = lines.findLast(
+      (l): l is Extract<(typeof lines)[number], { kind: "options" }> =>
+        l.kind === "options" && l.options.some((o) => o.id === option),
+    );
+    const picked = set?.options.find((o) => o.id === option);
+    if (!set || set.several || !picked) return;
+    const keptNow = (id: string) => {
+      const last = lines.findLast((d) => d.kind === "finding-decided" && d.finding === id);
+      return last?.kind === "finding-decided" && last.status === "kept";
+    };
+    const picks = lines.filter(
+      (l): l is Extract<(typeof lines)[number], { kind: "finding" }> =>
+        l.kind === "finding" &&
+        l.option !== undefined &&
+        set.options.some((o) => o.id === l.option),
+    );
+    if (picks.some((p) => p.option === option && keptNow(p.id))) return;
+    if (how !== "also")
+      for (const p of picks)
+        if (keptNow(p.id)) {
+          await this.append(doc, thread, {
+            kind: "finding-decided",
+            finding: p.id,
+            status: "dropped",
+            claim: null,
+            how: "auto",
+          });
+          await this.commitDecided(thread, p.id, "dropped");
+        }
+    const turn = lines.findLast((l) => l.kind === "turn");
+    const others = set.options
+      .filter((o) => o.id !== option)
+      .map((o) => o.title)
+      .join(", ");
+    const line = await this.append(doc, thread, {
+      kind: "finding",
+      turn: turn?.kind === "turn" ? turn.turn : "pick",
+      claim: set.heading ? `${set.heading}: ${picked.title}` : picked.title,
+      source: null,
+      by: "person",
+      instead: others ? others.slice(0, 300) : null,
+      until: null,
+      scope: "section",
+      option,
+    });
+    await this.append(doc, thread, {
+      kind: "finding-decided",
+      finding: line.id,
+      status: "kept",
+      claim: null,
+      how: "auto",
+    });
+    await this.commitDecided(thread, line.id, "kept");
   }
 
   /**

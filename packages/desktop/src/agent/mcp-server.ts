@@ -113,7 +113,7 @@ const TOOLS = [
         decision: {
           type: "string",
           description:
-            'The decision in one short plain sentence, under 15 words, standing on its own, such as "Three retries, not infinite."',
+            'The decision as a statement of at most 7 words, one idea, standing on its own and in no one\'s voice: "Three retries, not infinite.", "Task lists stay in this doc.", "Drafts allowed, never sent." Never "I", "we", "you", "don\'t" or two ideas joined by a semicolon.',
         },
         instead: {
           type: "string",
@@ -145,7 +145,7 @@ const TOOLS = [
           type: "string",
           enum: ["section", "doc", "folder", "everywhere"],
           description:
-            'How far it reaches, from the person\'s words: "section" (default), "doc" ("in this doc"), "folder" ("in this repo", "across the project"), or "everywhere" ("always", "in every project").',
+            'How far it reaches, never wider than the person said: "section" for this section\'s subject (the default for the subject); "doc" for this doc, "for this", or a rule about how you work (the default for work); "folder" only when they name the folder or repo, or say "all our docs"; "everywhere" only when they say "always", "everywhere" or "every project". Anur narrows a scope their words don\'t name.',
         },
       },
       required: ["quote", "decision", "confidence"],
@@ -505,7 +505,7 @@ const TERMINAL_TOOLS = [
         decision: {
           type: "string",
           description:
-            'The decision in one short sentence, under 15 words, such as "Three retries, not infinite."',
+            'The decision as a statement of at most 7 words, one idea, in no one\'s voice, such as "Three retries, not infinite."',
         },
         instead: { type: "string", description: "What it replaces or turns down, if they said." },
         until: {

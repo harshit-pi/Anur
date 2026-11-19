@@ -370,6 +370,85 @@ describe("Threads", () => {
     expect(check.claims.map((c) => c.about)).toEqual(["fact", "wording"]);
   });
 
+  it("keeps a pick as a decision: switching drops the earlier one, Also add keeps both", async () => {
+    const { threads: t, reply } = await setup();
+    const a = await t.start("plan.md", DOC, risks, "How do we host it?");
+    if (a.kind !== "started") throw new Error(a.reason);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    await tool(a.thread.id, "anur_offer_options", {
+      heading: "Host",
+      options: [
+        { title: "Fly", text: "Run it on Fly." },
+        { title: "Render", text: "Run it on Render." },
+      ],
+    });
+    await tool(a.thread.id, "anur_offer_options", {
+      several: true,
+      options: [
+        { title: "Logs", text: "Ship logs." },
+        { title: "Alerts", text: "Page on errors." },
+      ],
+    });
+    await reply(a.thread.id, "Two hosts, two parts.");
+    const view = async () => (await t.list("plan.md", DOC)).find((x) => x.id === a.thread.id);
+    const kept = async () =>
+      ((await view())?.items ?? []).flatMap((i) =>
+        i.kind === "finding" && i.by === "person" && i.status === "kept" ? [i.claim] : [],
+      );
+    const sets = ((await view())?.items ?? []).flatMap((i) => (i.kind === "options" ? [i] : []));
+    const [fly, render] = sets[0]?.options ?? [];
+    const logs = sets[1]?.options[0];
+    if (!fly || !render || !logs) throw new Error("no options");
+    await t.useOption("plan.md", DOC, a.thread.id, fly.id, "subsection");
+    expect(await kept()).toEqual(["Host: Fly"]);
+    const first = ((await view())?.items ?? []).find(
+      (i) => i.kind === "finding" && i.claim === "Host: Fly",
+    );
+    expect(first).toMatchObject({ instead: "Render", scope: "section" });
+    await t.useOption("plan.md", DOC, a.thread.id, render.id, "replace");
+    expect(await kept()).toEqual(["Host: Render"]);
+    await t.useOption("plan.md", DOC, a.thread.id, fly.id, "also");
+    expect((await kept()).sort()).toEqual(["Host: Fly", "Host: Render"]);
+    // A part added to a set isn't a decision.
+    await t.useOption("plan.md", DOC, a.thread.id, logs.id, "subsection");
+    expect(await kept()).toHaveLength(2);
+  });
+
+  it("refuses a decision that's long or in someone's voice, and narrows a folder nobody named", async () => {
+    const { threads: t, sent } = await setup();
+    const a = await t.start(
+      "plan.md",
+      DOC,
+      risks,
+      "Don't deploy anything, for this launch or later.",
+    );
+    if (a.kind !== "started") throw new Error(a.reason);
+    expect(sent.length).toBeGreaterThan(0);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    const quote = "Don't deploy anything, for this launch or later.";
+    const long = (await tool(a.thread.id, "anur_note_decision", {
+      quote,
+      decision: "We never deploy anything at all for this launch or any later one.",
+      confidence: 0.9,
+      concerns: "work",
+    })) as { error?: string };
+    expect(long.error).toMatch(/at most 7 words/);
+    await tool(a.thread.id, "anur_note_decision", {
+      quote,
+      decision: "No deploys for this launch.",
+      confidence: 0.9,
+      concerns: "work",
+      scope: "folder",
+    });
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === a.thread.id);
+    const d = (view?.items ?? []).find((i) => i.kind === "finding");
+    expect(d).toMatchObject({ claim: "No deploys for this launch.", scope: "doc" });
+  });
+
   it("shows the option used last when a choice is switched to another", async () => {
     const { threads: t, reply } = await setup();
     const a = await t.start("plan.md", DOC, risks, "How do we host it?");

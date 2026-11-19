@@ -100,6 +100,45 @@ describe("committed decisions (18.9)", () => {
   });
 });
 
+describe("one person, one name (2026-11-19 review)", () => {
+  it("joins a file kept under the person's email hash to their login's, on their next decision", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "anur-dec-"));
+    mkdirSync(path.join(dir, ".anur/decisions"), { recursive: true });
+    const old = path.join(dir, ".anur/decisions/e-5f56042a44fb.jsonl");
+    const before = JSON.stringify({
+      id: "11111111-1111-4111-8111-111111111111",
+      at: "2026-11-18T10:00:00.000Z",
+      seq: 0,
+      dev: "mac-a",
+      kind: "decision",
+      scope: "section:notes.md#Checkout",
+      ref: "fnd-00000000",
+      decision: "Two retries",
+      quote: null,
+      instead: null,
+      until: null,
+      who: "Sam",
+    });
+    writeFileSync(old, `${before}\n`);
+    const store = new CommittedDecisions(
+      dir,
+      "mac-a",
+      () => Promise.resolve("sam"),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      () => Promise.resolve("e-5f56042a44fb"),
+    );
+    await store.keep("notes.md", "Checkout", "fnd-00000001", decision);
+    expect(existsSync(old)).toBe(false);
+    const mine = read(path.join(dir, ".anur/decisions/sam.jsonl"));
+    expect(mine).toHaveLength(2);
+    expect(mine[0]).toBe(before);
+  });
+});
+
 describe("the opened folder's one reader (18.14)", () => {
   it("collects its own decisions and each repo's, saying which home each came from", async () => {
     const folder = mkdtempSync(path.join(tmpdir(), "anur-dec-"));

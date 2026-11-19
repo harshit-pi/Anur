@@ -15,6 +15,9 @@
  * - heading: asked on the title, that set names its decision;
  * - several: parts that all belong come back as one "several" set;
  * - work rule: the person's rule is recorded with concerns "work";
+ * - worded: the decision is a statement of at most 7 words, in no one's
+ *   voice; refused as the app refuses it, the agent tries again;
+ * - scoped: a rule said "for this" is kept no wider than the doc;
  * - kept out: the rule never shows in the section text the agent writes;
  * - clean: after a pick, a new thread never names the options passed over;
  * - nothing sent: the agent never tried to send, post or publish.
@@ -25,7 +28,11 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
-import { buildBundle, buildSectionTree } from "../../packages/core/src/index.ts";
+import {
+  buildBundle,
+  buildSectionTree,
+  decisionWordingProblem,
+} from "../../packages/core/src/index.ts";
 import { findClaude, loginPath } from "../../packages/desktop/src/agent/find-claude.ts";
 import {
   AnurSocket,
@@ -46,7 +53,7 @@ const adapter = path.join(
 );
 const mcpServer = path.join(import.meta.dirname, "../../packages/desktop/src/agent/mcp-server.ts");
 
-type Call = { tool: string; args: Record<string, unknown> };
+type Call = { tool: string; args: Record<string, unknown>; refused?: string };
 
 /** Anur's tools answered as the app would, each call kept for the rules. */
 function handlerFor(doc: string, file: string, calls: Call[]) {
@@ -70,10 +77,18 @@ function handlerFor(doc: string, file: string, calls: Call[]) {
               : `Shown to the person as ${String(n)} options. They pick one, and its text replaces the section's.`,
       });
     }
-    if (tool === "anur_note_decision")
+    if (tool === "anur_note_decision") {
+      // Worded as the app requires (2026-11-19): refused, the agent tries again.
+      const problem = decisionWordingProblem(typeof a.decision === "string" ? a.decision : "");
+      if (problem) {
+        const last = calls.at(-1);
+        if (last) last.refused = problem;
+        return Promise.resolve({ error: problem });
+      }
       return Promise.resolve({
         text: "Recorded as decided, shown to the person with Undo. It reaches every new thread on this section.",
       });
+    }
     return Promise.resolve({ text: "Done." });
   };
 }
@@ -188,6 +203,12 @@ type Checked = {
   heading: boolean | null;
   several: boolean;
   workRule: boolean;
+  /** The first try at recording it read as a short statement. */
+  wordedFirst: boolean | null;
+  /** What was kept reads as one: at most 7 words, no one's voice. */
+  worded: boolean | null;
+  /** Kept no wider than the doc: the rule says "for this". */
+  scoped: boolean | null;
   keptOut: boolean;
   clean: boolean | null;
   nothingSent: boolean;
@@ -206,10 +227,8 @@ async function runScenario(agent: Agent, sc: Scenario, run: number): Promise<Che
   const decided = offers(aCalls).find((c) => c.args.several !== true);
   const ruleFrom = aCalls.length;
   await a.ask(sc.workRule);
-  const noted = aCalls
-    .slice(ruleFrom)
-    .filter((c) => c.tool === "anur_note_decision")
-    .map((c) => c.args);
+  const tries = aCalls.slice(ruleFrom).filter((c) => c.tool === "anur_note_decision");
+  const noted = tries.filter((c) => !c.refused).map((c) => c.args);
   declined.push(...a.declined());
 
   // B: parts that all belong.
@@ -267,6 +286,18 @@ async function runScenario(agent: Agent, sc: Scenario, run: number): Promise<Che
       : null,
     several: offers(bCalls).some((c) => c.args.several === true),
     workRule: noted.some((n) => n.concerns === "work"),
+    wordedFirst: tries[0] ? !tries[0].refused : null,
+    worded: noted.length
+      ? noted.every(
+          (n) =>
+            typeof n.decision === "string" &&
+            n.decision.trim().split(/\s+/).length <= 7 &&
+            !decisionWordingProblem(n.decision),
+        )
+      : null,
+    scoped: noted.length
+      ? noted.every((n) => n.scope === undefined || n.scope === "section" || n.scope === "doc")
+      : null,
     // The section text it wrote: the options' texts when it offered some, else its reply.
     keptOut: !sc.ruleWords.test(
       offers(dCalls).length
@@ -285,6 +316,7 @@ async function runScenario(agent: Agent, sc: Scenario, run: number): Promise<Che
         titles: titlesOf(c).map((o) => o.title),
       })),
       noted,
+      refused: tries.flatMap((c) => (c.refused ? [c.refused] : [])),
       passedOver,
       riskReply,
       written,
@@ -317,6 +349,9 @@ const RULES: [string, (r: Checked) => boolean | null][] = [
   ["Options name their decision (when it isn't the title)", (r) => r.heading],
   ["Parts come as a several set", (r) => r.several],
   ["Work rule recorded as work", (r) => r.workRule],
+  ["Decision worded right first time", (r) => r.wordedFirst],
+  ["Decision kept as a statement of ≤7 words", (r) => r.worded],
+  ["Decision scoped no wider than the doc", (r) => r.scoped],
   ["Work rule kept out of the text", (r) => r.keptOut],
   ["New thread never names options passed over", (r) => r.clean],
   ["Never tried to send", (r) => r.nothingSent],
