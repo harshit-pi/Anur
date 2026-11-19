@@ -446,6 +446,22 @@ export const livePreviewTheme = EditorView.theme({
     borderRadius: "4px",
   },
   ".cm-lp-property-add:hover": { color: "var(--blue)", backgroundColor: "var(--hover)" },
+  // Under the owner's value, lined up with it: the key is 140px, then a 12px gap.
+  ".cm-lp-property:has(.cm-lp-owner-suggest)": { flexWrap: "wrap" },
+  ".cm-lp-owner-suggest": {
+    display: "flex",
+    flexWrap: "wrap",
+    flexBasis: "100%",
+    gap: "4px",
+    margin: "2px 0 4px 158px",
+  },
+  ".cm-lp-owner-suggest .cm-lp-tag": {
+    border: "none",
+    cursor: "pointer",
+    font: "inherit",
+    opacity: "0.75",
+  },
+  ".cm-lp-owner-suggest .cm-lp-tag:hover": { opacity: "1" },
   ".cm-lp-tag": {
     backgroundColor: "var(--blue-wash)",
     color: "var(--blue)",

@@ -828,6 +828,13 @@ export const ipcContract = {
     response: z.object({}),
   },
   /** Search the folder's docs, case ignored: each matching line (2.26). */
+  /** Everyone who works in the open folder (people): their handle and the name they go by. */
+  "people:list": {
+    request: z.object({}).strict(),
+    response: z.object({
+      people: z.array(z.object({ handle: z.string().nullable(), name: z.string() })),
+    }),
+  },
   "folder:search": {
     request: z.object({ query: z.string().max(500) }).strict(),
     response: z.object({
@@ -1698,6 +1705,8 @@ export const ipcContract = {
 export const ipcEvents = {
   /** This window's folder changed, as when opened from the menu. */
   "folder:changed": FolderState.nullable(),
+  /** Someone's people note changed in the open folder, this Mac's own included: read the list again. */
+  "people:changed": z.object({}),
   /** The open doc changed outside Anur: its new text, or that it is gone or no longer readable. */
   "doc:changed": z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("changed"), path: z.string(), text: z.string(), hash: z.string() }),

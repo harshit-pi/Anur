@@ -4,6 +4,7 @@ import type { EditorState } from "@codemirror/state";
 import { type EditorView, WidgetType } from "@codemirror/view";
 import { followLinkIn } from "../link-click.ts";
 import { renderInline } from "../live-preview/inline.ts";
+import { nameOfHandle, ownerChoices } from "../../layout/people.ts";
 import {
   type Field,
   type Properties,
@@ -84,7 +85,15 @@ function showValue(cell: HTMLElement, f: Field) {
   }
   cell.classList.remove("cm-lp-property-empty");
   f.values.forEach((v, i) => {
-    if (chips) {
+    if (chips && f.key === "owner") {
+      // An owner is stored by handle and shown by name (people).
+      const chip = document.createElement("span");
+      chip.className = "cm-lp-tag";
+      chip.dataset.owner = v;
+      chip.textContent = nameOfHandle(v);
+      if (chip.textContent !== v) chip.title = v;
+      cell.append(chip);
+    } else if (chips) {
       const chip = document.createElement("span");
       chip.className = "cm-lp-tag";
       chip.append(renderInline(v));
@@ -239,6 +248,7 @@ function wire(box: HTMLElement) {
     const f = current()?.fields[Number(cell.dataset.row)];
     // While typed in, a list is its items separated by commas.
     cell.textContent = f ? valueText(f) : "";
+    if (f?.key === "owner") suggestOwners(cell, f.values);
     requestAnimationFrame(() => {
       if (document.activeElement === cell) focusCell(cell);
     });
@@ -251,7 +261,10 @@ function wire(box: HTMLElement) {
     const { row, field } = where(cell);
     const f = p.fields[row];
     if (!f) return;
-    if (field === "value") showValue(cell, f);
+    if (field === "value") {
+      showValue(cell, f);
+      cell.parentElement?.querySelector(".cm-lp-owner-suggest")?.remove();
+    }
     // A name can't be empty: an emptied one goes back to what it was.
     else if (cell.innerText.trim() === "") cell.textContent = f.key;
   });
@@ -338,4 +351,35 @@ function wire(box: HTMLElement) {
       commit(box, addField(p), "input.properties");
     }
   });
+}
+
+/**
+ * While an owner list is typed in: the folder's other people, by name, to add
+ * with a click; each goes in by handle, as the list stores it (people).
+ */
+function suggestOwners(cell: HTMLElement, have: readonly string[]) {
+  const line = cell.parentElement;
+  if (!line) return;
+  line.querySelector(".cm-lp-owner-suggest")?.remove();
+  const choices = ownerChoices().filter((c) => !have.includes(c.value));
+  if (choices.length === 0) return;
+  const strip = document.createElement("div");
+  strip.className = "cm-lp-owner-suggest";
+  for (const c of choices) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "cm-lp-tag";
+    b.textContent = `+ ${c.name}`;
+    b.title = c.value;
+    // Pressed before the cell loses focus, so the typing it adds to is still there.
+    b.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const typed = cell.innerText.trim();
+      cell.textContent = typed ? `${typed}, ${c.value}` : c.value;
+      cell.dispatchEvent(new InputEvent("input", { bubbles: true }));
+      b.remove();
+    });
+    strip.append(b);
+  }
+  line.append(strip);
 }

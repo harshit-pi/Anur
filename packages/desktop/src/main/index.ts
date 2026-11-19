@@ -51,7 +51,7 @@ import { listDocs } from "./folder/list-docs.ts";
 import { ClaudeSkill, claudeHome } from "./claude-skill/install.ts";
 import { terminalHandler, writeTerminalFile } from "./claude-skill/terminal.ts";
 import { findClaude, loginPath } from "../agent/find-claude.ts";
-import { baseAsMarkdown } from "@anur/core";
+import { baseAsMarkdown, today, withCreatedProperties, type CreatedProperties } from "@anur/core";
 import { readImage, saveImage } from "./folder/images.ts";
 import { MapInk } from "./folder/map-ink.ts";
 import { MapLayouts } from "./folder/map-layout.ts";
@@ -78,8 +78,8 @@ import { lastSavedIn } from "./folder/versions.ts";
 import { HomeVersions } from "./folder/home-versions.ts";
 import { sectionCommits } from "./folder/git-history.ts";
 import { suggestMatch } from "./folder/orphans.ts";
-import { personName } from "./folder/people.ts";
-import { CommittedDecisions } from "./committed-decisions.ts";
+import { notePerson, peopleIn, personName } from "./folder/people.ts";
+import { CommittedDecisions, personIn } from "./committed-decisions.ts";
 import { publicRepoFor } from "./public-repo.ts";
 import { writeShim } from "./pre-commit-shim.ts";
 import { PluginHost, PluginRefused } from "@anur/core";
@@ -441,8 +441,9 @@ async function startClaudeSkill(): Promise<void> {
         if (!folder) return { error: "Anur has no folder open." };
         const made = await createDoc(folder, name);
         if (made.kind === "failed") return { error: made.reason };
-        await writeFileAtomic(path.join(folder.path, made.path), markdown);
-        threadsFor(folder)?.ownWrite(made.path, markdown);
+        const text = withCreatedProperties(markdown, await createdBy(folder.path));
+        await writeFileAtomic(path.join(folder.path, made.path), text);
+        threadsFor(folder)?.ownWrite(made.path, text);
         const now = await folders.refresh(webContentsId);
         const win = windows.get(webContentsId);
         if (win && now) send(win, "folder:changed", now);
@@ -544,6 +545,15 @@ function storeFor(base: string, dev: string): CommittedDecisions {
       edgeSidesSoon(base);
     },
   );
+}
+
+/** A new doc's owner and day (people): the person's handle, else their name. */
+async function createdBy(folderPath: string): Promise<CreatedProperties> {
+  const handle = await personIn(folderPath).catch(() => null);
+  return {
+    owner: handle ?? (await personName(folderPath, appSettings.get().name)),
+    created: today(),
+  };
 }
 
 /**
@@ -766,6 +776,7 @@ function threadsFor(folder: FolderState): Threads | null {
         me: await personName(folder.path, appSettings.get().name),
         byDevice: await namesOf(folder.path),
       }),
+      createdBy: () => createdBy(folder.path),
       folderState: () =>
         [...windows.keys()].map((id) => folders.current(id)).find((f) => f?.path === folder.path) ??
         null,
@@ -881,7 +892,12 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
     if (device && outcome.folder.mode === "writable") {
       const at = outcome.folder.path;
       void personName(at, appSettings.get().name)
-        .then((name) => noteOpened(at, device as string, new Date(), name))
+        .then(async (name) => {
+          await noteOpened(at, device as string, new Date(), name);
+          // Committed, so teammates see this person's name and handle (people).
+          await notePerson(at, device as string, name, await personIn(at).catch(() => null));
+          send(target, "people:changed", {});
+        })
         .catch(() => undefined);
     }
     folderWatch.start(target.webContents.id, outcome.folder.path);
@@ -1153,8 +1169,13 @@ const handlers: { [C in Channel]: Handler<C> } = {
       // Every open folder's note follows, so others see the new name on their next look.
       for (const id of windows.keys()) {
         const f = folders.current(id);
-        if (f && device && f.mode === "writable")
-          await noteName(f.path, device, await personName(f.path, appSettings.get().name));
+        if (f && device && f.mode === "writable") {
+          const now = await personName(f.path, appSettings.get().name);
+          await noteName(f.path, device, now);
+          await notePerson(f.path, device, now, await personIn(f.path).catch(() => null));
+          const win = windows.get(id);
+          if (win) send(win, "people:changed", {});
+        }
       }
     }
     if (defaultAgent !== undefined) await appSettings.set({ defaultAgent });
@@ -1512,6 +1533,14 @@ const handlers: { [C in Channel]: Handler<C> } = {
     await t?.noteAutoUsed(rel, text, thread, section);
     return {};
   },
+  "people:list": async (_, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    return {
+      people: folder
+        ? (await peopleIn(folder.path)).map(({ handle, name }) => ({ handle, name }))
+        : [],
+    };
+  },
   "folder:search": async ({ query }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { matches: [], truncated: false, skipped: 0 };
@@ -1520,7 +1549,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
   "doc:create": async ({ path: requested }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
-    const made = await createDoc(folder, requested);
+    const made = await createDoc(folder, requested, await createdBy(folder.path));
     if (made.kind === "failed") return made;
     const madeText = await readFile(path.join(folder.path, made.path), "utf8").catch(() => null);
     if (madeText !== null) threadsFor(folder)?.ownWrite(made.path, madeText);

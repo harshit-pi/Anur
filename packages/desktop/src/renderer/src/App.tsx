@@ -62,6 +62,7 @@ import { anur } from "./bridge.ts";
 import { CommandPalette } from "./regions/CommandPalette.tsx";
 import { Think } from "./regions/Think.tsx";
 import { SCOPE_EVENT, type Scope } from "./regions/ThinkScope.tsx";
+import { setPeople } from "./layout/people.ts";
 import { Settings, type SettingsSection } from "./regions/Settings.tsx";
 import { newDocPath } from "./layout/new-doc.ts";
 import { MergeDialog } from "./regions/MergeDialog.tsx";
@@ -1083,6 +1084,23 @@ export function App() {
       window.removeEventListener("anur:show-preview", toPage);
     };
   }, []);
+  // Who works in this folder, so an owner property shows names, not handles: read
+  // again on every change, as this Mac's own note lands just after the folder opens.
+  useEffect(() => {
+    if (!folder) return;
+    const load = () => {
+      void anur.call("people:list", {}).then(
+        (r) => {
+          setPeople(r.people);
+        },
+        () => {
+          setPeople([]);
+        },
+      );
+    };
+    load();
+    return anur.on("people:changed", load);
+  }, [folder]);
   // A new doc starts on its section again; with no doc open, Think is the whole folder's.
   const docShown = doc?.path ?? null;
   useEffect(() => {

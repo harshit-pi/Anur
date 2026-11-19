@@ -223,3 +223,8 @@ export { PluginHost, PluginRefused } from "./plugins/host.ts";
 
 export { SYSTEM_DOC, systemDocText, systemIdsOf, systemIndexOf } from "./sections/system-doc.ts";
 export { FOLDER_DOC, folderDocText } from "./sections/folder-doc.ts";
+export {
+  today,
+  withCreatedProperties,
+  type CreatedProperties,
+} from "./markdown/created-properties.ts";
