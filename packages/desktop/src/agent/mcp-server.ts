@@ -437,6 +437,81 @@ const TERMINAL_TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: "anur_note_decision",
+    description:
+      "Record a decision the person made in this session that should outlast the task: a choice about the work, or a correction of what you did or proposed. It's committed with the code in .anur/decisions/, so the team's agents follow it. Give their exact words from this session as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it's recorded; otherwise Anur tells you to ask them first. Leave out doc to record it for the repo this session works in. Don't record one-off instructions, or your own choices.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        quote: {
+          type: "string",
+          description: "The person's exact words from this session that state the decision.",
+        },
+        decision: {
+          type: "string",
+          description:
+            'The decision in one short sentence, under 15 words, such as "Three retries, not infinite."',
+        },
+        instead: { type: "string", description: "What it replaces or turns down, if they said." },
+        until: {
+          type: "string",
+          description: 'When it stops holding, in their words, such as "for now".',
+        },
+        confidence: {
+          type: "number",
+          description:
+            "0 to 1: how sure you are it's a lasting decision, not a one-off instruction.",
+        },
+        confirmed: {
+          type: "boolean",
+          description:
+            "True only after the person said yes to keeping it, when Anur asked you to check.",
+        },
+        doc: { ...docArg, description: "The doc it's about, if any; leave out for the repo." },
+        section: sectionArg,
+      },
+      required: ["quote", "decision", "confidence"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "anur_propose_finding",
+    description:
+      "Keep a fact this session established that later work here should know, such as how a job is scheduled or a confirmed limit, with where it came from. Ask the person first; call with confirmed: true once they agree. It's committed with the code in .anur/decisions/. One claim per call, only what you checked against a source.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        claim: {
+          type: "string",
+          description: "The fact, in one or two sentences, standing on its own.",
+        },
+        source: {
+          type: "string",
+          description: "Where it came from: a file and line, a doc, or a URL.",
+        },
+        confirmed: { type: "boolean", description: "True once the person agreed to keep it." },
+        doc: { ...docArg, description: "The doc it's about, if any; leave out for the repo." },
+        section: sectionArg,
+      },
+      required: ["claim", "source"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "anur_drop_decision",
+    description:
+      "Take back a decision or finding you recorded, by the id Anur gave, when the person asks.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "The id Anur gave when it was recorded." },
+        doc: { ...docArg, description: "The doc it was recorded on, if any." },
+      },
+      required: ["id"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 function write(message: object): void {
