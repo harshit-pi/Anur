@@ -34,8 +34,10 @@ import {
   canGoBack,
   canGoForward,
   close,
+  closeWhere,
   currentDoc,
   cycle,
+  docOf,
   forward,
   listItems,
   loadTabs,
@@ -347,7 +349,14 @@ export function App() {
       openDocNow.current(path, newTab ?? Date.now() - modAt < 600);
     };
     window.addEventListener("anur:open-path", onOpen);
+    // A doc deleted outside Anur with nothing unsaved on its page: its tabs close.
+    const onGone = (e: Event) => {
+      const { path } = (e as CustomEvent<{ path: string }>).detail;
+      setTabs((t) => closeWhere(t, (tab) => docOf(tab) === path));
+    };
+    window.addEventListener("anur:doc-gone", onGone);
     return () => {
+      window.removeEventListener("anur:doc-gone", onGone);
       window.removeEventListener("pointerdown", onPress, true);
       window.removeEventListener("click", onPress, true);
       window.removeEventListener("anur:open-path", onOpen);

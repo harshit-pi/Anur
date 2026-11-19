@@ -1293,6 +1293,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
       const now = await folders.refresh(webContentsId);
       return now ? { ...copied, folder: now } : { kind: "failed", reason: "The folder closed." };
     }
+    if (found.reason) return { kind: "failed", reason: found.reason };
     if (!found.text) return { kind: "failed", reason: "There was nothing Anur could use in that." };
     const file = await docFromText(path.join(folder.path, into), found.text);
     const now = await folders.refresh(webContentsId);

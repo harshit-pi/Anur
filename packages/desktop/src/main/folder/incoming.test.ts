@@ -87,3 +87,34 @@ describe("what another app drops or pastes", () => {
     expect(readFileSync(path.join(dir, "Notes from Slack.md"), "utf8")).toBe("Notes from Slack\n");
   });
 });
+
+describe("a folder dragged from Obsidian, which gives only its name", () => {
+  const none = { uriList: "", obsidianFiles: "" };
+  function vault(name: string, open: boolean) {
+    const root = mkdtempSync(path.join(tmpdir(), "vault-"));
+    return { name, path: root, open };
+  }
+
+  it("copies the one folder by that name", async () => {
+    const v = vault("Work", true);
+    mkdirSync(path.join(v.path, "Mocks", "Actions"), { recursive: true });
+    const r = await resolveIncoming({ ...none, text: "Actions" }, [v]);
+    expect(r).toEqual({ paths: [path.join(v.path, "Mocks", "Actions")], text: null });
+  });
+
+  it("asks for a copy when several folders share the name", async () => {
+    const v = vault("Work", true);
+    mkdirSync(path.join(v.path, "A", "Actions"), { recursive: true });
+    mkdirSync(path.join(v.path, "B", "Actions"), { recursive: true });
+    const r = await resolveIncoming({ ...none, text: "Actions" }, [v]);
+    expect(r.paths).toEqual([]);
+    expect(r.reason).toMatch(/2 folders are called "Actions"/);
+  });
+
+  it("keeps text that names no folder as text", async () => {
+    const v = vault("Work", true);
+    mkdirSync(path.join(v.path, "Mocks"), { recursive: true });
+    const r = await resolveIncoming({ ...none, text: "Buy milk" }, [v]);
+    expect(r).toEqual({ paths: [], text: "Buy milk" });
+  });
+});
