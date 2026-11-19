@@ -63,7 +63,7 @@ export function ScopeChip({
     { value: "folder", name: "The whole folder", detail: scope.folderName, off: false },
   ];
   return (
-    <span className="think-scope" ref={host}>
+    <span className="think-scope-pick" ref={host}>
       <button
         type="button"
         className={`think-scope-chip${open ? " open" : ""}`}

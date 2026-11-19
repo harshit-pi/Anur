@@ -6199,7 +6199,7 @@ button.file-card-name:hover {
 }
 
 /* What a new thread is about: a chip above the box, and its menu (Mock: Think scope). */
-.think-composer:has(.think-scope) {
+.think-composer:has(.think-scope-pick) {
   position: relative;
 }
 
@@ -6208,7 +6208,7 @@ button.file-card-name:hover {
   margin: 0 0 4px;
 }
 
-.think-scope {
+.think-scope-pick {
   min-width: 0;
 }
 
