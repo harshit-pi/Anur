@@ -8,6 +8,7 @@ import { FEATURES } from "../../../shared/features.ts";
 import { CloseIcon } from "./Icons.tsx";
 import { type ThemePref, applyTheme, loadTheme, saveTheme } from "./theme-pref.ts";
 import { type PageFont, applyPageFont, loadPageFont, savePageFont } from "./font-pref.ts";
+import { type MapStyle, loadMapStyle, saveMapStyle } from "./map-style-pref.ts";
 
 /**
  * Settings (task 2.25), from the gear, the plugins icon or ⌘,. Laid out as
@@ -510,6 +511,7 @@ export function Settings({
     });
   };
   const [pageFont, setPageFont] = useState<PageFont>(() => loadPageFont(window.localStorage));
+  const [mapStyle, setMapStyle] = useState<MapStyle>(() => loadMapStyle(window.localStorage));
   const pickPageFont = (f: PageFont) => {
     setPageFont(f);
     savePageFont(window.localStorage, f);
@@ -635,6 +637,28 @@ export function Settings({
                     }}
                   >
                     {f === "serif" ? "Serif" : f === "sans" ? "Sans" : "System"}
+                  </button>
+                ))}
+              </div>
+            </Row>
+            <Row
+              title="Map style"
+              detail="How the map draws its boxes and lines: clean, or hand-drawn as Excalidraw draws."
+            >
+              <div className="segmented" role="radiogroup" aria-label="Map style">
+                {(["clean", "hand"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={mapStyle === m}
+                    className="segmented-option"
+                    onClick={() => {
+                      setMapStyle(m);
+                      saveMapStyle(window.localStorage, m);
+                    }}
+                  >
+                    {m === "clean" ? "Clean" : "Hand-drawn"}
                   </button>
                 ))}
               </div>

@@ -5,6 +5,8 @@ import { anur } from "../bridge.ts";
 import { useFeatures } from "../features.ts";
 import { changeSummary } from "../layout/change-summary.ts";
 import { mapSkeleton } from "../layout/map-drawing.ts";
+import { BoxSketch, sketchLine } from "./MapSketch.tsx";
+import { useMapStyle } from "./map-style-pref.ts";
 import "../editor/drawings/assets.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
 
@@ -165,6 +167,20 @@ export function MapView({
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
   /** Naming a new box: where it goes, and its parent when it was drawn from a box. */
   const [makingDrawing, setMakingDrawing] = useState(false);
+  /** Hand-drawn, as Excalidraw draws, when picked in Settings → Appearance. */
+  const hand = useMapStyle() === "hand";
+  /** A line as the map style draws it: one path, or its sketched strokes. */
+  const line = (key: string, className: string, d: string, marker?: string) =>
+    hand
+      ? sketchLine(key, d, className.includes("thread")).map((sd, i, all) => (
+          <path
+            key={`${key}:${String(i)}`}
+            className={className}
+            d={sd}
+            {...(marker && i === all.length - 1 ? { markerEnd: marker } : {})}
+          />
+        ))
+      : [<path key={key} className={className} d={d} {...(marker ? { markerEnd: marker } : {})} />];
   /** The map as an Excalidraw drawing beside the doc, opened in a tab. */
   const openAsDrawing = async (newTab: boolean) => {
     const sameDocLinks = tree.sections.flatMap((s) =>
@@ -941,13 +957,11 @@ export function MapView({
               [b.x, rail],
               [b.x, top],
             ];
-      return [
-        <path
-          key={b.id}
-          className={b.kind === "section" ? "map-edge rail" : "map-edge rail thread"}
-          d={pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" ")}
-        />,
-      ];
+      return line(
+        b.id,
+        b.kind === "section" ? "map-edge rail" : "map-edge rail thread",
+        pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" "),
+      );
     }
     // From the parent's bottom to the child's top, a soft S; sideways when a moved box sits beside.
     const below = b.y - b.h / 2 >= p.y + p.h / 2;
@@ -966,9 +980,7 @@ export function MapView({
       const mid = (x1 + x2) / 2;
       d = `M ${String(x1)} ${String(p.y)} C ${String(mid)} ${String(p.y)}, ${String(mid)} ${String(b.y)}, ${String(x2)} ${String(b.y)}`;
     }
-    return [
-      <path key={b.id} className={b.kind === "section" ? "map-edge" : "map-edge thread"} d={d} />,
-    ];
+    return [...line(b.id, b.kind === "section" ? "map-edge" : "map-edge thread", d)];
   });
 
   // Links between sections, drawn as arrows from the linking box to its target.
@@ -991,17 +1003,12 @@ export function MapView({
         if (!a || !b) return [];
         const p = edge(a, b);
         const q = edge(b, a);
-        return [
-          <line
-            key={`${a.id}>${b.id}`}
-            className="map-link"
-            x1={p.x}
-            y1={p.y}
-            x2={q.x}
-            y2={q.y}
-            markerEnd="url(#map-arrow)"
-          />,
-        ];
+        return line(
+          `${a.id}>${b.id}`,
+          "map-link",
+          `M ${String(p.x)} ${String(p.y)} L ${String(q.x)} ${String(q.y)}`,
+          "url(#map-arrow)",
+        );
       }),
   );
   const drawing = (() => {
@@ -1025,6 +1032,7 @@ export function MapView({
     <div
       ref={host}
       className="map"
+      data-style={hand ? "hand" : "clean"}
       tabIndex={0}
       role="application"
       aria-label="Map of the doc's sections"
@@ -1090,6 +1098,7 @@ export function MapView({
                 onBoxDown(e, b);
               }}
             >
+              {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed={b.kind === "edit"} /> : null}
               <div className="map-box-head">
                 <span className="map-box-name">{b.option.title}</span>
                 {b.kind === "edit" && writable && b.thread ? (
@@ -1131,6 +1140,7 @@ export function MapView({
                 onBoxDown(e, b);
               }}
             >
+              {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed={false} /> : null}
               <span className="truncate">→ {b.heading}</span>
             </button>
           ) : b.kind === "thread" && b.thread ? (
@@ -1144,6 +1154,7 @@ export function MapView({
                 onBoxDown(e, b);
               }}
             >
+              {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed /> : null}
               <span className="truncate">
                 <ThreadName thread={b.thread} />
               </span>
@@ -1169,6 +1180,7 @@ export function MapView({
                 if (writable) setRenaming(b.index);
               }}
             >
+              {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed={b.kind === "edit"} /> : null}
               <div className="map-box-head">
                 {renaming === b.index ? (
                   <input
