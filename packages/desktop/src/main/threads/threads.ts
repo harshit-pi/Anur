@@ -25,6 +25,8 @@ import {
   withPreview,
   settleRule,
   DocId,
+  decisionWordingProblem,
+  scopeFromWords,
   type PreviewPart,
   type KnownThreadLine,
   type SectionId,
@@ -2362,6 +2364,14 @@ export class Threads {
     );
     const rule = settleRule(quote, confidence, said);
     if (rule.kind === "refuse") return { error: rule.reason };
+    const wording = decisionWordingProblem(decision);
+    if (wording) return { error: wording };
+    // Never wider than the person's words: a folder they didn't name is the doc.
+    const scope = scopeFromWords(
+      quote,
+      DecisionScope.safeParse(a.scope).data,
+      a.concerns === "work" ? "work" : undefined,
+    );
     // Going against one already kept (18.4): named by its words as listed.
     const againstWords = str(a.against, 600);
     const decidedHere = (live.findings ?? []).filter((f) => f.by === "person");
@@ -2386,7 +2396,7 @@ export class Threads {
       instead: str(a.instead, 300),
       until: str(a.until, 200),
       ...(a.concerns === "work" ? { concerns: "work" as const } : {}),
-      ...(DecisionScope.safeParse(a.scope).success ? { scope: DecisionScope.parse(a.scope) } : {}),
+      scope,
       ...(against ? { against } : {}),
     });
     if (rule.kind === "settle")

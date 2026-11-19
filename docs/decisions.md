@@ -2,6 +2,47 @@
 
 Engineering decisions made while building Anur, newest first, each with why. The product design lives outside this repo; this file keeps what a session working in the code needs to know without it. When a decision changes, edit its entry and say when.
 
+## What counts as a decision (2026-11-19)
+
+Kept short on purpose: every decision reaches every later thread in its reach, so a weak one costs everyone context.
+
+- **A decision is something a person said should hold**: a choice they stated, or a correction of what the agent assumed or did ("no, three retries, not infinite"). A correction is the strongest kind: it is the agent's assumption overruled.
+- **The stages**: what the agent assumed is shown (the task report's "decided on its own"), never carried. When the person confirms it, or corrects it, it becomes a decision; a stated rule or fact is one at once. Picks go to the page. Assumptions aren't captured anywhere yet; that comes with the change report.
+- **Why picks stay out**: the page already holds them, so a decision would be a second record that goes stale when the section is edited. Every decision also takes room in every later thread's list, and that list is capped (the carry eval, 18.7). A pick that should bind beyond its section is said so by the person, and that sentence is the decision.
+- **Never a decision:**
+  - picking an option, or using an edit. Its text goes into the page, and the page is the record. A pick was briefly kept as a decision on 2026-11-19 and taken out the same day;
+  - anything the agent assumed, inferred or chose itself;
+  - a one-off instruction for this task, or a question answered.
+- **Wording**: a statement of at most 7 words, one idea, in no one's voice. "Task lists stay in this doc.", not "Keep task lists in this doc; create nothing in Linear or Gmail." The person's own words go in `quote`, which is the evidence. `decisionWordingProblem` (`packages/core/src/decisions/wording.ts`) refuses more than 8 words, a semicolon, "I/we/you", and a leading "don't". The agent rewords and calls again.
+- **Reach**: never wider than the person said. Left out, a rule about the work holds for the doc and a subject decision for its section. "Folder" needs the folder, the repo or "all our docs" in their words, and "everywhere" needs "always", "everywhere" or "every project". `scopeFromWords` narrows anything else to the doc. Why: "for this launch or later" was once kept for the whole of `~/workspace`, and reached unrelated plans.
+- **One name per person**: a person's file is named by their GitHub login wherever `gh` knows it, not only in a GitHub repo. A file kept earlier under their email hash joins the login's file on their next decision there.
+
+## Decisions from Claude Code, outside Anur's window (2026-11-19)
+
+Decisions don't need Anur's window: any Claude Code session on the person's Mac records them.
+
+```
+Add in Anur (once per Mac)
+  ├─ /anur skill ─────────▶ ~/.claude/skills/anur/
+  └─ Anur's MCP server ───▶ Claude Code's user config
+        │
+any Claude Code session, any folder
+  └─ anur_note_decision ──▶ the Anur app, or, with Anur closed,
+        │                     the MCP program itself
+        │   same checks as a thread: quote typed by the person,
+        │   at most 7 words, scope never wider than said
+        ▼
+<repo>/.anur/decisions/<person>.jsonl   committed with the code
+        │   first decision in a repo also adds:
+        ├─ git pre-commit hook ─▶ the CLAUDE.md block, for people without Anur
+        └─ CLAUDE.local.md ─────▶ the person's own not-yet-merged decisions
+```
+
+- There is no Claude Code hook per repo. Capture is one user-level install, the skill and the MCP server, through `claude mcp add` (`main/claude-skill/install.ts`), and works in every folder.
+- Where it lands: the folder open in Anur when the session is inside it; otherwise the session's own repo. Left unscoped it holds for that repo, or for the part the touched files name (`about`). It holds everywhere only when the person's words say so.
+- `main/claude-skill/terminal.ts` runs `settleRule`, `decisionWordingProblem` and `scopeFromWords`, the same as a thread. The skill text in `skill-files.ts` carries the same "what counts" rule, so a session never records a pick, its own assumption or a one-off.
+- With Anur closed, `anur_note_decision`, `anur_propose_finding` and `anur_drop_decision` still work: the MCP program runs the same `terminal.ts` path itself (`main/claude-skill/offline.ts`), loaded only then, into the session's repo found by `git rev-parse --show-toplevel`, with this Mac's device ID, so Anur shows the decision as the person's own when it opens. A doc can't be named while closed, since only Anur knows its folder; the other tools still answer "Anur isn't open".
+
 ## What a thread reads (2026-11-17)
 
 - A thread on a section gets: the own text of every section above it, its own section in full (subsections included), and **the rest of the doc in full**, every other section's heading and own text.
@@ -228,7 +269,7 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 
 ## Decisions: a finding a person stands behind
 
-- A decision is a finding whose source is a person, not a file: their exact words from the thread, the decision in under 15 words, what it replaced, and any "until". People see "Decided"; findings stay "Finding". No other kinds are shown (models confused override and decision 40% of the time in the 2026-11-18 eval).
+- A decision is a finding whose source is a person, not a file: their exact words from the thread, the decision as a statement of at most 7 words (see "What counts as a decision"), what it replaced, and any "until". People see "Decided"; findings stay "Finding". No other kinds are shown (models confused override and decision 40% of the time in the 2026-11-18 eval).
 - The agent records one with `anur_note_decision`. It settles with no click, shown as one line with Undo, only when the words are word for word in something the person typed in that thread, they aren't a question, and the agent's confidence is 0.7 or more (Opus at 0.7 kept 92% right on 286 real messages). Otherwise it asks once: "Keep this for later work?", Keep or Just this once. Words the person never typed are refused, so nothing is put in anyone's mouth.
 - Kept decisions reach every new thread on the section and below, listed apart from findings as "Decided by Sam (3 Nov): … Instead of: …". The agent is told to follow them, to say in a line when it relied on one, and to ask rather than go against one.
 - Names show only on someone else's decisions. In a real run, a new thread asked to cut the price below a competitor answered "No. On 18 November Harshit decided…".

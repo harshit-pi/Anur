@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { installPreCommit, writeLocalMd, writeUserClaudeMd, type About } from "@anur/system";
 import os from "node:os";
 import { loginPath } from "../agent/find-claude.ts";
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
@@ -101,12 +101,18 @@ export async function personIn(
   pathOf: () => Promise<string> = loginPath,
 ): Promise<string | null> {
   const email = await git(dir, "config", "user.email");
-  let login = email ? loginFromEmail(email) : null;
-  if (!login && /github\.com/.test((await git(dir, "remote", "get-url", "origin")) ?? ""))
-    login = await ghLogin(await pathOf());
-  return personKey({ login, email: email || null }, (t) =>
-    createHash("sha256").update(t).digest("hex"),
-  );
+  // The GitHub login wherever there is one, not only in a GitHub repo, so a
+  // person is one name in every folder (2026-11-19 review).
+  const login = (email ? loginFromEmail(email) : null) ?? (await ghLogin(await pathOf()));
+  return personKey({ login, email: email || null }, sha256);
+}
+
+const sha256 = (t: string) => createHash("sha256").update(t).digest("hex");
+
+/** The name a person's file had before their login was known: their email's hash. */
+export async function emailKeyIn(dir: string): Promise<string | null> {
+  const email = await git(dir, "config", "user.email");
+  return email ? personKey({ login: null, email }, sha256) : null;
 }
 
 export class CommittedDecisions {
@@ -134,12 +140,34 @@ export class CommittedDecisions {
      * own `CLAUDE.local.md` (23.10). Only a system folder knows both ends.
      */
     private readonly sidesFor: () => void = () => undefined,
+    /** The person's older name here, their email's hash, whose file joins their login's. */
+    private readonly emailKeyOf: (dir: string) => Promise<string | null> = emailKeyIn,
   ) {}
+
+  /**
+   * A file kept under the person's email hash, from before their login was
+   * known, joins their login's file: one person, one name (2026-11-19).
+   */
+  private async adoptEmailFile(home: string, person: string) {
+    const old = await this.emailKeyOf(home);
+    if (!old || old === person) return;
+    const from = path.join(home, ANUR_DIR, anurPaths.decisions(old));
+    const text = await readFile(from, "utf8").catch(() => null);
+    if (text === null) return;
+    const to = path.join(home, ANUR_DIR, anurPaths.decisions(person));
+    const mine = await readFile(to, "utf8").catch(() => "");
+    const have = new Set(mine.split("\n").filter(Boolean));
+    const add = text.split("\n").filter((row) => row.trim() && !have.has(row));
+    const sep = mine === "" || mine.endsWith("\n") ? "" : "\n";
+    await writeFile(to, `${mine}${sep}${add.map((r) => `${r}\n`).join("")}`);
+    await unlink(from);
+  }
 
   private async place(rel: string) {
     const home = await decisionsHome(this.folder, rel);
     const person = await this.personOf(home);
     if (!person) return null;
+    await this.adoptEmailFile(home, person).catch(() => undefined);
     const file = path.join(home, ANUR_DIR, anurPaths.decisions(person));
     return { home, person, file };
   }

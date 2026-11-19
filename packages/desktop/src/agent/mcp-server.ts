@@ -2,6 +2,7 @@ import { PluginHost } from "@anur/core";
 import { pluginById } from "../plugins/index.ts";
 import { readFileSync } from "node:fs";
 import { createConnection } from "node:net";
+import path from "node:path";
 import { createInterface } from "node:readline";
 
 /**
@@ -101,7 +102,7 @@ const TOOLS = [
   {
     name: "anur_note_decision",
     description:
-      "Record a decision the person made that should outlast this task: a choice about the work, or a correction of what you did or proposed. Give their exact words from this thread as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it settles with an Undo for the person; otherwise they're asked to keep it. Kept decisions reach every new thread on this section. Don't record one-off instructions for this task, or your own choices.",
+      "Record a decision the person made that should outlast this task: a choice about the work, or a correction of what you did or proposed. Give their exact words from this thread as the quote; Anur refuses words they didn't type. When you're sure it's lasting and it isn't a question, it settles with an Undo for the person; otherwise they're asked to keep it. Kept decisions reach every new thread on this section. Don't record one-off instructions for this task, your own choices or assumptions, or which option or edit they picked: the doc holds that.",
     inputSchema: {
       type: "object",
       properties: {
@@ -113,7 +114,7 @@ const TOOLS = [
         decision: {
           type: "string",
           description:
-            'The decision in one short plain sentence, under 15 words, standing on its own, such as "Three retries, not infinite."',
+            'The decision as a statement of at most 7 words, one idea, standing on its own and in no one\'s voice: "Three retries, not infinite.", "Task lists stay in this doc.", "Drafts allowed, never sent." Never "I", "we", "you", "don\'t" or two ideas joined by a semicolon.',
         },
         instead: {
           type: "string",
@@ -145,7 +146,7 @@ const TOOLS = [
           type: "string",
           enum: ["section", "doc", "folder", "everywhere"],
           description:
-            'How far it reaches, from the person\'s words: "section" (default), "doc" ("in this doc"), "folder" ("in this repo", "across the project"), or "everywhere" ("always", "in every project").',
+            'How far it reaches, never wider than the person said: "section" for this section\'s subject (the default for the subject); "doc" for this doc, "for this", or a rule about how you work (the default for work); "folder" only when they name the folder or repo, or say "all our docs"; "everywhere" only when they say "always", "everywhere" or "every project". Anur narrows a scope their words don\'t name.',
         },
       },
       required: ["quote", "decision", "confidence"],
@@ -326,6 +327,9 @@ const pluginTools = () =>
     .map((t) => ({ name: t.name, description: t.description, inputSchema: t.inputSchema }));
 const inTerminal = !process.env.ANUR_TOKEN && terminalFile !== "";
 
+/** The tools that still work with Anur closed (2026-11-19): a decision lands in the repo either way. */
+const OFFLINE = new Set(["anur_note_decision", "anur_propose_finding", "anur_drop_decision"]);
+
 function reach(): { socket: string; token: string } | null {
   if (!inTerminal)
     return { socket: process.env.ANUR_SOCKET ?? "", token: process.env.ANUR_TOKEN ?? "" };
@@ -505,7 +509,7 @@ const TERMINAL_TOOLS = [
         decision: {
           type: "string",
           description:
-            'The decision in one short sentence, under 15 words, such as "Three retries, not infinite."',
+            'The decision as a statement of at most 7 words, one idea, in no one\'s voice, such as "Three retries, not infinite."',
         },
         instead: { type: "string", description: "What it replaces or turns down, if they said." },
         until: {
@@ -600,11 +604,21 @@ function call(
   tool: string,
   args: unknown,
 ): Promise<{ text?: string; error?: string; image?: { data: string; mimeType: string } }> {
+  // Anur closed: a decision still lands in the repo, through the same checks (2026-11-19).
+  // Loaded only then: the store's code is heavier than this program's start needs.
+  const closed = (): Promise<{ text?: string; error?: string }> =>
+    inTerminal && OFFLINE.has(tool)
+      ? import("../main/claude-skill/offline.ts")
+          .then((m) =>
+            m.offlineDecision(tool, (args ?? {}) as Record<string, unknown>, {
+              cwd: process.cwd(),
+              appSupport: path.dirname(path.dirname(terminalFile)),
+            }),
+          )
+          .catch((e: unknown) => ({ error: `Couldn't record it: ${String(e)}` }))
+      : Promise.resolve({ error: "Anur isn't open. Ask the person to open Anur, then try again." });
   const to = reach();
-  if (!to)
-    return Promise.resolve({
-      error: "Anur isn't open. Ask the person to open Anur, then try again.",
-    });
+  if (!to) return closed();
   return new Promise((resolve) => {
     const conn = createConnection(to.socket);
     let buf = "";
@@ -623,7 +637,8 @@ function call(
       }
     });
     conn.on("error", () => {
-      done({ error: "Anur isn't open. Ask the person to open Anur, then try again." });
+      conn.destroy();
+      void closed().then(resolve);
     });
     // From a terminal, where the agent runs: Anur finds its chat from there.
     const sent = inTerminal ? { ...(args as object), _cwd: process.cwd() } : args;

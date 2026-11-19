@@ -7,6 +7,7 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 - [`docs/decisions.md`](docs/decisions.md): the engineering decisions made so far, each with why.
 - [`docs/patterns.md`](docs/patterns.md): how things are done here: IPC channels, changing the doc, widgets, the agent layer, checking a change in the real app, tests, and gotchas.
 - [`docs/what-anur-reads.md`](docs/what-anur-reads.md): every language, framework and file the engineering plugin reads, and what it doesn't yet; check it before calling a miss a bug.
+- Before changing what gets kept as a decision, read "What counts as a decision" in `docs/decisions.md`: a decision is what a person said should hold, or their correction of the agent; never a pick (the page holds it) or the agent's own assumption.
 - A PR that makes a decision or a pattern, or changes one, updates these files in the same PR.
 
 ## Source of truth
