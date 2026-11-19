@@ -939,16 +939,17 @@ export function MapView({
       moving = true;
       setDrag({ id: b.id, dx, dy });
     };
+    // On the window, as for a handle: a box drawn again mid-drag still hears the let-go.
     const up = (ev: PointerEvent) => {
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", up);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
       setDrag(null);
       if (!moving) return;
       const at = { x: b.x + (ev.clientX - start.x) / z, y: b.y + (ev.clientY - start.y) / z };
       moveBoxes({ [b.id]: at });
     };
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
   };
 
   // A box's handle: drag out an arrow. Dropped on a box, it links the two
@@ -974,10 +975,19 @@ export function MapView({
     const move = (ev: PointerEvent) => {
       setLinking({ from: b.id, to: toWorld(ev.clientX, ev.clientY), over: target(ev) });
     };
-    const up = (ev: PointerEvent) => {
-      el.removeEventListener("pointermove", move);
-      el.removeEventListener("pointerup", up);
+    // On the window, not the handle: if the box is drawn again mid-drag (its
+    // section's ID settling after a save), a let-go is still heard.
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
       setLinking(null);
+    };
+    const cancel = () => {
+      stop();
+    };
+    const up = (ev: PointerEvent) => {
+      stop();
       const over = target(ev);
       if (over !== null) {
         onLink(b.index, over);
@@ -993,8 +1003,9 @@ export function MapView({
         parent: b.index,
       });
     };
-    el.addEventListener("pointermove", move);
-    el.addEventListener("pointerup", up);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
   };
 
   // Arrow keys move between boxes; Shift+arrow nudges the selected one.
