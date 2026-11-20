@@ -6774,3 +6774,58 @@ button.file-card-name:hover {
     transform: translateY(4px);
   }
 }
+
+/*
+ * Use and Explore on a choice, Build and Check on a section (30.32): a
+ * toolbar on the box's top edge. A choice shows it while hovered or picked;
+ * a section only while hovered, since one is always selected.
+ */
+.map-acts {
+  position: absolute;
+  top: 0;
+  left: 12px;
+  z-index: 3;
+  display: none;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 12%, transparent);
+  transform: translateY(-60%);
+}
+
+.map-option:hover > .map-acts,
+.map-option.selected > .map-acts,
+.map-box:hover > .map-acts {
+  display: flex;
+}
+
+.map-act {
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--blue);
+  font: 600 12px/18px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.map-act:hover {
+  background: var(--blue-wash);
+}
+
+.map-act.primary {
+  background: var(--blue);
+  color: var(--sheet);
+}
+
+.map-act.primary:hover {
+  filter: brightness(1.1);
+}
+
+.map-act:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
