@@ -316,6 +316,8 @@ export function MapView({
   const [view, setView] = useState<View | null>(null);
   /** The person panned or zoomed: the map stays where they put it. Until then it fits itself. */
   const userMoved = useRef(false);
+  /** The pointer is over the map: nothing moves the view on its own while it is (30.40). */
+  const pointerIn = useRef(false);
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null);
   /** Naming a new box: where it goes, and its parent when it was drawn from a box. */
   const [makingDrawing, setMakingDrawing] = useState(false);
@@ -1204,7 +1206,8 @@ export function MapView({
           const bottom = (b.y - b.h / 2) * view.z + view.y;
           return left < 0 || right > r.width || top < 0 || bottom > r.height;
         });
-      if (unseen) {
+      // Never while the pointer is on the map: it would move under the person's hand (30.40).
+      if (unseen && !pointerIn.current) {
         // Bring the new boxes into view where they are, as one group, keeping
         // the zoom unless they need less of it: refitting on the title would
         // leave a mind map's far branches out of sight.
@@ -1216,10 +1219,27 @@ export function MapView({
         const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
         const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
         setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
-      } else if (!userMoved.current) setView(null);
+      }
+      // A framed map never refits on its own: new boxes take no zoom from the ones in view (30.40).
     }
     lastCount.current = count;
   }, [count]);
+
+  // When the layout shifts, as when an edit lands and boxes are added, removed
+  // or renamed, the box the person has selected stays where it is on screen:
+  // the map moves around it, never it under the pointer (30.40).
+  const anchorAt = useRef<{ id: string; x: number; y: number } | null>(null);
+  useLayoutEffect(() => {
+    const id = idOf(selected);
+    const b = boxes.find((x) => x.id === id) ?? boxes.find((x) => x.side === 0);
+    const was = anchorAt.current;
+    anchorAt.current = b ? { id: b.id, x: b.x, y: b.y } : null;
+    if (!b || !was || was.id !== b.id || drag) return;
+    const dx = b.x - was.x;
+    const dy = b.y - was.y;
+    if (dx === 0 && dy === 0) return;
+    setView((v) => (v ? { ...v, x: v.x - dx * v.z, y: v.y - dy * v.z } : v));
+  }, [boxes]);
 
   // The selected box stays in view: arrow keys and new sections pan to it.
   const selectedId = idOf(selected);
@@ -1857,7 +1877,11 @@ export function MapView({
       onPointerDown={onBackgroundDown}
       onDoubleClick={onDoubleClick}
       onPointerOver={onHover}
+      onPointerEnter={() => {
+        pointerIn.current = true;
+      }}
       onPointerLeave={() => {
+        pointerIn.current = false;
         peekWant.current = null;
         window.clearTimeout(peekTimer.current);
         setPeek(null);
