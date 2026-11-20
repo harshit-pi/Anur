@@ -23,6 +23,8 @@ export function actionPrompt(purpose: Purpose, section: string, note: string): s
         "",
         'Before your first tool call, write one line saying what you will build and what you are relying on, such as "Building: the launch email and FAQ. Relying on: beta.csv; no list of addresses in the folder." The person can stop you there if it is wrong.',
         "",
+        "Look first for what an earlier Build of this section made. The section may end with a line saying it was built and where, and may link a doc it made, such as a triage or a plan. If you find one, update that doc instead of making a second: add this run's changes and asks to it, keep what it already holds, and mark what is now done. That change is a proposal the person decides on. Make a new doc only when there is no earlier one.",
+        "",
         "Build it. A new doc you write is kept in the folder as you make it; a change to an existing doc becomes a proposal the person decides on. A message to a person is a draft for them to send: never send it yourself. When you're done, report what you did (no progress notes), each change with its path relative to the folder (never a working copy's, never absolute) or link, then your guesses, each marked as a guess, then the section's remaining steps as next steps, if you built only one. Last, propose the section's text with a short line at its end saying it was built and where the work is, as an edit to your working copy.",
       ].join("\n") + extra
     );
