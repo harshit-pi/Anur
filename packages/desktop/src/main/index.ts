@@ -506,10 +506,16 @@ const probeFolder = () => {
 };
 /** Each folder's threads, so a reply reaches the windows showing that folder. */
 const threads = new Map<string, Threads>();
-/** The plugins switched on for a folder, in Anur's own order (group 19). */
+/** Whether each folder holds code repos, read once per opening. */
+const holdsCode = new Map<string, boolean>();
+/** The plugins on for a folder: Engineering whenever it holds code repos, with no switch. */
 function pluginsOn(folderPath: string): string[] {
-  const on = appSettings.get().plugins[folderPath] ?? [];
-  return FIRST_PARTY.map((p) => p.manifest.id).filter((id) => on.includes(id));
+  let code = holdsCode.get(folderPath);
+  if (code === undefined) {
+    code = codeRepos(folderPath) > 0;
+    holdsCode.set(folderPath, code);
+  }
+  return FIRST_PARTY.map((p) => p.manifest.id).filter((id) => id === "engineering" && code);
 }
 
 /** Main's plugin host for each folder: it keeps main's points (context providers, surfaces). */
@@ -904,6 +910,7 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
   if (folders.current(win.webContents.id)) target = createWindow();
   const id = target.webContents.id;
   openingIn.set(id, path.basename(folder));
+  holdsCode.clear();
   send(target, "folder:opening", { name: path.basename(folder) });
   const outcome = await folders.open(id, folder).finally(() => {
     openingIn.delete(id);
@@ -1451,24 +1458,6 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (!folder || !pluginsOn(folder.path).includes("engineering")) return { ok: false };
     systemReview.reviewed(folder.path, parts);
     return { ok: true };
-  },
-  "plugins:set": async ({ id, on }, { webContentsId }) => {
-    const folder = folders.current(webContentsId);
-    if (!folder)
-      return {
-        kind: "refused",
-        reason: "Open a folder first: plugins are switched on per folder.",
-      };
-    if (!pluginById(id)) return { kind: "refused", reason: `Anur has no plugin "${id}".` };
-    const now = pluginsOn(folder.path).filter((x) => x !== id);
-    if (on) now.push(id);
-    await appSettings.set({ plugins: { ...appSettings.get().plugins, [folder.path]: now } });
-    try {
-      await syncPlugins(folder.path);
-    } catch (e) {
-      return { kind: "refused", reason: e instanceof Error ? e.message : String(e) };
-    }
-    return { kind: "ok" };
   },
   "orphans:list": async ({ path: rel, text }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

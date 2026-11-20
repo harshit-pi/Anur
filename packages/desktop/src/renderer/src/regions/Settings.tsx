@@ -471,45 +471,15 @@ function TaskHooksRow() {
   );
 }
 
-/** Plugins Anur ships, each with a switch for this window's folder (19.4). */
+/** Engineering is on by itself in a folder of code repos; then its task reports can be added. */
 function PluginRows({ folder }: { folder: FolderState | null }) {
-  const [list, setList] = useState<{ id: string; name: string; what: string; on: boolean }[]>([]);
-  const [note, setNote] = useState<string | null>(null);
-  const [n, setN] = useState(0);
+  const [on, setOn] = useState(false);
   useEffect(() => {
     void anur.call("plugins:list", {}).then((r) => {
-      setList(r.plugins);
+      setOn(r.plugins.some((p) => p.id === "engineering" && p.on));
     });
-  }, [folder?.path, n]);
-  return (
-    <>
-      {list.map((p) => (
-        <Row
-          key={p.id}
-          title={p.name}
-          detail={folder ? p.what : `${p.what} Open a folder to switch it on.`}
-        >
-          <Switch
-            on={p.on}
-            label={`${p.name} for this folder`}
-            disabled={!folder}
-            onChange={(on) => {
-              setNote(null);
-              void anur.call("plugins:set", { id: p.id, on }).then((r) => {
-                if (r.kind === "refused") setNote(r.reason);
-                setN((x) => x + 1);
-                // Engineering on: show what it does at once, in the System tab.
-                if (r.kind === "ok" && on && p.id === "engineering")
-                  window.dispatchEvent(new CustomEvent("anur:engineering-on"));
-              });
-            }}
-          />
-        </Row>
-      ))}
-      {list.some((p) => p.id === "engineering") ? <TaskHooksRow /> : null}
-      {note ? <p className="settings-row-detail">{note}</p> : null}
-    </>
-  );
+  }, [folder?.path]);
+  return on ? <TaskHooksRow /> : null;
 }
 
 type MarketData = Awaited<ReturnType<typeof anur.call<"market:list">>>;
@@ -616,23 +586,20 @@ function Market({ folder }: { folder: FolderState | null }) {
               onNote={setNote}
             />
           ))}
-          {data && data.installed.length === 0 ? (
-            <div className="settings-empty">
-              Nothing installed from the feed yet. Browse to add Git and others.
-            </div>
+          {data && data.installed.length > 0 ? (
+            <Row
+              title="Update plugins by themselves"
+              detail="New versions install in the background, checked against Anur's signature. On by default."
+            >
+              <Switch
+                on={data.autoUpdate}
+                label="Update plugins by themselves"
+                onChange={(on) => {
+                  void anur.call("market:set", { autoUpdate: on }).then(reload);
+                }}
+              />
+            </Row>
           ) : null}
-          <Row
-            title="Update plugins by themselves"
-            detail="New versions install in the background, checked against Anur's signature. On by default."
-          >
-            <Switch
-              on={data?.autoUpdate ?? true}
-              label="Update plugins by themselves"
-              onChange={(on) => {
-                void anur.call("market:set", { autoUpdate: on }).then(reload);
-              }}
-            />
-          </Row>
         </>
       )}
       {note ? <p className="settings-row-detail">{note}</p> : null}
@@ -1081,10 +1048,6 @@ export function Settings({
         return (
           <>
             <h2>Core plugins</h2>
-            <p className="settings-lede">
-              What every doc needs: the page and its map, and threads beside them. These two are
-              always on; turn the rest off and everything they add goes, in every window.
-            </p>
             {FEATURES.map((f) =>
               f.always ? (
                 <Row key={f.id} title={f.name} detail={f.what}>
@@ -1108,10 +1071,6 @@ export function Settings({
         return (
           <>
             <h2>Plugins</h2>
-            <p className="settings-lede">
-              Each is switched on for one folder; Anur's core works without them. Plugins from
-              others come later, once each can run in its own sandbox.
-            </p>
             <Market folder={folder} />
           </>
         );

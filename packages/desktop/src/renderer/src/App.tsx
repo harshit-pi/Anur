@@ -75,16 +75,11 @@ import {
   StatusBar,
 } from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
-import { SkillCard } from "./regions/SkillCard.tsx";
-import { PublicRepoCard } from "./regions/PublicRepoCard.tsx";
-import { EngineeringCard } from "./regions/EngineeringCard.tsx";
-import { UpdateCard, WhatsNewCard } from "./regions/UpdateCard.tsx";
-import { OpenerCard } from "./regions/OpenerCard.tsx";
 import { Tour } from "./regions/Tour.tsx";
 import { tourSteps } from "./layout/tour.ts";
 import { useFeatures } from "./features.ts";
 import { MapView } from "./regions/MapView.tsx";
-import { StarPrompt } from "./regions/StarPrompt.tsx";
+import { Offers } from "./regions/Offers.tsx";
 import { keepSame } from "./layout/keep-same.ts";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
@@ -359,24 +354,6 @@ export function App() {
   const openSystem = useCallback(() => {
     setTabs((t) => showSystem(t));
   }, []);
-  // Engineering switched on, from Settings or the card: the System tab at once.
-  useEffect(() => {
-    const on = () => {
-      setSettings(null);
-      setEngineeringOn(true);
-      openSystem();
-    };
-    // Undo on the notice: the System row goes at once.
-    const off = () => {
-      setEngineeringOn(false);
-    };
-    window.addEventListener("anur:engineering-on", on);
-    window.addEventListener("anur:engineering-off", off);
-    return () => {
-      window.removeEventListener("anur:engineering-on", on);
-      window.removeEventListener("anur:engineering-off", off);
-    };
-  }, [openSystem]);
   const openDocNow = useRef<(path: string, inNewTab: boolean) => void>(() => undefined);
   const openDoc = useCallback((path: string, inNewTab: boolean) => {
     setTabs((t) => openInTab(t, path, inNewTab));
@@ -1495,18 +1472,7 @@ export function App() {
         />
       ) : null}
       {/* The offer cards wait until the tour is over. */}
-      {tourStep === null ? (
-        // One card at a time in the corner, the most pressing first.
-        <div className="corner-cards">
-          <UpdateCard />
-          <WhatsNewCard />
-          <PublicRepoCard />
-          <EngineeringCard />
-          <OpenerCard />
-          <SkillCard />
-          <StarPrompt />
-        </div>
-      ) : null}
+      {tourStep === null ? <Offers /> : null}
       <CommandPalette
         open={paletteOpen}
         onClose={() => {

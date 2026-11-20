@@ -792,14 +792,6 @@ export const ipcContract = {
     request: z.object({ parts: z.array(z.string().max(400)).max(5000) }).strict(),
     response: z.object({ ok: z.boolean() }),
   },
-  /** Switch a plugin on or off for this window's folder; new threads pick it up. */
-  "plugins:set": {
-    request: z.object({ id: z.string().max(100), on: z.boolean() }).strict(),
-    response: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("ok") }),
-      z.object({ kind: z.literal("refused"), reason: z.string() }),
-    ]),
-  },
   /** Close or reopen a thread (11.3): closed ones are hidden until a person shows them. */
   "thread:close": {
     request: z
