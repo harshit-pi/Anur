@@ -6236,12 +6236,13 @@ button.file-card-name:hover {
 }
 
 /* Every thread in the folder, newest first, under the section's own. */
+/* Recent sits one even gap below whatever is above it. */
 .think-recent {
-  margin-top: 18px;
+  margin-top: 4px;
 }
 
-.think-context + .think-recent {
-  margin-top: 4px;
+.think-recent > .think-subhead {
+  margin-top: 0;
 }
 
 .think-recent-where {
