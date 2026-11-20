@@ -272,6 +272,20 @@ describe("Threads", () => {
     expect(preview?.parts[1]?.proposed).toBe("## Budget\n\nTwo people, part time, from May.\n");
   });
 
+  it("keeps a page the agent made in attachments beside the doc instead (30.41)", async () => {
+    const { folder, support, threads: t, reply } = await setup();
+    const r = await t.start("plan.md", DOC, risks, "Draft a metrics page.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const copies = path.join(support, "agent", "copies", r.thread.id);
+    await mkdir(path.join(copies, "attachments", "Notes"), { recursive: true });
+    await writeFile(path.join(copies, "attachments", "Notes", "Metrics.md"), "# Metrics\n");
+    await reply(r.thread.id, "Made it.");
+    expect(await readFile(path.join(folder, "Metrics.md"), "utf8")).toContain("# Metrics");
+    await expect(
+      readFile(path.join(folder, "attachments", "Notes", "Metrics.md"), "utf8"),
+    ).rejects.toThrow();
+  });
+
   it("moves a thread to another agent: a new session there, rebuilt from its bundle and chat", async () => {
     const { threads: t, sent, reply } = await setup();
     const r = await t.start("plan.md", DOC, risks, "Remember HERON.");
