@@ -7,7 +7,7 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 - [`docs/decisions.md`](docs/decisions.md): the engineering decisions made so far, each with why.
 - [`docs/patterns.md`](docs/patterns.md): how things are done here: IPC channels, changing the doc, widgets, the agent layer, checking a change in the real app, tests, and gotchas.
 - [`docs/ux.md`](docs/ux.md): how Anur should feel to use; read it before mocking or changing anything a person sees.
-- [`docs/threads.md`](docs/threads.md): how a person moves between threads and what a thread does on its own: you stay where you are, + starts a new thread, Run never moves you; read it before changing the thread panel, how a thread starts, or what a Build does.
+- [`docs/threads.md`](docs/threads.md): how a person moves between threads and what a thread does on its own: you stay where you are, New thread on a box's hover bar starts one, Run never moves you; read it before changing the thread panel, how a thread starts, or what a Build does.
 - [`docs/thread-context.md`](docs/thread-context.md): what a thread's agent sees and must never see (`.anur/`, other threads' working copies), and how the hook holds it; read it before changing the bundle, the hook, working copies or MCP tools.
 - [`docs/anur-folder.md`](docs/anur-folder.md): spaces, homes and `.anur/`, which are three different things; what each file in `.anur/` is and whether it's committed. Read it before changing how folders open, what's committed, or what a plugin acts on. A `.anur/` never by itself means a space.
 - [`docs/maps.md`](docs/maps.md): what the doc map and the system map draw, what each mark means, and what they leave out; read it before changing either map.

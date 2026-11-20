@@ -1243,7 +1243,7 @@ export function Think({
     // Again when the section changes or a thread's turn adds lines.
   }, [docPath, sectionKey, threadsSeen]);
   // Picking another box on the map, or moving the cursor on the page, keeps the open
-  // thread: you leave it with ← or start one on the picked box with + (30.37).
+  // thread: you leave it with ←, or start one with New thread on a box's hover bar (30.37).
 
   const start = useCallback(
     async (
@@ -1738,28 +1738,6 @@ export function Think({
           </div>
           {writable && docPath && !isDraft ? (
             <span className="think-top-actions">
-              <button
-                type="button"
-                className="think-icon think-new"
-                aria-label="New thread"
-                title={`New thread on ${section.path.at(-1) ?? "this section"}`}
-                onClick={() => {
-                  setOpen(null);
-                  requestAnimationFrame(() => {
-                    document.querySelector<HTMLTextAreaElement>(".think .think-input")?.focus();
-                  });
-                }}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                  <path
-                    d="M8 3v10M3 8h10"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.6"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </button>
               <button
                 type="button"
                 className={thread.closed ? "think-more" : "think-icon"}
