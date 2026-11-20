@@ -15,6 +15,7 @@ import type {
 } from "../../../shared/ipc-contract.ts";
 import { AGENTS, runsThreads, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
+import { mergeLanded } from "../layout/landed-notes.ts";
 import { doingOf, listOf, ownToolName, stepOf } from "./step-label.ts";
 import { AGENT_SHORT, AgentMark } from "./AgentMark.tsx";
 import { useFeatures } from "../features.ts";
@@ -1626,7 +1627,7 @@ export function Think({
   if (thread) {
     const asks = prompts.filter((p) => p.thread === thread.id);
     // Who answered heads each reply: above its first step or its text, once per turn.
-    const folded = foldSteps(thread.items, thread.busy);
+    const folded = foldSteps(mergeLanded(thread.items), thread.busy);
     /** Every Use all but the latest folds to one link, so the thread isn't a column of them. */
     const earlierUsedAll = thread.items
       .flatMap((x, n) => (x.kind === "used-all" ? [n] : []))
@@ -2092,11 +2093,11 @@ export function Think({
                 <div key={i} className="think-changed auto" role="status">
                   <span>
                     {item.undone ? "Taken back: " : "Used as it landed: "}
-                    the edit to{" "}
+                    {item.sections.length > 1 ? "the edits to " : "the edit to "}
                     <strong>{item.sections.map((p) => p.at(-1) ?? "").join(", ")}</strong>
                     {item.doc !== docPath ? ` in ${item.doc}` : ""}.
                     {!item.undone && !item.undoable && item.doc === docPath
-                      ? " ⌘Z on the page takes it back."
+                      ? ` ⌘Z on the page takes ${item.sections.length > 1 ? "them" : "it"} back.`
                       : ""}
                   </span>
                   {item.undoable ? (

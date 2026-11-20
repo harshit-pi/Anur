@@ -8,7 +8,7 @@ import { SectionVersions } from "../folder/versions.ts";
 import { HomeVersions } from "../folder/home-versions.ts";
 import { execFileSync } from "node:child_process";
 import type { AgentHub } from "./hub.ts";
-import { Threads, appliesTo, linksIn, markDisputes, reachOf } from "./threads.ts";
+import { Threads, appliesTo, landingNote, linksIn, markDisputes, reachOf } from "./threads.ts";
 import { FOLDER_DOC_ID, SYSTEM_DOC_ID, folderLocated, systemLocated } from "./system-doc.ts";
 import { shape as sysShape, boxes as sysBoxes } from "./system-doc.fixture.ts";
 import {
@@ -1717,5 +1717,13 @@ describe("a thread on the whole folder, and every thread newest first", () => {
     await t.decideFinding(r.thread.id, { id: f.id, status: "kept", claim: null });
     await t.settled();
     expect(kept).toEqual(["folder:"]);
+  });
+});
+
+describe("landingNote (30.38)", () => {
+  it("says an edit landed when it did, and waits when it waits", () => {
+    expect(landingNote(true)).toMatch(/land in the doc as you make them/);
+    expect(landingNote(true)).toMatch(/never that an edit is ready/);
+    expect(landingNote(false)).toMatch(/wait as proposals/);
   });
 });
