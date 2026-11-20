@@ -920,10 +920,31 @@ function dropFormats(state: EditorState, spans: Span[]): ChangeSpec[] {
   const from = Math.min(...spans.map(([a]) => a));
   const to = Math.max(...spans.map(([, b]) => b));
   const gone = (p: number) => spans.some(([a, b]) => a <= p && p < b);
-  return formatsOver(state, from, to)
-    .filter((n) => STYLED.has(n.name))
+  const touched = formatsOver(state, from, to).filter((n) => STYLED.has(n.name));
+  // A format nested flush inside one losing its marks loses them too:
+  // ***"why"*** is italic around bold, and the bold's ** left on its own
+  // after a letter can't open, so it would show on the page as text.
+  const flush: SyntaxNode[] = [];
+  const within = (n: SyntaxNode) => {
+    const [open, close] = [hiddenParts(n)[0], hiddenParts(n).at(-1)];
+    for (let c = n.firstChild; c; c = c.nextSibling) {
+      if (!STYLED.has(c.name)) continue;
+      if ((open && c.from === open[1]) || (close && c.to === close[0])) {
+        flush.push(c);
+        within(c);
+      }
+    }
+  };
+  for (const n of touched) within(n);
+  const seen = new Set<string>();
+  return [...touched, ...flush]
     .flatMap((n) => hiddenParts(n))
-    .filter(([a]) => !gone(a))
+    .filter(([a, b]) => {
+      const key = `${String(a)}:${String(b)}`;
+      if (seen.has(key) || gone(a)) return false;
+      seen.add(key);
+      return true;
+    })
     .map(([a, b]): ChangeSpec => ({ from: a, to: b }));
 }
 

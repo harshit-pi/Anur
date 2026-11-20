@@ -99,12 +99,14 @@ function rng(seed: number) {
 describe("formatting on the corpus", () => {
   const styles: Style[] = ["bold", "italic", "strike"];
   it(`keeps visible text and flips only the selection, over ${String(texts.length)} texts`, () => {
-    const random = rng(7);
+    let random: () => number;
     let checked = 0;
     let declined = 0;
     const declinedExamples: string[] = [];
     const failures: string[] = [];
-    for (const text of texts) {
+    for (const [i, text] of texts.entries()) {
+      // Seeded by the text's place in the corpus: adding a text never reshuffles the rest.
+      random = rng(7 * 100_003 + i);
       const state = EditorState.create({ doc: text, extensions: [markdownSupport()] });
       const tree = ensureSyntaxTree(state, state.doc.length, 10_000) ?? syntaxTree(state);
       /** Inside a code block, where formatting has no meaning and is declined. */
