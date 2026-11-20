@@ -2793,9 +2793,19 @@ body.resizing * {
   font-weight: 600;
 }
 
+/* The one picked box: clear at a glance, as Miro and Whimsical draw a selection. */
 .map-box.selected {
   border-color: var(--blue);
-  box-shadow: 0 0 0 3px var(--blue-wash);
+  background: color-mix(in srgb, var(--blue-wash) 45%, var(--sheet));
+  box-shadow:
+    0 0 0 3px var(--blue-wash),
+    0 6px 18px var(--shadow);
+}
+
+/* Selection is drawn above; a clicked box never keeps the focus ring. */
+.map-box:focus,
+.map-box:focus-visible {
+  outline: none;
 }
 
 .map-box.dragging {
@@ -5902,6 +5912,14 @@ button.file-card-name:hover {
 
 .map-box.title {
   border: 2px solid var(--ink);
+}
+
+.map-box.selected {
+  padding: 9.5px 15.5px;
+  border: 2px solid var(--blue);
+  box-shadow:
+    0 0 0 4px var(--blue-wash),
+    0 6px 18px var(--shadow);
 }
 
 .map-thread {

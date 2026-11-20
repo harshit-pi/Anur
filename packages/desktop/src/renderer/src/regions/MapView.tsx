@@ -1493,7 +1493,10 @@ export function MapView({
         best = b;
       }
     }
-    if (best) onSelect(best.index);
+    if (!best) return;
+    // Arrows always bring the box into view, even just after a click.
+    clickedAt.current = 0;
+    onSelect(best.index);
   };
 
   // Double-click empty space: name a new section, under the nearest box.
