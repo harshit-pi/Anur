@@ -72,7 +72,7 @@ export function Tour({
   return (
     <div className="tour" role="presentation">
       <div className="tour-block" />
-      {s.demo === "map" ? <MapDemo /> : null}
+      {s.demo === "map" ? <MapDemo /> : s.demo === "keys" ? <KeysDemo /> : null}
       {hole ? (
         <div
           className="tour-hole"
@@ -215,6 +215,92 @@ function MapDemo() {
     <>
       {ripple ? (
         <span key={ripple.n} className="tour-ripple" style={{ left: ripple.x, top: ripple.y }} />
+      ) : null}
+      <svg
+        className={`tour-pointer${down ? " down" : ""}`}
+        style={at ? { left: at.x, top: at.y, opacity: 1 } : { opacity: 0 }}
+        width="22"
+        height="22"
+        viewBox="0 0 22 22"
+        aria-hidden="true"
+      >
+        <path d="M3 2 L3 18 L7.5 13.8 L10.5 20 L13.2 18.8 L10.3 12.6 L16.5 12.6 Z" />
+      </svg>
+    </>
+  );
+}
+
+type Ghost = { x: number; y: number; w: number; h: number };
+
+/**
+ * A ghost pointer picking a box, then the keys that grow the map: Tab draws a
+ * box under it, Enter one beside that. Only for show: nothing is written.
+ */
+function KeysDemo() {
+  const [at, setAt] = useState<{ x: number; y: number } | null>(null);
+  const [down, setDown] = useState(false);
+  const [key, setKey] = useState<{ name: string; x: number; y: number } | null>(null);
+  const [ghosts, setGhosts] = useState<Ghost[]>([]);
+  useEffect(() => {
+    const demo = { live: true };
+    const stopped = () => !demo.live;
+    const run = async () => {
+      await wait(500);
+      while (demo.live) {
+        const boxes = [...document.querySelectorAll<HTMLElement>(".map .map-box")];
+        const pick = boxes.find((b) => !b.classList.contains("title")) ?? boxes[0];
+        if (!pick) return;
+        const r = pick.getBoundingClientRect();
+        setAt(centre(pick));
+        await wait(800);
+        if (stopped()) break;
+        setDown(true);
+        pick.classList.add("tour-picked");
+        await wait(200);
+        setDown(false);
+        setAt(null);
+        await wait(500);
+        // Tab: a box under the picked one, to its right.
+        const child = { x: r.right + 70, y: r.top, w: 130, h: r.height };
+        setKey({ name: "Tab", x: r.left, y: r.bottom + 14 });
+        await wait(450);
+        setGhosts([child]);
+        await wait(1300);
+        if (stopped()) break;
+        // Enter: one beside it.
+        setKey({ name: "Enter", x: r.left, y: r.bottom + 14 });
+        await wait(450);
+        setGhosts([child, { ...child, y: child.y + r.height + 18 }]);
+        await wait(1800);
+        setKey(null);
+        setGhosts([]);
+        pick.classList.remove("tour-picked");
+        await wait(1000);
+      }
+    };
+    void run();
+    return () => {
+      demo.live = false;
+      document.querySelectorAll(".tour-picked").forEach((b) => {
+        b.classList.remove("tour-picked");
+      });
+    };
+  }, []);
+  return (
+    <>
+      {ghosts.map((g, i) => (
+        <span
+          key={i}
+          className="tour-ghost-box"
+          style={{ left: g.x, top: g.y, width: g.w, height: g.h }}
+        >
+          New section
+        </span>
+      ))}
+      {key ? (
+        <kbd key={key.name} className="tour-key" style={{ left: key.x, top: key.y }}>
+          {key.name}
+        </kbd>
       ) : null}
       <svg
         className={`tour-pointer${down ? " down" : ""}`}
