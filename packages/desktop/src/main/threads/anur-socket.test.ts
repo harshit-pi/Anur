@@ -121,6 +121,7 @@ describe("Anur's tool socket", () => {
       "anur_note_decision",
       "anur_offer_options",
       "anur_propose_action",
+      "anur_remove_doc",
       "anur_name_thread",
       "anur_report_check",
       "anur_list_inputs",

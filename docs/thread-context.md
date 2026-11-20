@@ -32,18 +32,19 @@ a thread's agent
 
 The guard is a command hook plus deny rules in the session's settings (`packages/desktop/src/agent/hook.ts`, `hook-rules.ts`, `deny-rules.ts`). Each check names the message the agent gets, so it knows what to do instead.
 
-| What the agent tries                                                                        | What happens                                       | Message        |
-| ------------------------------------------------------------------------------------------- | -------------------------------------------------- | -------------- |
-| A file tool on a doc in the folder                                                          | Sent to its working copy, made from the doc        | `toCopy`       |
-| A file tool, the shell or an MCP argument naming `.anur/`                                   | Refused; `du`, `ls` and `stat` may size or list it | `anur`         |
-| A recursive read from a root holding `.anur/` (`grep -r`, `rg -u`, `find … -exec cat`)      | Refused unless it excludes `.anur`                 | `recursive`    |
-| `git clean -x`                                                                              | Refused unless it keeps `.anur` (`-e .anur`)       | `gitClean`     |
-| A file tool on another thread's working copy                                                | Refused                                            | `otherCopy`    |
-| The shell naming another thread's copy (`cat`, `grep`, any command but `du`, `ls`, `stat`)  | Refused (30.14)                                    | `otherCopy`    |
-| A search from the copies folder or above it (`rg … ~`, `grep -r … /`, `find / … -exec cat`) | Refused (30.14)                                    | `searchCopies` |
-| An MCP tool's argument naming another thread's copy                                         | Refused (30.14)                                    | `otherCopy`    |
-| Its own working copy, where the person's deny rules forbid the doc                          | Refused, as for the doc                            | `ownRule`      |
-| A shell write onto a doc                                                                    | Allowed; Anur adopts it as the thread's proposal   | —              |
+| What the agent tries                                                                        | What happens                                                                  | Message        |
+| ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------- |
+| A file tool on a doc in the folder                                                          | Sent to its working copy, made from the doc                                   | `toCopy`       |
+| A file tool, the shell or an MCP argument naming `.anur/`                                   | Refused; `du`, `ls` and `stat` may size or list it                            | `anur`         |
+| A recursive read from a root holding `.anur/` (`grep -r`, `rg -u`, `find … -exec cat`)      | Refused unless it excludes `.anur`                                            | `recursive`    |
+| `git clean -x`                                                                              | Refused unless it keeps `.anur` (`-e .anur`)                                  | `gitClean`     |
+| A file tool on another thread's working copy                                                | Refused                                                                       | `otherCopy`    |
+| The shell naming another thread's copy (`cat`, `grep`, any command but `du`, `ls`, `stat`)  | Refused (30.14)                                                               | `otherCopy`    |
+| A search from the copies folder or above it (`rg … ~`, `grep -r … /`, `find / … -exec cat`) | Refused (30.14)                                                               | `searchCopies` |
+| An MCP tool's argument naming another thread's copy                                         | Refused (30.14)                                                               | `otherCopy`    |
+| Its own working copy, where the person's deny rules forbid the doc                          | Refused, as for the doc                                                       | `ownRule`      |
+| The shell removing a doc (`rm`, `unlink`, `trash`)                                          | Refused: use `anur_remove_doc`, which moves it to the Trash with Undo (30.43) | `removeDoc`    |
+| A shell write onto a doc                                                                    | Allowed; Anur adopts it as the thread's proposal                              | —              |
 
 - Paths are read as the shell sees them: `~`, `$HOME` and `${HOME}` are the home folder, and `Application\ Support` is one name. Matching ignores letter case, as macOS does.
 - Working copies live outside the folder, in app support at `agent/copies/<thread>/`. Every thread gets its own.

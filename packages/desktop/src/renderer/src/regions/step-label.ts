@@ -72,6 +72,7 @@ export const TOOL_NAMES: Record<string, { done: string; doing: string }> = {
   anur_list_threads: { done: "Looked at the doc's threads", doing: "Looking at the doc's threads" },
   anur_create_doc: { done: "Made a doc", doing: "Making a doc" },
   anur_open: { done: "Opened a doc", doing: "Opening a doc" },
+  anur_remove_doc: { done: "Removed a page", doing: "Removing a page" },
 };
 
 /** An Anur tool's name, done or running; null for any other tool. */

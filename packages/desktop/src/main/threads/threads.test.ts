@@ -286,6 +286,48 @@ describe("Threads", () => {
     ).rejects.toThrow();
   });
 
+  it("removes a page to the Trash and brings it back from the thread (30.43)", async () => {
+    const { folder, threads: t } = await setup();
+    await writeFile(path.join(folder, "Old plan.md"), "# Old plan\n");
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    const r = await t.start("plan.md", DOC, risks, "Split it.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    await tool(r.thread.id, "anur_remove_doc", { path: "Old plan.md" });
+    await expect(readFile(path.join(folder, "Old plan.md"), "utf8")).rejects.toThrow();
+    const own = (await tool(r.thread.id, "anur_remove_doc", { path: "plan.md" })) as {
+      error?: string;
+    };
+    expect(own.error).toMatch(/own doc/);
+    const gone = (await t.list("plan.md", DOC))
+      .find((v) => v.id === r.thread.id)
+      ?.items.find((i) => i.kind === "page-gone");
+    if (gone?.kind !== "page-gone") throw new Error("no note");
+    expect(gone).toMatchObject({ doc: "Old plan.md", why: "removed", back: false });
+    expect(await t.pageBack(r.thread.id, gone.id)).toEqual({ kind: "back" });
+    expect(await readFile(path.join(folder, "Old plan.md"), "utf8")).toBe("# Old plan\n");
+  });
+
+  it("skips a page made for a section removed while the thread ran (30.43)", async () => {
+    const { folder, support, threads: t, reply } = await setup();
+    const r = await t.start("plan.md", DOC, risks, "One note per section.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    // Meanwhile the person removes Budget from the doc.
+    const without = DOC.replace(/## Budget[\s\S]*$/, "");
+    await t.list("plan.md", without);
+    const copies = path.join(support, "agent", "copies", r.thread.id);
+    await writeFile(path.join(copies, "plan - Budget.md"), "# Budget\n\nBack to [[plan#Budget]]\n");
+    await writeFile(path.join(copies, "plan - Risks.md"), "# Risks\n\nBack to [[plan#Risks]]\n");
+    await reply(r.thread.id, "Made the notes.");
+    await expect(readFile(path.join(folder, "plan - Budget.md"), "utf8")).rejects.toThrow();
+    expect(await readFile(path.join(folder, "plan - Risks.md"), "utf8")).toContain("# Risks");
+    const skipped = (await t.list("plan.md", without))
+      .find((v) => v.id === r.thread.id)
+      ?.items.find((i) => i.kind === "page-gone");
+    expect(skipped).toMatchObject({ doc: "plan - Budget.md", why: "skipped" });
+  });
+
   it("moves a thread to another agent: a new session there, rebuilt from its bundle and chat", async () => {
     const { threads: t, sent, reply } = await setup();
     const r = await t.start("plan.md", DOC, risks, "Remember HERON.");

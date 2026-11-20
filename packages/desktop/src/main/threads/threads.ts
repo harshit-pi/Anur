@@ -6,6 +6,7 @@ import { LinkIndex } from "../folder/link-index.ts";
 import { editsLand } from "../../shared/edits-land.ts";
 import { actionPrompt, actionTitle, type Purpose } from "./actions.ts";
 import { pageHome } from "./page-home.ts";
+import { staleFor } from "./stale-page.ts";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { existsSync, watch, type FSWatcher } from "node:fs";
 import { cp, lstat, mkdir, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
@@ -186,6 +187,8 @@ const canonIn = (at: Located, id: SectionId) => at.canon?.get(id) ?? id;
 export type ThreadDeps = {
   /** The folder's files changed: a doc an agent made, or one taken back. */
   filesChanged?: () => void;
+  /** Move a file to the system Trash (30.43); without it, the file is deleted. */
+  trash?: (full: string) => Promise<void>;
   /** Which switchable Core features are on (group 12); all on when not given. */
   features?: () => FeatureFlags;
   /** A doc's `.anur/`, in its home (18.15.2); the opened folder's when not given. */
@@ -302,6 +305,8 @@ type Live = {
   merged: Map<string, string>;
   /** Docs this thread made (15.6): each one's undo id, revised in place while it's as made. */
   created?: Map<string, string>;
+  /** Pages it made for sections removed while it ran, left out (30.43). */
+  skipped?: Set<string>;
   /** The sections this thread's section links to in other docs, for its bundle (group 8). */
   linked?: {
     linked: { label: string; path: string; text: string; nameOnly?: boolean }[];
@@ -825,6 +830,7 @@ export class Threads {
     let closed = false;
     const used = new Map<string, string>();
     const undone = new Set(lines.flatMap((l) => (l.kind === "auto-undone" ? [l.used] : [])));
+    const back = new Set(lines.flatMap((l) => (l.kind === "page-back" ? [l.gone] : [])));
     const explored = new Set<string>();
     /** Parts the person skipped, the latest Skip or Undo deciding. */
     const skipped = new Set<string>();
@@ -929,6 +935,8 @@ export class Threads {
           undoable: l.undo !== null && this.createdUndo.has(l.undo) && !undone.has(l.id),
           undone: undone.has(l.id),
         });
+      else if (l.kind === "page-gone")
+        items.push({ kind: "page-gone", id: l.id, doc: l.doc, why: l.why, back: back.has(l.id) });
       else if (l.kind === "auto-used")
         items.push({
           kind: "auto-used",
@@ -1613,6 +1621,22 @@ export class Threads {
         // kept in the folder as made, and noted in the thread with Undo. Never
         // in attachments or an attached folder: beside the doc instead (30.41).
         const home = pageHome(rel, live.rel, await this.keptFolders(thread, live));
+        // Made for a section removed while this ran (30.43): newer wins, so it isn't kept.
+        if (!live.created?.has(home)) {
+          if (live.skipped?.has(home)) continue;
+          const before = live.copyStart ?? live.docText;
+          if (staleFor(home, copy, live.rel, before, live.docText)) {
+            (live.skipped ??= new Set()).add(home);
+            await this.append(live.doc, thread, {
+              kind: "page-gone",
+              doc: home,
+              why: "skipped",
+              text: copy,
+            });
+            await this.refresh(live.rel, live.docText, thread);
+            continue;
+          }
+        }
         if (home !== rel) {
           await mkdir(path.dirname(path.join(dir, home)), { recursive: true });
           await rename(path.join(dir, rel), path.join(dir, home));
@@ -3414,6 +3438,64 @@ export class Threads {
     return { kind: "undone" };
   }
 
+  /**
+   * anur_remove_doc (30.43): a page the agent replaced, as by a split, goes to
+   * the Trash, and the thread notes it with a way to bring it back. Never the
+   * thread's own doc, Anur's data, or a file that isn't a page.
+   */
+  private async removeDocTool(thread: string, args: unknown): Promise<ToolAnswer> {
+    const live = this.live.get(thread);
+    if (!live?.turn) return { error: "Pages can only be removed during a turn." };
+    const raw = (args ?? {}) as Record<string, unknown>;
+    const given = typeof raw.path === "string" ? raw.path.trim() : "";
+    const full = path.resolve(live.cwd ?? this.d.folder, given);
+    const rel = path.relative(this.d.folder, full).split(path.sep).join("/");
+    if (
+      !given ||
+      rel.startsWith("..") ||
+      !rel.toLowerCase().endsWith(".md") ||
+      rel.split("/").some((p) => p.startsWith("."))
+    )
+      return { error: 'Name a page in the folder, such as "Go-to-market and Pricing.md".' };
+    if (rel === live.rel) return { error: "That's this thread's own doc; it stays." };
+    const text = await readFile(full, "utf8").catch(() => null);
+    if (text === null) return { error: `There is no ${rel} in the folder.` };
+    await this.goneToTrash(full);
+    await this.append(live.doc, thread, { kind: "page-gone", doc: rel, why: "removed", text });
+    this.d.filesChanged?.();
+    await this.refresh(live.rel, live.docText, thread);
+    return { text: `Moved ${rel} to the Trash; the person can bring it back from this thread.` };
+  }
+
+  private async goneToTrash(full: string): Promise<void> {
+    if (this.d.trash) await this.d.trash(full).catch(() => rm(full, { force: true }));
+    else await rm(full, { force: true });
+  }
+
+  /** Back from a "page-gone" note (30.43): the page as it was, unless one is there now. */
+  async pageBack(
+    thread: string,
+    id: string,
+  ): Promise<{ kind: "back" } | { kind: "refused"; reason: string }> {
+    const own = await this.docOfThread(thread);
+    const lines = own ? await this.linesOf(own, thread) : [];
+    const line = lines.find((l) => l.id === id && l.kind === "page-gone");
+    if (!own || line?.kind !== "page-gone")
+      return { kind: "refused", reason: "That page isn't known here." };
+    if (lines.some((l) => l.kind === "page-back" && l.gone === id)) return { kind: "back" };
+    const full = path.join(this.d.folder, line.doc);
+    if ((await readFile(full, "utf8").catch(() => null)) !== null)
+      return { kind: "refused", reason: `There's a ${line.doc} in the folder already.` };
+    await mkdir(path.dirname(full), { recursive: true });
+    this.ownWrite(line.doc, line.text);
+    await writeFileAtomic(full, line.text);
+    await this.append(own, thread, { kind: "page-back", gone: id });
+    this.d.filesChanged?.();
+    const live = this.live.get(thread);
+    if (live) await this.refresh(live.rel, live.docText, thread);
+    return { kind: "back" };
+  }
+
   /** anur_name_thread: the agent names a thread once; a name already given is kept. */
   private async nameThreadTool(thread: string, args: unknown): Promise<ToolAnswer> {
     const live = this.live.get(thread);
@@ -3782,6 +3864,7 @@ export class Threads {
     if (tool === "anur_propose_action") return this.proposeAction(thread, args);
     if (tool === "anur_list_inputs") return this.listInputsTool(thread);
     if (tool === "anur_name_thread") return this.nameThreadTool(thread, args);
+    if (tool === "anur_remove_doc") return this.removeDocTool(thread, args);
     if (tool === "anur_report_check") return this.reportCheckTool(thread, args);
     if (tool === "anur_read_input") return this.readInputTool(thread, args);
     if (tool === "anur_links") return this.linksTool(thread, args);
@@ -3936,6 +4019,8 @@ const KNOWN = new Set([
   "renamed",
   "check",
   "created",
+  "page-gone",
+  "page-back",
   "proposed",
   "used-all",
   "finding",

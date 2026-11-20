@@ -891,6 +891,7 @@ function threadsFor(folder: FolderState): Threads | null {
       folderState: () =>
         [...windows.keys()].map((id) => folders.current(id)).find((f) => f?.path === folder.path) ??
         null,
+      trash: (full) => shell.trashItem(full),
       filesChanged: () => {
         for (const [id, win] of windows) {
           if (folders.current(id)?.path !== folder.path) continue;
@@ -1657,6 +1658,18 @@ const handlers: { [C in Channel]: Handler<C> } = {
     await t.forgetSection(rel, text, orphan as never);
     await v.forget(rel, orphan as never);
     return { ok: true };
+  },
+  "thread:page-back": async ({ thread, id }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!t) return { kind: "refused", reason: "No folder is open." };
+    const r = await t.pageBack(thread, id);
+    if (r.kind === "back")
+      await folders.refresh(webContentsId).then((now) => {
+        const win = windows.get(webContentsId);
+        if (win && now) send(win, "folder:changed", now);
+      });
+    return r;
   },
   "thread:undo-created": async ({ thread, id }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

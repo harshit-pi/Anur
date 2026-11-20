@@ -105,6 +105,19 @@ describe("the hook's shell rules", () => {
     expect(bash("git grep retry")).toBeNull();
   });
 
+  it("sends removing a doc to anur_remove_doc, so it can come back (30.43)", () => {
+    expect(bash('rm "Go-to-market and Pricing.md"')).toBe(
+      MESSAGES.removeDoc("Go-to-market and Pricing.md"),
+    );
+    expect(bash("rm -f /tmp/plan.md")).toBeNull();
+    expect(bash("rm Go-to-market\\ and\\ Pricing.md")).toBe(
+      MESSAGES.removeDoc("Go-to-market and Pricing.md"),
+    );
+    expect(bash("rm -f notes/plan.md")).toBe(MESSAGES.removeDoc("notes/plan.md"));
+    expect(bash("rm build.log")).toBeNull();
+    expect(bash("rm CLAUDE.md")).toBeNull();
+  });
+
   it("blocks git clean -x unless it keeps .anur", () => {
     expect(bash("git clean -xfd")).toBe(MESSAGES.gitClean);
     expect(bash("git clean -xfd -e .anur")).toBeNull();

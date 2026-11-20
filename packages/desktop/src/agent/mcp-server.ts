@@ -234,6 +234,22 @@ const TOOLS = [
     },
   },
   {
+    name: "anur_remove_doc",
+    description:
+      "Remove a page from the folder, as when you split or replace it with others: it goes to the Trash, and the person can bring it back from this thread. Repoint links to it first. Not for this thread's own doc.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: 'The page\'s path in the folder, such as "Go-to-market and Pricing.md".',
+        },
+      },
+      required: ["path"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "anur_name_thread",
     description:
       'Name this thread, once, as you first reply: two to five words for what it is about, such as "Pricing per flat". The person sees it in Anur\'s thread list and on the map. A name the person gave is kept.',

@@ -265,6 +265,15 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     doc: z.string(),
     sections: z.array(z.array(z.string())),
   }),
+  /** A page the thread took out of the folder (30.43): removed by its agent, or skipped as stale. */
+  z.object({
+    kind: z.literal("page-gone"),
+    id: z.string(),
+    doc: z.string(),
+    why: z.enum(["removed", "skipped"]),
+    /** Brought back by the person since. */
+    back: z.boolean(),
+  }),
   /** An edit used as it landed (the setting); `undoable` while its Undo can still restore it. */
   z.object({
     kind: z.literal("auto-used"),
@@ -888,6 +897,14 @@ export const ipcContract = {
     request: z.object({ thread: z.string().max(200), id: z.string().max(100) }).strict(),
     response: z.discriminatedUnion("kind", [
       z.object({ kind: z.literal("undone") }),
+      z.object({ kind: z.literal("refused"), reason: z.string() }),
+    ]),
+  },
+  /** Bring back a page a thread removed or skipped (30.43), from its note in the thread. */
+  "thread:page-back": {
+    request: z.object({ thread: z.string().max(200), id: z.string().max(100) }).strict(),
+    response: z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("back") }),
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
   },
