@@ -92,16 +92,17 @@ button {
   -webkit-app-region: no-drag;
 }
 
+/* No space open: the strip keeps its room so the right-hand buttons stay put. */
+.tabs[hidden] {
+  visibility: hidden;
+}
+
 .tabs {
   display: flex;
   align-items: center;
   gap: 4px;
   flex: 1;
   min-width: 0;
-}
-
-.tab-empty {
-  margin-right: 8px;
 }
 
 .icon-button {
