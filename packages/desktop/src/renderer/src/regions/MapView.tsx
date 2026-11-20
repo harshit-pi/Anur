@@ -1404,7 +1404,12 @@ export function MapView({
       const thread = b.thread;
       const open = () => {
         picked.current = b.kind === "thread" ? thread.id : null;
-        onSelect(b.index);
+        // The thread's own section, wherever this box hangs: a choice under its
+        // decision's subsection must not switch Think away from the thread.
+        const own = thread.path
+          ? tree.sections.find((x) => samePath(x.path, thread.path ?? []))?.index
+          : undefined;
+        onSelect(own ?? b.index);
         window.dispatchEvent(
           new CustomEvent("anur:open-thread", { detail: { thread: thread.id } }),
         );
