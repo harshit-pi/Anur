@@ -80,9 +80,8 @@ type Box = {
   /** For a section: its lane of work, and the lane's height under the box. */
   lane?: LanePill[];
   laneH?: number;
-  /** For a section whose lane is wider than it: its own width, and where the lane starts. */
+  /** For a section whose lane is wider than it: its own width. */
   boxW?: number;
-  laneX?: number;
   /** For a section: threads with nothing drawn off them yet, shown as a 💬 count. */
   chats?: ThreadView[];
   /** For a label naming one of a thread's choices: that choice's heading, shown instead of the thread's title. */
@@ -925,8 +924,6 @@ export function MapView({
         x,
         y: p.y - lane / 2,
         w: own,
-        // The title's lane reads down from its box's left edge, not centred on a wider slot.
-        ...(own < p.w && p.side !== 0 ? { laneX: p.x - p.w / 2 + 10 } : {}),
         h: p.h - lane,
         side: p.side,
         ...(p.row !== undefined ? { row: p.row } : {}),
@@ -2118,7 +2115,8 @@ export function MapView({
               key={`lane:${b.id}`}
               className="map-lane"
               style={{
-                left: b.laneX ?? b.x - b.w / 2 + 10,
+                // Every lane reads down from its box's left edge, whichever side the box is on.
+                left: b.x - b.w / 2 + 10,
                 top: b.y + Math.max(b.h, drawnH.get(b.index) ?? 0) / 2 + 6,
               }}
             >

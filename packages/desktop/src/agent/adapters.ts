@@ -47,6 +47,8 @@ export interface AgentAdapter {
   clientMeta?: Record<string, unknown>;
   /** Where the session's start hook checks in, when not the thread's own log. */
   startLog?: string;
+  /** A step's title as Claude Code would write it, which Think's labels read. */
+  toolTitle?(title: string, input: unknown): string;
   /** Tell the hook which thread a session is, once the agent has named the session. */
   bindSession?(sessionId: string, guard: Guard): Promise<void>;
 }
@@ -108,6 +110,7 @@ export function kiro(opts: {
     sessionMeta() {
       return {};
     },
+    toolTitle: kiroToolTitle,
     async bindSession(sessionId, guard) {
       if (!/^[\w.-]+$/.test(sessionId)) throw new Error(`Kiro named a session oddly: ${sessionId}`);
       await writeFile(
@@ -174,4 +177,23 @@ export function claudeCode(opts: {
       };
     },
   };
+}
+
+/**
+ * Kiro's step titles ("Read File", "Run Command") as Claude Code's ("Read
+ * notes.md", the command itself), from the call's input. Its tool loading
+ * and Anur's own tools read as Claude Code's, which Think leaves out of the steps.
+ */
+export function kiroToolTitle(title: string, input: unknown): string {
+  const i = (input ?? {}) as Record<string, unknown>;
+  const str = (k: string) => (typeof i[k] === "string" ? i[k] : null);
+  if (title.startsWith("@anur/")) return `mcp__anur__${title.slice("@anur/".length)}`;
+  if (title === "Tool Load" || title === "Load Resource") return "ToolSearch";
+  const file = str("path");
+  if (title === "Read File" && file) return `Read ${file}`;
+  if (title === "Write File" && file) return `Write ${file}`;
+  if (title === "Replace in File" && file) return `Edit ${file}`;
+  if (title === "Run Command" && str("command")) return str("command") ?? title;
+  if (title === "Fetch URL" && str("url")) return `WebFetch ${str("url") ?? ""}`;
+  return title;
 }

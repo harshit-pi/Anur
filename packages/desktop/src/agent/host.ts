@@ -702,7 +702,9 @@ export class AgentHost {
         type: "tool",
         ...t,
         toolUse: u.toolCallId,
-        title: u.title ?? "",
+        title: u.title
+          ? (this.env.adapters[agent]?.toolTitle?.(u.title, u.rawInput) ?? u.title)
+          : "",
         kind: u.kind ?? null,
         status: u.status ?? "pending",
         input: u.rawInput ?? null,

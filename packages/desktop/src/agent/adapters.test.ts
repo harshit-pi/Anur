@@ -2,7 +2,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { THREAD_SESSION_ENV } from "@anur/system";
-import { atLeast, claudeCode, kiro } from "./adapters.ts";
+import { atLeast, claudeCode, kiro, kiroToolTitle } from "./adapters.ts";
 
 describe("the Claude Code adapter", () => {
   it("marks a thread's session in its environment, so the person's task hooks leave it out", async () => {
@@ -51,5 +51,16 @@ describe("the Kiro adapter", () => {
     expect(launch.args).toEqual(["acp", "--agent-engine", "v3", "--auth-method", "cli"]);
     expect(launch.env.ANUR_KIRO).toBe(dir);
     expect(make("3.5.0").clientMeta).toEqual({ kiro: { hooks: { enabled: true, v2: true } } });
+  });
+});
+
+describe("Kiro's step titles", () => {
+  it("read as Claude Code's, so steps say what they did", () => {
+    expect(kiroToolTitle("Read File", { path: "notes.md" })).toBe("Read notes.md");
+    expect(kiroToolTitle("Replace in File", { path: "a.ts" })).toBe("Edit a.ts");
+    expect(kiroToolTitle("Run Command", { command: "rg retry" })).toBe("rg retry");
+    expect(kiroToolTitle("Tool Load", { id: "tool::anur::x" })).toBe("ToolSearch");
+    expect(kiroToolTitle("@anur/anur_name_thread", {})).toBe("mcp__anur__anur_name_thread");
+    expect(kiroToolTitle("Something New", {})).toBe("Something New");
   });
 });
