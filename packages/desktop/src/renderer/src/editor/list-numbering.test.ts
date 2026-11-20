@@ -55,6 +55,12 @@ describe("Enter in a numbered list", () => {
     expect(r.text).toBe("1. a\n2. b\n3. |\n\nnote\n\n1. x\n2. y\n");
   });
 
+  it("leaves a later list that starts at 1, even after a one-item list", () => {
+    // Its first number matches this list's last, but a list starting at 1 is a new list.
+    const r = enter("1. a|\n\nnote\n\n1. x\n2. y\n");
+    expect(r.text).toBe("1. a\n2. |\n\nnote\n\n1. x\n2. y\n");
+  });
+
   it("keeps images between items out of the way", () => {
     const r = enter("1. a|\n![[p.png|10]]\n2. b\n\nnote\n\n2. x\n");
     expect(r.text).toBe("1. a\n2. |\n![[p.png|10]]\n3. b\n\nnote\n\n4. x\n");

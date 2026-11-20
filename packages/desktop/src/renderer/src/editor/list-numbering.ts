@@ -10,7 +10,7 @@ import type { EditorView } from "@codemirror/view";
  * A person writing "1. … 9." then a note, then "9. …" means one sequence;
  * when Enter adds an item to a numbered list, every later list that picked up
  * where this one ended (its first number is this list's last, or the one
- * after) is numbered on from the new last, until a list that doesn't.
+ * after, and not 1) is numbered on from the new last, until a list that doesn't.
  */
 
 interface Mark {
@@ -73,7 +73,8 @@ export function continuedNumbers(before: EditorState, tr: Transaction): ChangeSp
   const changes: ChangeSpec[] = [];
   for (const next of later) {
     const first = next.marks[0]?.num;
-    if (first === undefined || (first !== oldLast && first !== oldLast + 1)) break;
+    // A list starting at 1 is its own, even after a one-item list ending at 1.
+    if (first === undefined || first === 1 || (first !== oldLast && first !== oldLast + 1)) break;
     oldLast = next.marks.at(-1)?.num ?? first;
     next.marks.forEach((mark, k) => {
       const num = newLast + 1 + k;
