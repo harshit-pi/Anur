@@ -8,6 +8,7 @@ import {
   noteName,
   noteOpened,
   noteQuit,
+  removeSnapshots,
   storageOf,
   unusedAttachments,
   unusedSnapshots,
@@ -71,6 +72,32 @@ describe("storage and Clean up (11.5)", () => {
     expect(kinds.map((k) => k.kind)).toEqual(["threads", "history", "snapshots", "other"]);
     expect(kinds.find((k) => k.kind === "snapshots")?.files).toBe(3);
     expect((await unusedSnapshots(dir)).map((s) => s.hash)).toEqual([B]);
+  });
+
+  it("counts and cleans every .anur in a space, its repos' too", async () => {
+    const dir = await folder({
+      ".anur/docs/d1/threads/t1/dev.jsonl": `{"kind":"input","hash":"${C}"}\n`,
+      "api/.git/HEAD": "ref: refs/heads/main\n",
+      "api/.anur/docs/d2/threads/t2/dev.jsonl": "{}\n",
+      "api/.anur/docs/d2/history/s1/dev.jsonl": "{}\n",
+      [`api/.anur/snapshots/${B}`]: "unused",
+      [`api/.anur/snapshots/${C}`]: "named from the space's own .anur",
+    });
+    for (const h of [B, C]) await utimes(path.join(dir, "api/.anur/snapshots", h), old, old);
+    const kinds = await storageOf(dir);
+    expect(kinds.find((k) => k.kind === "threads")?.files).toBe(2);
+    expect(kinds.find((k) => k.kind === "history")?.files).toBe(1);
+    expect(kinds.find((k) => k.kind === "snapshots")?.files).toBe(2);
+    const found = await unusedSnapshots(dir);
+    expect(found).toEqual([{ home: "api", hash: B, bytes: 6 }]);
+    const gone: string[] = [];
+    expect(
+      await removeSnapshots(dir, found, (home, hash) => {
+        gone.push(`${home}/${hash}`);
+        return Promise.resolve();
+      }),
+    ).toBe(1);
+    expect(gone).toEqual([`api/${B}`]);
   });
 
   it("keeps a recent snapshot, even unnamed", async () => {

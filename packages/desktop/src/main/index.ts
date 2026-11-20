@@ -1271,12 +1271,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
         reason:
           "Another device has this folder open, or didn't quit cleanly. Quit Anur there first.",
       };
-    const store = new SnapshotStore(path.join(folder.path, ".anur"), device);
     const found = await unusedSnapshots(folder.path);
-    const removed = await removeSnapshots(
-      folder.path,
-      found.map((f) => f.hash),
-      (h) => store.delete(h as never, "cleanup"),
+    const me = device;
+    // Each home keeps its own snapshots, a repo's in the repo's own .anur/.
+    const removed = await removeSnapshots(folder.path, found, (home, h) =>
+      new SnapshotStore(path.join(folder.path, home, ".anur"), me).delete(h as never, "cleanup"),
     );
     return { kind: "ok", removed };
   },
