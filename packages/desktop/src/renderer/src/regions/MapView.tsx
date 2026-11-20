@@ -758,8 +758,8 @@ export function MapView({
             nodes.push({
               id: did,
               parent: at,
-              w: bare ? 28 : labelWidth(label ?? t.title),
-              h: bare ? 28 : 36,
+              w: bare ? 1 : labelWidth(label ?? t.title),
+              h: bare ? 1 : 36,
             });
             info.set(did, {
               id: did,
@@ -1724,7 +1724,13 @@ export function MapView({
   };
 
   const v = view ?? { x: 0, y: 0, z: 1 };
-  /** A thread's line under one of its decisions: hovered, it names the thread; clicked, opens it. */
+  /** The thread named by the line under the pointer, and where, in the map's own pixels. */
+  const [lineTip, setLineTip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const tipAt = (e: React.PointerEvent, text: string) => {
+    const r = host.current?.getBoundingClientRect();
+    if (r) setLineTip({ text, x: e.clientX - r.left, y: e.clientY - r.top });
+  };
+  /** A thread's line under one of its decisions: hovered, it names the thread at once; clicked, opens it. */
   const threadHit = (b: Box, p: Box, d: string) => {
     const t = b.bare ? b.thread : p.bare ? p.thread : undefined;
     if (!t) return [];
@@ -1733,6 +1739,15 @@ export function MapView({
         key={`hit:${b.id}`}
         className="map-edge-hit"
         d={d}
+        onPointerEnter={(e) => {
+          tipAt(e, `from ${t.title}`);
+        }}
+        onPointerMove={(e) => {
+          tipAt(e, `from ${t.title}`);
+        }}
+        onPointerLeave={() => {
+          setLineTip(null);
+        }}
         onPointerDown={(e) => {
           e.stopPropagation();
           clickedAt.current = Date.now();
@@ -1742,9 +1757,7 @@ export function MapView({
           if (own !== undefined) onSelect(own);
           window.dispatchEvent(new CustomEvent("anur:open-thread", { detail: { thread: t.id } }));
         }}
-      >
-        <title>{`from ${t.title}`}</title>
-      </path>,
+      ></path>,
     ];
   };
   const edges = boxes.flatMap((b) => {
@@ -2445,6 +2458,11 @@ export function MapView({
         );
       })()}
       {writable ? <KeyBar /> : null}
+      {lineTip ? (
+        <div className="map-line-tip" style={{ left: lineTip.x, top: lineTip.y }}>
+          {lineTip.text}
+        </div>
+      ) : null}
       {note ? (
         <div className="map-note" role="status">
           {note}

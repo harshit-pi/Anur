@@ -6944,3 +6944,17 @@ button.file-card-name:hover {
 .map-edge-hit:hover {
   stroke: color-mix(in srgb, var(--ink) 10%, transparent);
 }
+
+/* A thread's name beside the pointer on its line: shown at once, not after the system's delay. */
+.map-line-tip {
+  position: absolute;
+  z-index: 6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--sheet);
+  font: 12px var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(10px, 14px);
+}
