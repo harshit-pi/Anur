@@ -134,3 +134,24 @@ export function withPreview(
   }
   return text;
 }
+
+/**
+ * A working copy's edits as preview parts on the doc as it is now (3.6, 30.42),
+ * merged as git would, with no one asked. `start` is the doc the copy was made
+ * from, `decided` the doc now, `current` the doc now with the thread's earlier
+ * preview made, and `copy` the agent's version. First the copy is brought onto
+ * the newer doc, and where both changed the same lines the newer doc wins: an
+ * edit the agent made to a section removed since never brings it back. Then the
+ * agent's latest wins over its own earlier preview, as before.
+ */
+export function partsFromCopy(
+  decided: string,
+  start: string,
+  current: string,
+  copy: string,
+  sections: readonly SectionSpan[],
+): PreviewPart[] {
+  const onto = merge3(start, decided, copy, "ours").text;
+  const proposed = merge3(decided, current, onto, "theirs").text;
+  return previewParts(decided, proposed, sections);
+}

@@ -70,6 +70,7 @@ export {
   currentPreview,
   encodePreviewFile,
   partHunks,
+  partsFromCopy,
   previewParts,
   rejectHunks,
   withPreview,
