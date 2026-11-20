@@ -11,7 +11,7 @@ import {
   type SystemShape,
   boxCounts,
 } from "./threads/system-doc.ts";
-import { chmodSync, mkdtempSync, mkdirSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync } from "node:fs";
 import { readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -108,6 +108,7 @@ import { loadDeviceId } from "../device/device-id.ts";
 import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
 import { readRecent } from "./folder/recent.ts";
+import { readOpenWindows, saveOpenWindows } from "./folder/open-windows.ts";
 import { onGitHub, spacesIn } from "./folder/spaces.ts";
 import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
@@ -164,6 +165,8 @@ import { Threads } from "./threads/threads.ts";
 const here = import.meta.dirname;
 const devUrl = process.env.ELECTRON_RENDERER_URL;
 const isCheck = Boolean(process.env.ANUR_SCREENSHOT);
+/** Windows reopen at launch as they were; checks opt in with ANUR_CHECK_RESTORE. */
+const restoresWindows = !isCheck || Boolean(process.env.ANUR_CHECK_RESTORE);
 const rendererUrl = () =>
   devUrl ?? pathToFileURL(path.join(here, "..", "renderer", "index.html")).href;
 const senders = trustedSenders(rendererUrl);
@@ -942,6 +945,7 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
     target.setTitle(outcome.folder.name);
     target.setRepresentedFilename(outcome.folder.path);
     send(target, "folder:changed", outcome.folder);
+    void refreshDockMenu();
     return outcome;
   }
   if (target !== win) target.close();
@@ -2569,6 +2573,44 @@ async function openDocIn(win: BrowserWindow, rel: string, section: string | null
   send(win, "app:open-doc", { path: rel, section, ...(view ? { view } : {}) });
 }
 
+/** The Dock's menu, as VS Code's: New Window, then the last five spaces; macOS adds the open windows. */
+async function refreshDockMenu(): Promise<void> {
+  if (process.platform !== "darwin" || isCheck) return;
+  const spaces = (await spacesIn(await readRecent(app.getPath("userData")).catch(() => []))).slice(
+    0,
+    5,
+  );
+  const openSpace = async (at: string) => {
+    const id = folders.windowFor(at);
+    const open = id === null ? undefined : windows.get(id);
+    if (open) {
+      if (open.isMinimized()) open.restore();
+      open.focus();
+      return;
+    }
+    const win = createWindow();
+    await whenLoaded(win);
+    await openFolderIn(win, at);
+  };
+  app.dock?.setMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "New Window",
+        click: () => {
+          createWindow();
+        },
+      },
+      ...(spaces.length ? [{ type: "separator" as const }] : []),
+      ...spaces.map((at) => ({
+        label: path.basename(at),
+        click: () => {
+          void openSpace(at);
+        },
+      })),
+    ]),
+  );
+}
+
 /** Files macOS asked Anur to open before it was ready, as when a double-click launched it. */
 const filesToOpen: string[] = [];
 let readyForFiles = false;
@@ -2819,22 +2861,35 @@ void app.whenReady().then(async () => {
   const shot = process.env.ANUR_SCREENSHOT;
   if (shot) screenshotThenQuit(win, shot);
 
-  // Reopen a folder: ANUR_OPEN_FOLDER for checks, otherwise the last one opened;
-  // a file double-clicked in Finder opens its own folder instead.
-  const reopen =
-    process.env.ANUR_OPEN_FOLDER ??
-    (isCheck || filesToOpen.length > 0
-      ? undefined
-      : (await readRecent(app.getPath("userData")))[0]);
+  // Reopen what was open: ANUR_OPEN_FOLDER for checks, otherwise every window's
+  // space at the last quit, else the last one opened; a file double-clicked in
+  // Finder opens its own folder instead.
+  const userData = app.getPath("userData");
+  const stillThere = (restoresWindows ? await readOpenWindows(userData) : []).filter((f) =>
+    existsSync(f),
+  );
+  const reopenAll = process.env.ANUR_OPEN_FOLDER
+    ? [process.env.ANUR_OPEN_FOLDER]
+    : (isCheck && !restoresWindows) || filesToOpen.length > 0
+      ? []
+      : stillThere.length > 0
+        ? stillThere
+        : (await readRecent(userData)).slice(0, 1);
+  const reopen = reopenAll[0];
   readyForFiles = true;
   for (const file of filesToOpen.splice(0)) await openMarkdownFile(file);
   // ANUR_CHECK_OPEN_FILE stands in for a double-click in Finder.
   if (process.env.ANUR_CHECK_OPEN_FILE) void openMarkdownFile(process.env.ANUR_CHECK_OPEN_FILE);
   if (reopen) {
     win.webContents.once("did-finish-load", () => {
-      void openFolderIn(win, reopen);
+      void (async () => {
+        // The first in this window; each next in a window of its own, the front one focused last.
+        for (const f of reopenAll) await openFolderIn(win, f).catch(() => undefined);
+        if (reopenAll.length > 1 && !win.isDestroyed()) win.focus();
+      })();
     });
   }
+  void refreshDockMenu();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -2892,6 +2947,13 @@ const quitNotes = new Set<Promise<void>>();
 // (the page's beforeunload), then closes itself; a quit carries on after it.
 let quitting = false;
 app.on("before-quit", () => {
+  if (!quitting && restoresWindows) {
+    // Every window's space, the front one first, so the next launch opens them all again.
+    const front = BrowserWindow.getFocusedWindow();
+    const order = [...windows.values()].sort((a, b) => Number(b === front) - Number(a === front));
+    const open = order.flatMap((w) => folders.current(w.webContents.id)?.path ?? []);
+    quitNotes.add(saveOpenWindows(app.getPath("userData"), open).catch(() => undefined));
+  }
   quitting = true;
 });
 
