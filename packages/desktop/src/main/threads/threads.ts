@@ -4,9 +4,10 @@ import { classify } from "./inputs.ts";
 import { LinkIndex } from "../folder/link-index.ts";
 import { editsLand } from "../../shared/edits-land.ts";
 import { actionPrompt, actionTitle, type Purpose } from "./actions.ts";
+import { pageHome } from "./page-home.ts";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { existsSync, watch, type FSWatcher } from "node:fs";
-import { cp, lstat, mkdir, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -1599,7 +1600,17 @@ export class Threads {
       }
       if (decided === null) {
         // A doc the agent made (15.6): nothing to propose against, so it's
-        // kept in the folder as made, and noted in the thread with Undo.
+        // kept in the folder as made, and noted in the thread with Undo. Never
+        // in attachments or an attached folder: beside the doc instead (30.41).
+        const home = pageHome(rel, live.rel, await this.keptFolders(thread, live));
+        if (home !== rel) {
+          await mkdir(path.dirname(path.join(dir, home)), { recursive: true });
+          await rename(path.join(dir, rel), path.join(dir, home));
+          const made = live.created?.get(home);
+          if (made) await this.reviseCreated(made, home, copy, live);
+          else live.merged.set(home, await this.keepCreated(thread, live, home, copy));
+          continue;
+        }
         live.merged.set(rel, await this.keepCreated(thread, live, rel, copy));
         continue;
       }
@@ -3288,6 +3299,25 @@ export class Threads {
     return {
       text: `Shown to the person as a check of ${String(claims.length)} claim${claims.length === 1 ? "" : "s"}${proposed ? ", with the corrected text as a proposal on the section" : ""}.`,
     };
+  }
+
+  /**
+   * Folders that hold what people add, never what agents write (30.41): the
+   * attachments folder, and folders the person attached as inputs.
+   */
+  private async keptFolders(thread: string, live: Live): Promise<string[]> {
+    const docDir = path.posix.dirname(live.rel);
+    const set =
+      (await attachmentFolder(this.d.folder)) === null
+        ? "attachments"
+        : await attachmentDir(this.d.folder, live.rel);
+    const own = (await this.linesOf(live.doc, thread)).flatMap((l) =>
+      l.kind === "added-input" && l.source === "attachment" && l.ref ? [l.ref] : [],
+    );
+    const carried = (live.carried ?? []).flatMap((c) => (c.source === "attachment" ? [c.ref] : []));
+    return [set, "attachments", ...own, ...carried].filter(
+      (d) => d !== "" && d !== "." && d !== docDir,
+    );
   }
 
   /**
