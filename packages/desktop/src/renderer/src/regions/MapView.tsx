@@ -904,7 +904,8 @@ export function MapView({
         x,
         y: p.y - lane / 2,
         w: own,
-        ...(own < p.w ? { laneX: p.x - p.w / 2 + 10 } : {}),
+        // The title's lane reads down from its box's left edge, not centred on a wider slot.
+        ...(own < p.w && p.side !== 0 ? { laneX: p.x - p.w / 2 + 10 } : {}),
         h: p.h - lane,
         side: p.side,
         ...(p.row !== undefined ? { row: p.row } : {}),
