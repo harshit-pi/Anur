@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { SnapshotStore } from "../../vault/snapshot-store.ts";
+import { sameWork } from "./same-work.ts";
 import { classify } from "./inputs.ts";
 import { LinkIndex } from "../folder/link-index.ts";
 import { editsLand } from "../../shared/edits-land.ts";
@@ -2911,6 +2912,22 @@ export class Threads {
     const title = str(a.title, 80);
     const what = str(a.what, 2000);
     if (!title || !what) return { error: "Give the action a title and what it should do." };
+    // A Build or Check does its one job; more work is the person's to plan (30.39).
+    const own = await this.linesOf(live.doc, thread);
+    const begun = own.find((l) => l.kind === "thread");
+    if (begun?.kind === "thread" && begun.purpose)
+      return {
+        text: "Nothing was added: a Build or Check doesn't plan more work. Say in your reply what's left, in a line.",
+      };
+    // The same work already planned, running or done in this doc isn't added again (30.39).
+    const views = await this.list(live.rel, live.docText);
+    const twin = views
+      .flatMap((v) => v.items)
+      .find((x) => x.kind === "proposed-action" && sameWork(x.title, title));
+    if (twin?.kind === "proposed-action")
+      return {
+        text: `Nothing was added: "${twin.title}" is already on the map${twin.run ? " and has run" : " as a planned action"}. Don't propose it again.`,
+      };
     const service = str(a.service, 60)?.toLowerCase();
     // A named section, found by its heading; the thread's own otherwise.
     const heading = str(a.section, 200);

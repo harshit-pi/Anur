@@ -408,6 +408,35 @@ describe("Threads", () => {
     expect(d).toMatchObject({ claim: "No deploys for this launch.", scope: "doc" });
   });
 
+  it("adds no action a Build proposes, nor one already on the map (30.39)", async () => {
+    const { threads: t } = await setup();
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    const plan = await t.start("plan.md", DOC, risks, "Plan the pages");
+    if (plan.kind !== "started") throw new Error(plan.reason);
+    await tool(plan.thread.id, "anur_propose_action", {
+      title: "Draft the Roadmap page",
+      what: "Write the roadmap.",
+    });
+    const twin = (await tool(plan.thread.id, "anur_propose_action", {
+      title: "Draft the Roadmap and Milestones page",
+      what: "Write it.",
+    })) as { text?: string };
+    expect(twin.text).toMatch(/already on the map/);
+    const b = await t.start("plan.md", DOC, risks, "-", undefined, [], "build");
+    if (b.kind !== "started") throw new Error(b.reason);
+    const more = (await tool(b.thread.id, "anur_propose_action", {
+      title: "Verify the price anchors",
+      what: "Check the prices.",
+    })) as { text?: string };
+    expect(more.text).toMatch(/doesn't plan more work/);
+    const actions = (await t.list("plan.md", DOC)).flatMap((v) =>
+      v.items.flatMap((i) => (i.kind === "proposed-action" ? [i.title] : [])),
+    );
+    expect(actions).toEqual(["Draft the Roadmap page"]);
+  });
+
   it("calls a build that ends on a choice done, not waiting on the person (30.33)", async () => {
     const { threads: t, reply } = await setup();
     const b = await t.start("plan.md", DOC, risks, "-", undefined, [], "build");
