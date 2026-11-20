@@ -586,23 +586,20 @@ function Market({ folder }: { folder: FolderState | null }) {
               onNote={setNote}
             />
           ))}
-          {data && data.installed.length === 0 ? (
-            <div className="settings-empty">
-              Nothing installed from the feed yet. Browse to add Git and others.
-            </div>
+          {data && data.installed.length > 0 ? (
+            <Row
+              title="Update plugins by themselves"
+              detail="New versions install in the background, checked against Anur's signature. On by default."
+            >
+              <Switch
+                on={data.autoUpdate}
+                label="Update plugins by themselves"
+                onChange={(on) => {
+                  void anur.call("market:set", { autoUpdate: on }).then(reload);
+                }}
+              />
+            </Row>
           ) : null}
-          <Row
-            title="Update plugins by themselves"
-            detail="New versions install in the background, checked against Anur's signature. On by default."
-          >
-            <Switch
-              on={data?.autoUpdate ?? true}
-              label="Update plugins by themselves"
-              onChange={(on) => {
-                void anur.call("market:set", { autoUpdate: on }).then(reload);
-              }}
-            />
-          </Row>
         </>
       )}
       {note ? <p className="settings-row-detail">{note}</p> : null}
@@ -1051,10 +1048,6 @@ export function Settings({
         return (
           <>
             <h2>Core plugins</h2>
-            <p className="settings-lede">
-              What every doc needs: the page and its map, and threads beside them. These two are
-              always on; turn the rest off and everything they add goes, in every window.
-            </p>
             {FEATURES.map((f) =>
               f.always ? (
                 <Row key={f.id} title={f.name} detail={f.what}>
@@ -1078,10 +1071,6 @@ export function Settings({
         return (
           <>
             <h2>Plugins</h2>
-            <p className="settings-lede">
-              Each is switched on for one folder; Anur's core works without them. Plugins from
-              others come later, once each can run in its own sandbox.
-            </p>
             <Market folder={folder} />
           </>
         );
