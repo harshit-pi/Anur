@@ -10,7 +10,6 @@ import {
   FOLDER_DOC,
   boxSize,
   keptSides,
-  mapLayout,
   mindLayout,
   resolveWiki,
   type MapNode,
@@ -26,7 +25,6 @@ import { ownOffsets } from "../layout/map-moves.ts";
 import { sidesSeen, withNames } from "../layout/map-sides.ts";
 import { mapSkeleton } from "../layout/map-drawing.ts";
 import { BoxSketch, sketchLine } from "./MapSketch.tsx";
-import { useMapLayout } from "./map-layout-pref.ts";
 import { useMapStyle } from "./map-style-pref.ts";
 import "../editor/drawings/assets.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
@@ -101,10 +99,6 @@ type Box = {
   status?: BoxStatus | null;
   /** A section's links to other docs (8.6), shown as one badge with a list. */
   outLinks?: { doc: string | null; heading: string | null; label: string }[];
-  /** Where the layout put its parent's rail for its row, and the spine (group 7). */
-  row?: number;
-  rails?: number[];
-  spine?: number;
   /** Moved off the layout by a drag: its lines go back to curves. */
   shifted?: boolean;
   heading: string;
@@ -327,7 +321,6 @@ export function MapView({
   const [makingDrawing, setMakingDrawing] = useState(false);
   /** Hand-drawn, as Excalidraw draws, when picked in Settings → Appearance. */
   const hand = useMapStyle() === "hand";
-  const [layout, setLayout] = useMapLayout();
   /** A line as the map style draws it: one path, or its sketched strokes. */
   const line = (key: string, className: string, d: string, marker?: string) =>
     hand
@@ -952,11 +945,11 @@ export function MapView({
       }
       return undefined;
     };
-    const placed =
-      layout === "mind"
-        ? mindLayout(ordered, keptSides(ordered, withNames(ordered, sidesKept.current, nameOf)))
-        : mapLayout(ordered);
-    if (layout === "mind") sidesKept.current = sidesSeen(placed, nameOf);
+    const placed = mindLayout(
+      ordered,
+      keptSides(ordered, withNames(ordered, sidesKept.current, nameOf)),
+    );
+    sidesKept.current = sidesSeen(placed, nameOf);
     const out: Box[] = [];
     for (const [id, p] of placed) {
       const i = info.get(id);
@@ -975,9 +968,6 @@ export function MapView({
         h: p.h - lane,
         side: p.side,
         ...(p.side === 0 && own < p.w ? { laneCentred: true } : {}),
-        ...(p.row !== undefined ? { row: p.row } : {}),
-        ...(p.rails ? { rails: p.rails } : {}),
-        ...(p.spine !== undefined ? { spine: p.spine } : {}),
       });
     }
     // A moved box sits where it was put; its threads move with it.
@@ -1036,7 +1026,6 @@ export function MapView({
     docs,
     docPath,
     features.links,
-    layout,
     unfolded,
     laneOpen,
     fontsIn,
@@ -1047,7 +1036,7 @@ export function MapView({
   // Sections stay where they were drawn: when the layout would move one only because
   // something else changed (a new section, a thread's choices), it's kept in place,
   // and a new one goes to the first free spot below where the layout puts it. Tidy,
-  // a drag, an undo or a switch of layout re-lays them, and that becomes the place kept.
+  // a drag or an undo re-lays them, and that becomes the place kept.
   const drawnAt = useRef(new Map<string, Pos>());
   /** Re-laid on purpose: what's drawn until this moment is the place kept. */
   const settleUntil = useRef(0);
@@ -1055,7 +1044,7 @@ export function MapView({
   useLayoutEffect(() => {
     if (!loaded || drag) return;
     const sections = boxes.filter((b) => b.kind === "section");
-    // Opening, Tidy or a switch of layout: the map settles for a moment (its
+    // Opening or Tidy: the map settles for a moment (its
     // threads, fonts and measured heights arrive) before anything is held in place.
     if (relayout.current) {
       relayout.current = false;
@@ -1182,12 +1171,10 @@ export function MapView({
     // In the mind map the title is in the middle, so the view centres on it.
     // Fit centres on what it frames; opening centres on the title.
     if (fitting) setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
-    else if (z > all && title && layout === "mind")
-      setView({ x: r.width / 2 - title.x * z, y: r.height / 2 - title.y * z, z });
     else if (z > all && title)
-      setView({ x: r.width / 2 - title.x * z, y: 60 - Math.min(...ys) * z, z });
+      setView({ x: r.width / 2 - title.x * z, y: r.height / 2 - title.y * z, z });
     else setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
-  }, [boxes, view, loaded, waited, layout]);
+  }, [boxes, view, loaded, waited]);
 
   // New boxes, such as a thread's options, come into view: the map fits
   // itself again, unless the person has panned or zoomed it.
@@ -1834,37 +1821,9 @@ export function MapView({
   const edges = boxes.flatMap((b) => {
     const p = b.parent ? byId.get(b.parent) : undefined;
     if (!p) return [];
-    // Laid out as placed: a trunk from the parent, its row's rail, and a drop to the box.
-    const r = b.row ?? 0;
-    const rail = p.rails?.[r];
-    const first = p.rails?.[0];
-    if (!b.shifted && !p.shifted && rail !== undefined && first !== undefined) {
-      const top = b.y - b.h / 2;
-      const pts =
-        r === 0
-          ? [
-              [p.x, p.y + p.h / 2],
-              [p.x, rail],
-              [b.x, rail],
-              [b.x, top],
-            ]
-          : [
-              [p.x, p.y + p.h / 2],
-              [p.x, first],
-              [p.spine ?? p.x, first],
-              [p.spine ?? p.x, rail],
-              [b.x, rail],
-              [b.x, top],
-            ];
-      const d = pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" ");
-      return [
-        ...line(b.id, b.kind === "section" ? "map-edge rail" : "map-edge rail thread", d),
-        ...threadHit(b, p, d),
-      ];
-    }
-    // From the parent's bottom to the child's top, a soft S; sideways when a
-    // moved box sits beside, and always in the mind map, which branches sideways.
-    const beside = layout === "mind" && Math.abs(b.x - p.x) > (b.w + p.w) / 2;
+    // Sideways, as the mind map branches; from the parent's bottom to the
+    // child's top, a soft S, when a moved box sits above or below it.
+    const beside = Math.abs(b.x - p.x) > (b.w + p.w) / 2;
     const below = !beside && b.y - b.h / 2 >= p.y + p.h / 2;
     const above = !beside && b.y + b.h / 2 <= p.y - p.h / 2;
     let d: string;
@@ -2567,23 +2526,6 @@ export function MapView({
         </div>
       ) : null}
       <div className="map-tools">
-        <button
-          type="button"
-          className="map-tool"
-          title={
-            layout === "mind"
-              ? "Lay the map out as a tree, read top down"
-              : "Lay the map out as a mind map, the title in the middle"
-          }
-          onClick={() => {
-            relayout.current = true;
-            setLayout(layout === "mind" ? "tree" : "mind");
-            userMoved.current = false;
-            setView(null);
-          }}
-        >
-          {layout === "mind" ? "Mind map" : "Tree"}
-        </button>
         <button
           type="button"
           className="map-tool"

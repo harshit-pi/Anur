@@ -1,54 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { boxSize, keptSides, mapLayout, mindLayout, type MapNode } from "./layout.ts";
+import { boxSize, keptSides, mindLayout, type MapNode } from "./layout.ts";
 
 const box = (id: string, parent: string | null, h = 40): MapNode => ({ id, parent, w: 160, h });
-
-describe("mapLayout", () => {
-  const nodes = [
-    box("title", null),
-    box("problem", "title"),
-    box("who", "title"),
-    box("retry", "title"),
-    box("payday", "retry"),
-    box("declines", "retry"),
-    box("channel", "title"),
-  ];
-  const at = mapLayout(nodes);
-
-  it("puts the title at the top and its sections in a row beneath it", () => {
-    expect(at.get("title")).toMatchObject({ x: 0, y: 0, side: 0 });
-    const y = (id: string) => at.get(id)?.y ?? NaN;
-    for (const id of ["problem", "who", "retry", "channel"]) expect(y(id), id).toBeGreaterThan(0);
-    expect(new Set(["problem", "who", "retry", "channel"].map(y)).size).toBe(1);
-  });
-
-  it("keeps reading order left to right, children a row further down, centred under their parent", () => {
-    const x = (id: string) => at.get(id)?.x ?? NaN;
-    const y = (id: string) => at.get(id)?.y ?? NaN;
-    expect(x("problem")).toBeLessThan(x("who"));
-    expect(x("who")).toBeLessThan(x("retry"));
-    expect(x("retry")).toBeLessThan(x("channel"));
-    expect(y("payday")).toBeGreaterThan(y("retry"));
-    expect(x("retry")).toBeCloseTo((x("payday") + x("declines")) / 2);
-    // The title sits over the middle of its row.
-    expect(x("title")).toBeCloseTo((x("problem") + x("channel")) / 2);
-  });
-
-  it("never overlaps two boxes", () => {
-    const all = [...at.values()];
-    for (const a of all)
-      for (const b of all) {
-        if (a === b) continue;
-        const apart =
-          Math.abs(a.x - b.x) >= (a.w + b.w) / 2 || Math.abs(a.y - b.y) >= (a.h + b.h) / 2;
-        expect(apart, `${a.id} and ${b.id}`).toBe(true);
-      }
-  });
-
-  it("gives the same picture for the same tree", () => {
-    expect([...mapLayout(nodes).entries()]).toEqual([...at.entries()]);
-  });
-});
 
 describe("boxSize", () => {
   it("grows with the text, within bounds, and never from the screen", () => {
@@ -57,34 +10,6 @@ describe("boxSize", () => {
     expect(boxSize("Retry timing", "Retry after 1, 3 and 7 days.").h).toBeGreaterThan(
       boxSize("Retry timing", "").h,
     );
-  });
-});
-
-describe("wrapping", () => {
-  it("wraps a parent's children into rows of four, in reading order, without overlap", () => {
-    const names = ["a", "b", "c", "d", "e", "f", "g"];
-    const at = mapLayout([box("title", null), ...names.map((n) => box(n, "title"))]);
-    const y = (id: string) => at.get(id)?.y ?? NaN;
-    const x = (id: string) => at.get(id)?.x ?? NaN;
-    expect(new Set(["a", "b", "c", "d"].map(y)).size).toBe(1);
-    expect(y("e")).toBeGreaterThan(y("a"));
-    expect(y("f")).toBe(y("g"));
-    expect(x("a")).toBeLessThan(x("d"));
-    expect(x("f")).toBeLessThan(x("g"));
-    expect(at.get("a")?.row).toBe(0);
-    expect(at.get("f")?.row).toBe(1);
-    expect(at.get("title")?.rails).toHaveLength(2);
-    // The spine runs left of every child.
-    const spine = at.get("title")?.spine ?? 0;
-    for (const n of names) expect(spine).toBeLessThan(x(n) - 80);
-    const all = [...at.values()];
-    for (const a of all)
-      for (const b of all) {
-        if (a === b) continue;
-        const apart =
-          Math.abs(a.x - b.x) >= (a.w + b.w) / 2 || Math.abs(a.y - b.y) >= (a.h + b.h) / 2;
-        expect(apart, `${a.id} and ${b.id}`).toBe(true);
-      }
   });
 });
 

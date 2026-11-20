@@ -4385,10 +4385,6 @@ body.resizing * {
   cursor: default;
 }
 
-.map-edge.rail {
-  stroke-linejoin: round;
-}
-
 .map-linklist.up {
   top: auto;
   bottom: calc(100% + 6px);
