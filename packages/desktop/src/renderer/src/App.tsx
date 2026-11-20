@@ -1114,14 +1114,14 @@ export function App() {
     void anur.call("tour:done", {});
   }, []);
   /** The files panel floating over the page while hovered, when it isn't docked. */
-  const [peek, setPeek] = useState(false);
+  const [peek, setPeek] = useState<"off" | "on" | "leaving">("off");
   const peekHover = useRef(false);
   const peekHold = useRef(false);
   const peekTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const peekCheck = useCallback(() => {
     clearTimeout(peekTimer.current);
     if (peekHover.current) {
-      setPeek(true);
+      setPeek("on");
       return;
     }
     if (peekHold.current) return;
@@ -1133,7 +1133,11 @@ export function App() {
         peekTimer.current = setTimeout(close, 300);
         return;
       }
-      setPeek(false);
+      // It slides away, then goes; a hover meanwhile brings it back.
+      setPeek("leaving");
+      peekTimer.current = setTimeout(() => {
+        setPeek("off");
+      }, 180);
     };
     peekTimer.current = setTimeout(close, 300);
   }, []);
@@ -1156,7 +1160,7 @@ export function App() {
       clearTimeout(peekTimer.current);
       peekHover.current = false;
       peekHold.current = false;
-      setPeek(false);
+      setPeek("off");
     }
     setOpen((o) => {
       const next = { ...o, [side]: !o[side] };
@@ -1165,12 +1169,16 @@ export function App() {
     });
   }, []);
   useEffect(() => {
-    if (!peek) return;
+    if (peek !== "on") return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       peekHover.current = false;
       peekHold.current = false;
-      setPeek(false);
+      clearTimeout(peekTimer.current);
+      setPeek("leaving");
+      peekTimer.current = setTimeout(() => {
+        setPeek("off");
+      }, 180);
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -1403,7 +1411,7 @@ export function App() {
       <Ribbon
         files={folder !== null}
         filesOpen={open.left}
-        filesPeek={peek && !open.left}
+        filesPeek={peek === "on" && !open.left}
         onFiles={() => {
           toggle("left");
         }}
@@ -1443,10 +1451,15 @@ export function App() {
         }
         selected={selected}
         onSelect={openDoc}
-        hidden={!(open.left || peek) || !folder}
+        hidden={!(open.left || peek !== "off") || !folder}
         peek={
-          !open.left && peek
-            ? { width: widths.left, onHover: onPeekHover, onHold: onPeekHold }
+          !open.left && peek !== "off"
+            ? {
+                width: widths.left,
+                leaving: peek === "leaving",
+                onHover: onPeekHover,
+                onHold: onPeekHold,
+              }
             : null
         }
         reveal={reveal}

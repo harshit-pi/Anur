@@ -153,6 +153,8 @@ export function LeftSidebar({
   /** Undocked and hovered: the panel floats over the page at this width. */
   peek?: {
     width: number;
+    /** Sliding away. */
+    leaving: boolean;
     onHover: (over: boolean) => void;
     /** Dragging from it: it stays until the drag ends. */
     onHold: (hold: boolean) => void;
@@ -217,7 +219,7 @@ export function LeftSidebar({
   }, [folderPath]);
   const aside = peek
     ? {
-        className: "left-sidebar peek",
+        className: `left-sidebar peek${peek.leaving ? " leaving" : ""}`,
         style: { width: peek.width },
         onMouseEnter: () => {
           peek.onHover(true);

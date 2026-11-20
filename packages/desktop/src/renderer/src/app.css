@@ -183,6 +183,10 @@ button {
 /* 1. Ribbon. */
 .ribbon {
   grid-area: ribbon;
+  /* Above the files when they slide out from under it. */
+  position: relative;
+  z-index: 31;
+  background: var(--paper);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -228,13 +232,19 @@ button {
   z-index: 30;
   background: var(--paper);
   box-shadow: 4px 0 14px var(--scrim);
-  animation: peek-in 120ms ease-out;
+  transition: transform 180ms ease-out;
+  animation: peek-in 180ms ease-out;
+}
+
+/* Slides away under the rail; a hover meanwhile slides it back. */
+.left-sidebar.peek.leaving {
+  transform: translateX(-100%);
+  transition-timing-function: ease-in;
 }
 
 @keyframes peek-in {
   from {
-    transform: translateX(-12px);
-    opacity: 0;
+    transform: translateX(-100%);
   }
 }
 
@@ -7007,5 +7017,6 @@ button.file-card-name:hover {
 @media (prefers-reduced-motion: reduce) {
   .left-sidebar.peek {
     animation: none;
+    transition: none;
   }
 }
