@@ -81,13 +81,7 @@ const nameIn = (all: readonly SystemSection[], id: string) =>
 /** The last read, kept while the tab is closed, so coming back draws it at once. */
 let lastRead: Extract<Shown, { kind: "ok" }> | null = null;
 
-export function SystemView({
-  folder,
-  onPlugins,
-}: {
-  folder: string | null;
-  onPlugins: () => void;
-}) {
+export function SystemView({ folder }: { folder: string | null }) {
   const [shown, setShown] = useState<Shown>(() =>
     lastRead && lastRead.folder === folder ? lastRead : { kind: "reading" },
   );
@@ -137,15 +131,8 @@ export function SystemView({
   }, [read]);
 
   if (shown.kind === "reading") return <div className="system-view quiet">Reading the repos…</div>;
-  if (shown.kind === "off")
-    return (
-      <div className="system-view">
-        <p className="quiet">The system map comes with the Engineering plugin.</p>
-        <button type="button" className="think-button primary" onClick={onPlugins}>
-          Turn on Engineering
-        </button>
-      </div>
-    );
+  // No code repos in this space: the tab closes itself (App), so nothing to show.
+  if (shown.kind === "off") return <div className="system-view" />;
   if (shown.kind === "failed")
     return (
       <div className="system-view">

@@ -2681,12 +2681,12 @@ export function Think({
               }));
         }}
       />
-      {scope ? (
+      {scope && (scope.value === "folder" || !scope.docName) ? (
         <RecentThreads
           hide={new Set([...here, ...closedHere].map((t) => t.id))}
           docPath={docPath}
         />
-      ) : elsewhere.length > 0 ? (
+      ) : !scope && elsewhere.length > 0 ? (
         <details className="think-elsewhere">
           <summary className="think-subhead">
             Other threads in this doc ({String(elsewhere.length)})

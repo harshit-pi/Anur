@@ -6691,3 +6691,43 @@ button.file-card-name:hover {
   color: var(--blue);
   cursor: default;
 }
+
+/* A new map before it's a file: its one box in the middle, ready for a name. */
+.blank-map {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.blank-map-box {
+  position: static;
+  min-width: 220px;
+  cursor: text;
+}
+
+.blank-map-box .map-rename::placeholder {
+  color: var(--slate);
+}
+
+.blank-page-title {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-doc);
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.blank-page-title::placeholder {
+  color: var(--slate);
+}
+
+.blank-map .space-opening h1 {
+  margin: 0;
+  font-family: var(--font-doc);
+  font-size: 22px;
+}

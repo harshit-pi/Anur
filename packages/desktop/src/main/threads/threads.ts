@@ -5,7 +5,7 @@ import { LinkIndex } from "../folder/link-index.ts";
 import { editsLand } from "../../shared/edits-land.ts";
 import { actionPrompt, actionTitle, type Purpose } from "./actions.ts";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
-import { watch, type FSWatcher } from "node:fs";
+import { existsSync, watch, type FSWatcher } from "node:fs";
 import { cp, lstat, mkdir, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -740,6 +740,8 @@ export class Threads {
         if (!names.length) continue;
         const rel = (await this.d.relOf?.(doc).catch(() => null)) ?? null;
         if (!rel || rel === SYSTEM_DOC) continue;
+        // A doc moved into another repo or deleted outside Anur: its old threads aren't recent.
+        if (rel !== FOLDER_DOC && !existsSync(path.join(this.d.folder, rel))) continue;
         this.docDirs.set(doc, anurDir);
         const at = rel === FOLDER_DOC ? null : await locate(rel);
         for (const thread of names) {
