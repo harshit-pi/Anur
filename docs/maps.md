@@ -21,7 +21,7 @@ Thread    italic text on a line, or 💬 N on a box
 
 | Piece                     | What it is                                                                                                                       | Click                                                          |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Title and sections        | The doc's headings, laid out from the title (mind map) or top down (tree)                                                        | Selects it; Think shows its threads                            |
+| Title and sections        | The doc's headings, as a mind map branching from the title                                                                       | Selects it; Think shows its threads                            |
 | Choice card               | An option or proposed edit from a thread, not used yet; filled in once explored                                                  | Opens its thread at that card                                  |
 | "N not picked"            | The options passed over once one was used, folded; opening it keeps the view still                                               | Opens or folds them                                            |
 | Lane under a section      | The section's work: one capsule each for what's running, waiting or failed; planned and done fold into "▶ N planned", "✓ N done" | A capsule opens its thread at its card; Run, Stop, Approve act |

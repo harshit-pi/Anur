@@ -168,6 +168,7 @@ any Claude Code session, any folder
 
 ## The map, read top down
 
+- Since 2026-11-20 the map is a mind map only: the tree layout and its toggle are gone, as nobody needed them and box positions kept in one layout didn't fit the other.
 - The map is a tree read top down: the title at the top, each box's sections in a row beneath it, a thread under its section, and the thread's options and edits under the thread. Rows line up by depth.
 - Every box has a second line saying what's under it ("4 sections", "1 thread") or what sets it apart: an option's one-line why (`anur_offer_options` now asks for it), "Exploring…" while the agent works on it, an edit's first line.
 - A thread is a pill that reads as its name, in the doc's italic. A proposed edit has Use on its box, which puts it in the doc as Use in Think does.
