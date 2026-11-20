@@ -63,6 +63,8 @@ type Box = {
   notPicked?: boolean;
   /** One of a set of parts that all belong: Add, not Use, and nothing to explore. */
   several?: boolean;
+  /** A thread's line under one of its decisions: no name, which shows at its own section. */
+  bare?: boolean;
   /** A part the person skipped, shown when its fold is open. */
   skipped?: boolean;
   /**
@@ -716,6 +718,8 @@ export function MapView({
             parent: parentId,
           });
         };
+        /** This thread's decision lines drawn as stubs, not named. */
+        const bareIds = new Set<string>();
         // Two or more choices in one thread: each hangs under its own name, so
         // "Who we target first" and "What we offer" don't read as one list.
         const named = firsts.filter((f) => !f.several && f.heading).length > 1;
@@ -741,14 +745,29 @@ export function MapView({
             const did = `d:${t.id}:${f.options[0]?.id ?? f.heading ?? t.id}`;
             const at = home ? idOf(home.index) : inLane ? id : tid;
             const label = home || !f.heading ? null : f.heading;
-            // Under its own box, the line names the thread; elsewhere, the choice.
-            nodes.push({ id: did, parent: at, w: labelWidth(label ?? t.title), h: 36 });
+            // Under its decision's own box, the thread isn't named again (it is at its
+            // section): a short stub on the line, naming it on hover. Elsewhere, the choice.
+            // Named once: on its own label when it has one, else at its first decision.
+            // Its own label shows only with something hanging off it.
+            const shownAlready = nodes.some(
+              (n) =>
+                n.parent === `t:${t.id}` || (n.id.startsWith(`d:${t.id}:`) && !bareIds.has(n.id)),
+            );
+            const bare = Boolean(home) && !inLane && shownAlready;
+            if (bare) bareIds.add(did);
+            nodes.push({
+              id: did,
+              parent: at,
+              w: bare ? 24 : labelWidth(label ?? t.title),
+              h: bare ? 16 : 36,
+            });
             info.set(did, {
               id: did,
               kind: "thread",
               index: home?.index ?? s.index,
               thread: t,
               ...(label ? { label } : {}),
+              ...(bare ? { bare: true } : {}),
               heading: f.heading ?? t.title,
               parent: at,
             });
@@ -1948,23 +1967,25 @@ export function MapView({
             <button
               key={b.id}
               type="button"
-              className={`map-thread${b.thread.busy ? " busy" : ""}`}
+              className={`map-thread${b.thread.busy ? " busy" : ""}${b.bare ? " bare" : ""}`}
               style={{ left: b.x - b.w / 2, top: b.y - b.h / 2, width: b.w, height: b.h }}
-              title={b.label ?? b.thread.title}
+              title={b.bare ? `from ${b.thread.title}` : (b.label ?? b.thread.title)}
               onPointerDown={(e) => {
                 onBoxDown(e, b);
               }}
             >
               {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed /> : null}
               {/* The services it acted in, such as Linear or Gmail, by their marks. */}
-              {servicesUsed(b.label ? [] : b.thread.items)
+              {servicesUsed(b.label || b.bare ? [] : b.thread.items)
                 .slice(0, MARKS_SHOWN)
                 .map((sv) => (
                   <span key={sv.name} title={sv.name} className="map-thread-mark">
                     <ServiceIcon service={sv} />
                   </span>
                 ))}
-              <span className="truncate">{b.label ?? <ThreadName thread={b.thread} />}</span>
+              {b.bare ? null : (
+                <span className="truncate">{b.label ?? <ThreadName thread={b.thread} />}</span>
+              )}
               {previewed.has(b.thread.id) ? (
                 <span className="map-dot" aria-label="Has a preview" />
               ) : null}

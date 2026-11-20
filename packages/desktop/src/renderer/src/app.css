@@ -6920,3 +6920,16 @@ button.file-card-name:hover {
 .map-legend:hover span.map-legend-what {
   margin-left: 6px;
 }
+
+/* A thread's stub under one of its decisions: a short dash on the line; its name on hover. */
+.map-thread.bare {
+  padding: 0;
+  border-top: 1.5px dashed var(--slate);
+  border-radius: 0;
+  background: transparent;
+  transform: translateY(8px);
+}
+
+.map-thread.bare:hover {
+  border-top-color: var(--ink);
+}
