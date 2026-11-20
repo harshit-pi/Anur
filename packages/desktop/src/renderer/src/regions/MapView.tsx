@@ -85,6 +85,8 @@ type Box = {
   /** For a section: its lane of work, and the lane's height under the box. */
   lane?: LanePill[];
   laneH?: number;
+  /** The title's lane, wider than its box: centred under it, inside the room the layout made. */
+  laneCentred?: boolean;
   /** For a section whose lane is wider than it: its own width. */
   boxW?: number;
   /** For a section: threads with nothing drawn off them yet, shown as a 💬 count. */
@@ -972,6 +974,7 @@ export function MapView({
         w: own,
         h: p.h - lane,
         side: p.side,
+        ...(p.side === 0 && own < p.w ? { laneCentred: true } : {}),
         ...(p.row !== undefined ? { row: p.row } : {}),
         ...(p.rails ? { rails: p.rails } : {}),
         ...(p.spine !== undefined ? { spine: p.spine } : {}),
@@ -2278,8 +2281,10 @@ export function MapView({
               key={`lane:${b.id}`}
               className="map-lane"
               style={{
-                // Every lane reads down from its box's left edge, whichever side the box is on.
-                left: b.x - b.w / 2 + 10,
+                // Every lane reads down from its box's left edge, whichever side the box is on;
+                // the title's, centred in its slot, is centred under it so it stays clear of its children.
+                left: b.laneCentred ? b.x : b.x - b.w / 2 + 10,
+                ...(b.laneCentred ? { transform: "translateX(-50%)" } : {}),
                 top: b.y + Math.max(b.h, drawnH.get(b.index) ?? 0) / 2 + 6,
               }}
             >
