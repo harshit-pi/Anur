@@ -89,6 +89,8 @@ ANUR_SCREENSHOT=/tmp/shot.png ANUR_OPEN_FOLDER=/path/to/folder ANUR_SCREENSHOT_C
 
 ## Gotchas found the hard way
 
+- Enter in a numbered list is `insertNewlineContinueNumbering` (`editor/list-numbering.ts`), not Markdown's own command: it also renumbers a later list that picks up where this one ended (a paragraph splits a list in Markdown, so the stock command left those numbers behind and 9 and 10 showed twice). It is one undo step. A later list that starts anywhere else is left alone.
+
 - macOS's temp folder is a symlink (`/var` → `/private/var`). The hook resolves real paths, so anything compared with what it sees must be real too (`realpathSync`).
 - A Unix socket path must stay under about 104 bytes. Anur's lives in a fresh folder in the system temp folder, not in app support.
 - Claude Code's own permission check runs before the hook. A call a deny rule stops never reaches the hook, so the hook log isn't a list of every attempt.
