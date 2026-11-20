@@ -1825,14 +1825,16 @@ body.resizing * {
   align-self: auto;
 }
 
+/*
+ * What a thread did to the docs (Used as it landed, Used all, Proposed, Made):
+ * plain text in the thread, like its replies. Amber is for what waits on the
+ * person; these are done, so they carry no bar and no wash (30.34).
+ */
 .think-changed {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
-  border-left: 3px solid var(--amber);
-  border-radius: 0 8px 8px 0;
-  background: var(--amber-wash);
+  padding: 2px 0;
 }
 
 /* An image opened in a tab from the files panel. */
@@ -4172,7 +4174,6 @@ body.resizing * {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
 }
 
 .think-earlier {
