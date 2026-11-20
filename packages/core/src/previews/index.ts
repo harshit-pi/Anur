@@ -2,6 +2,7 @@ export { PreviewFile, PreviewPart, currentPreview, encodePreviewFile } from "./p
 export {
   applyPart,
   partHunks,
+  partsFromCopy,
   previewParts,
   rejectHunks,
   withPreview,

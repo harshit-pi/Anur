@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { SectionId } from "../sections/section.ts";
 import { buildSectionTree } from "../sections/tree.ts";
-import { applyPart, partHunks, previewParts, rejectHunks, withPreview } from "./compute.ts";
+import {
+  applyPart,
+  partHunks,
+  partsFromCopy,
+  previewParts,
+  rejectHunks,
+  withPreview,
+} from "./compute.ts";
 
 const DOC = `# Notifications
 
@@ -111,5 +118,32 @@ describe("withPreview", () => {
     expect(
       withPreview(DOC, parts, (p) => (p.section ? (ranges.get(p.section) ?? null) : null)),
     ).toBe(proposed);
+  });
+});
+
+describe("partsFromCopy (30.42)", () => {
+  const sec = (n: string, extra = "") => `## ${n}\n\n- Covers: ${n}.${extra}\n\n`;
+  const names = ["Vision", "Mocks", "Design", "Plugins", "Validation"];
+  const doc = (ns: string[], extra = "") =>
+    `# Anur\n\nHub.\n\n` + ns.map((n) => sec(n, extra)).join("");
+
+  it("keeps the newer doc where it clashes, and lands the rest of the copy's edits", () => {
+    const start = doc(names);
+    // The agent's copy, from before: a note line in every section.
+    const copy = doc(names, "\n- Note: [[x]]");
+    // Meanwhile Design and Plugins were removed from the doc.
+    const now = doc(["Vision", "Mocks", "Validation"]);
+    const parts = partsFromCopy(now, start, now, copy, spans(now));
+    const after = parts.reduce((t, p) => t.replace(p.base, p.proposed), now);
+    expect(after).not.toContain("## Design");
+    expect(after).not.toContain("## Plugins");
+    expect(after.match(/- Note: \[\[x\]\]/g)).toHaveLength(3);
+  });
+
+  it("is the copy's edit, as before, when the doc didn't change under it", () => {
+    const start = doc(names);
+    const copy = doc(names, "\n- Note: [[x]]");
+    const parts = partsFromCopy(start, start, start, copy, spans(start));
+    expect(parts.reduce((t, p) => t.replace(p.base, p.proposed), start)).toBe(copy);
   });
 });

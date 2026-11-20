@@ -22,6 +22,7 @@ import {
   embedTargets,
   compareLines,
   merge3,
+  partsFromCopy,
   previewParts,
   withPreview,
   settleRule,
@@ -1629,8 +1630,8 @@ export class Threads {
       if (!at) continue;
       const existing = await this.previews.read(at.doc, thread);
       const current = withPreview(decided, existing?.parts ?? [], Threads.byId(at));
-      const proposed = merge3(start, current, copy, "theirs").text;
-      const parts = previewParts(decided, proposed, Threads.spans(at));
+      // Merged as git would: where the copy clashes with newer text, the newer wins (30.42).
+      const parts = partsFromCopy(decided, start, current, copy, Threads.spans(at));
       await this.previews.write(at.doc, thread, parts);
       this.d.previewsChanged(rel);
       // An edit to another doc shows on that doc's page; the thread says where.

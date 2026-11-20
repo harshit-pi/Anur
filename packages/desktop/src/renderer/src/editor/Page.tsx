@@ -189,7 +189,17 @@ export function Page({
      * and the thread notes it with Undo. Your own kept typing is never
      * applied this way.
      */
-    const useAsTheyLand = async (previews: { thread: string; parts: PreviewPart[] }[]) => {
+    /**
+     * One landing at a time (30.42): each apply refreshes the previews and so
+     * calls this again; run side by side, two calls applied the same part twice,
+     * and a part that adds sections added them twice.
+     */
+    let landing: Promise<void> = Promise.resolve();
+    const useAsTheyLand = (previews: { thread: string; parts: PreviewPart[] }[]) => {
+      landing = landing.then(() => landNow(previews)).catch(() => undefined);
+      return landing;
+    };
+    const landNow = async (previews: { thread: string; parts: PreviewPart[] }[]) => {
       if (editor.state.readOnly) return;
       const fresh = previews.flatMap((p) =>
         p.thread === UNSAVED_EDIT
@@ -207,7 +217,16 @@ export function Page({
       });
       if (closed) return;
       for (const { thread, part } of fresh.filter((f) => lands.includes(f.thread))) {
-        autoTried.add(`${thread}\u0000${sectionKey(part.path)}\u0000${part.proposed}`);
+        // Tried already, or used or dropped since this list was read: never twice.
+        const key = `${thread}\u0000${sectionKey(part.path)}\u0000${part.proposed}`;
+        const still = editor.state
+          .field(previewState)
+          .previews.find((p) => p.thread === thread)
+          ?.parts.some(
+            (p) => sectionKey(p.path) === sectionKey(part.path) && p.proposed === part.proposed,
+          );
+        if (autoTried.has(key) || !still) continue;
+        autoTried.add(key);
         const ok = await applyPreviewPart(thread, part, false, true);
         if (ok && thread !== TERMINAL_EDIT)
           void anur.call("thread:auto-used", {
