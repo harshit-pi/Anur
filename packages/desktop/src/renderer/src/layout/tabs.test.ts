@@ -83,6 +83,22 @@ describe("tabs", () => {
     expect(t).toEqual(noTabs);
   });
 
+  it("close: a tab just opened goes back to the tab it came from, as in a browser", () => {
+    // a, b, c; from a, open d: it sits right after a, before b.
+    let t = open(open(open(noTabs, "a.md"), "b.md", true), "c.md", true);
+    const [a] = t.tabs;
+    t = open(select(t, a?.id ?? ""), "d.md", true);
+    expect(currentDoc(t)).toBe("d.md");
+    t = close(t, t.active ?? "");
+    expect(currentDoc(t)).toBe("a.md");
+    // Went elsewhere first: the neighbour takes focus, as before.
+    t = open(t, "e.md", true);
+    const e = t.active ?? "";
+    t = select(select(t, t.tabs.at(-1)?.id ?? ""), e);
+    t = close(t, e);
+    expect(currentDoc(t)).toBe("b.md");
+  });
+
   it("a new tab is empty until a doc opens in it", () => {
     const t = newTab(open(noTabs, "a.md"));
     expect(currentDoc(t)).toBeNull();

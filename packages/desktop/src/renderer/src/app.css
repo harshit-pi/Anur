@@ -2888,32 +2888,34 @@ body.resizing * {
   position: absolute;
   width: 10px;
   height: 10px;
-  margin: -6px 0 0 -6px;
   border: 1px solid var(--blue);
+  /* Centred on its point by its own size, whatever that is. */
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   background: var(--sheet);
   cursor: crosshair;
   opacity: 0;
 }
 
+/* Each dot centred on the middle of the box's border, whatever its width (--bw). */
 .map-handle.left {
-  left: 0;
+  left: calc(var(--bw, 1px) / -2);
   top: 50%;
 }
 
 .map-handle.right {
-  left: 100%;
+  left: calc(100% + var(--bw, 1px) / 2);
   top: 50%;
 }
 
 .map-handle.top {
   left: 50%;
-  top: 0;
+  top: calc(var(--bw, 1px) / -2);
 }
 
 .map-handle.bottom {
   left: 50%;
-  top: 100%;
+  top: calc(100% + var(--bw, 1px) / 2);
 }
 
 .map-box:hover .map-handle,
@@ -6949,4 +6951,47 @@ button.file-card-name:hover {
   white-space: nowrap;
   pointer-events: none;
   transform: translate(10px, 14px);
+}
+
+/*
+ * The doc's own box, the map's anchor: filled in the ink colour, so black in
+ * light mode and light in dark, with its name and counts on it in the paper colour.
+ */
+.map .map-box.title {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--sheet);
+  box-shadow: none;
+}
+
+.map .map-box.title .map-box-name,
+.map .map-box.title .map-rename {
+  color: var(--sheet);
+}
+
+.map .map-box.title .map-chats,
+.map .map-box.title .map-linkcount {
+  background: var(--sheet);
+  color: var(--ink);
+}
+
+/* Selected, it keeps its fill and gets the blue ring outside it. */
+.map .map-box.title.selected {
+  border-color: var(--ink);
+  background: var(--ink);
+  box-shadow: 0 0 0 3px var(--blue);
+}
+
+.map .map-box.title .map-handle {
+  background: var(--sheet);
+}
+
+/* The border widths the handles centre on. */
+.map .map-box {
+  --bw: 1.5px;
+}
+
+.map .map-box.title,
+.map .map-box.selected {
+  --bw: 2px;
 }
