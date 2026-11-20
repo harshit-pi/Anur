@@ -735,16 +735,19 @@ export function MapView({
           // An action's thread is a capsule in the lane, not a label: its
           // choices still need a line of their own, or they scatter round the section.
           const inLane = Boolean(t.purpose && t.action);
-          if ((f.heading && !f.several && (named || home)) || inLane) {
+          if (home) {
+            // Under its own section, which already names the decision: no label
+            // between them, or the thread's title would repeat on every choice.
+            tid = idOf(home.index);
+          } else if ((f.heading && !f.several && named) || inLane) {
             const did = `d:${t.id}:${f.options[0]?.id ?? f.heading ?? t.id}`;
-            const at = home ? idOf(home.index) : inLane ? id : tid;
-            const label = home || !f.heading ? null : f.heading;
-            // Under its own box, the line names the thread; elsewhere, the choice.
+            const at = inLane ? id : tid;
+            const label = f.heading ?? null;
             nodes.push({ id: did, parent: at, w: labelWidth(label ?? t.title), h: 36 });
             info.set(did, {
               id: did,
               kind: "thread",
-              index: home?.index ?? s.index,
+              index: s.index,
               thread: t,
               ...(label ? { label } : {}),
               heading: f.heading ?? t.title,
