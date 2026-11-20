@@ -449,7 +449,7 @@ const TERMINAL_TOOLS = [
   {
     name: "anur_create_doc",
     description:
-      "Make a doc in the folder open in Anur and open it there. For /anur doc, give the drafted Markdown, a summary of this chat and the inputs you used: Anur keeps the chat on the doc's title. For /anur new, give the headings only.",
+      "Make a doc in the folder open in Anur and open it there. For /anur map, give the drafted Markdown, a summary of this chat and the inputs you used: Anur keeps the chat on the doc's title. For /anur new, give the headings only.",
     inputSchema: {
       type: "object",
       properties: {
@@ -462,10 +462,10 @@ const TERMINAL_TOOLS = [
           type: "string",
           description: "The whole doc: a title as an H1, then its sections.",
         },
-        summary: { type: "string", description: "For /anur doc: the chat in five to ten lines." },
+        summary: { type: "string", description: "For /anur map: the chat in five to ten lines." },
         inputs: {
           type: "array",
-          description: "For /anur doc: what you used in this chat.",
+          description: "For /anur map: what you used in this chat.",
           items: {
             type: "object",
             properties: {

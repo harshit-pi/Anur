@@ -6,7 +6,7 @@
 export type TourStep = {
   title: string;
   text: string;
-  /** What `/anur doc` looks like, shown as code after the text. */
+  /** What `/anur map` looks like, shown as code after the text. */
   code?: string;
   target: string;
   fallback?: string;
@@ -58,8 +58,8 @@ export const TOUR: readonly TourStep[] = [
   },
   {
     title: "Bring chats in from Claude Code",
-    text: "In any Claude Code chat, type this and the chat becomes a doc here, ready to edit:",
-    code: "/anur doc",
+    text: "In any Claude Code chat, type this and the chat becomes a map here, ready to edit:",
+    code: "/anur map",
     target: ".status-bar .status-item",
     side: "top",
     view: "page",

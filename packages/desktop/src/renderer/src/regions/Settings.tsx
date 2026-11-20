@@ -261,9 +261,9 @@ function SkillRow() {
           : !s.claude
             ? "Claude Code isn't on this computer."
             : !s.added
-              ? "Adds /anur to Claude Code: /anur doc turns a chat into a doc here."
+              ? "Adds /anur to Claude Code: /anur map turns a chat into a map here."
               : s.current
-                ? "Added: /anur doc, /anur new and /anur open work in Claude Code. Anur keeps them up to date."
+                ? "Added: /anur map, /anur new and /anur open work in Claude Code. Anur keeps them up to date."
                 : "Added, but out of date: Anur updates it on its next launch, or now.")
       }
     >

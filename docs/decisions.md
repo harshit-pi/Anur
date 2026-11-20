@@ -140,7 +140,7 @@ any Claude Code session, any folder
 - Anur adds itself to the person's Claude Code only on their Add: the `/anur` skill in `~/.claude/skills/anur/`, and its MCP server registered through `claude mcp add-json --scope user`, so Anur never edits Claude Code's config by hand. `CLAUDE_CONFIG_DIR` is honoured, as Claude Code does.
 - Every launch checks the install: a skill file whose hash differs from the app's (an update, or corruption) is rewritten, and a registration pointing at an old path is replaced. Remove is remembered; nothing comes back after it.
 - An agent in a terminal reaches Anur with a terminal token, written each launch to a file only the person can read. Its tools work on the folder in Anur's front window: outline, section bundle, thread counts, a proposed edit (shown as "Proposed from your terminal"), make a doc, open a doc.
-- `/anur doc` keeps the chat on the new doc's title: the agent's summary as the thread's first message, the Claude Code transcript and the inputs it used as inputs, carried to every section.
+- `/anur map` keeps the chat on the new doc's title: the agent's summary as the thread's first message, the Claude Code transcript and the inputs it used as inputs, carried to every section.
 - Quitting cleans up once (sessions, threads, socket, folders, at most four seconds), then exits: a second quit from inside will-quit wasn't always honoured.
 
 ## Never worse than Obsidian; agents' edits as they land
@@ -183,7 +183,7 @@ any Claude Code session, any folder
 ## Inputs: reads only, and the machine's own stays on it
 
 - Only reads become inputs: files, pages, searches, other MCP servers' answers, and shell commands made only of reading programs (cat, ls, rg, git log…) with nothing written to a file. Commands that write, run, build or test are the agent's own work, and reading back a file the thread wrote brings nothing in.
-- What came from the person's machine outside the folder (a file, a command's output, another MCP server's answer, the chat behind `/anur doc`) keeps its content in Anur's local app data, never `.anur/`, which is shared and often committed. The input line keeps its label and hash, marked `local`; another person's agent sees it exists and reads it again itself. Think marks it "kept local".
+- What came from the person's machine outside the folder (a file, a command's output, another MCP server's answer, the chat behind `/anur map`) keeps its content in Anur's local app data, never `.anur/`, which is shared and often committed. The input line keeps its label and hash, marked `local`; another person's agent sees it exists and reads it again itself. Think marks it "kept local".
 - Build says first, in one line, what it will build and what it relies on, so the person can stop it early. On a section with several steps it builds the first that fits one sitting and lists the rest as next steps.
 
 ## Steps folded, as in Claude's apps
@@ -283,7 +283,7 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 ## People, and who owns a doc
 
 - One person across their Macs: each device writes `.anur/people/<device>.json` (its person's handle, name and the time), committed with the folder, so a teammate's clone knows every name. The handle is the same key as their decisions file: GitHub login, else their email's hash. People with one handle are one person, named as they last set it on any Mac. Names used to live only in `.anur/open/<device>.json`, which stays on each Mac (18.10), so a teammate's clone lost them; a test now clones a committed folder and checks the names arrive.
-- A doc Anur creates (New doc, `/anur doc`, a doc an agent makes in a thread) gets `owner: [<handle>]` and `created: <day>` as properties, once, at creation. Keys a doc already has are kept, and docs made elsewhere are never given any. The file keeps the handle, which never changes; the page shows the name. Editing `owner` suggests the folder's other people, by name, and adds their handle.
+- A doc Anur creates (New doc, `/anur map`, a doc an agent makes in a thread) gets `owner: [<handle>]` and `created: <day>` as properties, once, at creation. Keys a doc already has are kept, and docs made elsewhere are never given any. The file keeps the handle, which never changes; the page shows the name. Editing `owner` suggests the folder's other people, by name, and adds their handle.
 
 ## Plugins from Anur's feed, and Git
 

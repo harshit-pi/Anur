@@ -60,8 +60,8 @@ export type TerminalDeps = {
       }[];
     },
   ) => Promise<string | null>;
-  /** Show a doc in the front window, at a section if given. */
-  open: (webContentsId: number, rel: string, section: string | null) => void;
+  /** Show a doc in the front window, at a section if given; a new map opens as its map. */
+  open: (webContentsId: number, rel: string, section: string | null, view?: "map") => void;
   /** A section named by heading, as its heading path; null when there's none. */
   sectionPath: (
     folder: string,
@@ -200,7 +200,7 @@ export function terminalHandler(d: TerminalDeps) {
           inputs: kept,
         });
       }
-      d.open(webContentsId, made.path, null);
+      d.open(webContentsId, made.path, null, "map");
       return {
         text: `Made ${made.path} in Anur's open folder, and opened it.${summary ? " This chat is kept on its title." : ""}`,
       };
