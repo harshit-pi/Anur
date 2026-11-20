@@ -416,8 +416,8 @@ export function TabBar({
             className="icon-button tab-ask"
             type="button"
             disabled={!onAsk}
-            aria-label="A thread on the whole doc"
-            title="A thread on the whole doc"
+            aria-label="Ask about the whole space"
+            title="Ask about the whole space"
             onClick={() => {
               onAsk?.();
             }}

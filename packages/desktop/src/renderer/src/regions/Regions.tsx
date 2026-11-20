@@ -3,7 +3,7 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
 import type { AgentStatus, FolderState } from "../../../shared/ipc-contract.ts";
-import { AGENTS } from "../../../shared/agents.ts";
+import { AGENTS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { FileTree, type FileActions, type MakeRequest } from "./FileTree.tsx";
 import { OpenFromButtons, PluginStatusItem, usePluginStatuses } from "./PluginUI.tsx";
@@ -783,20 +783,39 @@ const SAVE_LABELS: Record<SaveStatus, string> = {
   failed: "Not saved",
 };
 
-/** Whether the person's agent is connected; it connects when a thread first needs it. */
+/**
+ * Whether the agent in use is connected: the one Think is working with (the
+ * open thread's, or the one picked for a new thread), else the default. It
+ * connects when a thread first needs it.
+ */
 function AgentState() {
+  const [agent, setAgent] = useState<AgentId | null>(null);
   const [status, setStatus] = useState<AgentStatus | null>(null);
   useEffect(() => {
-    let shown: string | null = null;
-    void anur.call("agent:status", { connect: false }).then((s) => {
+    const onShown = (e: Event) => {
+      setAgent((e as CustomEvent<{ agent: AgentId }>).detail.agent);
+    };
+    window.addEventListener("anur:agent-shown", onShown);
+    return () => {
+      window.removeEventListener("anur:agent-shown", onShown);
+    };
+  }, []);
+  useEffect(() => {
+    let current = true;
+    let shown: string | null = agent;
+    void anur.call("agent:status", { connect: false, ...(agent ? { agent } : {}) }).then((s) => {
+      if (!current) return;
       shown = s.id;
       setStatus(s);
     });
-    // The default agent's status; another agent's doesn't replace it here.
-    return anur.on("agent:status", (s) => {
+    const off = anur.on("agent:status", (s) => {
       if (shown === null || s.id === shown) setStatus(s);
     });
-  }, []);
+    return () => {
+      current = false;
+      off();
+    };
+  }, [agent]);
   const on = status?.connected === true;
   return (
     <span className="status-item" title={status?.reason ?? undefined}>
@@ -804,8 +823,10 @@ function AgentState() {
       {on
         ? `${AGENTS[status.id].name} connected`
         : status?.connected === false
-          ? "Agent not connected"
-          : "Agent connects with the first thread"}
+          ? `${AGENTS[status.id].name} not connected`
+          : status
+            ? `${AGENTS[status.id].name} connects with the first thread`
+            : "Agent connects with the first thread"}
     </span>
   );
 }

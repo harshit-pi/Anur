@@ -1135,6 +1135,10 @@ export function Think({
     }
   }, [open, draft]);
   const shownAgent = thread?.agent ?? newAgent;
+  // The status bar names the agent being worked with here, not only the default.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("anur:agent-shown", { detail: { agent: shownAgent } }));
+  }, [shownAgent]);
   useEffect(() => {
     checkSignIn(shownAgent);
   }, [shownAgent, checkSignIn]);
@@ -1816,8 +1820,12 @@ export function Think({
           {folded.map(({ item, i, steps, leads }) => (
             <Fragment key={`e${String(i)}`}>
               {whoBefore.has(i) ? (
-                <div className="think-who" title={whoLabel(thread.agent, thread.options)}>
-                  <AgentMark agent={thread.agent} />
+                // The agent that ran this turn, which may not be the one the thread is on now.
+                <div
+                  className="think-who"
+                  title={whoLabel(turnAgent(thread, item), thread.options)}
+                >
+                  <AgentMark agent={turnAgent(thread, item)} />
                 </div>
               ) : null}
               {steps ? (
@@ -3758,6 +3766,10 @@ function PlanCard({
     </div>
   );
 }
+
+/** The agent that ran an item's turn; the thread's own when the turn didn't say. */
+const turnAgent = (t: ThreadView, item: ThreadView["items"][number]): AgentId =>
+  ("turn" in item ? t.turnAgents?.[item.turn] : undefined) ?? t.agent;
 
 /** Settings → Agents, where agents are switched on and off. */
 const openAgents = () => {
