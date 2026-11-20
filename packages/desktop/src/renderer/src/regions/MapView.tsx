@@ -7,6 +7,7 @@ import {
 import { ChevronDownIcon } from "./Icons.tsx";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
+  FOLDER_DOC,
   boxSize,
   mapLayout,
   mindLayout,
@@ -19,6 +20,7 @@ import { anur } from "../bridge.ts";
 import { useFeatures } from "../features.ts";
 import type { BoxStatus } from "../layout/box-status.ts";
 import { changeSummary } from "../layout/change-summary.ts";
+import { choiceActs } from "../layout/map-acts.ts";
 import { mapSkeleton } from "../layout/map-drawing.ts";
 import { BoxSketch, sketchLine } from "./MapSketch.tsx";
 import { useMapLayout } from "./map-layout-pref.ts";
@@ -56,6 +58,8 @@ type Box = {
   exploring?: boolean;
   /** An option passed over when another was picked: shown when its fold is open. */
   notPicked?: boolean;
+  /** One of a set of parts that all belong: Add, not Use, and nothing to explore. */
+  several?: boolean;
   /**
    * An action (Mock 10): a Build or Check thread, or one a thread proposed
    * and hasn't run. Its state, a few words, and the thread behind it.
@@ -267,6 +271,8 @@ export function MapView({
   const host = useRef<HTMLDivElement>(null);
   /** The section whose list of links is open (8.6). */
   const [openLinks, setOpenLinks] = useState<string | null>(null);
+  /** The box last clicked: a choice shows its Use and Explore while picked (30.32). */
+  const [focusBox, setFocusBox] = useState<string | null>(null);
   /** The list opens upward from a box low in the view, so it stays on screen. */
   const [linksUp, setLinksUp] = useState(false);
   /** Section IDs by heading path, so a heading added above can't hand a box another's ID. */
@@ -681,11 +687,13 @@ export function MapView({
         const optionBox = (
           o: Offer["options"][number],
           parentId: string,
-          extra: { notPicked?: boolean } = {},
+          extra: { notPicked?: boolean; several?: boolean } = {},
         ) => {
           const oid = `o:${o.id}`;
+          // Working on it now: in this thread, or in the thread exploring it (30.32).
           const exploring =
-            t.busy && exploredIds.has(o.id) && !offers.some((x) => x.within === o.id);
+            (t.busy && exploredIds.has(o.id) && !offers.some((x) => x.within === o.id)) ||
+            threads.some((th) => th.busy && th.explores?.option === o.id);
           const sub = exploring ? "Exploring…" : clip(o.why ?? plainLine(o.text), 46);
           nodes.push({ id: oid, parent: parentId, ...boxSize(o.title, sub) });
           info.set(oid, {
@@ -698,6 +706,7 @@ export function MapView({
             exploring,
             explored: exploredIds.has(o.id),
             ...(extra.notPicked ? { notPicked: true } : {}),
+            ...(extra.several ? { several: true } : {}),
             heading: o.title,
             parent: parentId,
           });
@@ -741,7 +750,8 @@ export function MapView({
             tid = did;
           }
           if (f.several) {
-            for (const o of f.options) if (!f.added.includes(o.id)) optionBox(o, tid);
+            for (const o of f.options)
+              if (!f.added.includes(o.id)) optionBox(o, tid, { several: true });
             continue;
           }
           // Picked here, or in a thread exploring one of these options.
@@ -1317,11 +1327,23 @@ export function MapView({
     };
   }, []);
 
+  /** Use or Explore on a choice's box: Think does what its card's buttons do (30.32). */
+  const mapChoice = (b: Box, act: "use" | "explore") => {
+    clickedAt.current = Date.now();
+    if (!b.thread || !b.option) return;
+    window.dispatchEvent(
+      new CustomEvent("anur:map-choice", {
+        detail: { thread: b.thread.id, option: b.option.id, act },
+      }),
+    );
+  };
+
   // A box: click selects it, drag moves it anywhere.
   const onBoxDown = (e: React.PointerEvent, b: Box) => {
     if (e.button !== 0) return;
     clickedAt.current = Date.now();
     e.stopPropagation();
+    setFocusBox(b.id);
     host.current?.focus();
     if (b.kind === "link") {
       if (b.link?.doc)
@@ -1730,7 +1752,7 @@ export function MapView({
               role="button"
               tabIndex={-1}
               className={
-                b.kind === "edit"
+                (b.kind === "edit"
                   ? "map-option edit"
                   : b.notPicked
                     ? "map-option not-picked"
@@ -1738,7 +1760,7 @@ export function MapView({
                       ? "map-option explored exploring"
                       : b.explored
                         ? "map-option explored"
-                        : "map-option"
+                        : "map-option") + (focusBox === b.id ? " selected" : "")
               }
               data-peek={b.id}
               title={
@@ -1779,6 +1801,33 @@ export function MapView({
                 ) : null}
               </div>
               {b.sub ? <div className="map-box-sub">{b.sub}</div> : null}
+              {/* Use and Explore on the choice itself (30.32): what its card's buttons do. */}
+              {(() => {
+                const acts = b.kind === "option" && writable && b.thread ? choiceActs(b) : null;
+                return acts ? (
+                  <MapActs
+                    acts={[
+                      {
+                        label: acts.use,
+                        primary: true,
+                        run: () => {
+                          mapChoice(b, "use");
+                        },
+                      },
+                      ...(acts.explore
+                        ? [
+                            {
+                              label: "Explore",
+                              run: () => {
+                                mapChoice(b, "explore");
+                              },
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                ) : null;
+              })()}
             </div>
           ) : b.kind === "link" && b.link ? (
             <button
@@ -1967,6 +2016,25 @@ export function MapView({
                     </button>
                   ))}
                 </div>
+              ) : null}
+              {/* Build and Check on the section's box (30.32): the links under it in Think. */}
+              {features.actions && writable && docPath !== FOLDER_DOC && renaming !== b.index ? (
+                <MapActs
+                  acts={(["build", "check"] as const).map((purpose) => ({
+                    label: purpose === "build" ? "Build" : "Check",
+                    primary: purpose === "build",
+                    run: () => {
+                      clickedAt.current = Date.now();
+                      const path = tree.sections[b.index]?.path;
+                      if (!path) return;
+                      window.dispatchEvent(
+                        new CustomEvent("anur:map-section-action", {
+                          detail: { index: b.index, path, purpose },
+                        }),
+                      );
+                    },
+                  }))}
+                />
               ) : null}
               {/* A section is just its name (Mock 10): its threads and actions hang off it. */}
               {writable
@@ -2471,4 +2539,35 @@ function useSays(b: Box): string {
   return heading
     ? `Use puts this under § ${heading}, in § ${section}.`
     : `Use replaces § ${section}'s text with this.`;
+}
+
+/**
+ * The buttons a box shows while hovered or picked (30.32): on its top edge,
+ * over the line in, so the box never grows and nothing around it moves.
+ */
+function MapActs({
+  acts,
+}: {
+  acts: readonly { label: string; primary?: boolean; run: () => void }[];
+}) {
+  return (
+    <div className="map-acts" role="group">
+      {acts.map((a) => (
+        <button
+          key={a.label}
+          type="button"
+          className={a.primary ? "map-act primary" : "map-act"}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+            a.run();
+          }}
+        >
+          {a.label}
+        </button>
+      ))}
+    </div>
+  );
 }

@@ -1,6 +1,7 @@
 import { ServiceIcon, serviceOf } from "../icons/services/index.tsx";
 import { editsLand } from "../../../shared/edits-land.ts";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { choicePress } from "../layout/map-acts.ts";
 import { FOLDER_DOC, diffLines, type SectionNode, type SectionTree } from "@anur/core";
 import { RecentThreads, ScopeChip, type ScopeChoice } from "./ThinkScope.tsx";
 import type {
@@ -1231,8 +1232,15 @@ export function Think({
   }, [sectionKey, section, thread]);
 
   const start = useCallback(
-    async (message: string, purpose?: "build" | "check", from?: ThreadView) => {
-      if (!docPath || !section) return false;
+    async (
+      message: string,
+      purpose?: "build" | "check",
+      from?: ThreadView,
+      /** Build or Check pressed on a section's box on the map (30.32), when it isn't the one shown. */
+      on?: { index: number; path: string[] },
+    ) => {
+      const at = on ?? section;
+      if (!docPath || !at) return false;
       setError(null);
       // An action runs in the mode the person picked, as any thread does:
       // Anur adds no approval Claude Code wouldn't ask for.
@@ -1249,7 +1257,7 @@ export function Think({
         id: `starting:${String(Date.now())}`,
         branchedFrom: from?.branchedFrom ?? null,
         section: "",
-        path: section.path,
+        path: at.path,
         title: shown.split("\n")[0]?.slice(0, 80) ?? "",
         closed: false,
         busy: true,
@@ -1273,7 +1281,7 @@ export function Think({
       const r = await anur.call("thread:start", {
         path: docPath,
         text: docText(),
-        section: { index: section.index, path: section.path },
+        section: { index: at.index, path: at.path },
         message,
         agent,
         options,
@@ -1329,6 +1337,21 @@ export function Think({
     },
     [tree, docPath, docText, newAgent, newChoices, setThreads],
   );
+  // Build or Check pressed on a section's box on the map (30.32): the same as the links here.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent<{ index: number; path: string[]; purpose: "build" | "check" }>)
+        .detail;
+      const node = tree?.sections[d.index];
+      if (!node || !samePath(node.path, d.path)) return;
+      void start("-", d.purpose, undefined, { index: node.index, path: node.path });
+    };
+    window.addEventListener("anur:map-section-action", on);
+    return () => {
+      window.removeEventListener("anur:map-section-action", on);
+    };
+  }, [tree, start]);
+
   // ▶ Run pressed on a planned box on the map.
   useEffect(() => {
     const onRun = (e: Event) => {
@@ -1439,6 +1462,53 @@ export function Think({
       how: how === "also" ? "also" : mode === "beside" ? "subsection" : mode,
     });
   };
+
+  /** Explore this: its own thread, clean of the other options (30.18). */
+  const exploreOption = (t: ThreadView, option: string) => {
+    if (!docPath) return;
+    setError(null);
+    void anur
+      .call("thread:explore-option", { thread: t.id, path: docPath, text: docText(), option })
+      .then((r) => {
+        if (r.kind === "refused") {
+          setError(r.reason);
+          return;
+        }
+        setThreads((ts) => [...ts.filter((x) => x.id !== r.thread.id), r.thread]);
+        setOpen(r.thread.id);
+      });
+  };
+
+  /**
+   * Use or Explore pressed on a choice on the map (30.32): the same as its
+   * card's buttons here, so the doc and the thread can't tell them apart.
+   */
+  const onMapChoice = useRef<
+    (d: { thread: string; option: string; act: "use" | "explore" }) => void
+  >(() => undefined);
+  onMapChoice.current = ({ thread: id, option, act }) => {
+    const t = threads.find((x) => x.id === id);
+    const item = t?.items.find(
+      (x): x is Extract<ThreadView["items"][number], { kind: "options" }> =>
+        x.kind === "options" && x.options.some((o) => o.id === option),
+    );
+    const o = item?.options.find((x) => x.id === option);
+    if (!t || !item || !o) return;
+    const press = choicePress(item, o.id, act);
+    if (press?.kind === "explore") exploreOption(t, o.id);
+    else if (press) useOption(t, o, press.how, press.heading);
+  };
+  useEffect(() => {
+    const on = (e: Event) => {
+      onMapChoice.current(
+        (e as CustomEvent<{ thread: string; option: string; act: "use" | "explore" }>).detail,
+      );
+    };
+    window.addEventListener("anur:map-choice", on);
+    return () => {
+      window.removeEventListener("anur:map-choice", on);
+    };
+  }, []);
 
   /** "Use in doc": a reply's text added at the end of its thread's section, ⌘Z to undo. */
   const addToSection = (t: ThreadView, text: string) => {
@@ -1907,26 +1977,7 @@ export function Think({
                               type="button"
                               className="think-more"
                               onClick={() => {
-                                setError(null);
-                                void anur
-                                  .call("thread:explore-option", {
-                                    thread: thread.id,
-                                    path: docPath,
-                                    text: docText(),
-                                    option: o.id,
-                                  })
-                                  .then((r) => {
-                                    if (r.kind === "refused") {
-                                      setError(r.reason);
-                                      return;
-                                    }
-                                    // Exploring starts its own thread, clean of the other options.
-                                    setThreads((ts) => [
-                                      ...ts.filter((t) => t.id !== r.thread.id),
-                                      r.thread,
-                                    ]);
-                                    setOpen(r.thread.id);
-                                  });
+                                exploreOption(thread, o.id);
                               }}
                             >
                               Explore this
