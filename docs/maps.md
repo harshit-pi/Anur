@@ -35,7 +35,7 @@ Thread    italic text on a line, or 💬 N on a box
 - A choice raised by a running action hangs under its own label, never loose round the section.
 - Fit frames the sections and the choices waiting at the top level, never below 60% (`FIT_MIN`), centred on what it frames (30.27). Opening a map centres on the title at 75% or more (`READABLE`).
 - A new box appears from Tab, Enter, double-clicking empty space, or dragging a box's handle onto empty space. Moving a box never changes the file.
-- The map holds still once framed (30.40): new boxes never refit or zoom it; while the pointer is on the map nothing pans it; when the layout shifts, as when an edit lands, the selected box keeps its place on screen and the map moves around it. Only Fit, a pan or a zoom by the person moves the view, and new boxes all out of sight are brought in only while the pointer is off the map.
+- The map holds still under the pointer (30.40): while the pointer is on the map, nothing refits, zooms or pans it; when the layout shifts, as when an edit lands, the selected box keeps its place on screen and the map moves around it. With the pointer elsewhere, a map the person hasn't moved refits to show new boxes, as before.
 
 ## What the doc map leaves out
 

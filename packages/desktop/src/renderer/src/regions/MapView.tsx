@@ -1219,8 +1219,8 @@ export function MapView({
         const cx = (Math.max(...xs) + Math.min(...xs)) / 2;
         const cy = (Math.max(...ys) + Math.min(...ys)) / 2;
         setView({ x: r.width / 2 - cx * z, y: r.height / 2 - cy * z, z });
-      }
-      // A framed map never refits on its own: new boxes take no zoom from the ones in view (30.40).
+      } else if (!userMoved.current && !pointerIn.current) setView(null);
+      // A map the person moved never refits, and none does while the pointer is on it (30.40).
     }
     lastCount.current = count;
   }, [count]);
