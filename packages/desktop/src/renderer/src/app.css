@@ -5905,6 +5905,7 @@ button.file-card-name:hover {
   background: var(--paper);
   color: var(--graphite);
   font: italic 13px var(--font-doc);
+  white-space: nowrap;
 }
 
 .map-thread:hover {

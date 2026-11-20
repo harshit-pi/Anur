@@ -108,6 +108,20 @@ const pill = (title: string, marks = 0) => ({
   w: Math.max(150, Math.min(320, Math.round(title.length * 7.8 + 44 + marks * 18))),
   h: 36,
 });
+let measurer: CanvasRenderingContext2D | null = null;
+/**
+ * A thread is italic text on its line (Mock 11): its slot is as wide as its
+ * words, so the lines meet them instead of stopping short of a guessed width.
+ */
+const labelWidth = (title: string) => {
+  measurer ??= document.createElement("canvas").getContext("2d");
+  if (!measurer) return pill(title).w;
+  // The page's own font, once it has loaded; until then a serif close to it.
+  const font = getComputedStyle(document.documentElement).getPropertyValue("--font-doc").trim();
+  measurer.font = `italic 13px ${font || "serif"}`;
+  // The label's padding (6px a side), and a pixel so the last letter never wraps.
+  return Math.min(360, Math.ceil(measurer.measureText(title).width) + 14);
+};
 /**
  * A section box's size: room for its name beside the links badge, and for
  * the status chip beside the thread count on one line, so neither wraps a
@@ -486,6 +500,20 @@ export function MapView({
   );
 
   // The layout: sections, with each section's threads as its nearest children.
+  // Labels are measured in the page's font: once it has loaded, the map lays out again.
+  const [fontsIn, setFontsIn] = useState(0);
+  useEffect(() => {
+    const again = () => {
+      setFontsIn((n) => n + 1);
+    };
+    // "Ready" can come before the serif has even started loading: ask for it by name too.
+    const font = getComputedStyle(document.documentElement).getPropertyValue("--font-doc").trim();
+    void document.fonts.load(`italic 13px ${font || "serif"}`).then(again, () => undefined);
+    document.fonts.addEventListener("loadingdone", again);
+    return () => {
+      document.fonts.removeEventListener("loadingdone", again);
+    };
+  }, []);
   const boxes = useMemo(() => {
     const nodes: MapNode[] = [];
     const info = new Map<string, Omit<Box, "x" | "y" | "w" | "h" | "side">>();
@@ -553,7 +581,7 @@ export function MapView({
             ? `t:${from}`
             : id;
         // A thread is a label on the line to its choices; one with none is counted on its section below.
-        nodes.push({ id: tid, parent, ...pill(t.title, 0) });
+        nodes.push({ id: tid, parent, w: labelWidth(t.title), h: 36 });
         info.set(tid, {
           id: tid,
           kind: "thread",
@@ -689,7 +717,7 @@ export function MapView({
             const at = home ? idOf(home.index) : inLane ? id : tid;
             const label = home || !f.heading ? null : f.heading;
             // Under its own box, the line names the thread; elsewhere, the choice.
-            nodes.push({ id: did, parent: at, ...pill(label ?? t.title, 0) });
+            nodes.push({ id: did, parent: at, w: labelWidth(label ?? t.title), h: 36 });
             info.set(did, {
               id: did,
               kind: "thread",
@@ -923,6 +951,7 @@ export function MapView({
     layout,
     unfolded,
     laneOpen,
+    fontsIn,
   ]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
