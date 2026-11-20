@@ -1113,13 +1113,78 @@ export function App() {
     setCenterView(loadDocView(window.localStorage));
     void anur.call("tour:done", {});
   }, []);
+  /** The files panel floating over the page while hovered, when it isn't docked. */
+  const [peek, setPeek] = useState<"off" | "on" | "leaving">("off");
+  const peekHover = useRef(false);
+  const peekHold = useRef(false);
+  const peekTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const peekCheck = useCallback(() => {
+    clearTimeout(peekTimer.current);
+    if (peekHover.current) {
+      setPeek("on");
+      return;
+    }
+    if (peekHold.current) return;
+    // A moment's grace, so passing over the edge doesn't flicker it.
+    const close = () => {
+      // Renaming in the panel: it stays until the typing ends.
+      const at = document.activeElement;
+      if (at?.closest(".left-sidebar.peek") && at.matches("input, textarea")) {
+        peekTimer.current = setTimeout(close, 300);
+        return;
+      }
+      // It slides away, then goes; a hover meanwhile brings it back.
+      setPeek("leaving");
+      peekTimer.current = setTimeout(() => {
+        setPeek("off");
+      }, 180);
+    };
+    peekTimer.current = setTimeout(close, 300);
+  }, []);
+  const onPeekHover = useCallback(
+    (over: boolean) => {
+      peekHover.current = over;
+      peekCheck();
+    },
+    [peekCheck],
+  );
+  const onPeekHold = useCallback(
+    (hold: boolean) => {
+      peekHold.current = hold;
+      peekCheck();
+    },
+    [peekCheck],
+  );
   const toggle = useCallback((side: Side) => {
+    if (side === "left") {
+      clearTimeout(peekTimer.current);
+      peekHover.current = false;
+      peekHold.current = false;
+      setPeek("off");
+    }
     setOpen((o) => {
       const next = { ...o, [side]: !o[side] };
       saveOpen(window.localStorage, next);
       return next;
     });
   }, []);
+  useEffect(() => {
+    if (peek !== "on") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      peekHover.current = false;
+      peekHold.current = false;
+      clearTimeout(peekTimer.current);
+      setPeek("leaving");
+      peekTimer.current = setTimeout(() => {
+        setPeek("off");
+      }, 180);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [peek]);
   /**
    * A thread to open in Think, as "Keep discussing" on a preview asks. Held
    * here, so it reaches Think however the panel was showing when it came.
@@ -1346,9 +1411,11 @@ export function App() {
       <Ribbon
         files={folder !== null}
         filesOpen={open.left}
+        filesPeek={peek === "on" && !open.left}
         onFiles={() => {
           toggle("left");
         }}
+        onFilesHover={onPeekHover}
         searchOpen={paletteOpen}
         onSearch={() => {
           setPaletteOpen((o) => !o);
@@ -1384,7 +1451,17 @@ export function App() {
         }
         selected={selected}
         onSelect={openDoc}
-        hidden={!open.left || !folder}
+        hidden={!(open.left || peek !== "off") || !folder}
+        peek={
+          !open.left && peek !== "off"
+            ? {
+                width: widths.left,
+                leaving: peek === "leaving",
+                onHover: onPeekHover,
+                onHold: onPeekHold,
+              }
+            : null
+        }
         reveal={reveal}
         actions={fileActions}
         notice={fileNotice}
@@ -1536,6 +1613,18 @@ export function App() {
         }}
         threads={docThreads}
       />
+      {folder && !open.left ? (
+        <div
+          className="peek-edge"
+          aria-hidden="true"
+          onMouseEnter={() => {
+            onPeekHover(true);
+          }}
+          onMouseLeave={() => {
+            onPeekHover(false);
+          }}
+        />
+      ) : null}
       {open.left ? (
         <Resizer
           side="left"
