@@ -1,3 +1,4 @@
+import { UpdatePill, VersionItem } from "./UpdatePill.tsx";
 import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
@@ -893,7 +894,8 @@ export function StatusBar({
               : `${String(threads.count)} threads`}
         </span>
       ) : null}
-      {version ? <span className="status-item quiet">Anur {version}</span> : null}
+      <UpdatePill />
+      {version ? <VersionItem version={version} /> : null}
     </footer>
   );
 }

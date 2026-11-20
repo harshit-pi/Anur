@@ -1,30 +1,14 @@
-import { useEffect, useState } from "react";
 import { anur } from "../bridge.ts";
 import { FEATURE_URL, REPO_URL } from "../layout/github.ts";
-import { dayOf, readStar, shouldAsk, snoozed, used, writeStar } from "../layout/star-prompt.ts";
+import { readStar, snoozed, writeStar } from "../layout/star-prompt.ts";
 import { GitHubIcon } from "./Icons.tsx";
 
-/** After a few days of use: a star on GitHub, or a feature to ask for. Asked rarely. */
-export function StarPrompt() {
-  const [shown, setShown] = useState(false);
-  useEffect(() => {
-    const today = dayOf(new Date());
-    const s = used(readStar(window.localStorage), today);
-    writeStar(window.localStorage, s);
-    if (!shouldAsk(s, today)) return;
-    // A little after opening, not in the way of what the person came to do.
-    const t = window.setTimeout(() => {
-      setShown(true);
-    }, 4000);
-    return () => {
-      window.clearTimeout(t);
-    };
-  }, []);
-  if (!shown) return null;
-  const finish = (done: boolean) => {
+/** After a few days of use: a star on GitHub, or a feature to ask for. Offers decides when. */
+export function StarPrompt({ done }: { done: () => void }) {
+  const finish = (finished: boolean) => {
     const s = readStar(window.localStorage);
-    writeStar(window.localStorage, done ? { ...s, done: true } : snoozed(s, new Date()));
-    setShown(false);
+    writeStar(window.localStorage, finished ? { ...s, done: true } : snoozed(s, new Date()));
+    done();
   };
   const open = (url: string) => void anur.call("link:open-external", { url });
   return (

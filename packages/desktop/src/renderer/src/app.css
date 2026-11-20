@@ -3561,11 +3561,6 @@ body.resizing * {
   z-index: 20;
 }
 
-/* Only the first card due shows; the next waits until it's dealt with. */
-.corner-cards > :not(:first-child) {
-  display: none;
-}
-
 .skill-card {
   display: flex;
   flex-direction: column;
@@ -6792,4 +6787,21 @@ button.file-card-name:hover {
 
 .think-context > summary {
   cursor: pointer;
+}
+
+/* A new version, in the status bar: one click updates and restarts. */
+.update-pill {
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--blue);
+  color: var(--sheet);
+  font: 600 12px/18px var(--font-ui);
+  cursor: pointer;
+}
+
+.update-pill.busy {
+  background: var(--blue-wash);
+  color: var(--blue);
+  cursor: default;
 }

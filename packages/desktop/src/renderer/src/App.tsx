@@ -75,15 +75,11 @@ import {
   StatusBar,
 } from "./regions/Regions.tsx";
 import { TabBar } from "./regions/TabBar.tsx";
-import { SkillCard } from "./regions/SkillCard.tsx";
-import { PublicRepoCard } from "./regions/PublicRepoCard.tsx";
-import { UpdateCard, WhatsNewCard } from "./regions/UpdateCard.tsx";
-import { OpenerCard } from "./regions/OpenerCard.tsx";
 import { Tour } from "./regions/Tour.tsx";
 import { tourSteps } from "./layout/tour.ts";
 import { useFeatures } from "./features.ts";
 import { MapView } from "./regions/MapView.tsx";
-import { StarPrompt } from "./regions/StarPrompt.tsx";
+import { Offers } from "./regions/Offers.tsx";
 import { keepSame } from "./layout/keep-same.ts";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 
@@ -1476,17 +1472,7 @@ export function App() {
         />
       ) : null}
       {/* The offer cards wait until the tour is over. */}
-      {tourStep === null ? (
-        // One card at a time in the corner, the most pressing first.
-        <div className="corner-cards">
-          <UpdateCard />
-          <WhatsNewCard />
-          <PublicRepoCard />
-          <OpenerCard />
-          <SkillCard />
-          <StarPrompt />
-        </div>
-      ) : null}
+      {tourStep === null ? <Offers /> : null}
       <CommandPalette
         open={paletteOpen}
         onClose={() => {
