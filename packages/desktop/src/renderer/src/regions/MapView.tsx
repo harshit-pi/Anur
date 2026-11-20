@@ -1029,12 +1029,19 @@ export function MapView({
   // and a new one goes to the first free spot below where the layout puts it. Tidy,
   // a drag, an undo or a switch of layout re-lays them, and that becomes the place kept.
   const drawnAt = useRef(new Map<string, Pos>());
+  /** Re-laid on purpose: what's drawn until this moment is the place kept. */
+  const settleUntil = useRef(0);
   const relayout = useRef(true);
   useLayoutEffect(() => {
     if (!loaded || drag) return;
     const sections = boxes.filter((b) => b.kind === "section");
+    // Opening, Tidy or a switch of layout: the map settles for a moment (its
+    // threads, fonts and measured heights arrive) before anything is held in place.
     if (relayout.current) {
       relayout.current = false;
+      settleUntil.current = Date.now() + 1500;
+    }
+    if (Date.now() < settleUntil.current) {
       drawnAt.current = new Map(sections.map((b) => [b.id, { x: b.x, y: b.y }]));
       return;
     }
