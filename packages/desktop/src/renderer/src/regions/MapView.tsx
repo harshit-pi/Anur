@@ -5,7 +5,7 @@ import {
   servicesUsed,
 } from "../icons/services/index.tsx";
 import { ChevronDownIcon } from "./Icons.tsx";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   boxSize,
   mapLayout,
@@ -904,7 +904,8 @@ export function MapView({
         x,
         y: p.y - lane / 2,
         w: own,
-        ...(own < p.w ? { laneX: p.x - p.w / 2 + 10 } : {}),
+        // The title's lane reads down from its box's left edge, not centred on a wider slot.
+        ...(own < p.w && p.side !== 0 ? { laneX: p.x - p.w / 2 + 10 } : {}),
         h: p.h - lane,
         side: p.side,
         ...(p.row !== undefined ? { row: p.row } : {}),
@@ -966,6 +967,18 @@ export function MapView({
   ]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
+
+  // A box's drawn height, by section index: a name that wraps makes it taller than
+  // the layout's estimate, and the lane under it must start below it.
+  const [drawnH, setDrawnH] = useState<ReadonlyMap<number, number>>(new Map());
+  useLayoutEffect(() => {
+    const els = host.current?.querySelectorAll<HTMLElement>(".map-box[data-section]") ?? [];
+    const next = new Map<number, number>();
+    for (const el of els) next.set(Number(el.dataset.section), el.offsetHeight);
+    setDrawnH((was) =>
+      was.size === next.size && [...next].every(([k, v]) => was.get(k) === v) ? was : next,
+    );
+  });
 
   const startChild = useRef(childOnOpen);
   useEffect(() => {
@@ -1977,7 +1990,10 @@ export function MapView({
             <div
               key={`lane:${b.id}`}
               className="map-lane"
-              style={{ left: b.laneX ?? b.x - b.w / 2 + 10, top: b.y + b.h / 2 + 6 }}
+              style={{
+                left: b.laneX ?? b.x - b.w / 2 + 10,
+                top: b.y + Math.max(b.h, drawnH.get(b.index) ?? 0) / 2 + 6,
+              }}
             >
               {b.lane.map((pl) =>
                 pl.kind === "group" ? (
