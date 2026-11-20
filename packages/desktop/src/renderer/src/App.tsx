@@ -1108,7 +1108,8 @@ export function App() {
   }, [tourStep]);
   const endTour = useCallback(() => {
     setTourStep(null);
-    setCenterView("page");
+    // Back to the view picked in Settings, where the person works.
+    setCenterView(loadDocView(window.localStorage));
     void anur.call("tour:done", {});
   }, []);
   const toggle = useCallback((side: Side) => {
