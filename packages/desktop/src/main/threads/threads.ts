@@ -1011,6 +1011,13 @@ export class Threads {
       items,
       options: this.optionsOf(thread, this.agentOf(thread, lines)),
       agent: this.agentOf(thread, lines),
+      turnAgents: Object.fromEntries(
+        lines.flatMap((l) =>
+          l.kind === "turn" && l.event === "start" && l.agent && isAgentId(l.agent.name)
+            ? [[l.turn, l.agent.name] as const]
+            : [],
+        ),
+      ),
       tokens: tokensOf(lines),
       purpose: start.purpose ?? null,
       explores: start.explores ?? null,

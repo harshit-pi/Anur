@@ -2171,33 +2171,6 @@ export function MapView({
                 ) : (
                   <span className="map-box-name">{b.heading}</span>
                 )}
-                {b.chats?.length ? (
-                  <button
-                    type="button"
-                    className="map-chats"
-                    title={
-                      b.chats.length === 1
-                        ? `A thread here: ${b.chats[0]?.title ?? ""}`
-                        : `${String(b.chats.length)} threads here`
-                    }
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      clickedAt.current = Date.now();
-                      onSelect(b.index);
-                      const only = b.chats?.length === 1 ? b.chats[0] : undefined;
-                      picked.current = only?.id ?? null;
-                      if (only)
-                        window.dispatchEvent(
-                          new CustomEvent("anur:open-thread", { detail: { thread: only.id } }),
-                        );
-                    }}
-                  >
-                    💬 {b.chats.length}
-                  </button>
-                ) : null}
                 {b.outLinks ? (
                   <button
                     type="button"

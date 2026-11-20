@@ -369,6 +369,8 @@ export const ThreadView = z.object({
   /** When it started (ISO). */
   startedAt: z.string().optional(),
   agent: AgentIdSchema,
+  /** The agent each turn ran on, by turn: a thread switched to another agent keeps the earlier replies' marks. */
+  turnAgents: z.record(z.string(), AgentIdSchema).optional(),
 });
 export type ThreadView = z.infer<typeof ThreadView>;
 

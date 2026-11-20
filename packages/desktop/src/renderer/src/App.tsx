@@ -864,9 +864,10 @@ export function App() {
       }, 60);
     }, 60);
   }, []);
-  /** Ask (4.8): a thread on the doc's title, whose text is the whole doc. */
+  /** The ◆ in the tab bar: Think on the whole space, ready to ask. */
   const ask = useCallback(() => {
-    thinkOn(0);
+    window.dispatchEvent(new CustomEvent(SCOPE_EVENT, { detail: { scope: "folder" } }));
+    thinkOn(null);
   }, [thinkOn]);
   /**
    * A section added on the map: a heading one level under `parent`, after
@@ -1340,7 +1341,7 @@ export function App() {
         mapOnly={selected === SYSTEM_TAB}
         space={folder !== null}
         onView={setCenterView}
-        onAsk={doc && sections ? ask : null}
+        onAsk={folder ? ask : null}
       />
       <Ribbon
         files={folder !== null}
@@ -1587,7 +1588,7 @@ export function App() {
               }
             : null
         }
-        onAsk={doc && sections ? ask : null}
+        onAsk={folder ? ask : null}
         onSystem={engineeringOn ? openSystem : null}
       />
       {settings ? (

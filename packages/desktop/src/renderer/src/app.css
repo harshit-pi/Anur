@@ -5835,22 +5835,6 @@ button.file-card-name:hover {
   text-decoration: underline;
 }
 
-.map-chats {
-  flex: none;
-  margin-left: 8px;
-  padding: 0 7px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--hover);
-  color: var(--graphite);
-  font: 600 11px/18px var(--font-ui);
-  cursor: pointer;
-}
-
-.map-chats:hover {
-  color: var(--ink);
-}
-
 .map-lane {
   position: absolute;
   display: flex;
@@ -6962,7 +6946,6 @@ button.file-card-name:hover {
   color: var(--sheet);
 }
 
-.map .map-box.title .map-chats,
 .map .map-box.title .map-linkcount {
   background: var(--sheet);
   color: var(--ink);

@@ -157,15 +157,15 @@ export const SortIcon = (p: IconProps) => (
   </Svg>
 );
 
-/** Anur's mark, the app icon's rounded diamond: the agent, on the whole doc. */
+/** Anur's mark, the app icon's rounded diamond, about as wide as the marks beside it. */
 export const AnurIcon = (p: IconProps) => (
   <Svg {...p}>
     <rect
-      x="4.2"
-      y="4.2"
-      width="7.6"
-      height="7.6"
-      rx="1.6"
+      x="2.7"
+      y="2.7"
+      width="10.6"
+      height="10.6"
+      rx="2.2"
       transform="rotate(45 8 8)"
       fill="currentColor"
       stroke="none"
