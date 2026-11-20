@@ -6881,3 +6881,13 @@ button.file-card-name:hover {
 .think-pickers .think-option:has(select[aria-label="Agent"]) {
   flex: none;
 }
+
+/* A thread's header stays at the top of Think while its chat scrolls under it. */
+.right-main .think-head {
+  position: sticky;
+  top: -16px;
+  z-index: 4;
+  margin: -16px -16px 6px;
+  padding: 16px 16px 8px;
+  background: var(--sheet);
+}
