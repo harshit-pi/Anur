@@ -5950,15 +5950,13 @@ button.file-card-name:hover {
   background: var(--hover);
 }
 
+/* A thread: the dashed line it hangs on, as on the map. */
 .map-key.thread {
-  width: auto;
-  height: auto;
+  width: 16px;
+  height: 0;
   border: 0;
-  font: italic 12px var(--font-doc);
-}
-
-.map-key.thread::before {
-  content: "Italic";
+  border-top: 1.5px dashed var(--slate);
+  border-radius: 0;
 }
 
 /*
