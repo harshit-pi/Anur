@@ -9,6 +9,11 @@ describe("actionPrompt build", () => {
     expect(prompt).toContain("only when there is no earlier one");
   });
 
+  it("moves the built line after the last point once every point is covered", () => {
+    const prompt = actionPrompt("build", "Findings", "");
+    expect(prompt).toContain('move the section\'s "built" line to the end, after the last point');
+  });
+
   it("leaves Check read-only, with no earlier-doc rule", () => {
     expect(actionPrompt("check", "Findings", "")).not.toContain("earlier Build");
   });
