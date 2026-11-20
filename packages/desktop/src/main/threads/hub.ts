@@ -1,5 +1,5 @@
 import path from "node:path";
-import { utilityProcess, type UtilityProcess } from "electron";
+import { app, utilityProcess, type UtilityProcess } from "electron";
 import type { AgentId } from "../../shared/agents.ts";
 import type { AgentStatus } from "../../shared/ipc-contract.ts";
 import type { AgentAuth, SessionOption, ToHost, ToMain } from "../../agent/protocol.ts";
@@ -103,6 +103,13 @@ export class AgentHub {
     const proc = utilityProcess.fork(this.entry, [], {
       serviceName: "Anur agent host",
       stdio: "pipe",
+      // Where agents' own files live, such as Kiro's session bindings.
+      // The app itself, not the host's helper: hooks installed in agents name main's.
+      env: {
+        ...process.env,
+        ANUR_USER_DATA: app.getPath("userData"),
+        ANUR_APP_EXEC: process.execPath,
+      },
     });
     proc.stdout?.on("data", (d: Buffer) => {
       process.stdout.write(`[agent host] ${d.toString()}`);

@@ -3,6 +3,19 @@ import { PreviewPart } from "@anur/core";
 import { AGENT_IDS } from "./agents.ts";
 
 const AgentIdSchema = z.enum(AGENT_IDS);
+
+/** An agent in Settings → Agents: switched on or not, and whether it can run here. */
+export const AgentRow = z.object({
+  id: AgentIdSchema,
+  name: z.string(),
+  on: z.boolean(),
+  /** Installed, and new enough; false shows `fix` and the switch can't turn on. */
+  ready: z.boolean(),
+  version: z.string().nullable(),
+  /** What to do so it can run, such as "Run kiro-cli update". */
+  fix: z.string().nullable(),
+});
+export type AgentRow = z.infer<typeof AgentRow>;
 import { INSERT_IDS } from "./insert-items.ts";
 
 /**
@@ -602,6 +615,16 @@ export const ipcContract = {
     ]),
   },
   /** Settings main acts on (2.25): app-wide ones, and whether this window's folder commits `.anur/`. */
+  /** The agents Anur can run, each switched on or off, with what it needs to run (Settings → Agents). */
+  "agents:list": {
+    request: z.object({}).strict(),
+    response: z.object({ agents: z.array(AgentRow) }),
+  },
+  /** Switch an agent on, installing Anur into it, or off, removing it. */
+  "agents:set": {
+    request: z.object({ id: AgentIdSchema, on: z.boolean() }).strict(),
+    response: z.object({ agents: z.array(AgentRow), error: z.string().nullable() }),
+  },
   "settings:get": {
     request: z.object({}).strict(),
     response: z.object({
@@ -1808,6 +1831,8 @@ export const ipcEvents = {
   }),
   /** Someone's people note changed in the open folder, this Mac's own included: read the list again. */
   "people:changed": z.object({}),
+  /** An agent was switched on or off, in any window. */
+  "agents:changed": z.object({}),
   /** The open doc changed outside Anur: its new text, or that it is gone or no longer readable. */
   "doc:changed": z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("changed"), path: z.string(), text: z.string(), hash: z.string() }),

@@ -1421,6 +1421,7 @@ export class Threads {
           command: "/usr/bin/env",
           args: ["ELECTRON_RUN_AS_NODE=1", this.d.node, this.d.hookScript, config],
         },
+        config,
         anurDir,
         anurDirs,
         copies: this.copiesOf(thread),

@@ -66,3 +66,23 @@ export async function claudeVersion(claude: string): Promise<string | null> {
     return null;
   }
 }
+
+/** Where `kiro-cli` is, or null when Kiro CLI isn't installed. */
+export async function findKiro(pathEnv: string): Promise<string | null> {
+  const forced = process.env.ANUR_KIRO_CLI;
+  if (forced) return (await executable(forced)) ? forced : null;
+  const candidates = [
+    ...pathEnv
+      .split(path.delimiter)
+      .filter(Boolean)
+      .map((d) => path.join(d, "kiro-cli")),
+    path.join(os.homedir(), ".local", "bin", "kiro-cli"),
+    "/opt/homebrew/bin/kiro-cli",
+    "/usr/local/bin/kiro-cli",
+  ];
+  for (const c of candidates) if (await executable(c)) return c;
+  return null;
+}
+
+/** "kiro-cli 3.5.0" → "3.5.0". */
+export const kiroVersion = claudeVersion;

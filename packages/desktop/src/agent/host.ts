@@ -5,7 +5,7 @@ import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { AGENTS, type AgentId } from "../shared/agents.ts";
 import type { AgentAdapter } from "./adapters.ts";
-import { checkedIn, hookSaw } from "./check-log.ts";
+import { checkedIn, hookSaw, toolsSeen } from "./check-log.ts";
 import type { Launch } from "./adapters.ts";
 import type {
   AgentAuth,
@@ -101,6 +101,8 @@ export class AgentHost {
   private readonly warming = new Set<string>();
   /** Each session's hook log, to match its tool calls against. */
   private readonly hookLogs = new Map<string, string>();
+  /** Tool calls each Kiro session finished, matched by count against the hook log. */
+  private readonly callsDone = new Map<string, number>();
   /** Each thread's chosen mode and model, applied to its session whenever one starts. */
   private readonly chosen = new Map<string, Map<string, string>>();
   /** A sign-in running for an agent. */
@@ -192,7 +194,7 @@ export class AgentHost {
     const adapter = this.env.adapters[agent];
     if (!adapter)
       return this.fail(agent, AGENTS[agent].why ?? `${AGENTS[agent].name} can't run threads yet.`);
-    const failed = selfTest(this.env.node, this.env.nodeEnv, this.env.hook);
+    const failed = selfTest(this.env.node, this.env.nodeEnv, this.env.hook, adapter.hookFlavor);
     if (failed)
       return this.fail(
         agent,
@@ -252,6 +254,7 @@ export class AgentHost {
         fs: { readTextFile: false, writeTextFile: false },
         terminal: false,
         auth: { terminal: true },
+        ...(adapter.clientMeta ? { _meta: adapter.clientMeta } : {}),
       },
     });
     const signIns = (init.authMethods ?? []).flatMap((m) => {
@@ -441,7 +444,12 @@ export class AgentHost {
     sessionId: string,
     options: unknown,
   ): Promise<void> {
-    if (!(await checkedIn(spec.hookLog, sessionId))) {
+    const adapter = this.env.adapters[spec.agent];
+    await adapter?.bindSession?.(sessionId, spec.guard);
+    // Kiro runs its start hook with the session's first prompt, not before: its
+    // check-in is checked with each finished tool call instead (matchCall).
+    const later = adapter?.hookFlavor === "kiro";
+    if (!later && !(await checkedIn(adapter?.startLog ?? spec.hookLog, sessionId))) {
       await conn.agent
         .request(acp.methods.agent.session.close, { sessionId })
         .catch(() => undefined);
@@ -704,7 +712,16 @@ export class AgentHost {
     toolUse: string,
   ): Promise<void> {
     const log = this.hookLogs.get(sessionId);
-    if (!log || (await hookSaw(log, toolUse))) return;
+    if (!log) return;
+    const adapter = this.env.adapters[agent];
+    if (adapter?.hookFlavor === "kiro") {
+      // Kiro's hook input names no call: every finished call needs one the hook saw.
+      const done = (this.callsDone.get(sessionId) ?? 0) + 1;
+      this.callsDone.set(sessionId, done);
+      const start = adapter.startLog;
+      const started = !start || (await checkedIn(start, sessionId, 2000));
+      if (started && (await toolsSeen(log, sessionId)) >= done) return;
+    } else if (await hookSaw(log, toolUse)) return;
     const reason =
       "A tool call ran without passing through Anur's hook, so the turn stopped and threads are off until the check passes again.";
     const c = this.connected(agent);

@@ -8,7 +8,7 @@ import {
   keepsAnurOut,
 } from "@anur/core";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
-import { DEFAULT_AGENT, isAgentId, type AgentId } from "../shared/agents.ts";
+import { AGENTS, DEFAULT_AGENT, isAgentId, type AgentId } from "../shared/agents.ts";
 import { DEFAULT_FLAGS, flagsFrom, type FeatureFlags } from "../shared/features.ts";
 
 /**
@@ -22,6 +22,8 @@ export type AppSettings = {
   features: FeatureFlags;
   /** The agent new threads run on. */
   defaultAgent: AgentId;
+  /** The agents switched on in Settings → Agents; none leaves Think asking for one. */
+  agents: AgentId[];
   /** Use agents' edits as they land, instead of proposing them; off by default. */
   autoApply: boolean;
   /** Download updates and install them on quit by themselves; on by default. */
@@ -39,6 +41,7 @@ export type AppSettings = {
 const DEFAULTS: AppSettings = {
   features: { ...DEFAULT_FLAGS },
   defaultAgent: DEFAULT_AGENT,
+  agents: [DEFAULT_AGENT],
   autoApply: false,
   autoUpdate: true,
   sessionLimit: 8,
@@ -69,6 +72,7 @@ export class AppSettingsStore {
       this.current = {
         features: flagsFrom(raw.features, { sectionHistory: raw.sectionHistory }),
         defaultAgent: isAgentId(raw.defaultAgent) ? raw.defaultAgent : DEFAULT_AGENT,
+        agents: agentsFrom(raw.agents),
         autoApply: raw.autoApply === true,
         autoUpdate: raw.autoUpdate !== false,
         sessionLimit: sessionLimitOf(raw.sessionLimit),
@@ -116,4 +120,10 @@ export async function setCommitsAnur(folder: string, commit: boolean): Promise<v
   const next = gitignoreCommitting(now, commit);
   // Keeping `.anur/` out of git still commits its decisions (18.9).
   await writeFile(file, commit ? next : (gitignoreKeepingDecisions(next) ?? next));
+}
+
+/** Saved agent switches: known agents that can run threads; none saved is Claude Code alone. */
+function agentsFrom(raw: unknown): AgentId[] {
+  if (!Array.isArray(raw)) return [DEFAULT_AGENT];
+  return [...new Set(raw.filter((x): x is AgentId => isAgentId(x) && AGENTS[x].runsThreads))];
 }

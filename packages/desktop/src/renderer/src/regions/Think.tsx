@@ -13,7 +13,7 @@ import type {
   ThreadView,
   PreviewView,
 } from "../../../shared/ipc-contract.ts";
-import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
+import { AGENTS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { listOf, stepOf } from "./step-label.ts";
 import { AGENT_SHORT, AgentMark } from "./AgentMark.tsx";
@@ -851,6 +851,8 @@ export function Think({
   }, []);
   /** The agent a new thread runs on: the default from settings, unless picked here. */
   const [newAgent, setNewAgent] = useState<AgentId>("claude-code");
+  /** The agents switched on in Settings → Agents; null until read. */
+  const [agentsOn, setAgentsOn] = useState<AgentId[] | null>(null);
   /** A new thread's mode and model: the agent's choices, as last seen, with the person's picks. */
   const [newChoices, setNewChoices] = useState<SessionOption[]>([]);
   /** The mode a Build started now runs in, named on its button: it acts as that mode does. */
@@ -1015,12 +1017,28 @@ export function Think({
   }, [docPath]);
 
   useEffect(() => {
-    void anur.call("settings:get", {}).then((s) => {
-      setNewAgent(s.defaultAgent);
-    });
     void anur.call("agent:status", { connect: false }).then(noteStatus);
     return anur.on("agent:status", noteStatus);
   }, [noteStatus]);
+  // The agents on, and the default among them: read again whenever one is switched.
+  useEffect(() => {
+    const read = () => {
+      void Promise.all([anur.call("agents:list", {}), anur.call("settings:get", {})]).then(
+        ([a, s]) => {
+          const on = a.agents.filter((r) => r.on).map((r) => r.id);
+          setAgentsOn(on);
+          setNewAgent(on.includes(s.defaultAgent) ? s.defaultAgent : (on[0] ?? s.defaultAgent));
+        },
+      );
+    };
+    read();
+    window.addEventListener("anur:settings-changed", read);
+    const off = anur.on("agents:changed", read);
+    return () => {
+      window.removeEventListener("anur:settings-changed", read);
+      off();
+    };
+  }, []);
 
   // A section's threads: those on it, and those whose choices or planned
   // actions the map draws under it, so the panel never says "no threads"
@@ -2277,6 +2295,7 @@ export function Think({
               <>
                 <AgentPicker
                   value={thread.agent}
+                  agents={agentsOn ?? []}
                   disabled={thread.busy}
                   onChange={(next) => {
                     if (isDraft) {
@@ -2802,42 +2821,63 @@ export function Think({
             </button>
           </div>
         ) : null}
-        {signedOut(newAgent) ?? (
-          <Composer
-            placeholder={
-              !writable
-                ? "Threads need a folder Anur can write to"
-                : scope?.value === "folder"
-                  ? `Ask about everything in ${scope.folderName}…`
-                  : scope?.value === "doc" || section.index === 0
-                    ? "Ask about this doc…"
-                    : `Ask about this ${noun}…`
-            }
-            chip={scope ? <ScopeChip scope={scope} section={section} disabled={!!branch} /> : null}
-            sendLabel="Start thread"
-            {...composerAttach}
-            pickers={
-              <>
-                <AgentPicker value={newAgent} disabled={!writable} onChange={setNewAgent} />
-                {newChoices.map((o) => (
-                  <OptionPicker
-                    key={o.id}
-                    option={o}
-                    disabled={!writable}
-                    onChange={(value) => {
-                      setNewChoices((all) =>
-                        all.map((x) => (x.id === o.id ? { ...x, current: value } : x)),
-                      );
-                    }}
-                  />
-                ))}
-              </>
-            }
-            busy={false}
-            disabled={!writable || !AGENTS[newAgent].runsThreads}
-            onSend={(m) => start(m)}
-          />
-        )}
+        {agentsOn?.length === 0 ? (
+          <div className="think-no-agent" role="group" aria-label="No agent">
+            <p>Turn on an agent to ask about this.</p>
+            <button type="button" className="think-button" onClick={openAgents}>
+              Turn on an agent
+            </button>
+          </div>
+        ) : null}
+        {agentsOn?.length === 0
+          ? null
+          : (signedOut(newAgent) ?? (
+              <Composer
+                placeholder={
+                  !writable
+                    ? "Threads need a folder Anur can write to"
+                    : scope?.value === "folder"
+                      ? `Ask about everything in ${scope.folderName}…`
+                      : scope?.value === "doc" || section.index === 0
+                        ? "Ask about this doc…"
+                        : `Ask about this ${noun}…`
+                }
+                chip={
+                  scope ? <ScopeChip scope={scope} section={section} disabled={!!branch} /> : null
+                }
+                sendLabel="Start thread"
+                {...composerAttach}
+                pickers={
+                  <>
+                    <AgentPicker
+                      value={newAgent}
+                      agents={agentsOn ?? []}
+                      disabled={!writable}
+                      onChange={setNewAgent}
+                    />
+                    {newChoices.map((o) => (
+                      <OptionPicker
+                        key={o.id}
+                        option={o}
+                        // One agent on, so no agent menu: the model menu leads to the others.
+                        onMore={
+                          o.id === "model" && (agentsOn ?? []).length <= 1 ? openAgents : null
+                        }
+                        disabled={!writable}
+                        onChange={(value) => {
+                          setNewChoices((all) =>
+                            all.map((x) => (x.id === o.id ? { ...x, current: value } : x)),
+                          );
+                        }}
+                      />
+                    ))}
+                  </>
+                }
+                busy={false}
+                disabled={!writable || !AGENTS[newAgent].runsThreads}
+                onSend={(m) => start(m)}
+              />
+            ))}
       </div>
     </div>
   );
@@ -3668,40 +3708,60 @@ function PlanCard({
   );
 }
 
-/** Which agent a thread runs on. Agents that can't run threads yet are listed, and say why. */
+/** Settings → Agents, where agents are switched on and off. */
+const openAgents = () => {
+  window.dispatchEvent(new CustomEvent("anur:open-settings", { detail: { section: "agent" } }));
+};
+
+/**
+ * Which agent a thread runs on, among those switched on. With one agent on
+ * there's nothing to pick, so it isn't shown; the menu ends in More agents….
+ */
 function AgentPicker({
   value,
+  agents,
   disabled,
   onChange,
 }: {
   value: AgentId;
+  agents: readonly AgentId[];
   disabled: boolean;
   onChange: (agent: AgentId) => void;
 }) {
+  // A thread on an agent since switched off still names it.
+  const shown = agents.includes(value) ? agents : [value, ...agents];
+  if (shown.length <= 1) return null;
   return (
     <label className="think-option">
       <span className="think-pick" title={AGENTS[value].name}>
+        <AgentMark agent={value} />
         {AGENT_SHORT[value]}
       </span>
       <select
         aria-label="Agent"
         value={value}
         disabled={disabled}
-        title={AGENTS[value].why ?? undefined}
         onChange={(e) => {
-          const next = AGENT_IDS.find((id) => id === e.target.value);
+          if (e.target.value === MORE) {
+            openAgents();
+            return;
+          }
+          const next = shown.find((id) => id === e.target.value);
           if (next) onChange(next);
         }}
       >
-        {AGENT_IDS.map((id) => (
-          <option key={id} value={id} disabled={!AGENTS[id].runsThreads}>
-            {AGENTS[id].runsThreads ? AGENTS[id].name : `${AGENTS[id].name} (not yet)`}
+        {shown.map((id) => (
+          <option key={id} value={id}>
+            {AGENTS[id].name}
           </option>
         ))}
+        <option value={MORE}>More agents…</option>
       </select>
     </label>
   );
 }
+
+const MORE = "__more_agents";
 
 type ThreadState = "needs-you" | "running" | "done";
 
@@ -4217,10 +4277,13 @@ function OptionPicker({
   option,
   disabled,
   onChange,
+  onMore = null,
 }: {
   option: SessionOption;
   disabled: boolean;
   onChange: (value: string) => void;
+  /** A last item that opens Settings → Agents, when no agent menu is shown. */
+  onMore?: (() => void) | null;
 }) {
   return (
     <label className="think-option">
@@ -4233,6 +4296,10 @@ function OptionPicker({
         disabled={disabled}
         title={option.choices.find((c) => c.value === option.current)?.description ?? undefined}
         onChange={(e) => {
+          if (e.target.value === MORE) {
+            onMore?.();
+            return;
+          }
           onChange(e.target.value);
         }}
       >
@@ -4241,6 +4308,7 @@ function OptionPicker({
             {c.name}
           </option>
         ))}
+        {onMore ? <option value={MORE}>More agents…</option> : null}
       </select>
     </label>
   );

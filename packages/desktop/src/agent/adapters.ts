@@ -1,4 +1,6 @@
 import { THREAD_SESSION_ENV } from "@anur/system";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import type { AgentId } from "../shared/agents.ts";
 
 /**
@@ -13,6 +15,8 @@ import type { AgentId } from "../shared/agents.ts";
 export type Guard = {
   /** The hook program, run before every tool call and at session start. */
   hook: { command: string; args: string[] };
+  /** The hook's config for this thread, which `hook` names as its last argument. */
+  config: string;
   /** `.anur/`, closed to the agent's own file tools. */
   anurDir: string;
   /** Every home's `.anur/`, closed the same way (18.15.2). */
@@ -37,6 +41,81 @@ export interface AgentAdapter {
   launch(): Promise<Launch | { fail: string }>;
   /** The session's `_meta`: Anur's guard in the agent's own settings. */
   sessionMeta(guard: Guard): Record<string, unknown>;
+  /** The hook's form: Claude Code's, or Kiro's (its tool names, one global hook, exit 2). */
+  hookFlavor?: "claude" | "kiro";
+  /** Extra `clientCapabilities._meta` for initialize, such as Kiro's switch for its hooks. */
+  clientMeta?: Record<string, unknown>;
+  /** Where the session's start hook checks in, when not the thread's own log. */
+  startLog?: string;
+  /** Tell the hook which thread a session is, once the agent has named the session. */
+  bindSession?(sessionId: string, guard: Guard): Promise<void>;
+}
+
+/** Kiro CLI's minimum: hooks in ~/.kiro/hooks/ run in V3, from 3.0 (spike, 2026-11-19). */
+export const KIRO_MIN = "3.0.0";
+
+/** Whether version `a` is at least `b`, both x.y.z. */
+export function atLeast(a: string, b: string): boolean {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    const x = pa[i] ?? 0;
+    const y = pb[i] ?? 0;
+    if (x !== y) return x > y;
+  }
+  return true;
+}
+
+/**
+ * Kiro, through its own ACP server (`kiro-cli acp`), run as the person's
+ * install and sign-in. Its guard is one global hook Anur installs in
+ * ~/.kiro/hooks/: it acts only in sessions carrying ANUR_KIRO, and finds
+ * each session's thread from the file `bindSession` writes.
+ */
+export function kiro(opts: {
+  /** Anur's folder for Kiro: session bindings and the start check-ins. */
+  dir: string;
+  locate: () => Promise<{ kiro: string | null; version: string | null; path: string }>;
+  /** Whether Anur's hook is in Kiro's global hooks, pointing at this app. */
+  hookInstalled: () => Promise<boolean>;
+}): AgentAdapter {
+  return {
+    id: "kiro",
+    name: "Kiro",
+    adapterVersion: "built-in",
+    hookFlavor: "kiro",
+    // Kiro loads hooks over ACP only when the client asks for them (spike, 2026-11-19).
+    clientMeta: { kiro: { hooks: { enabled: true, v2: true } } },
+    startLog: path.join(opts.dir, "start.jsonl"),
+    async launch() {
+      const found = await opts.locate();
+      if (!found.kiro)
+        return {
+          fail: "Kiro CLI isn't installed. Install it, sign in once with kiro-cli login, then try again.",
+        };
+      if (!found.version || !atLeast(found.version, KIRO_MIN))
+        return { fail: `Kiro CLI ${KIRO_MIN} or later is needed. Run kiro-cli update.` };
+      if (!(await opts.hookInstalled()))
+        return { fail: "Anur's hook isn't in Kiro. Turn Kiro on in Settings → Agents." };
+      await mkdir(path.join(opts.dir, "sessions"), { recursive: true });
+      return {
+        command: found.kiro,
+        args: ["acp", "--agent-engine", "v3", "--auth-method", "cli"],
+        env: { PATH: found.path, ANUR_KIRO: opts.dir, [THREAD_SESSION_ENV]: "1" },
+        version: found.version,
+      };
+    },
+    sessionMeta() {
+      return {};
+    },
+    async bindSession(sessionId, guard) {
+      if (!/^[\w.-]+$/.test(sessionId)) throw new Error(`Kiro named a session oddly: ${sessionId}`);
+      await writeFile(
+        path.join(opts.dir, "sessions", `${sessionId}.json`),
+        JSON.stringify({ config: guard.config }),
+      );
+    },
+  };
 }
 
 /** Claude Code, through its ACP adapter, run as the person's own install. */

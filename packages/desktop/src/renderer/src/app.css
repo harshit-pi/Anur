@@ -6830,3 +6830,41 @@ button.file-card-name:hover {
   outline: 2px solid var(--blue);
   outline-offset: 1px;
 }
+
+/* An agent's mark before its name in Settings → Agents. */
+.settings-row-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  margin-right: 10px;
+}
+
+.settings-row-icon .agent-mark {
+  width: 20px;
+  height: 20px;
+}
+
+.settings-error {
+  margin: 8px 0 0;
+  color: var(--red);
+  font-size: 13px;
+}
+
+/* No agent switched on: where the chat box would be, the way to turn one on. */
+.think-no-agent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--sheet);
+}
+
+.think-no-agent p {
+  margin: 0;
+  color: var(--graphite);
+  font-size: 13px;
+}

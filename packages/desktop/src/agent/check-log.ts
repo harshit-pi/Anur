@@ -35,3 +35,8 @@ export async function checkedIn(log: string, session: string, ms = 8000): Promis
 export async function hookSaw(log: string, toolUse: string): Promise<boolean> {
   return (await entries(log)).some((e) => e.event === "tool" && e.toolUse === toolUse);
 }
+
+/** How many tool calls the hook saw in a session: for agents whose hook input names no call (Kiro). */
+export async function toolsSeen(log: string, session: string): Promise<number> {
+  return (await entries(log)).filter((e) => e.event === "tool" && e.session === session).length;
+}

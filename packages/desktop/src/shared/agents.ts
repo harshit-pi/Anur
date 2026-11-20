@@ -8,13 +8,14 @@
  * ACP adapters offer deny rules and a hook before tool calls.
  */
 
-export const AGENT_IDS = ["claude-code", "codex", "gemini-cli"] as const;
+export const AGENT_IDS = ["claude-code", "kiro", "codex", "gemini-cli"] as const;
 export type AgentId = (typeof AGENT_IDS)[number];
 
 export const DEFAULT_AGENT: AgentId = "claude-code";
 
 export const AGENTS: Record<AgentId, { name: string; runsThreads: boolean; why: string | null }> = {
   "claude-code": { name: "Claude Code", runsThreads: true, why: null },
+  kiro: { name: "Kiro", runsThreads: true, why: null },
   codex: {
     name: "Codex",
     runsThreads: false,

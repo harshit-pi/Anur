@@ -46,6 +46,22 @@ export type ToolCall = {
   cwd?: string;
 };
 
+/** Kiro's built-in tools, as the Claude Code tools the rules know (its search runs in the shell). */
+export function asClaudeCall(call: ToolCall): ToolCall {
+  const names: Record<string, string> = {
+    read_file: "Read",
+    fs_read: "Read",
+    fs_write: "Write",
+    str_replace: "Edit",
+    execute_bash: "Bash",
+  };
+  const name = names[call.tool_name];
+  if (!name) return call;
+  const input = { ...call.tool_input };
+  if (typeof input.path === "string" && input.file_path === undefined) input.file_path = input.path;
+  return { ...call, tool_name: name, tool_input: input };
+}
+
 /** Resolve a path the way the design asks: absolute, symlinks followed where they exist. */
 export type Resolver = (p: string, cwd: string) => string;
 
