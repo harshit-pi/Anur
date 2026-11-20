@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -119,6 +127,34 @@ describe("the Git plugin", () => {
     expect(a.statuses.at(-1)?.lines?.find((l) => l.label === "Last synced")?.value).toBe(
       "just now",
     );
+  }, 60_000);
+
+  it("puts back a branch a cut-off commit left as a stale lock, and says when a commit fails", async () => {
+    const origin = temp("anur-git-lock-origin-");
+    git(origin, "init", "-q", "--bare", "-b", "main");
+    const sam = temp("anur-git-lock-sam-");
+    writeFileSync(path.join(sam, "plan.md"), "# Plan\n");
+    const a = open(sam, "Sam");
+    await settle();
+    git(sam, "remote", "add", "origin", origin);
+    expect(await a.act("syncNow")).toBe("Synced with GitHub.");
+    const head = git(sam, "rev-parse", "HEAD");
+    // As in iCloud: the commit's rename never happened; the branch is only its lock.
+    const lock = path.join(sam, ".git/refs/heads/main.lock");
+    writeFileSync(lock, `${head}\n`);
+    rmSync(path.join(sam, ".git/refs/heads/main"));
+    writeFileSync(path.join(sam, "plan.md"), "# Plan\n\nMore.\n");
+    // A fresh lock may be git at work: left alone, and the failed commit is the reason given.
+    expect(await a.act("syncNow")).toMatch(/main\.lock/);
+    expect(a.statuses.at(-1)).toMatchObject({ text: "Sync failed" });
+    expect(existsSync(lock)).toBe(true);
+    // Minutes old, nothing holds it: the branch comes back and the sync goes through.
+    const old = new Date(Date.now() - 30 * 60_000);
+    utimesSync(lock, old, old);
+    expect(await a.act("syncNow")).toBe("Synced with GitHub.");
+    expect(existsSync(lock)).toBe(false);
+    expect(git(sam, "rev-parse", "HEAD~1")).toBe(head);
+    expect(git(origin, "rev-parse", "main")).toBe(git(sam, "rev-parse", "HEAD"));
   }, 60_000);
 
   it("never makes a space that holds repos into a repo, nor syncs one inside another repo", async () => {
