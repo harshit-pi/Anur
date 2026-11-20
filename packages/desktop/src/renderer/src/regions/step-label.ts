@@ -45,3 +45,43 @@ export function listOf(names: string[], max = 2): string {
   if (u.length <= max) return u.join(" and ");
   return `${u.slice(0, max).join(", ")} and ${String(u.length - max)} more`;
 }
+
+/** Anur's own tools, named for the person rather than by their ids: done, and while running. */
+export const TOOL_NAMES: Record<string, { done: string; doing: string }> = {
+  anur_name_thread: { done: "Named the thread", doing: "Naming the thread" },
+  anur_list_inputs: {
+    done: "Looked at the section's inputs",
+    doing: "Looking at the section's inputs",
+  },
+  anur_read_input: { done: "Read an input", doing: "Reading an input" },
+  anur_report_check: { done: "Reported the check", doing: "Reporting the check" },
+  anur_offer_options: { done: "Offered options", doing: "Offering options" },
+  anur_propose_action: { done: "Proposed an action", doing: "Proposing an action" },
+  anur_propose_preview: { done: "Proposed an edit", doing: "Proposing an edit" },
+  anur_note_decision: { done: "Noted a decision", doing: "Noting a decision" },
+  anur_drop_decision: { done: "Took back a decision", doing: "Taking back a decision" },
+  anur_propose_finding: { done: "Proposed a finding", doing: "Proposing a finding" },
+  anur_search_sections: { done: "Searched the doc", doing: "Searching the doc" },
+  anur_read_section: { done: "Read a section", doing: "Reading a section" },
+  anur_section_bundle: {
+    done: "Read what a thread starts with",
+    doing: "Reading what a thread starts with",
+  },
+  anur_outline: { done: "Read the doc's headings", doing: "Reading the doc's headings" },
+  anur_links: { done: "Looked up the section's links", doing: "Looking up the section's links" },
+  anur_list_threads: { done: "Looked at the doc's threads", doing: "Looking at the doc's threads" },
+  anur_create_doc: { done: "Made a doc", doing: "Making a doc" },
+  anur_open: { done: "Opened a doc", doing: "Opening a doc" },
+};
+
+/** An Anur tool's name, done or running; null for any other tool. */
+export function ownToolName(title: string, when: "done" | "doing"): string | null {
+  const own = /^mcp__anur__(\w+)/.exec(title)?.[1];
+  if (!own) return null;
+  return TOOL_NAMES[own]?.[when] ?? own.replace(/^anur_/, "").replace(/_/g, " ");
+}
+
+/** What a running step says: an Anur tool by what it does, anything else as it came. */
+export function doingOf(title: string): string {
+  return ownToolName(title, "doing") ?? title;
+}
