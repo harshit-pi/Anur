@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { listOf, stepOf } from "./step-label.ts";
+import { doingOf, listOf, stepOf } from "./step-label.ts";
 
 const DIR = "/private/tmp/x/walk/Tally";
 
@@ -29,5 +29,14 @@ describe("listOf", () => {
   it("names two, then counts the rest", () => {
     expect(listOf(["a", "b"])).toBe("a and b");
     expect(listOf(["a", "b", "c", "a"])).toBe("a, b and 1 more");
+  });
+});
+
+describe("doingOf", () => {
+  it("names a running Anur tool by what it does, never by its id", () => {
+    expect(doingOf("mcp__anur__anur_propose_action")).toBe("Proposing an action");
+    expect(doingOf("mcp__anur__anur_note_decision")).toBe("Noting a decision");
+    expect(doingOf("mcp__anur__anur_new_thing")).toBe("new thing");
+    expect(doingOf("Read working copy of Anur.md")).toBe("Read working copy of Anur.md");
   });
 });

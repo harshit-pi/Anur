@@ -3101,6 +3101,22 @@ body.resizing * {
   margin-bottom: 4px;
 }
 
+/* A run action's title opens its Build, quietly: it reads as the title. */
+.think-action-run {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.think-action-run:hover {
+  color: var(--blue);
+}
+
 .think-offer-text {
   max-height: 9em;
   overflow: hidden;

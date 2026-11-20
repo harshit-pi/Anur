@@ -15,7 +15,7 @@ import type {
 } from "../../../shared/ipc-contract.ts";
 import { AGENTS, runsThreads, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
-import { listOf, stepOf } from "./step-label.ts";
+import { doingOf, listOf, ownToolName, stepOf } from "./step-label.ts";
 import { AGENT_SHORT, AgentMark } from "./AgentMark.tsx";
 import { useFeatures } from "../features.ts";
 import { formatTokens } from "../layout/tokens.ts";
@@ -1354,8 +1354,9 @@ export function Think({
         setError(r.reason);
         return;
       }
+      // The Build runs beside you: the thread you ran it from stays open, and
+      // its action opens the Build when you want it.
       setThreads((ts) => [...ts.filter((t) => t.id !== r.thread.id), r.thread]);
-      setOpen(r.thread.id);
     },
     [tree, docPath, docText, newAgent, newChoices, setThreads],
   );
@@ -2232,9 +2233,24 @@ export function Think({
                   aria-label="Proposed action"
                 >
                   <div className="think-offer-head">
-                    <strong>
-                      <span className="map-pill-icon">{item.run ? "✓" : "▶"}</span> {item.title}
-                    </strong>
+                    {item.run ? (
+                      <button
+                        type="button"
+                        className="think-action-run"
+                        onClick={() => {
+                          if (item.run) setOpen(item.run);
+                        }}
+                      >
+                        <span className="map-pill-icon">
+                          {threads.find((t) => t.id === item.run)?.busy ? "…" : "✓"}
+                        </span>{" "}
+                        {item.title}
+                      </button>
+                    ) : (
+                      <strong>
+                        <span className="map-pill-icon">▶</span> {item.title}
+                      </strong>
+                    )}
                   </div>
                   <div className="think-offer-text">
                     <Markdown text={item.what} />
@@ -3171,7 +3187,7 @@ function runningStep(items: ThreadItem[]): string | null {
   return last?.kind === "tool" &&
     !/^(completed|failed)$/.test(last.status) &&
     !HOUSEKEEPING.test(last.title)
-    ? last.title
+    ? doingOf(last.title)
     : null;
 }
 
@@ -3880,26 +3896,12 @@ function withBranches(threads: ThreadView[]): ThreadView[] {
 }
 
 /** Threads as buttons: their question, where they are, and how far they've got. */
-/** Anur's own tools, named for the person rather than by their ids. */
-const OWN_TOOLS: Record<string, string> = {
-  anur_name_thread: "Named the thread",
-  anur_list_inputs: "Looked at the section's inputs",
-  anur_read_input: "Read an input",
-  anur_report_check: "Reported the check",
-  anur_offer_options: "Offered options",
-  anur_propose_action: "Proposed an action",
-  anur_note_decision: "Noted a decision",
-  anur_propose_finding: "Proposed a finding",
-  anur_search_sections: "Searched the doc",
-  anur_read_section: "Read a section",
-  anur_links: "Looked up the section's links",
-};
 
 function toolLabel(title: string): string {
   if (title === "Approve Plan") return "Asked you to approve the plan";
   if (/^Write \S*\/\.claude\/plans\//.test(title)) return "Wrote the plan";
-  const own = /^mcp__anur__(\w+)/.exec(title)?.[1];
-  if (own) return OWN_TOOLS[own] ?? own.replace(/^anur_/, "").replace(/_/g, " ");
+  const own = ownToolName(title, "done");
+  if (own) return own;
   // A service the agent acted in: "Linear: save issue", shown with its mark.
   const service = serviceOf(title);
   if (service) return `${service.name}: ${service.action}`;
