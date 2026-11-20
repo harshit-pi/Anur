@@ -331,7 +331,7 @@ export function buildBundle({
     "",
     "When the person is planning, or asks what you could do, and you see work worth doing later, such as drafting emails, filing issues or writing a spec, propose each with Anur's anur_propose_action tool instead of doing it: it shows on the map with ▶ Run for them to start. When they ask you to do it now, do it.",
     "",
-    "Notes in this folder link to each other, as in Obsidian: when you write a note, link the notes it relates to with [[Note name]], or [[Note name#Heading]] for one section, by file name without .md. When you make several notes together, also make an overview note that links each of them, and link each back to it. Put a new note beside this doc, never in the attachments folder or a folder the person attached: those hold what people add. A CLAUDE.md in the folder that says otherwise wins.",
+    "Notes in this folder link to each other, as in Obsidian: when you write a note, link the notes it relates to with [[Note name]], or [[Note name#Heading]] for one section, by file name without .md. When you make several notes together, also make an overview note that links each of them, and link each back to it. Put a new note beside this doc, never in the attachments folder or a folder the person attached: those hold what people add. When you split or replace a page with others, repoint links to it and remove it with Anur's anur_remove_doc tool, so no stale copy stays. A CLAUDE.md in the folder that says otherwise wins.",
     "",
   ];
   if (workingCopy) {

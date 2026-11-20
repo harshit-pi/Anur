@@ -2311,6 +2311,40 @@ export function Think({
                       })()
                     : null}
                 </div>
+              ) : item.kind === "page-gone" ? (
+                // A page this thread took out (30.43), with the way to bring it back.
+                <div key={i} className="think-changed auto" role="status">
+                  <span>
+                    {item.back
+                      ? item.why === "removed"
+                        ? "Removed, then brought back: "
+                        : "Kept "
+                      : item.why === "removed"
+                        ? "Removed "
+                        : "Skipped "}
+                    <strong>{item.doc}</strong>
+                    {!item.back && item.why === "skipped"
+                      ? ": its section was removed while this ran."
+                      : !item.back
+                        ? ", to the Trash."
+                        : ""}
+                  </span>
+                  {item.back ? null : (
+                    <button
+                      type="button"
+                      className="think-button"
+                      onClick={() => {
+                        void anur
+                          .call("thread:page-back", { thread: thread.id, id: item.id })
+                          .then((r) => {
+                            if (r.kind === "refused") setError(r.reason);
+                          });
+                      }}
+                    >
+                      {item.why === "removed" ? "Undo" : "Keep it"}
+                    </button>
+                  )}
+                </div>
               ) : (
                 <div key={i} className="think-error" role="alert">
                   {item.text}

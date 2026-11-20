@@ -92,6 +92,8 @@ export const MESSAGES = {
   otherCopy: "Anur: that is another thread's working copy, and off limits to this one.",
   searchCopies:
     "Anur: a search from there would read other threads' working copies. Search a folder below it, such as the project you're working in.",
+  removeDoc: (rel: string) =>
+    `Anur: remove ${rel} with Anur's anur_remove_doc tool instead: it goes to the Trash, and the person can bring it back from the thread. Repoint any links to it first.`,
   ownRule: (rule: string, rel: string) =>
     `Your own settings deny this (${rule}), and that holds for the working copy of ${rel} too.`,
 } as const;
@@ -162,6 +164,20 @@ export function decideShell(
   const excludesAnur = EXCLUDES_ANUR.test(cmd);
   if (/\bgit\s+clean\b/.test(cmd) && /\s-[a-zA-Z]*[xX]/.test(cmd) && !excludesAnur)
     return MESSAGES.gitClean;
+
+  // Removing a doc (30.43): through anur_remove_doc, so it goes to the Trash with Undo.
+  for (const part of cmd.split(/[;&|]+/)) {
+    const words = (part.trim().match(/"[^"]*"|'[^']*'|(?:\\ |\S)+/g) ?? []).map((w) =>
+      w.replace(/\\ /g, " "),
+    );
+    if (!/^(rm|unlink|trash)$/.test(words[0] ?? "")) continue;
+    const doc = words
+      .slice(1)
+      .filter((w) => !w.startsWith("-"))
+      .map((w) => resolve(w.replace(/^['"]|['"]$/g, "")))
+      .find((abs) => isDoc(abs, config.folder));
+    if (doc) return MESSAGES.removeDoc(path.relative(config.folder, doc));
+  }
 
   // Other threads' working copies (30.14): named outright, or under a recursive
   // read from a folder that holds them, as "find ~ -exec cat" or "rg secret ~"

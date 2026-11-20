@@ -328,6 +328,25 @@ export const CreatedLine = LineEnvelope.extend({
   undo: z.string().nullable(),
 });
 
+/**
+ * A page a thread took out of the folder (30.43): `removed` when its agent
+ * removed it, as when a split replaces it; `skipped` when a page it made was
+ * for a section removed while it ran. `text` is the page as it was, so the
+ * person can bring it back, even after a restart.
+ */
+export const PageGoneLine = LineEnvelope.extend({
+  kind: z.literal("page-gone"),
+  doc: z.string(),
+  why: z.enum(["removed", "skipped"]),
+  text: z.string(),
+});
+
+/** The person brought a page back from its "page-gone" note. */
+export const PageBackLine = LineEnvelope.extend({
+  kind: z.literal("page-back"),
+  gone: z.string(),
+});
+
 /** The person chose to explore an option before picking: the thread digs into it. */
 export const OptionExploredLine = LineEnvelope.extend({
   kind: z.literal("option-explored"),
@@ -383,6 +402,8 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   RenamedLine,
   CheckLine,
   CreatedLine,
+  PageGoneLine,
+  PageBackLine,
   ProposedLine,
   UsedAllLine,
   FindingLine,
@@ -411,6 +432,8 @@ const KNOWN_KINDS = new Set([
   "renamed",
   "check",
   "created",
+  "page-gone",
+  "page-back",
   "proposed",
   "used-all",
   "finding",
