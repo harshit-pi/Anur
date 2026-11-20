@@ -8,6 +8,10 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    # Reading the code, and the PR's description for its check.
+    permissions:
+      contents: read
+      pull-requests: read
     env:
       # Tests never launch Electron, so CI skips downloading it.
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
@@ -19,10 +23,16 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       # The PR's description fills the template: its sections and a release note.
+      # Read live, not from the event: a re-run after editing the description
+      # would otherwise check the text the run started with.
       - if: github.event_name == 'pull_request'
-        run: node packages/desktop/scripts/pr-description.mjs
+        run: |
+          body="$(gh pr view "$PR" --repo "$REPO" --json body --jq .body)"
+          PR_BODY="$body" node packages/desktop/scripts/pr-description.mjs
         env:
-          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
