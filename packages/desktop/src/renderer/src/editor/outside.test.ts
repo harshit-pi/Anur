@@ -77,7 +77,7 @@ describe("changeWithin", () => {
     const section = "# A\n1\nBuilt\n2\n3\n";
     const moved = "# A\n1\n2\n3\nBuilt\n";
     const c = changeWithin(100, section, moved);
-    expect(c).toEqual({ from: 105, to: 112, insert: "2\n3\nBuilt\n" });
+    expect(c).toEqual({ from: 106, to: 115, insert: "2\n3\nBuilt" });
     if (!c) throw new Error("no change");
     expect(section.slice(0, c.from - 100) + c.insert + section.slice(c.to - 100)).toBe(moved);
   });
