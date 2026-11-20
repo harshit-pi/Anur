@@ -8,6 +8,7 @@ import { FEATURES } from "../../../shared/features.ts";
 import { CloseIcon } from "./Icons.tsx";
 import { type ThemePref, applyTheme, loadTheme, saveTheme } from "./theme-pref.ts";
 import { type PageFont, applyPageFont, loadPageFont, savePageFont } from "./font-pref.ts";
+import { type DocView, loadDocView, saveDocView } from "./doc-view-pref.ts";
 import { type MapStyle, loadMapStyle, saveMapStyle } from "./map-style-pref.ts";
 
 /**
@@ -66,14 +67,14 @@ function Row({
   children,
 }: {
   title: string;
-  detail: string;
+  detail?: string;
   children?: React.ReactNode;
 }) {
   return (
     <div className="settings-row">
       <div className="settings-row-text">
         <div className="settings-row-title">{title}</div>
-        <div className="settings-row-detail">{detail}</div>
+        {detail ? <div className="settings-row-detail">{detail}</div> : null}
       </div>
       {children}
     </div>
@@ -823,6 +824,7 @@ export function Settings({
   };
   const [pageFont, setPageFont] = useState<PageFont>(() => loadPageFont(window.localStorage));
   const [mapStyle, setMapStyle] = useState<MapStyle>(() => loadMapStyle(window.localStorage));
+  const [docView, setDocView] = useState<DocView>(() => loadDocView(window.localStorage));
   const pickPageFont = (f: PageFont) => {
     setPageFont(f);
     savePageFont(window.localStorage, f);
@@ -844,6 +846,25 @@ export function Settings({
               <button type="button" className="settings-button" onClick={onOpenFolder}>
                 {folder ? "Open another folder…" : "Open a folder…"}
               </button>
+            </Row>
+            <Row title="Open docs in">
+              <div className="segmented" role="radiogroup" aria-label="Open docs in">
+                {(["map", "page"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={docView === v}
+                    className="segmented-option"
+                    onClick={() => {
+                      setDocView(v);
+                      saveDocView(window.localStorage, v);
+                    }}
+                  >
+                    {v === "map" ? "Map" : "Page"}
+                  </button>
+                ))}
+              </div>
             </Row>
             <Row
               title="Your name"

@@ -6691,3 +6691,21 @@ button.file-card-name:hover {
   color: var(--blue);
   cursor: default;
 }
+
+/* A new map before it's a file: its one box in the middle, ready for a name. */
+.blank-map {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.blank-map-box {
+  position: static;
+  min-width: 220px;
+  cursor: text;
+}
+
+.blank-map-box .map-rename::placeholder {
+  color: var(--slate);
+}

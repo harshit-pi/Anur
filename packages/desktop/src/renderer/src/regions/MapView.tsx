@@ -239,6 +239,7 @@ export function MapView({
   onRedo,
   writable,
   docs,
+  childOnOpen = false,
 }: {
   docPath: string;
   tree: SectionTree;
@@ -259,6 +260,8 @@ export function MapView({
   writable: boolean;
   /** The folder's docs, to place links to other docs (8.6). */
   docs: readonly string[];
+  /** A map just named with Tab: a box under its title, open for a name. */
+  childOnOpen?: boolean;
 }) {
   const features = useFeatures();
   const host = useRef<HTMLDivElement>(null);
@@ -963,6 +966,17 @@ export function MapView({
   ]);
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
+
+  const startChild = useRef(childOnOpen);
+  useEffect(() => {
+    if (!startChild.current || !writable || !tree.sections[0]) return;
+    startChild.current = false;
+    const path = onAddSection(0, "New section");
+    if (path) {
+      record({ kind: "doc" });
+      freshNew.current = { path, armed: true };
+    }
+  }, [tree, writable, onAddSection]);
 
   // A section made by a key opens for its name once it's in the tree.
   useEffect(() => {
