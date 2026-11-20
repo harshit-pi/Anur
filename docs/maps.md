@@ -35,6 +35,7 @@ Thread    italic text on a line, or 💬 N on a box
 - A choice raised by a running action hangs under its own label, never loose round the section.
 - Fit frames the sections and the choices waiting at the top level, never below 60% (`FIT_MIN`), centred on what it frames (30.27). Opening a map centres on the title at 75% or more (`READABLE`).
 - A new box appears from Tab, Enter, double-clicking empty space, or dragging a box's handle onto empty space. Moving a box never changes the file.
+- The map holds still under the pointer (30.40): while the pointer is on the map, nothing refits, zooms or pans it; when the layout shifts, as when an edit lands, the selected box keeps its place on screen and the map moves around it. With the pointer elsewhere, a map the person hasn't moved refits to show new boxes, as before.
 
 ## What the doc map leaves out
 
@@ -61,6 +62,8 @@ Thread    italic text on a line, or 💬 N on a box
 - A map change that adds a mark adds its row here, or it doesn't ship.
 
 ## History
+
+- 2026-11-20 (30.40): the map holds still when edits land. Found replaying a brainstorm: an edit landed as the person clicked ▶ Run, the map re-laid out and zoomed from 89% to 76%, and the click hit empty space.
 
 - 2026-11-19: links within a doc no longer drawn; Fit frames what matters at a readable zoom (30.27); dashes kept for choices only.
 - 2026-11-19: three kinds on the doc map (Mock 11), choices you can switch or add beside (Anur PR 248).
