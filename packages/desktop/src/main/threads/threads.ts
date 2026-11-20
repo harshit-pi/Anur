@@ -969,6 +969,11 @@ export class Threads {
           items.push({ kind: "tool", turn: live.turn, toolUse, title: t.title, status: t.status });
       if (live.text)
         items.push({ kind: "message", turn: live.turn, role: "agent", text: live.text });
+    } else {
+      // A turn this Mac started, with no end and nothing running: Anur closed during it.
+      const last = lines.findLast((l) => l.kind === "turn");
+      if (last?.kind === "turn" && last.event === "start" && last.dev === this.d.device)
+        items.push({ kind: "error", turn: last.turn, text: "Anur closed during this reply." });
     }
     const reads =
       index >= 0
