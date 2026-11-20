@@ -101,6 +101,8 @@ export class AgentHost {
   private readonly warming = new Set<string>();
   /** Each session's hook log, to match its tool calls against. */
   private readonly hookLogs = new Map<string, string>();
+  /** Each Kiro session's MCP servers and their state, as Kiro last reported them. */
+  private readonly mcpStates = new Map<string, Map<string, string>>();
   /** Tool calls each Kiro session finished, matched by count against the hook log. */
   private readonly callsDone = new Map<string, number>();
   /** Each thread's chosen mode and model, applied to its session whenever one starts. */
@@ -236,6 +238,20 @@ export class AgentHost {
       })
       .onRequest(acp.methods.client.session.requestPermission, ({ params }) =>
         this.askPermission(params),
+      )
+      // Kiro's MCP servers connect in the background; it reports each one's state.
+      .onNotification(
+        "_kiro/mcp/status",
+        (raw: unknown) => raw,
+        ({ params }) => {
+          const p = params as { sessionId?: unknown; servers?: unknown };
+          if (typeof p.sessionId !== "string" || !Array.isArray(p.servers)) return;
+          const states = new Map<string, string>();
+          for (const s of p.servers as { name?: unknown; status?: unknown }[])
+            if (typeof s.name === "string" && typeof s.status === "string")
+              states.set(s.name, s.status);
+          this.mcpStates.set(p.sessionId, states);
+        },
       )
       // ACP's auth extension is unstable, so it is called by name.
       .onNotification(
@@ -462,6 +478,8 @@ export class AgentHost {
     this.report();
     void this.trim();
     this.hookLogs.set(sessionId, spec.hookLog);
+    // Kiro connects MCP servers after the session opens: Anur's tools must be there first.
+    if (later && spec.mcp) await this.mcpReady(sessionId, "anur");
     let current = optionsOf(options);
     for (const [id, value] of this.chosen.get(spec.thread) ?? []) {
       const res = await conn.agent
@@ -704,6 +722,15 @@ export class AgentHost {
     }
   }
 
+  /** Wait until Kiro reports the server connected, or failed; never more than 20 s. */
+  private async mcpReady(sessionId: string, name: string): Promise<void> {
+    for (let i = 0; i < 200; i++) {
+      const state = this.mcpStates.get(sessionId)?.get(name);
+      if (state === "connected" || state === "failed" || state === "disabled") return;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
   /** A tool call the agent finished must have passed through the hook first. */
   private async matchCall(
     agent: AgentId,
@@ -742,7 +769,9 @@ export class AgentHost {
     if (!t) return Promise.resolve({ outcome: { outcome: "cancelled" } });
     // Anur's own tools are the thread talking to Anur, never something to ask
     // the person about, in any mode (plan mode asks for every MCP tool).
-    const own = (params.toolCall.title ?? "").startsWith("mcp__anur__");
+    // Claude Code names them "mcp__anur__…", Kiro "@anur/…".
+    const title = params.toolCall.title ?? "";
+    const own = title.startsWith("mcp__anur__") || title.startsWith("@anur/");
     const allow =
       params.options.find((o) => o.kind === "allow_once") ??
       params.options.find((o) => o.kind.startsWith("allow"));
