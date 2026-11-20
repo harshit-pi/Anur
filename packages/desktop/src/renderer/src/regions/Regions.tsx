@@ -41,7 +41,6 @@ export function Ribbon({
   filesPeek = false,
   onFiles,
   onFilesHover,
-  onRailHover,
   searchOpen,
   onSearch,
   onSettings,
@@ -54,9 +53,8 @@ export function Ribbon({
   /** Undocked, the files panel floating over the page while hovered. */
   filesPeek?: boolean;
   onFiles: () => void;
+  /** Anywhere on the rail: the files float over the page while the pointer is there. */
   onFilesHover?: (over: boolean) => void;
-  /** Anywhere on the rail: keeps the floating files open while the pointer is there. */
-  onRailHover?: (over: boolean) => void;
   searchOpen: boolean;
   onSearch: () => void;
   onSettings: () => void;
@@ -66,8 +64,12 @@ export function Ribbon({
     <nav
       className="ribbon"
       aria-label="Ribbon"
-      onMouseEnter={() => onRailHover?.(true)}
-      onMouseLeave={() => onRailHover?.(false)}
+      onMouseEnter={() => {
+        if (files) onFilesHover?.(true);
+      }}
+      onMouseLeave={() => {
+        onFilesHover?.(false);
+      }}
     >
       {files ? (
         <button
@@ -77,8 +79,6 @@ export function Ribbon({
           aria-pressed={filesOpen}
           title={filesOpen ? "Hide files (⌘\\)" : "Keep files open (⌘\\)"}
           onClick={onFiles}
-          onMouseEnter={() => onFilesHover?.(true)}
-          onMouseLeave={() => onFilesHover?.(false)}
         >
           <FolderIcon />
         </button>

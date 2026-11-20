@@ -1114,15 +1114,8 @@ export function App() {
     void anur.call("tour:done", {});
   }, []);
   /** The files panel floating over the page while hovered, when it isn't docked. */
-  const [peek, setPeekState] = useState<"off" | "on" | "leaving">("off");
-  const peekNow = useRef<"off" | "on" | "leaving">("off");
-  const setPeek = useCallback((p: "off" | "on" | "leaving") => {
-    peekNow.current = p;
-    setPeekState(p);
-  }, []);
+  const [peek, setPeek] = useState<"off" | "on" | "leaving">("off");
   const peekHover = useRef(false);
-  /** On the rail: keeps an open panel open, but doesn't open it. */
-  const peekRail = useRef(false);
   const peekHold = useRef(false);
   const peekTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const peekCheck = useCallback(() => {
@@ -1131,7 +1124,7 @@ export function App() {
       setPeek("on");
       return;
     }
-    if (peekHold.current || (peekRail.current && peekNow.current === "on")) return;
+    if (peekHold.current) return;
     // A moment's grace, so passing over the edge doesn't flicker it.
     const close = () => {
       // Renaming in the panel: it stays until the typing ends.
@@ -1147,14 +1140,7 @@ export function App() {
       }, 180);
     };
     peekTimer.current = setTimeout(close, 300);
-  }, [setPeek]);
-  const onPeekRail = useCallback(
-    (over: boolean) => {
-      peekRail.current = over;
-      peekCheck();
-    },
-    [peekCheck],
-  );
+  }, []);
   const onPeekHover = useCallback(
     (over: boolean) => {
       peekHover.current = over;
@@ -1169,22 +1155,19 @@ export function App() {
     },
     [peekCheck],
   );
-  const toggle = useCallback(
-    (side: Side) => {
-      if (side === "left") {
-        clearTimeout(peekTimer.current);
-        peekHover.current = false;
-        peekHold.current = false;
-        setPeek("off");
-      }
-      setOpen((o) => {
-        const next = { ...o, [side]: !o[side] };
-        saveOpen(window.localStorage, next);
-        return next;
-      });
-    },
-    [setPeek],
-  );
+  const toggle = useCallback((side: Side) => {
+    if (side === "left") {
+      clearTimeout(peekTimer.current);
+      peekHover.current = false;
+      peekHold.current = false;
+      setPeek("off");
+    }
+    setOpen((o) => {
+      const next = { ...o, [side]: !o[side] };
+      saveOpen(window.localStorage, next);
+      return next;
+    });
+  }, []);
   useEffect(() => {
     if (peek !== "on") return;
     const onKey = (e: KeyboardEvent) => {
@@ -1201,7 +1184,7 @@ export function App() {
     return () => {
       window.removeEventListener("keydown", onKey);
     };
-  }, [peek, setPeek]);
+  }, [peek]);
   /**
    * A thread to open in Think, as "Keep discussing" on a preview asks. Held
    * here, so it reaches Think however the panel was showing when it came.
@@ -1433,7 +1416,6 @@ export function App() {
           toggle("left");
         }}
         onFilesHover={onPeekHover}
-        onRailHover={onPeekRail}
         searchOpen={paletteOpen}
         onSearch={() => {
           setPaletteOpen((o) => !o);
