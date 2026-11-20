@@ -1243,7 +1243,7 @@ export function Think({
     // Again when the section changes or a thread's turn adds lines.
   }, [docPath, sectionKey, threadsSeen]);
   // Picking another box on the map, or moving the cursor on the page, keeps the open
-  // thread: you leave it with ←, or start one with New thread on a box's hover bar (30.37).
+  // thread: you leave it with ←, or start one from a section's hover card on the map (30.37).
 
   const start = useCallback(
     async (
@@ -1362,7 +1362,7 @@ export function Think({
     },
     [tree, docPath, docText, newAgent, newChoices, setThreads],
   );
-  // New thread pressed on a box on the map (30.37): the map selected it; its box to type in is ready.
+  // Start a new thread pressed in a section's hover card on the map (30.37): the map selected it; its box to type in is ready.
   useEffect(() => {
     const on = () => {
       setOpen(null);

@@ -2198,34 +2198,23 @@ export function MapView({
                   ))}
                 </div>
               ) : null}
-              {/* New thread, Build and Check on the section's box (30.32, 30.37): the links under it in Think. */}
-              {writable && docPath !== FOLDER_DOC && renaming !== b.index ? (
+              {/* Build and Check on the section's box (30.32): the links under it in Think. */}
+              {features.actions && writable && docPath !== FOLDER_DOC && renaming !== b.index ? (
                 <MapActs
-                  acts={[
-                    // A new thread on this box (30.37): selected, with its box to type in focused.
-                    {
-                      label: "New thread",
-                      run: () => {
-                        clickedAt.current = Date.now();
-                        onSelect(b.index);
-                        window.dispatchEvent(new CustomEvent("anur:map-new-thread"));
-                      },
+                  acts={(["build", "check"] as const).map((purpose) => ({
+                    label: purpose === "build" ? "Build" : "Check",
+                    primary: purpose === "build",
+                    run: () => {
+                      clickedAt.current = Date.now();
+                      const path = tree.sections[b.index]?.path;
+                      if (!path) return;
+                      window.dispatchEvent(
+                        new CustomEvent("anur:map-section-action", {
+                          detail: { index: b.index, path, purpose },
+                        }),
+                      );
                     },
-                    ...(features.actions ? (["build", "check"] as const) : []).map((purpose) => ({
-                      label: purpose === "build" ? "Build" : "Check",
-                      primary: purpose === "build",
-                      run: () => {
-                        clickedAt.current = Date.now();
-                        const path = tree.sections[b.index]?.path;
-                        if (!path) return;
-                        window.dispatchEvent(
-                          new CustomEvent("anur:map-section-action", {
-                            detail: { index: b.index, path, purpose },
-                          }),
-                        );
-                      },
-                    })),
-                  ]}
+                  }))}
                 />
               ) : null}
               {/* A section is just its name (Mock 10): its threads and actions hang off it. */}
@@ -2483,11 +2472,32 @@ export function MapView({
             aria-label={`${name}: its text`}
           >
             <div className="map-peek-name">
-              {opt?.kind === "edit"
-                ? `Proposed edit to ${tree.sections[opt.index]?.path.at(-1) ?? ""}`
-                : opt
-                  ? `Option: ${name}`
-                  : name}
+              <span>
+                {opt?.kind === "edit"
+                  ? `Proposed edit to ${tree.sections[opt.index]?.path.at(-1) ?? ""}`
+                  : opt
+                    ? `Option: ${name}`
+                    : name}
+              </span>
+              {/* A new thread on the section hovered (30.37): selected, its box to type in focused. */}
+              {s && writable && docPath !== FOLDER_DOC ? (
+                <button
+                  type="button"
+                  className="map-peek-new"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clickedAt.current = Date.now();
+                    setPeek(null);
+                    onSelect(s.index);
+                    window.dispatchEvent(new CustomEvent("anur:map-new-thread"));
+                  }}
+                >
+                  Start a new thread
+                </button>
+              ) : null}
             </div>
             {opt ? <p className="map-peek-use quiet">{useSays(opt)}</p> : null}
             {body ? <Markdown text={body} /> : <p className="quiet">No text yet.</p>}
