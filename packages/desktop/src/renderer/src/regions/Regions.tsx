@@ -657,12 +657,12 @@ export function Center({
         <div className="page-empty">
           <h1>Open a space</h1>
           <p>
-            Think beside your docs with your own agent. Each section gets its own threads, which
-            start from that section, the rules it links to and what earlier threads settled.
+            Think on maps with your own agent. Ask about any box and the thread starts from it, what
+            it links to and what earlier threads settled.
           </p>
           <p>
-            A space is a folder of Markdown docs you work in and share, with what Anur keeps about
-            them inside it. Your docs stay plain files that open in any editor.
+            A space is a folder you work in and share. Every map is also a Markdown file in it, so
+            it opens in any editor.
           </p>
           <div className="page-empty-buttons">
             <button className="primary-button" type="button" onClick={onNewFolder}>
