@@ -1,3 +1,4 @@
+import { logLine, startLog } from "./log.ts";
 import { retitleMoved } from "./folder/title-follows.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -193,6 +194,13 @@ app.setPath(
     : isRelease
       ? sharedProfile
       : path.join(app.getPath("appData"), "Anur Dev"),
+);
+
+// The log, in ~/Library/Logs/Anur (Anur Dev's own for local builds); a check run's
+// in its throwaway profile, so checks never write the person's log.
+startLog(
+  isCheck ? path.join(app.getPath("userData"), "logs") : app.getPath("logs"),
+  `Anur ${app.getVersion()} started on macOS ${process.getSystemVersion()} (${process.arch})`,
 );
 
 // For checks: ANUR_THEME=light or dark overrides the system theme.
@@ -2458,6 +2466,26 @@ function createWindow(): BrowserWindow {
     if (direction === "right") send(win, "app:command", { command: "back" });
     else if (direction === "left") send(win, "app:command", { command: "forward" });
   });
+  // A window that stops answering, its page crashing, and what it reports going wrong.
+  const where = `window ${String(id)}`;
+  const spaceOf = () => folders.current(id)?.path ?? "no space";
+  win.on("unresponsive", () => {
+    logLine("warn", where, `stopped responding (${spaceOf()})`);
+  });
+  win.on("responsive", () => {
+    logLine("info", where, "responding again");
+  });
+  win.webContents.on("render-process-gone", (_e, d) => {
+    logLine("error", where, `page process gone: ${d.reason}, exit code ${String(d.exitCode)}`);
+  });
+  win.webContents.on("console-message", (e) => {
+    if (e.level === "warning" || e.level === "error")
+      logLine(
+        e.level === "error" ? "error" : "warn",
+        `${where} page`,
+        `${e.message} (${e.sourceId.split("/").pop() ?? ""}:${String(e.lineNumber)})`,
+      );
+  });
   win.on("closed", () => {
     const folder = folders.current(id);
     const shown = shownDoc.get(id);
@@ -2760,6 +2788,10 @@ function screenshotThenQuit(win: BrowserWindow, file: string) {
 if (!isCheck && !app.requestSingleInstanceLock()) app.quit();
 
 app.enableSandbox();
+app.on("child-process-gone", (_e, d) => {
+  logLine("error", "app", `${d.type} process gone: ${d.reason}, exit code ${String(d.exitCode)}`);
+});
+
 void app.whenReady().then(async () => {
   // Checks can set ANUR_CHECK_HOME, so a sample folder can stand in for one in iCloud.
   journal = new Journal(app.getPath("userData"));
