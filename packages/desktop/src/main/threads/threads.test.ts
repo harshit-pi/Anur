@@ -403,6 +403,25 @@ describe("Threads", () => {
     expect(d).toMatchObject({ claim: "No deploys for this launch.", scope: "doc" });
   });
 
+  it("calls a build that ends on a choice done, not waiting on the person (30.33)", async () => {
+    const { threads: t, reply } = await setup();
+    const b = await t.start("plan.md", DOC, risks, "-", undefined, [], "build");
+    if (b.kind !== "started") throw new Error(b.reason);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    await tool(b.thread.id, "anur_offer_options", {
+      heading: "Host",
+      options: [
+        { title: "Fly", text: "Run it on Fly." },
+        { title: "Render", text: "Run it on Render." },
+      ],
+    });
+    await reply(b.thread.id, "Built it; two hosts to pick from.");
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === b.thread.id);
+    expect(view?.action?.state).toBe("done");
+  });
+
   it("shows the option used last when a choice is switched to another", async () => {
     const { threads: t, reply } = await setup();
     const a = await t.start("plan.md", DOC, risks, "How do we host it?");
