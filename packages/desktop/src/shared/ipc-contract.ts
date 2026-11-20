@@ -1255,55 +1255,6 @@ export const ipcContract = {
     request: z.object({ items: z.array(MenuEntry).max(300) }).strict(),
     response: z.object({ id: z.string().nullable() }),
   },
-  /** How a conflict copy would merge into its original, section by section. */
-  "conflict:plan": {
-    request: z.object({ copy: z.string() }).strict(),
-    response: z.discriminatedUnion("kind", [
-      z.object({
-        kind: z.literal("plan"),
-        original: z.string(),
-        copy: z.string(),
-        parts: z.array(
-          z.discriminatedUnion("kind", [
-            z.object({ kind: z.literal("same"), path: z.array(z.string()), text: z.string() }),
-            z.object({
-              kind: z.literal("differs"),
-              path: z.array(z.string()),
-              original: z.string(),
-              copy: z.string(),
-            }),
-            z.object({
-              kind: z.literal("only-original"),
-              path: z.array(z.string()),
-              text: z.string(),
-            }),
-            z.object({ kind: z.literal("only-copy"), path: z.array(z.string()), text: z.string() }),
-          ]),
-        ),
-        /** The two files as planned; the merge is refused if either changes before it runs. */
-        hashes: z.object({ original: z.string(), copy: z.string() }),
-      }),
-      z.object({ kind: z.literal("failed"), reason: z.string() }),
-    ]),
-  },
-  /** Write the merge into the original, then move the copy to the Trash. */
-  "conflict:merge": {
-    request: z
-      .object({
-        copy: z.string(),
-        hashes: z.object({ original: z.string(), copy: z.string() }),
-        choices: z.record(
-          z.string().regex(/^\d+$/),
-          z.union([z.enum(["original", "copy"]), z.boolean()]),
-        ),
-      })
-      .strict(),
-    response: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("merged"), folder: FolderState }),
-      z.object({ kind: z.literal("failed"), reason: z.string() }),
-    ]),
-  },
-
   /**
    * The doc's map (task 7): each section's ID, in the order of the page's
    * sections for `text`, and where a person put boxes, by section ID.

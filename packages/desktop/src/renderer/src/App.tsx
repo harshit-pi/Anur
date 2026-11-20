@@ -66,7 +66,6 @@ import { SCOPE_EVENT, type Scope } from "./regions/ThinkScope.tsx";
 import { setPeople } from "./layout/people.ts";
 import { Settings, type SettingsSection } from "./regions/Settings.tsx";
 import { newDocPath } from "./layout/new-doc.ts";
-import { MergeDialog } from "./regions/MergeDialog.tsx";
 import {
   Center,
   LeftSidebar,
@@ -111,7 +110,6 @@ export function App() {
   const [reveal, setReveal] = useState(0);
   /** The doc in the active tab. */
   const selected = currentDoc(tabs);
-  const [merging, setMerging] = useState<string | null>(null);
   const [doc, setDoc] = useState<OpenDoc | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [docError, setDocError] = useState<string | null>(null);
@@ -1407,7 +1405,6 @@ export function App() {
         onOpenFolder={openFolder}
         onNewFolder={newFolder}
         onFirstDoc={firstDoc}
-        onMerge={setMerging}
         onCrumb={showFolder}
         onCopyLink={copySectionLink}
         onMore={showMore}
@@ -1492,14 +1489,6 @@ export function App() {
           width={widths.right}
           offset={widths.right}
           onChange={setWidth("right")}
-        />
-      ) : null}
-      {merging ? (
-        <MergeDialog
-          copy={merging}
-          onClose={() => {
-            setMerging(null);
-          }}
         />
       ) : null}
       {tourStep !== null ? (

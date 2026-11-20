@@ -151,6 +151,10 @@ export class HomeVersions {
     const { inHome, store } = await this.at(rel);
     return store.list(inHome, text, sectionPath);
   }
+  async has(rel: string): Promise<boolean> {
+    const { inHome, store } = await this.at(rel);
+    return store.has(inHome);
+  }
   async orphansOf(rel: string): ReturnType<SectionVersions["orphansOf"]> {
     const { inHome, store } = await this.at(rel);
     return store.orphansOf(inHome);
