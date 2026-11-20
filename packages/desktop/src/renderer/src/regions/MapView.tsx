@@ -1024,6 +1024,47 @@ export function MapView({
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
 
+  // Sections stay where they were drawn: when the layout would move one only because
+  // something else changed (a new section, a thread's choices), it's kept in place,
+  // and a new one goes to the first free spot below where the layout puts it. Tidy,
+  // a drag, an undo or a switch of layout re-lays them, and that becomes the place kept.
+  const drawnAt = useRef(new Map<string, Pos>());
+  const relayout = useRef(true);
+  useLayoutEffect(() => {
+    if (!loaded || drag) return;
+    const sections = boxes.filter((b) => b.kind === "section");
+    if (relayout.current) {
+      relayout.current = false;
+      drawnAt.current = new Map(sections.map((b) => [b.id, { x: b.x, y: b.y }]));
+      return;
+    }
+    const keep: Record<string, Pos> = {};
+    const placed: Box[] = [];
+    for (const b of sections) {
+      const was = drawnAt.current.get(b.id);
+      if (was) {
+        if (Math.abs(was.x - b.x) > 0.5 || Math.abs(was.y - b.y) > 0.5) keep[b.id] = was;
+        placed.push({ ...b, ...(keep[b.id] ?? {}) });
+      }
+    }
+    const clash = (a: Box, x: number, y: number) =>
+      placed.some(
+        (o) => Math.abs(o.x - x) < (o.w + a.w) / 2 + 12 && Math.abs(o.y - y) < (o.h + a.h) / 2 + 8,
+      );
+    for (const b of sections) {
+      if (drawnAt.current.has(b.id)) continue;
+      let y = b.y;
+      for (let n = 0; n < 60 && clash(b, b.x, y); n++) y += b.h + 12;
+      if (y !== b.y) keep[b.id] = { x: b.x, y };
+      placed.push({ ...b, y });
+    }
+    drawnAt.current = new Map(sections.map((b) => [b.id, keep[b.id] ?? { x: b.x, y: b.y }]));
+    if (Object.keys(keep).length > 0) {
+      setMoved((m) => ({ ...m, ...keep }));
+      save(keep);
+    }
+  }, [boxes, loaded, drag]);
+
   // A box's drawn height, by section index: a name that wraps makes it taller than
   // the layout's estimate, and the lane under it must start below it.
   const [drawnH, setDrawnH] = useState<ReadonlyMap<number, number>>(new Map());
@@ -1285,6 +1326,7 @@ export function MapView({
 
   /** Put boxes at `positions` (null: back in the layout), as one step to undo. */
   const place = (positions: Record<string, Pos | null>) => {
+    relayout.current = true;
     setMoved((m) => {
       const next = { ...m };
       for (const [id, p] of Object.entries(positions)) {
@@ -1708,6 +1750,23 @@ export function MapView({
   };
 
   const v = view ?? { x: 0, y: 0, z: 1 };
+  /** A soft S from a box's side to a point, as the map's lines run; `inset` stops short of it. */
+  const curveTo = (p: Box, to: Pos, inset: number) => {
+    // Mostly below or above: from the box's bottom or top, as a child's line runs.
+    if (Math.abs(to.y - p.y) > Math.abs(to.x - p.x)) {
+      const dir = to.y >= p.y ? 1 : -1;
+      const y1 = p.y + (dir * p.h) / 2;
+      // The name field is about 36px tall on screen: stop at its near edge.
+      const y2 = to.y - dir * (inset ? 16 / (view?.z ?? 1) : 0);
+      const mid = (y1 + y2) / 2;
+      return `M ${String(p.x)} ${String(y1)} C ${String(p.x)} ${String(mid)}, ${String(to.x)} ${String(mid)}, ${String(to.x)} ${String(y2)}`;
+    }
+    const side = to.x >= p.x ? 1 : -1;
+    const x1 = p.x + (side * p.w) / 2;
+    const x2 = to.x - side * inset;
+    const mid = (x1 + x2) / 2;
+    return `M ${String(x1)} ${String(p.y)} C ${String(mid)} ${String(p.y)}, ${String(mid)} ${String(to.y)}, ${String(x2)} ${String(to.y)}`;
+  };
   /** The thread named by the line under the pointer, and where, in the map's own pixels. */
   const [lineTip, setLineTip] = useState<{ text: string; x: number; y: number } | null>(null);
   const tipAt = (e: React.PointerEvent, text: string) => {
@@ -1829,16 +1888,23 @@ export function MapView({
       >
         <svg className="map-edges">
           {edges}
+          {/* A new section on its way: the same soft line as the rest, dashed until it's named. */}
           {linking
             ? (() => {
                 const a = byId.get(linking.from);
                 return a ? (
-                  <line
-                    className="map-drag-line"
-                    x1={a.x}
-                    y1={a.y + a.h / 2}
-                    x2={linking.to.x}
-                    y2={linking.to.y}
+                  <path className="map-edge thread" d={curveTo(a, linking.to, 0)} />
+                ) : null;
+              })()
+            : null}
+          {adding?.parent !== undefined
+            ? (() => {
+                const a = boxes.find((x) => x.kind === "section" && x.index === adding.parent);
+                // To the near edge of the name field, which is 200px wide on screen.
+                return a ? (
+                  <path
+                    className="map-edge thread"
+                    d={curveTo(a, adding.at, 100 / (view?.z ?? 1))}
                   />
                 ) : null;
               })()
@@ -2050,6 +2116,22 @@ export function MapView({
                       if (e.key === "Enter" || e.key === "Tab") {
                         e.preventDefault();
                         e.currentTarget.blur();
+                      }
+                      // ⌘Z in a name not changed yet undoes on the map (a box just added
+                      // goes, and ⇧⌘Z brings it back); once typed in, it undoes the typing.
+                      const untouched =
+                        (e.metaKey || e.ctrlKey) &&
+                        e.key.toLowerCase() === "z" &&
+                        !e.shiftKey &&
+                        e.currentTarget.value === b.heading;
+                      if (untouched) {
+                        e.preventDefault();
+                        cancelRename.current = true;
+                        setRenaming(null);
+                        setFreshIndex(null);
+                        host.current?.focus();
+                        undo();
+                        return;
                       }
                       if (e.key === "Escape") {
                         const fresh = freshIndex === b.index;
@@ -2461,6 +2543,7 @@ export function MapView({
               : "Lay the map out as a mind map, the title in the middle"
           }
           onClick={() => {
+            relayout.current = true;
             setLayout(layout === "mind" ? "tree" : "mind");
             userMoved.current = false;
             setView(null);
@@ -2483,7 +2566,7 @@ export function MapView({
         <button
           type="button"
           className="map-tool"
-          title="Put moved boxes back in the layout"
+          title="Lay the map out afresh; boxes otherwise stay where they are"
           disabled={Object.keys(moved).length === 0}
           onClick={() => {
             moveBoxes(Object.fromEntries(Object.keys(moved).map((id) => [id, null])));
