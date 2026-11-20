@@ -357,6 +357,13 @@ export const ActionRunLine = LineEnvelope.extend({
   thread: z.string().min(1),
 });
 
+/** The person skipped a proposed part, or undid that (`skipped: false`); the latest says. */
+export const OptionSkippedLine = LineEnvelope.extend({
+  kind: z.literal("option-skipped"),
+  option: z.string().min(1),
+  skipped: z.boolean(),
+});
+
 export const KnownThreadLine = z.discriminatedUnion("kind", [
   ThreadStartLine,
   SessionLine,
@@ -367,6 +374,7 @@ export const KnownThreadLine = z.discriminatedUnion("kind", [
   OptionsLine,
   OptionUsedLine,
   OptionExploredLine,
+  OptionSkippedLine,
   InputLine,
   InputRemovedLine,
   AddedInputLine,
@@ -394,6 +402,7 @@ const KNOWN_KINDS = new Set([
   "options",
   "option-used",
   "option-explored",
+  "option-skipped",
   "input",
   "input-removed",
   "added-input",

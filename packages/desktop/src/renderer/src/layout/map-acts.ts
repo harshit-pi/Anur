@@ -9,11 +9,14 @@ export function choiceActs(b: {
   notPicked?: boolean;
   explored?: boolean;
   exploring?: boolean;
-}): { use: string; explore: boolean } | null {
+  skipped?: boolean;
+}): { use: string; explore: boolean; skip: boolean } | null {
   if (b.exploring) return null;
   return {
     use: b.several ? "Add" : b.notPicked ? "Use instead" : "Use",
     explore: !b.several && !b.explored,
+    // A part can be passed over; one already skipped is only added, from its fold.
+    skip: !!b.several && !b.skipped,
   };
 }
 
@@ -24,6 +27,7 @@ export type OptionSet = {
   used: string | null;
   added: readonly string[];
   explored: readonly string[];
+  skipped?: readonly string[];
   options: readonly { id: string }[];
 };
 
@@ -31,13 +35,18 @@ export type OptionSet = {
 export function choicePress(
   set: OptionSet,
   option: string,
-  act: "use" | "explore",
+  act: "use" | "explore" | "skip",
 ):
   | { kind: "explore" }
+  | { kind: "skip" }
   | { kind: "use"; how: "replace" | "subsection"; heading: string | null }
   | null {
   if (!set.options.some((o) => o.id === option)) return null;
   if (act === "explore") return set.explored.includes(option) ? null : { kind: "explore" };
+  if (act === "skip")
+    return set.several && !set.added.includes(option) && !set.skipped?.includes(option)
+      ? { kind: "skip" }
+      : null;
   if (set.several)
     return set.added.includes(option) ? null : { kind: "use", how: "subsection", heading: null };
   return set.used === option ? null : { kind: "use", how: "replace", heading: set.heading };

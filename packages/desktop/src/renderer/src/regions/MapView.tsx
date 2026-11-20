@@ -63,6 +63,8 @@ type Box = {
   notPicked?: boolean;
   /** One of a set of parts that all belong: Add, not Use, and nothing to explore. */
   several?: boolean;
+  /** A part the person skipped, shown when its fold is open. */
+  skipped?: boolean;
   /**
    * An action (Mock 10): a Build or Check thread, or one a thread proposed
    * and hasn't run. Its state, a few words, and the thread behind it.
@@ -80,9 +82,8 @@ type Box = {
   /** For a section: its lane of work, and the lane's height under the box. */
   lane?: LanePill[];
   laneH?: number;
-  /** For a section whose lane is wider than it: its own width, and where the lane starts. */
+  /** For a section whose lane is wider than it: its own width. */
   boxW?: number;
-  laneX?: number;
   /** For a section: threads with nothing drawn off them yet, shown as a 💬 count. */
   chats?: ThreadView[];
   /** For a label naming one of a thread's choices: that choice's heading, shown instead of the thread's title. */
@@ -690,7 +691,7 @@ export function MapView({
         const optionBox = (
           o: Offer["options"][number],
           parentId: string,
-          extra: { notPicked?: boolean; several?: boolean } = {},
+          extra: { notPicked?: boolean; several?: boolean; skipped?: boolean } = {},
         ) => {
           const oid = `o:${o.id}`;
           // Working on it now: in this thread, or in the thread exploring it (30.32).
@@ -710,6 +711,7 @@ export function MapView({
             explored: exploredIds.has(o.id),
             ...(extra.notPicked ? { notPicked: true } : {}),
             ...(extra.several ? { several: true } : {}),
+            ...(extra.skipped ? { skipped: true } : {}),
             heading: o.title,
             parent: parentId,
           });
@@ -756,8 +758,31 @@ export function MapView({
             tid = did;
           }
           if (f.several) {
+            const skipped = f.options.filter(
+              (o) => f.skipped.includes(o.id) && !f.added.includes(o.id),
+            );
             for (const o of f.options)
-              if (!f.added.includes(o.id)) optionBox(o, tid, { several: true });
+              if (!f.added.includes(o.id) && !skipped.includes(o))
+                optionBox(o, tid, { several: true });
+            // Parts the person skipped: folded under one chip, still there to add.
+            if (skipped.length > 0) {
+              const fid = `k:${f.options[0]?.id ?? t.id}`;
+              const label = `${String(skipped.length)} skipped`;
+              const open = unfolded.has(fid);
+              nodes.push({ id: fid, parent: tid, ...boxSize(label, "") });
+              info.set(fid, {
+                id: fid,
+                kind: "option",
+                index: s.index,
+                thread: t,
+                fold: { open, count: skipped.length },
+                sub: open ? "Hide" : "Show",
+                heading: label,
+                parent: tid,
+              });
+              if (open)
+                for (const o of skipped) optionBox(o, fid, { several: true, skipped: true });
+            }
             continue;
           }
           // Picked here, or in a thread exploring one of these options.
@@ -928,8 +953,6 @@ export function MapView({
         x,
         y: p.y - lane / 2,
         w: own,
-        // The title's lane reads down from its box's left edge, not centred on a wider slot.
-        ...(own < p.w && p.side !== 0 ? { laneX: p.x - p.w / 2 + 10 } : {}),
         h: p.h - lane,
         side: p.side,
         ...(p.row !== undefined ? { row: p.row } : {}),
@@ -1351,7 +1374,7 @@ export function MapView({
   }, []);
 
   /** Use or Explore on a choice's box: Think does what its card's buttons do (30.32). */
-  const mapChoice = (b: Box, act: "use" | "explore") => {
+  const mapChoice = (b: Box, act: "use" | "explore" | "skip") => {
     clickedAt.current = Date.now();
     if (!b.thread || !b.option) return;
     window.dispatchEvent(
@@ -1384,7 +1407,12 @@ export function MapView({
       const thread = b.thread;
       const open = () => {
         picked.current = b.kind === "thread" ? thread.id : null;
-        onSelect(b.index);
+        // The thread's own section, wherever this box hangs: a choice under its
+        // decision's subsection must not switch Think away from the thread.
+        const own = thread.path
+          ? tree.sections.find((x) => samePath(x.path, thread.path ?? []))?.index
+          : undefined;
+        onSelect(own ?? b.index);
         window.dispatchEvent(
           new CustomEvent("anur:open-thread", { detail: { thread: thread.id } }),
         );
@@ -1680,6 +1708,43 @@ export function MapView({
   };
 
   const v = view ?? { x: 0, y: 0, z: 1 };
+  /** The thread named by the line under the pointer, and where, in the map's own pixels. */
+  const [lineTip, setLineTip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const tipAt = (e: React.PointerEvent, text: string) => {
+    const r = host.current?.getBoundingClientRect();
+    if (r) setLineTip({ text, x: e.clientX - r.left, y: e.clientY - r.top });
+  };
+  /** A thread's line from a decision's own section to its choices: hovered, it names the thread at once; clicked, opens it. */
+  const threadHit = (b: Box, p: Box, d: string) => {
+    // A choice hanging straight off its decision's own section: that line is the thread's.
+    const t = b.kind === "option" && p.kind === "section" ? b.thread : undefined;
+    if (!t) return [];
+    return [
+      <path
+        key={`hit:${b.id}`}
+        className="map-edge-hit"
+        d={d}
+        onPointerEnter={(e) => {
+          tipAt(e, `from ${t.title}`);
+        }}
+        onPointerMove={(e) => {
+          tipAt(e, `from ${t.title}`);
+        }}
+        onPointerLeave={() => {
+          setLineTip(null);
+        }}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          clickedAt.current = Date.now();
+          const own = t.path
+            ? tree.sections.find((x) => samePath(x.path, t.path ?? []))?.index
+            : undefined;
+          if (own !== undefined) onSelect(own);
+          window.dispatchEvent(new CustomEvent("anur:open-thread", { detail: { thread: t.id } }));
+        }}
+      ></path>,
+    ];
+  };
   const edges = boxes.flatMap((b) => {
     const p = b.parent ? byId.get(b.parent) : undefined;
     if (!p) return [];
@@ -1705,11 +1770,11 @@ export function MapView({
               [b.x, rail],
               [b.x, top],
             ];
-      return line(
-        b.id,
-        b.kind === "section" ? "map-edge rail" : "map-edge rail thread",
-        pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" "),
-      );
+      const d = pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" ");
+      return [
+        ...line(b.id, b.kind === "section" ? "map-edge rail" : "map-edge rail thread", d),
+        ...threadHit(b, p, d),
+      ];
     }
     // From the parent's bottom to the child's top, a soft S; sideways when a
     // moved box sits beside, and always in the mind map, which branches sideways.
@@ -1730,7 +1795,10 @@ export function MapView({
       const mid = (x1 + x2) / 2;
       d = `M ${String(x1)} ${String(p.y)} C ${String(mid)} ${String(p.y)}, ${String(mid)} ${String(b.y)}, ${String(x2)} ${String(b.y)}`;
     }
-    return [...line(b.id, b.kind === "section" ? "map-edge" : "map-edge thread", d)];
+    return [
+      ...line(b.id, b.kind === "section" ? "map-edge" : "map-edge thread", d),
+      ...threadHit(b, p, d),
+    ];
   });
 
   return (
@@ -1759,7 +1827,7 @@ export function MapView({
           visibility: view ? "visible" : "hidden",
         }}
       >
-        <svg className="map-edges" aria-hidden="true">
+        <svg className="map-edges">
           {edges}
           {linking
             ? (() => {
@@ -1882,6 +1950,16 @@ export function MapView({
                               label: "Explore",
                               run: () => {
                                 mapChoice(b, "explore");
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(acts.skip
+                        ? [
+                            {
+                              label: "Skip",
+                              run: () => {
+                                mapChoice(b, "skip");
                               },
                             },
                           ]
@@ -2121,7 +2199,8 @@ export function MapView({
               key={`lane:${b.id}`}
               className="map-lane"
               style={{
-                left: b.laneX ?? b.x - b.w / 2 + 10,
+                // Every lane reads down from its box's left edge, whichever side the box is on.
+                left: b.x - b.w / 2 + 10,
                 top: b.y + Math.max(b.h, drawnH.get(b.index) ?? 0) / 2 + 6,
               }}
             >
@@ -2334,12 +2413,12 @@ export function MapView({
         // Only the marks on this map (17.1); before any thread, what will appear.
         const has = (k: Box["kind"]) => boxes.some((b) => b.kind === k);
         const keys = [
-          { cls: "section", label: "Section · in the doc", on: true },
-          { cls: "choice", label: "Choice · not in the doc yet", on: has("option") || has("edit") },
-          { cls: "action", label: "Action · work", on: boxes.some((b) => b.lane?.length) },
+          { cls: "section", label: "Section", on: true },
+          { cls: "choice", label: "Choice · proposed", on: has("option") || has("edit") },
+          { cls: "action", label: "Action", on: boxes.some((b) => b.lane?.length) },
           {
             cls: "thread",
-            label: "A thread",
+            label: "Thread",
             on: has("thread") || boxes.some((b) => b.chats?.length),
           },
         ].filter((k) => k.on);
@@ -2350,16 +2429,23 @@ export function MapView({
             </div>
           );
         return (
-          <div className="map-legend" aria-hidden="true">
+          // Just the marks; hovered, each says what it is, as the key bar does.
+          <div className="map-legend" aria-label="Legend">
             {keys.map((k) => (
-              <span key={k.label}>
-                <i className={`map-key ${k.cls}`} /> {k.label}
+              <span key={k.label} title={k.label}>
+                <i className={`map-key ${k.cls}`} />
+                <span className="map-legend-what">{k.label}</span>
               </span>
             ))}
           </div>
         );
       })()}
       {writable ? <KeyBar /> : null}
+      {lineTip ? (
+        <div className="map-line-tip" style={{ left: lineTip.x, top: lineTip.y }}>
+          {lineTip.text}
+        </div>
+      ) : null}
       {note ? (
         <div className="map-note" role="status">
           {note}

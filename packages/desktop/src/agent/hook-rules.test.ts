@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { MESSAGES, decide, toCopy, type HookConfig } from "./hook-rules.ts";
+import { MESSAGES, asClaudeCall, decide, toCopy, type HookConfig } from "./hook-rules.ts";
 
 const folder = "/Users/p/Vault";
 const config: HookConfig = {
@@ -165,5 +165,27 @@ describe("every home's .anur/ (18.15.2)", () => {
   it("still guards only the folder's .anur/ when no homes are given, as before", () => {
     expect(call("Read", { file_path: "api/.anur/x" })).toBeNull();
     expect(call("Read", { file_path: ".anur/x" })).toBe(MESSAGES.anur);
+  });
+});
+
+describe("Kiro's tools, read as Claude Code's", () => {
+  const kiro = (tool_name: string, tool_input: Record<string, unknown>) =>
+    decide(asClaudeCall({ tool_name, tool_input, cwd: config.folder }), config, resolve);
+
+  it("holds read_file, fs_write and str_replace to the file rules", () => {
+    expect(kiro("read_file", { path: ".anur/docs/x.jsonl" })?.reason).toBe(MESSAGES.anur);
+    expect(kiro("fs_write", { path: "plan.md", text: "x" })?.reason).toBe(
+      toCopy("plan.md", path.join(config.copies, "plan.md")),
+    );
+    expect(kiro("str_replace", { path: "src/app.ts", oldStr: "a", newStr: "b" })).toBeNull();
+  });
+
+  it("holds execute_bash to the shell rules, and other tools to the .anur check", () => {
+    expect(kiro("execute_bash", { command: "grep -rn secret ." })?.reason).toBe(MESSAGES.recursive);
+    expect(kiro("execute_bash", { command: "rg secret" })).toBeNull();
+    expect(kiro("web_fetch", { url: "https://example.com" })).toBeNull();
+    expect(kiro("load_resource", { uri: path.join(config.folder, ".anur", "x") })?.reason).toBe(
+      MESSAGES.anur,
+    );
   });
 });

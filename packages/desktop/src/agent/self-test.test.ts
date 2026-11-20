@@ -2,7 +2,7 @@ import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkedIn, hookSaw } from "./check-log.ts";
+import { checkedIn, hookSaw, toolsSeen } from "./check-log.ts";
 import { selfTest } from "./self-test.ts";
 
 const hook = path.join(import.meta.dirname, "hook.ts");
@@ -12,11 +12,18 @@ describe("the thread check's self-test", () => {
     expect(selfTest(process.execPath, {}, hook)).toBeNull();
   });
 
+  it("passes the real hook program in Kiro's form", () => {
+    expect(selfTest(process.execPath, {}, hook, "kiro")).toBeNull();
+  });
+
   it("fails a hook that lets everything through", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "anur-hook-"));
     const lax = path.join(dir, "lax.mjs");
     await writeFile(lax, "process.exit(0);\n");
     expect(selfTest(process.execPath, {}, lax)).toBe("the hook allowed a read of another thread");
+    expect(selfTest(process.execPath, {}, lax, "kiro")).toBe(
+      "the hook allowed a Kiro session Anur doesn't know",
+    );
   });
 });
 
@@ -36,5 +43,8 @@ describe("reading the hook's log", () => {
     expect(await checkedIn(log, "s2", 100)).toBe(false);
     expect(await hookSaw(log, "toolu_1")).toBe(true);
     expect(await hookSaw(log, "toolu_2")).toBe(false);
+    // Kiro's hook input names no call: the check counts the session's calls instead.
+    expect(await toolsSeen(log, "s1")).toBe(1);
+    expect(await toolsSeen(log, "s2")).toBe(0);
   });
 });

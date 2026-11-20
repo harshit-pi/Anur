@@ -5950,15 +5950,13 @@ button.file-card-name:hover {
   background: var(--hover);
 }
 
+/* A thread: the dashed line it hangs on, as on the map. */
 .map-key.thread {
-  width: auto;
-  height: auto;
+  width: 16px;
+  height: 0;
   border: 0;
-  font: italic 12px var(--font-doc);
-}
-
-.map-key.thread::before {
-  content: "Italic";
+  border-top: 1.5px dashed var(--slate);
+  border-radius: 0;
 }
 
 /*
@@ -6829,4 +6827,126 @@ button.file-card-name:hover {
 .map-act:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 1px;
+}
+
+/* An agent's mark before its name in Settings → Agents. */
+.settings-row-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  margin-right: 10px;
+}
+
+.settings-row-icon .agent-mark {
+  width: 20px;
+  height: 20px;
+}
+
+.settings-error {
+  margin: 8px 0 0;
+  color: var(--red);
+  font-size: 13px;
+}
+
+/* No agent switched on: where the chat box would be, the way to turn one on. */
+.think-no-agent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--sheet);
+}
+
+.think-no-agent p {
+  margin: 0;
+  color: var(--graphite);
+  font-size: 13px;
+}
+
+/* The agent's mark in the picker: the size of its name's letters, on its line, a small gap after. */
+.think-pick .agent-mark {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+/* The agent picker sizes to its mark and name, so "Claude" is never cut. */
+.think-pickers .think-option:has(select[aria-label="Agent"]) {
+  flex: none;
+}
+
+/* A thread's header stays at the top of Think while its chat scrolls under it. */
+.right-main .think-head {
+  position: sticky;
+  top: -16px;
+  z-index: 4;
+  margin: -16px -16px 6px;
+  padding: 16px 16px 8px;
+  background: var(--sheet);
+}
+
+/* A part the person skipped: one quiet line in its set, with Undo. */
+.think-offer-skipped {
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+/* The legend shows its marks; hovered, each opens to its name, as the key bar's keys do. */
+.map-legend span.map-legend-what {
+  display: inline;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: max-width 160ms ease;
+}
+
+.map-legend:not(.map-hint) {
+  gap: 8px;
+}
+
+.map-legend:hover span.map-legend-what {
+  max-width: 160px;
+}
+
+.map-legend:not(.map-hint) > span {
+  gap: 0;
+}
+
+.map-legend:hover span.map-legend-what {
+  margin-left: 6px;
+}
+
+/* A wide, unseen band along a decision's line to its choices: hovered it shows faintly and names the thread. */
+.map-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14px;
+  stroke-linecap: round;
+  /* As wide on screen at any zoom. */
+  vector-effect: non-scaling-stroke;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.map-edge-hit:hover {
+  stroke: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+/* A thread's name beside the pointer on its line: shown at once, not after the system's delay. */
+.map-line-tip {
+  position: absolute;
+  z-index: 6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--sheet);
+  font: 12px var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(10px, 14px);
 }

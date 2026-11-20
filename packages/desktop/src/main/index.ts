@@ -26,7 +26,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { FORMAT_VERSION, PreviewPart, docsBefore, subtreeText } from "@anur/core";
-import { AGENTS, type AgentId } from "../shared/agents.ts";
+import { runsThreads, type AgentId } from "../shared/agents.ts";
 import type { SessionOption } from "../agent/protocol.ts";
 import {
   BrowserWindow,
@@ -61,7 +61,8 @@ import { emptyDrawing, findDrawing, sceneOf, withScene } from "./drawings/drawin
 import { listDocs } from "./folder/list-docs.ts";
 import { ClaudeSkill, claudeHome } from "./claude-skill/install.ts";
 import { terminalHandler, writeTerminalFile } from "./claude-skill/terminal.ts";
-import { findClaude, loginPath } from "../agent/find-claude.ts";
+import { findClaude, findKiro, loginPath } from "../agent/find-claude.ts";
+import { SKILL_FILES } from "./claude-skill/skill-files.ts";
 import {
   baseAsMarkdown,
   today,
@@ -151,6 +152,9 @@ import { IndexProcess, indexEntry } from "./index-process/client.ts";
 import type { FolderRead } from "./index-process/protocol.ts";
 import { loadRead, saveRead } from "./system-saved.ts";
 import { TaskHooks } from "./claude-plugin/task-hooks.ts";
+import { KiroInstall } from "./agents/kiro-install.ts";
+import { agentRows } from "./agents/rows.ts";
+import { kiroDir } from "../agent/kiro-hook.ts";
 import { ReportWatch, listReports, readReport, writeReport } from "./task-reports.ts";
 import { codeRepos, looksLikeCode } from "./engineering-offer.ts";
 import { SystemReview } from "./system-review.ts";
@@ -390,6 +394,8 @@ void anurSocket.start().catch((e: unknown) => {
 });
 /** Anur in the person's Claude Code (group 6); set up once the app is ready. */
 let claudeSkill: ClaudeSkill | null = null;
+/** Anur in the person's Kiro: hook, skill and MCP server, while Kiro is switched on. */
+let kiroInstall: KiroInstall | null = null;
 /** The `anur` Claude Code plugin with the task hooks (group 21). */
 let taskHooks: TaskHooks | null = null;
 /** Whether the person turned down making Anur the opener for Markdown files. */
@@ -420,6 +426,19 @@ async function startClaudeSkill(): Promise<void> {
       args: [path.join(here, "mcp-server.js")],
       env: { ELECTRON_RUN_AS_NODE: "1", ANUR_TERMINAL: terminalFile },
     },
+  });
+  kiroInstall = new KiroInstall({
+    dir: kiroDir(app.getPath("userData")),
+    node: process.execPath,
+    hook: hookEntry(here),
+    kiro: async () => findKiro(await loginPath()),
+    mcp: {
+      type: "stdio",
+      command: process.execPath,
+      args: [path.join(here, "mcp-server.js")],
+      env: { ELECTRON_RUN_AS_NODE: "1", ANUR_TERMINAL: terminalFile },
+    },
+    skillFiles: SKILL_FILES,
   });
   // The script repos' pre-commit hooks call, pointing at this app (23.6).
   void writeShim({
@@ -536,6 +555,38 @@ async function startClaudeSkill(): Promise<void> {
   const repaired = await claudeSkill.check().catch(() => []);
   if (repaired.length > 0)
     console.log(`Anur brought its Claude Code skill up to date: ${repaired.join(", ")}.`);
+  // Claude Code switched on has Anur in it: /anur, its tools and the task hooks.
+  if (!isCheck && appSettings.get().agents.includes("claude-code"))
+    await syncAgent("claude-code", true).catch((e: unknown) => {
+      logLine("warn", "agents", `Claude Code: ${(e as Error).message}`);
+    });
+  if (!isCheck && appSettings.get().agents.includes("kiro")) {
+    const fixed = await kiroInstall.check().catch(() => []);
+    if (fixed.length > 0) logLine("info", "agents", `Kiro brought up to date: ${fixed.join(", ")}`);
+    void kiroInstall.refreshMcp();
+  }
+}
+
+/**
+ * An agent switched on has Anur in it, and one switched off has none of it:
+ * Claude Code gets the /anur skill, Anur's tools and the task hooks; Kiro
+ * the skill, the tools and the guard that lets it run threads.
+ */
+async function syncAgent(id: AgentId, on: boolean): Promise<void> {
+  if (id === "kiro") {
+    await (on ? kiroInstall?.add() : kiroInstall?.remove());
+    return;
+  }
+  if (id !== "claude-code" || !claudeSkill || !taskHooks) return;
+  if (!on) {
+    await claudeSkill.remove();
+    await taskHooks.remove();
+    return;
+  }
+  // Not installed yet: nothing to put Anur into; the next launch after it is installed does.
+  if (!(await claudeSkill.status()).claude) return;
+  if (!(await claudeSkill.state()).added) await claudeSkill.add();
+  if (!(await taskHooks.status()).added) await taskHooks.add();
 }
 
 /** Agents whose choices were read this run; once per run is enough. */
@@ -1262,6 +1313,31 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     return readEmbeddedBase(folder, target, from);
+  },
+  "agents:list": async () => ({ agents: await agentRows(appSettings.get().agents) }),
+  "agents:set": async ({ id, on }) => {
+    let error: string | null = null;
+    const was = appSettings.get().agents;
+    const rows = await agentRows(was);
+    if (on && !rows.find((r) => r.id === id)?.ready) error = "This agent can't run here yet.";
+    else {
+      try {
+        // Turning an agent on puts Anur into it; off takes it back out.
+        await syncAgent(id, on);
+        const agents = on ? [...new Set([...was, id])] : was.filter((a) => a !== id);
+        const def = appSettings.get().defaultAgent;
+        await appSettings.set({
+          agents,
+          defaultAgent: agents.includes(def) ? def : (agents[0] ?? def),
+        });
+        logLine("info", "agents", `${id} switched ${on ? "on" : "off"}`);
+      } catch (e) {
+        error = `Anur couldn't set up ${id === "kiro" ? "Kiro" : "the agent"}: ${(e as Error).message}`;
+        logLine("warn", "agents", error);
+      }
+    }
+    for (const win of windows.values()) send(win, "agents:changed", {});
+    return { agents: await agentRows(appSettings.get().agents), error };
   },
   "settings:get": async (_request, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -2027,7 +2103,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return { threads: t ? await t.recent() : [] };
   },
   "agent:auth": ({ agent }) => {
-    if (AGENTS[agent].runsThreads) hub.send({ type: "auth", agent });
+    if (runsThreads(agent)) hub.send({ type: "auth", agent });
     return { agent, auth: hub.auth(agent), signIn: hub.signIn(agent) };
   },
   "agent:sign-in": ({ agent, method }) => {
@@ -2040,7 +2116,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return {};
   },
   "agent:options": ({ agent }, { webContentsId }) => {
-    if (!probed.has(agent) && AGENTS[agent].runsThreads) {
+    if (!probed.has(agent) && runsThreads(agent)) {
       probed.add(agent);
       hub.send({
         type: "probe",
@@ -2430,6 +2506,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
     } catch (e) {
       return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
     }
+  },
+  "thread:skip-option": async ({ thread, path: rel, text, option, skip }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !t || !threadable(folder, rel)) return { ok: false };
+    return { ok: await t.skipOption(rel, text, thread, option, skip) };
   },
   "thread:explore-option": async ({ thread, path: rel, text, option }, { webContentsId }) => {
     const folder = folders.current(webContentsId);

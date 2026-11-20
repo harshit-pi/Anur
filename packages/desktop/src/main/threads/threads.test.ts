@@ -514,6 +514,33 @@ describe("Threads", () => {
     expect(await offer()).toMatchObject({ used: render.id, added: [fly.id] });
   });
 
+  it("remembers a skipped part, and an Undo, without touching the doc", async () => {
+    const { threads: t, reply } = await setup();
+    const a = await t.start("plan.md", DOC, risks, "What else belongs here?");
+    if (a.kind !== "started") throw new Error(a.reason);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    await tool(a.thread.id, "anur_offer_options", {
+      several: true,
+      options: [
+        { title: "Failure", text: "What counts as failure." },
+        { title: "Exhausted", text: "After retries are exhausted." },
+      ],
+    });
+    await reply(a.thread.id, "Two parts.");
+    const offer = async () =>
+      (await t.list("plan.md", DOC))
+        .find((x) => x.id === a.thread.id)
+        ?.items.flatMap((i) => (i.kind === "options" ? [i] : []))[0];
+    const [failure] = (await offer())?.options ?? [];
+    if (!failure) throw new Error("no options");
+    expect(await t.skipOption("plan.md", DOC, a.thread.id, failure.id, true)).toBe(true);
+    expect((await offer())?.skipped).toEqual([failure.id]);
+    await t.skipOption("plan.md", DOC, a.thread.id, failure.id, false);
+    expect((await offer())?.skipped).toEqual([]);
+  });
+
   it("carries a kept finding to new threads on the section, and never an unkept one", async () => {
     const { threads: t, sent, reply } = await setup();
     const a = await t.start("plan.md", DOC, risks, "What does the host cost?");

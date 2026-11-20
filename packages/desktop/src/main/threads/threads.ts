@@ -48,7 +48,7 @@ import {
   DEFAULT_AGENT,
   TERMINAL_EDIT,
   UNSAVED_EDIT,
-  AGENTS,
+  runsThreads,
   isAgentId,
   type AgentId,
 } from "../../shared/agents.ts";
@@ -678,7 +678,7 @@ export class Threads {
   private async ensureSpare(): Promise<void> {
     const agent = this.d.defaultAgent();
     if (this.spare?.agent === agent || this.spareOpening || this.closed) return;
-    if (!AGENTS[agent].runsThreads || this.d.hub.status(agent).connected !== true) return;
+    if (!runsThreads(agent) || this.d.hub.status(agent).connected !== true) return;
     if (this.spare) this.d.hub.send({ type: "close", thread: this.spare.thread });
     this.spareOpening = true;
     try {
@@ -821,6 +821,8 @@ export class Threads {
     const used = new Map<string, string>();
     const undone = new Set(lines.flatMap((l) => (l.kind === "auto-undone" ? [l.used] : [])));
     const explored = new Set<string>();
+    /** Parts the person skipped, the latest Skip or Undo deciding. */
+    const skipped = new Set<string>();
     // When each option was last used: a choice switched to another option shows the latest.
     const usedAt = new Map<string, number>();
     lines.forEach((l, n) => {
@@ -830,6 +832,10 @@ export class Threads {
         if (l.how !== "also") usedAt.set(l.option, n);
       }
       if (l.kind === "option-explored") explored.add(l.option);
+      if (l.kind === "option-skipped") {
+        if (l.skipped) skipped.add(l.option);
+        else skipped.delete(l.option);
+      }
     });
     const ran = new Map(
       lines.flatMap((l) => (l.kind === "action-run" ? [[l.action, l.thread] as const] : [])),
@@ -938,6 +944,7 @@ export class Threads {
                 .filter((o) => usedAt.has(o.id))
                 .sort((a, b) => (usedAt.get(b.id) ?? 0) - (usedAt.get(a.id) ?? 0))[0]?.id ?? null),
           explored: l.options.filter((o) => explored.has(o.id)).map((o) => o.id),
+          skipped: l.options.filter((o) => skipped.has(o.id)).map((o) => o.id),
           within: l.within ?? null,
           heading: l.heading ?? null,
           several: l.several ?? false,
@@ -1424,6 +1431,7 @@ export class Threads {
           command: "/usr/bin/env",
           args: ["ELECTRON_RUN_AS_NODE=1", this.d.node, this.d.hookScript, config],
         },
+        config,
         anurDir,
         anurDirs,
         copies: this.copiesOf(thread),
@@ -2943,6 +2951,21 @@ export class Threads {
     return true;
   }
 
+  /** The person skipped a proposed part, or undid that; the doc is untouched. */
+  async skipOption(
+    rel: string,
+    text: string,
+    thread: string,
+    option: string,
+    skip: boolean,
+  ): Promise<boolean> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return false;
+    await this.append(at.doc, thread, { kind: "option-skipped", option, skipped: skip });
+    await this.refresh(rel, text, thread);
+    return true;
+  }
+
   /**
    * The person wants to dig into one option before picking: the thread
    * remembers it, and asks the agent to work it through.
@@ -3836,6 +3859,7 @@ const KNOWN = new Set([
   "options",
   "option-used",
   "option-explored",
+  "option-skipped",
   "input",
   "input-removed",
   "added-input",
