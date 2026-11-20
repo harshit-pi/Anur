@@ -34,6 +34,7 @@ How people and agents work in this repo. Keep it short; it grows as the build do
 
 - `main` takes changes only through pull requests with CI passing; a GitHub ruleset enforces it, and a pre-push hook stops a local push to `main` early.
 - Work on a branch, such as `task/1.4-section-tree`, open a PR, and turn on auto-merge (`gh pr merge --auto --squash`): it squash-merges once CI passes. Never force-push.
+- Write the PR's description from `.github/pull_request_template.md` (`gh pr create --body-file`): `--body` skips the template, and CI fails a description without its three sections or a release note.
 - The pre-commit hook fixes and checks staged files with ESLint and Prettier, then type-checks the whole workspace.
 
 ## Layout
