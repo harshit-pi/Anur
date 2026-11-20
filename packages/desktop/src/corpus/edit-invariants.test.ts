@@ -175,11 +175,13 @@ const same = (a: Char[], b: Char[]) =>
 
 describe("editing the corpus with marks hidden", () => {
   it(`deletes only what is selected, over ${String(texts.length)} texts`, () => {
-    const random = rng(11);
+    let random: () => number;
     const failures: string[] = [];
     let checked = 0;
     let lost = 0;
-    for (const text of texts) {
+    for (const [i, text] of texts.entries()) {
+      // Seeded by the text's place in the corpus: adding a text never reshuffles the rest.
+      random = rng(11 * 100_003 + i);
       const base = make(text);
       for (const line of proseLines(base).slice(0, 4)) {
         const hidden = hiddenOn(base, line.from, line.to);
@@ -192,7 +194,9 @@ describe("editing the corpus with marks hidden", () => {
         const before = shown(base, line.from, line.to);
         const want = before.filter((c) => c.pos < from || c.pos >= to);
         const after = base.update({ changes: { from, to }, userEvent: "delete.selection" }).state;
-        const newLine = after.doc.lineAt(Math.min(from, after.doc.length));
+        // The same line by number: the delete may take a link's hidden start
+        // before `from` with it, so `from` alone can land on the next line.
+        const newLine = after.doc.line(base.doc.lineAt(from).number);
         const got = shown(after, newLine.from, newLine.to);
         checked++;
         if (got.map((c) => c.ch).join("") === want.map((c) => c.ch).join("") && !same(got, want)) {
@@ -224,10 +228,12 @@ describe("editing the corpus with marks hidden", () => {
   }, 180_000);
 
   it("types a space or a letter exactly where the cursor is", () => {
-    const random = rng(23);
+    let random: () => number;
     const failures: string[] = [];
     let checked = 0;
-    for (const text of texts) {
+    for (const [i, text] of texts.entries()) {
+      // Seeded by the text's place in the corpus: adding a text never reshuffles the rest.
+      random = rng(23 * 100_003 + i);
       const base = make(text);
       for (const line of proseLines(base).slice(0, 4)) {
         const before = shown(base, line.from, line.to);
@@ -269,10 +275,12 @@ describe("editing the corpus with marks hidden", () => {
   }, 180_000);
 
   it("copies the selection as Markdown that reads back the same", () => {
-    const random = rng(37);
+    let random: () => number;
     const failures: string[] = [];
     let checked = 0;
-    for (const text of texts) {
+    for (const [i, text] of texts.entries()) {
+      // Seeded by the text's place in the corpus: adding a text never reshuffles the rest.
+      random = rng(37 * 100_003 + i);
       const base = make(text);
       for (const line of proseLines(base).slice(0, 4)) {
         const a = line.from + Math.floor(random() * line.length);
@@ -312,7 +320,7 @@ describe("pasting and dragging on the corpus with marks hidden", () => {
   const shownAlone = (md: string) => shown(make(md), 0, md.length);
 
   it("pastes Markdown so the page shows exactly it, in place", () => {
-    const random = rng(41);
+    let random = rng(41);
     const failures: string[] = [];
     let checked = 0;
     const lost: string[] = [];
@@ -328,7 +336,9 @@ describe("pasting and dragging on the corpus with marks hidden", () => {
       }
     }
     snippets.push("plain words", "**bold**", "*it*", "~~gone~~", "a **b** c");
-    for (const text of texts) {
+    for (const [i, text] of texts.entries()) {
+      // Seeded by the text's place in the corpus: adding a text never reshuffles the rest.
+      random = rng(41 * 100_003 + i);
       const base = make(text);
       for (const line of proseLines(base).slice(0, 3)) {
         const hidden = hiddenOn(base, line.from, line.to);
@@ -385,7 +395,7 @@ describe("pasting and dragging on the corpus with marks hidden", () => {
   }, 180_000);
 
   it("pastes several lines: the first joins the text before, the last the text after", () => {
-    const random = rng(67);
+    let random = rng(67);
     const failures: string[] = [];
     const lost: string[] = [];
     let checked = 0;
@@ -411,7 +421,9 @@ describe("pasting and dragging on the corpus with marks hidden", () => {
       }
     }
     snippets.push("one\ntwo", "**bold**\n\n*it*", "a **b**\nc");
-    for (const text of texts) {
+    for (const [i, text] of texts.entries()) {
+      // Seeded by the text's place in the corpus: adding a text never reshuffles the rest.
+      random = rng(67 * 100_003 + i);
       const base = make(text);
       for (const line of proseLines(base).slice(0, 3)) {
         const hidden = hiddenOn(base, line.from, line.to);
@@ -482,11 +494,13 @@ describe("pasting and dragging on the corpus with marks hidden", () => {
   }, 180_000);
 
   it("drags text to another line, styles and all", () => {
-    const random = rng(53);
+    let random: () => number;
     const failures: string[] = [];
     let checked = 0;
     const lost: string[] = [];
-    for (const text of texts) {
+    for (const [i, text] of texts.entries()) {
+      // Seeded by the text's place in the corpus: adding a text never reshuffles the rest.
+      random = rng(53 * 100_003 + i);
       const base = make(text);
       const lines = proseLines(base);
       if (lines.length < 2) continue;
@@ -531,7 +545,15 @@ describe("pasting and dragging on the corpus with marks hidden", () => {
         const where = `${JSON.stringify(text.slice(a, b))} to ${String(t - dst.from)} in ${JSON.stringify(dst.text.slice(0, 100))} → ${JSON.stringify(newD.text.slice(0, 160))} / ${JSON.stringify(newS.text.slice(0, 120))}`;
         const sameText = (x: Char[], y: Char[]) =>
           x.map((c) => c.ch).join("") === y.map((c) => c.ch).join("");
-        if (!sameText(gotS, keptS) || !sameText(gotD, wantD)) {
+        // Dropped inside a link or code where its plain text would change it (a
+        // "#" or brackets in a wiki link's target), it goes just after instead.
+        const [, atomEnd] = wholeAtoms(base, t, t);
+        const after_ = beforeD.filter((c) => c.pos < atomEnd).length;
+        const besideD = [...beforeD.slice(0, after_), ...moved, ...beforeD.slice(after_)];
+        if (
+          !sameText(gotS, keptS) ||
+          !(sameText(gotD, wantD) || (atomEnd > t && sameText(gotD, besideD)))
+        ) {
           failures.push(`text: ${where}`);
           continue;
         }

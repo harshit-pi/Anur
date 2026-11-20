@@ -59,6 +59,16 @@ describe("deleting with marks hidden", () => {
     expect(del(doc.indexOf("the"), doc.indexOf("]("), doc)).toBe("See  now");
   });
 
+  it("never leaves a stray ** when bold-italic can't follow the text kept", () => {
+    // Deleting from inside bold up to a bold-italic quote: Markdown can't open
+    // *** after a letter, so the quote loses its marks, both the italic and
+    // the bold inside it, rather than show ** as text.
+    const doc = '🔍 **look at the whole thing.** then say: ***"why not?"*** and go.';
+    const out = del(doc.indexOf("t the"), doc.indexOf('***"'), doc);
+    expect(out).not.toMatch(/\w\*/u);
+    expect(out.replace(/\*/g, "")).toBe('🔍 look a"why not?" and go.');
+  });
+
   it("deletes inside a wiki link's alias without breaking the link", () => {
     const doc = "Read [[Plan#Retry|the retry plan]] first";
     expect(del(doc.indexOf("retry plan"), doc.indexOf("]]"), doc)).toBe(
