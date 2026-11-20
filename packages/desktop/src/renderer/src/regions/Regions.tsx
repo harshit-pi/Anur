@@ -392,20 +392,12 @@ export function LeftSidebar({
   );
 }
 
-/** Notices about where the folder lives and what its sync service left behind. */
-function FolderNotices({
-  folder,
-  onMerge,
-}: {
-  folder: FolderState;
-  onMerge: (copy: string) => void;
-}) {
+/** A notice about where the folder lives. */
+function FolderNotices({ folder }: { folder: FolderState }) {
   // Once per folder: dismissed, it stays dismissed on this Mac, and the
   // status bar's cloud item carries the same words.
   const [dismissed, setDismissed] = useState(() => noticeSeen(window.localStorage, folder.path));
   const summary = cloudSummary(folder);
-  // Closed for now; a conflict copy still there comes back with the next session.
-  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
   return (
     <>
       {summary && !dismissed ? (
@@ -420,33 +412,6 @@ function FolderNotices({
           {summary.join(" ")}
         </NoticeBar>
       ) : null}
-      {folder.conflicts
-        .filter((c) => !closed.has(c.copy))
-        .map((c) => (
-          <NoticeBar
-            key={c.copy}
-            tone="warn"
-            onClose={() => {
-              setClosed((s) => new Set([...s, c.copy]));
-            }}
-            actions={
-              <button
-                type="button"
-                className="toast-action"
-                onClick={() => {
-                  onMerge(c.copy);
-                }}
-              >
-                Review merge
-              </button>
-            }
-          >
-            <span className="truncate" title={c.copy}>
-              <strong>{c.copy}</strong> looks like{" "}
-              {c.service === "icloud" ? "an iCloud" : "a Dropbox"} conflict copy of {c.original}.
-            </span>
-          </NoticeBar>
-        ))}
     </>
   );
 }
@@ -465,7 +430,6 @@ export function Center({
   onOpenFolder,
   onNewFolder,
   onFirstDoc,
-  onMerge,
   onBack,
   onForward,
   onCrumb,
@@ -498,7 +462,6 @@ export function Center({
   onNewFolder: () => void;
   /** Start the first doc in an empty folder. */
   onFirstDoc: () => void;
-  onMerge: (copy: string) => void;
 }) {
   const [copied, setCopied] = useState<string | null>(null);
   // Bars closed on this doc; another doc shows its own again.
@@ -600,7 +563,7 @@ export function Center({
           </button>
         </div>
       </div>
-      {folder ? <FolderNotices key={folder.path} folder={folder} onMerge={onMerge} /> : null}
+      {folder ? <FolderNotices key={folder.path} folder={folder} /> : null}
       {folder?.mode === "read-only" && !closedNow.has(`read-only:${folder.reason ?? ""}`) ? (
         <NoticeBar
           tone="info"

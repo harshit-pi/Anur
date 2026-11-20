@@ -7,3 +7,4 @@ export {
   type MergePart,
   type MergePlan,
 } from "./conflict-merge.ts";
+export { containsLines, decideConflict, type ConflictOutcome } from "./conflict-resolve.ts";

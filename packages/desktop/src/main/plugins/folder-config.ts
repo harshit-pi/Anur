@@ -1,4 +1,4 @@
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { ANUR_DIR, anurPaths } from "@anur/core";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
@@ -18,12 +18,42 @@ export type FolderPlugins = { on: string[]; values: Record<string, Record<string
 const dirOf = (folder: string) => path.join(folder, ANUR_DIR, "plugins");
 const ignoreLine = (id: string) => `plugins/${id}.json`;
 
-async function readJson(file: string): Promise<unknown> {
+async function parse(file: string): Promise<unknown> {
   try {
     return JSON.parse(await readFile(file, "utf8")) as unknown;
   } catch {
     return null;
   }
+}
+
+/** One settings file; when iCloud left copies ("enabled 2.json"), the newest wins and the rest go. */
+async function readJson(file: string): Promise<unknown> {
+  const dir = path.dirname(file);
+  const base = path.basename(file, ".json");
+  const names = await readdir(dir).catch(() => [] as string[]);
+  const copies = names.filter(
+    (n) => n.startsWith(`${base} `) && /^ \d+\.json$/.test(n.slice(base.length)),
+  );
+  if (copies.length === 0) return parse(file);
+  const found = await Promise.all(
+    [path.basename(file), ...copies].map(async (n) => {
+      const at = path.join(dir, n);
+      const s = await stat(at).catch(() => null);
+      return { at, time: s?.mtimeMs ?? -1, value: s ? await parse(at) : null };
+    }),
+  );
+  const newest = found
+    .filter((f) => typeof f.value === "object" && f.value !== null)
+    .sort((a, b) => b.time - a.time)[0];
+  if (!newest) return null;
+  try {
+    if (newest.at !== file) await rename(newest.at, file);
+    for (const f of found)
+      if (f.at !== file && f.at !== newest.at) await unlink(f.at).catch(() => undefined);
+  } catch {
+    // Read-only or moving underneath: the newest is still what this read returns.
+  }
+  return newest.value;
 }
 
 /** What a folder's files say, read fresh: after a pull, a teammate's change shows. */

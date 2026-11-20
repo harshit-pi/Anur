@@ -46,7 +46,7 @@ import {
 import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts";
 import { fetchOffloaded } from "./folder/offloaded.ts";
 import { keepAnurCopiesIn } from "../vault/anur-copy.ts";
-import { mergeConflict, planConflict } from "./folder/conflicts.ts";
+import { settleConflicts } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
 import { emptyDrawing, findDrawing, sceneOf, withScene } from "./drawings/drawing-file.ts";
@@ -888,6 +888,33 @@ function plainDrawings(root: string): Promise<string[]> {
   return files;
 }
 
+/** Folders settling their sync conflict copies now, so two passes never overlap. */
+const settling = new Set<string>();
+/** Sync conflict copies, settled without asking (folder/conflicts.ts). */
+async function settleCopies(windowId: number): Promise<void> {
+  const folder = folders.current(windowId);
+  const ids = folder ? versionsFor(folder) : null;
+  if (!folder || !ids || folder.conflicts.length === 0 || settling.has(folder.path)) return;
+  settling.add(folder.path);
+  try {
+    const changed = await settleConflicts(folder, {
+      history: async (rel, text, at) => (await ids.list(rel, text, at)).map((v) => v.text),
+      known: (rel) => ids.has(rel),
+      trash: async (file) => {
+        await shell.trashItem(file);
+      },
+      log: (message) => {
+        logLine("info", "conflicts", message);
+      },
+    });
+    const fresh = changed ? await folders.refresh(windowId) : null;
+    const win = windows.get(windowId);
+    if (fresh && win) send(win, "folder:changed", fresh);
+  } finally {
+    settling.delete(folder.path);
+  }
+}
+
 /** Files added, moved or removed outside Anur, as in Finder: the files panel catches up. */
 const folderWatch = new FolderWatch((windowId) => {
   void (async () => {
@@ -900,6 +927,7 @@ const folderWatch = new FolderWatch((windowId) => {
     if (JSON.stringify(before.folders) !== JSON.stringify(now.folders))
       void versions.get(now.path)?.refresh();
     if (lists(before) !== lists(now)) send(win, "folder:changed", now);
+    void settleCopies(windowId);
   })();
 });
 
@@ -947,6 +975,7 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
         .catch(() => undefined);
     }
     folderWatch.start(target.webContents.id, outcome.folder.path);
+    void settleCopies(target.webContents.id);
     if (outcome.folder.mode === "writable") void plugins.startFolder(outcome.folder.path);
     // Asked for a folder inside a space: the space opened; say so once, once the page listens.
     if (outcome.inside) {
@@ -1921,11 +1950,6 @@ const handlers: { [C in Channel]: Handler<C> } = {
     }
     return { ok: (await shell.openPath(file)) === "" };
   },
-  "conflict:plan": async ({ copy }, { webContentsId }) => {
-    const folder = folders.current(webContentsId);
-    if (!folder) return { kind: "failed", reason: "No folder is open." };
-    return planConflict(folder, copy);
-  },
   "map:read": async ({ path: doc, text }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const ids = folder ? versionsFor(folder) : null;
@@ -2410,18 +2434,6 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (folder) threadsFor(folder)?.answered(request);
     return {};
-  },
-  "conflict:merge": async (request, { webContentsId }) => {
-    const folder = folders.current(webContentsId);
-    if (!folder) return { kind: "failed", reason: "No folder is open." };
-    if (folder.mode === "read-only") return { kind: "failed", reason: "This folder is read-only." };
-    const result = await mergeConflict(folder, request, (file) => shell.trashItem(file));
-    if (!result.ok) return { kind: "failed", reason: result.reason };
-    const fresh = await folders.refresh(webContentsId);
-    if (!fresh) return { kind: "failed", reason: "The folder closed during the merge." };
-    const win = windows.get(webContentsId);
-    if (win) send(win, "folder:changed", fresh);
-    return { kind: "merged", folder: fresh };
   },
 };
 

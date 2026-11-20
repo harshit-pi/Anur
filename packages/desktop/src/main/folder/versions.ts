@@ -142,6 +142,13 @@ export class SectionVersions {
     });
   }
 
+  /** Whether this doc already has an ID here, without giving it one. */
+  async has(rel: string): Promise<boolean> {
+    this.loaded ??= this.docIds.load();
+    await this.loaded;
+    return this.docIds.lookup(rel) !== null;
+  }
+
   /** A doc's path in this store's folder, from its ID; null when it isn't known or is gone. */
   async pathOf(doc: DocId): Promise<string | null> {
     this.loaded ??= this.docIds.load();
