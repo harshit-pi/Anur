@@ -15,7 +15,7 @@ import type { AgentRow } from "../../shared/ipc-contract.ts";
  */
 export async function agentRows(on: readonly AgentId[]): Promise<AgentRow[]> {
   const pathEnv = await loginPath();
-  const rows = AGENT_IDS.filter((id) => AGENTS[id].runsThreads).map(async (id) => {
+  const rows = AGENT_IDS.filter((id) => AGENTS[id].listed === "available").map(async (id) => {
     const base = { id, name: AGENTS[id].name, on: on.includes(id), soon: false };
     if (id === "kiro") {
       const kiro = await findKiro(pathEnv);
@@ -58,5 +58,5 @@ export async function agentRows(on: readonly AgentId[]): Promise<AgentRow[]> {
   ];
 }
 
-/** Agents shown in Settings as coming, before they can run threads. */
-const SOON: AgentId[] = ["codex"];
+/** Agents listed as coming (shared/agents.ts says which). */
+const SOON = AGENT_IDS.filter((id) => AGENTS[id].listed === "soon");

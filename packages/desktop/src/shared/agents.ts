@@ -13,20 +13,31 @@ export type AgentId = (typeof AGENT_IDS)[number];
 
 export const DEFAULT_AGENT: AgentId = "claude-code";
 
-export const AGENTS: Record<AgentId, { name: string; runsThreads: boolean; why: string | null }> = {
-  "claude-code": { name: "Claude Code", runsThreads: true, why: null },
-  kiro: { name: "Kiro", runsThreads: true, why: null },
+/**
+ * The one place to show or hide an agent in a release: "available" runs
+ * threads and has its switch in Settings → Agents; "soon" is listed there,
+ * switched off, as coming; "hidden" isn't shown anywhere. An agent taken
+ * out for a version and brought back later changes only this line.
+ */
+export type Listed = "available" | "soon" | "hidden";
+
+export const AGENTS: Record<AgentId, { name: string; listed: Listed; why: string | null }> = {
+  "claude-code": { name: "Claude Code", listed: "available", why: null },
+  kiro: { name: "Kiro", listed: "available", why: null },
   codex: {
     name: "Codex",
-    runsThreads: false,
+    listed: "soon",
     why: "Not yet: its adapter has no hook before tool calls, so Anur can't keep other threads out.",
   },
   "gemini-cli": {
     name: "Gemini CLI",
-    runsThreads: false,
+    listed: "hidden",
     why: "Not yet: its adapter has no hook before tool calls, so Anur can't keep other threads out.",
   },
 };
+
+/** Whether Anur runs threads on this agent in this release. */
+export const runsThreads = (id: AgentId) => AGENTS[id].listed === "available";
 
 export const isAgentId = (v: unknown): v is AgentId =>
   typeof v === "string" && (AGENT_IDS as readonly string[]).includes(v);

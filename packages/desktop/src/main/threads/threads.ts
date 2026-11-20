@@ -48,7 +48,7 @@ import {
   DEFAULT_AGENT,
   TERMINAL_EDIT,
   UNSAVED_EDIT,
-  AGENTS,
+  runsThreads,
   isAgentId,
   type AgentId,
 } from "../../shared/agents.ts";
@@ -676,7 +676,7 @@ export class Threads {
   private async ensureSpare(): Promise<void> {
     const agent = this.d.defaultAgent();
     if (this.spare?.agent === agent || this.spareOpening || this.closed) return;
-    if (!AGENTS[agent].runsThreads || this.d.hub.status(agent).connected !== true) return;
+    if (!runsThreads(agent) || this.d.hub.status(agent).connected !== true) return;
     if (this.spare) this.d.hub.send({ type: "close", thread: this.spare.thread });
     this.spareOpening = true;
     try {

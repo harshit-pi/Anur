@@ -13,7 +13,7 @@ import type {
   ThreadView,
   PreviewView,
 } from "../../../shared/ipc-contract.ts";
-import { AGENTS, type AgentId } from "../../../shared/agents.ts";
+import { AGENTS, runsThreads, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { listOf, stepOf } from "./step-label.ts";
 import { AGENT_SHORT, AgentMark } from "./AgentMark.tsx";
@@ -871,7 +871,7 @@ export function Think({
   );
   /** Read an agent's sign-in when Think shows a thread, or a new one, on it. */
   const checkSignIn = useCallback((agent: AgentId) => {
-    if (!AGENTS[agent].runsThreads) return;
+    if (!runsThreads(agent)) return;
     void anur.call("agent:auth", { agent }).then((e) => {
       setSignIns((all) => ({
         ...all,
@@ -1567,7 +1567,7 @@ export function Think({
   /** Why the agent can't run threads now, with Try again; nothing when it can. */
   const notConnected = (id: AgentId) => {
     const s = statuses[id];
-    if (!AGENTS[id].runsThreads)
+    if (!runsThreads(id))
       return (
         <div className="think-banner" role="status">
           <p>{AGENTS[id].why}</p>
@@ -2843,7 +2843,7 @@ export function Think({
         agentsOn?.length !== 0 &&
         writable &&
         docPath !== FOLDER_DOC &&
-        AGENTS[newAgent].runsThreads &&
+        runsThreads(newAgent) &&
         !signedOut(newAgent) ? (
           <div className="think-actions" role="group" aria-label="Actions">
             <button
@@ -2921,7 +2921,7 @@ export function Think({
                   </>
                 }
                 busy={false}
-                disabled={!writable || !AGENTS[newAgent].runsThreads}
+                disabled={!writable || !runsThreads(newAgent)}
                 onSend={(m) => start(m)}
               />
             ))}

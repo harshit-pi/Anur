@@ -8,7 +8,7 @@ import {
   keepsAnurOut,
 } from "@anur/core";
 import { writeFileAtomic } from "../vault/anur-folder.ts";
-import { AGENTS, DEFAULT_AGENT, isAgentId, type AgentId } from "../shared/agents.ts";
+import { DEFAULT_AGENT, isAgentId, runsThreads, type AgentId } from "../shared/agents.ts";
 import { DEFAULT_FLAGS, flagsFrom, type FeatureFlags } from "../shared/features.ts";
 
 /**
@@ -125,5 +125,5 @@ export async function setCommitsAnur(folder: string, commit: boolean): Promise<v
 /** Saved agent switches: known agents that can run threads; none saved is Claude Code alone. */
 function agentsFrom(raw: unknown): AgentId[] {
   if (!Array.isArray(raw)) return [DEFAULT_AGENT];
-  return [...new Set(raw.filter((x): x is AgentId => isAgentId(x) && AGENTS[x].runsThreads))];
+  return [...new Set(raw.filter((x): x is AgentId => isAgentId(x) && runsThreads(x)))];
 }

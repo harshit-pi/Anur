@@ -26,7 +26,7 @@ import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { FORMAT_VERSION, PreviewPart, docsBefore, subtreeText } from "@anur/core";
-import { AGENTS, type AgentId } from "../shared/agents.ts";
+import { runsThreads, type AgentId } from "../shared/agents.ts";
 import type { SessionOption } from "../agent/protocol.ts";
 import {
   BrowserWindow,
@@ -2103,7 +2103,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return { threads: t ? await t.recent() : [] };
   },
   "agent:auth": ({ agent }) => {
-    if (AGENTS[agent].runsThreads) hub.send({ type: "auth", agent });
+    if (runsThreads(agent)) hub.send({ type: "auth", agent });
     return { agent, auth: hub.auth(agent), signIn: hub.signIn(agent) };
   },
   "agent:sign-in": ({ agent, method }) => {
@@ -2116,7 +2116,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return {};
   },
   "agent:options": ({ agent }, { webContentsId }) => {
-    if (!probed.has(agent) && AGENTS[agent].runsThreads) {
+    if (!probed.has(agent) && runsThreads(agent)) {
       probed.add(agent);
       hub.send({
         type: "probe",
