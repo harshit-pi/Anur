@@ -1897,7 +1897,12 @@ export const ipcEvents = {
     after: z.array(z.string()),
   }),
   /** An agent in a terminal asked to show a doc (6.7, 6.9): open it, at a section if given. */
-  "app:open-doc": z.object({ path: z.string(), section: z.string().nullable() }),
+  "app:open-doc": z.object({
+    path: z.string(),
+    section: z.string().nullable(),
+    /** A map made from a chat opens as its map. */
+    view: z.literal("map").optional(),
+  }),
   /** A Core feature was switched on or off, in this window or another. */
   "features:changed": FeatureFlagsSchema,
   /** Where updates stand changed, as when a new version finished downloading. */

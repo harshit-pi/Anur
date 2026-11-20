@@ -3131,7 +3131,7 @@ export class Threads {
   }
 
   /**
-   * /anur doc (6.8): the chat a doc came from, kept as a thread on its
+   * /anur map (6.8): the chat a doc came from, kept as a thread on its
    * title. The agent's summary is its first message; the transcript and
    * the inputs it used are inputs on the title, so every section's new
    * threads receive them.

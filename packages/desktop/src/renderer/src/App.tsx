@@ -1129,8 +1129,9 @@ export function App() {
       setFolder((was) => keepSame(was, f));
     });
     // An agent in a terminal asked to show a doc (6.7, 6.9).
-    const offOpenDoc = anur.on("app:open-doc", ({ path, section }) => {
+    const offOpenDoc = anur.on("app:open-doc", ({ path, section, view }) => {
       openDocNow.current(path, false);
+      if (view === "map") setCenterView("map");
       if (section) setPendingHeading({ path, heading: section });
     });
     // ⌘← and ⌘→ go back and forward when nothing is being typed in, as in Chrome.

@@ -189,7 +189,7 @@ function ClaudeCodeCard({
       <aside className="skill-card" role="dialog" aria-label="Added to Claude Code">
         <strong>Added to Claude Code</strong>
         <p>
-          In a Claude Code chat: <code>/anur doc</code>, <code>/anur new</code>,{" "}
+          In a Claude Code chat: <code>/anur map</code>, <code>/anur new</code>,{" "}
           <code>/anur open</code>.
         </p>
         <div className="skill-card-actions">
@@ -203,7 +203,7 @@ function ClaudeCodeCard({
     <aside className="skill-card" role="dialog" aria-label="Use Anur from Claude Code">
       <strong>Use Anur from Claude Code</strong>
       <p>
-        <code>/anur doc</code> turns a Claude Code chat into a doc here
+        <code>/anur map</code> turns a Claude Code chat into a map here
         {code ? ", and each task in a folder of code gets a report of what it changed." : "."}
       </p>
       {error ? <p className="skill-card-error">{error}</p> : null}
