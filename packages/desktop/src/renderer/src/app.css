@@ -6897,3 +6897,28 @@ button.file-card-name:hover {
   margin: 6px 0;
   font-size: 13px;
 }
+
+/* The legend shows its marks; hovered, each opens to its name, as the key bar's keys do. */
+.map-legend span.map-legend-what {
+  display: inline;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: max-width 160ms ease;
+}
+
+.map-legend:not(.map-hint) {
+  gap: 8px;
+}
+
+.map-legend:hover span.map-legend-what {
+  max-width: 160px;
+}
+
+.map-legend:not(.map-hint) > span {
+  gap: 0;
+}
+
+.map-legend:hover span.map-legend-what {
+  margin-left: 6px;
+}

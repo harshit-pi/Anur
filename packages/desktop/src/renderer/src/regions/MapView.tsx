@@ -2365,12 +2365,12 @@ export function MapView({
         // Only the marks on this map (17.1); before any thread, what will appear.
         const has = (k: Box["kind"]) => boxes.some((b) => b.kind === k);
         const keys = [
-          { cls: "section", label: "Section · in the doc", on: true },
-          { cls: "choice", label: "Choice · not in the doc yet", on: has("option") || has("edit") },
-          { cls: "action", label: "Action · work", on: boxes.some((b) => b.lane?.length) },
+          { cls: "section", label: "Section", on: true },
+          { cls: "choice", label: "Choice · proposed", on: has("option") || has("edit") },
+          { cls: "action", label: "Action", on: boxes.some((b) => b.lane?.length) },
           {
             cls: "thread",
-            label: "A thread",
+            label: "Thread",
             on: has("thread") || boxes.some((b) => b.chats?.length),
           },
         ].filter((k) => k.on);
@@ -2381,10 +2381,12 @@ export function MapView({
             </div>
           );
         return (
-          <div className="map-legend" aria-hidden="true">
+          // Just the marks; hovered, each says what it is, as the key bar does.
+          <div className="map-legend" aria-label="Legend">
             {keys.map((k) => (
-              <span key={k.label}>
-                <i className={`map-key ${k.cls}`} /> {k.label}
+              <span key={k.label} title={k.label}>
+                <i className={`map-key ${k.cls}`} />
+                <span className="map-legend-what">{k.label}</span>
               </span>
             ))}
           </div>
