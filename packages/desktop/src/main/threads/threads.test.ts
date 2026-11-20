@@ -985,6 +985,40 @@ describe("Threads", () => {
     });
   }, 15_000);
 
+  it("shows a turn as stopped when Anur closed during it, not while it runs", async () => {
+    const { folder, support, threads: t } = await setup();
+    const r = await t.start("plan.md", DOC, risks, "Is the host a real risk?");
+    if (r.kind !== "started") throw new Error(r.reason);
+    const errors = (v: Awaited<ReturnType<Threads["list"]>>) =>
+      v[0]?.items.filter((i) => i.kind === "error") ?? [];
+    expect(errors(await t.list("plan.md", DOC))).toEqual([]);
+    // Anur quits mid-turn; the next start finds the turn with no end.
+    const reopened = (device: string) => {
+      const versions = new SectionVersions(folder, device);
+      return new Threads({
+        folder,
+        device,
+        appSupport: support,
+        hub: fakeHub().hub,
+        hookScript: "/x/hook.js",
+        node: "/x/node",
+        locate: (rel, text) => versions.locate(rel, text),
+        emit: () => undefined,
+        previewsChanged: () => undefined,
+        defaultAgent: () => "claude-code",
+      });
+    };
+    expect(errors(await reopened("dev1").list("plan.md", DOC))).toEqual([
+      {
+        kind: "error",
+        turn: expect.any(String) as unknown,
+        text: "Anur closed during this reply.",
+      },
+    ]);
+    // Another Mac may still be running it: that one's turn isn't called stopped.
+    expect(errors(await reopened("dev2").list("plan.md", DOC))).toEqual([]);
+  });
+
   it("shows nothing for a doc changed outside Anur during the turn", async () => {
     const { folder, threads: t, reply } = await setup();
     await writeFile(path.join(folder, "plan.md"), DOC);
