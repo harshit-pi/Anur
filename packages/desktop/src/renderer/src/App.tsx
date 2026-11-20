@@ -1328,7 +1328,13 @@ export function App() {
           setTabs((t) => newTab(t));
         }}
         onListTabs={listTabs}
-        view={selected === SYSTEM_TAB ? "map" : doc && sections ? centerView : null}
+        view={
+          selected === SYSTEM_TAB
+            ? "map"
+            : (doc && sections) || (!selected && folder?.mode === "writable")
+              ? centerView
+              : null
+        }
         mapOnly={selected === SYSTEM_TAB}
         onView={setCenterView}
         onAsk={doc && sections ? ask : null}
