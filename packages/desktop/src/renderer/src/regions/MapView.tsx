@@ -2051,6 +2051,22 @@ export function MapView({
                         e.preventDefault();
                         e.currentTarget.blur();
                       }
+                      // ⌘Z in a name not changed yet undoes on the map (a box just added
+                      // goes, and ⇧⌘Z brings it back); once typed in, it undoes the typing.
+                      const untouched =
+                        (e.metaKey || e.ctrlKey) &&
+                        e.key.toLowerCase() === "z" &&
+                        !e.shiftKey &&
+                        e.currentTarget.value === b.heading;
+                      if (untouched) {
+                        e.preventDefault();
+                        cancelRename.current = true;
+                        setRenaming(null);
+                        setFreshIndex(null);
+                        host.current?.focus();
+                        undo();
+                        return;
+                      }
                       if (e.key === "Escape") {
                         const fresh = freshIndex === b.index;
                         cancelRename.current = true;
