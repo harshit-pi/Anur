@@ -10,6 +10,19 @@ import {
 } from "./file-tree.ts";
 
 describe("the file tree", () => {
+  it("leaves Excalidraw drawings out, and a folder that held only drawings", () => {
+    const tree = buildTree(
+      ["Plan.md", "Excalidraw/Sketch.excalidraw.md", "notes/Idea.md", "notes/Flow.excalidraw.md"],
+      ["Excalidraw", "notes", "Empty"],
+      "name",
+      {},
+      ["board.excalidraw", "notes/photo.png"],
+    );
+    const names = (nodes: typeof tree): string[] =>
+      nodes.flatMap((n) => [n.name, ...(n.kind === "folder" ? names(n.children) : [])]);
+    expect(names(tree)).toEqual(["Empty", "notes", "Idea", "photo", "Plan"]);
+  });
+
   it("nests docs under their folders, folders first, names without .md", () => {
     const tree = buildTree(["A.md", "notes/Plan.md", "notes/deep/Idea.md", "b.md"]);
     expect(tree.map((n) => [n.kind, n.name])).toEqual([
