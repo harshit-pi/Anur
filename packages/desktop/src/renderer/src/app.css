@@ -2614,7 +2614,11 @@ body.resizing * {
   outline: none;
   cursor: grab;
   background-color: var(--paper);
-  background-image: radial-gradient(var(--rule) 1px, transparent 1px);
+  /* Dots a shade off the paper, so boxes and lines lead. */
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--rule) 50%, var(--paper)) 1px,
+    transparent 1px
+  );
   background-size: 20px 20px;
   touch-action: none;
   user-select: none;
@@ -5760,7 +5764,7 @@ button.file-card-name:hover {
 
 /*
  * Mock 11: three kinds on the map, one look each.
- * Section, in the doc: a rectangle with a solid border.
+ * Section, in the doc: a rounded box with a solid border.
  * Choice, not in the doc yet: a rounded blue card with a dashed edge.
  * Action, work: a pill in a lane under its section.
  * A thread is italic text on the line to its choices.
@@ -5768,7 +5772,7 @@ button.file-card-name:hover {
 .map-box {
   padding: 10px 16px;
   border: 1.5px solid var(--graphite);
-  border-radius: 4px;
+  border-radius: 10px;
   box-shadow: none;
 }
 
