@@ -1,4 +1,5 @@
 import { EditorView } from "@codemirror/view";
+import { loadPlace, savePlace, sectionIndexOf } from "./layout/doc-place.ts";
 import { FOLDER_DOC, buildSectionTree, folderDocText, type SectionTree } from "@anur/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -140,6 +141,8 @@ export function App() {
   const [scope, setScope] = useState<Scope>("section");
   /** The section the outline marks: the cursor's, the map's pick, or the one scrolled to. */
   const [outlineAt, setOutlineAt] = useState(0);
+  const outlineAtNow = useRef(outlineAt);
+  outlineAtNow.current = outlineAt;
   /** When the cursor or a pick last set the mark: the scroll a jump causes doesn't move it. */
   const markedAt = useRef(0);
   /** Page or Map in the centre (task 7). */
@@ -858,6 +861,18 @@ export function App() {
   useEffect(() => {
     const was = lastView.current;
     lastView.current = centerView;
+    // To the map: the section the outline marks, the one being read, is the one picked,
+    // and the page's cursor moves there unseen, so both views keep one section.
+    if (was === "page" && centerView === "map") {
+      const at = outlineAtNow.current;
+      if (at !== cursorSection) {
+        setCursorSection(at);
+        const target = sectionsNow.current?.sections[at]?.headingRange;
+        const v = view.current;
+        if (target && v) v.dispatch({ selection: { anchor: target.to } });
+      }
+      return;
+    }
     if (was !== "map" || centerView !== "page") return;
     // After the page is shown again: a hidden editor can't scroll.
     requestAnimationFrame(() => {
@@ -978,6 +993,31 @@ export function App() {
     setPendingHeading(null);
     if (index >= 0) jumpTo(index);
   }, [pendingHeading, doc, sections, jumpTo]);
+  // Each doc reopens where it was left: its Page or Map and its section (per space, this device).
+  // A link's heading or a search hit asks for a place of its own and wins.
+  const placedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!doc || !sections || !folderPath || placedFor.current === doc.path) return;
+    placedFor.current = doc.path;
+    if (pendingHeading?.path === doc.path || pendingLine?.path === doc.path) return;
+    const place = loadPlace(window.localStorage, folderPath, doc.path);
+    if (!place) return;
+    setCenterView(place.view);
+    const index = sectionIndexOf(sections.sections, place.section);
+    if (index < 0) return;
+    setCursorSection(index);
+    setOutlineAt(index);
+    if (place.view === "page")
+      requestAnimationFrame(() => {
+        jumpTo(index);
+      });
+  }, [doc, sections, folderPath, pendingHeading, pendingLine, jumpTo]);
+  useEffect(() => {
+    if (!doc || !sections || !folderPath || placedFor.current !== doc.path) return;
+    const section = sections.sections[outlineAt]?.path;
+    if (section)
+      savePlace(window.localStorage, folderPath, doc.path, { view: centerView, section });
+  }, [doc, sections, folderPath, centerView, outlineAt]);
   // A search result's line: once its doc is on the page, select the match there.
   useEffect(() => {
     if (!pendingLine || doc?.path !== pendingLine.path || !sections) return;
