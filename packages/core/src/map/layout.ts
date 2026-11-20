@@ -151,6 +151,44 @@ const GAP_DEPTH = 72;
 const GAP_STACK = 18;
 
 /**
+ * The sides the title's children keep in the next mind map (30.35): each its
+ * own, else the side its boxes had before. A section made by Use takes the
+ * side its choices were on, so the map doesn't swap round under the person.
+ * `seen` is every box's side in the last mind map.
+ */
+export function keptSides(
+  nodes: readonly MapNode[],
+  seen: ReadonlyMap<string, -1 | 1>,
+): Map<string, -1 | 1> {
+  const root = nodes.find((n) => n.parent === null);
+  const kids = new Map<string, string[]>();
+  for (const n of nodes) {
+    if (n.parent === null) continue;
+    const list = kids.get(n.parent) ?? [];
+    list.push(n.id);
+    kids.set(n.parent, list);
+  }
+  /** The side the first box seen before under `id` had, nearest first. */
+  const inherited = (id: string): -1 | 1 | undefined => {
+    const queue = [...(kids.get(id) ?? [])];
+    for (let k = 0; k < queue.length; k++) {
+      const at = queue[k] ?? "";
+      const side = seen.get(at);
+      if (side) return side;
+      queue.push(...(kids.get(at) ?? []));
+    }
+    return undefined;
+  };
+  const out = new Map<string, -1 | 1>();
+  if (!root || seen.size === 0) return out;
+  for (const id of kids.get(root.id) ?? []) {
+    const side = seen.get(id) ?? inherited(id);
+    if (side) out.set(id, side);
+  }
+  return out;
+}
+
+/**
  * The mind map (mock 8): the title in the middle, its sections branching to
  * the right and the left, each box's children stacked beside it, further
  * out. The first half of the title's children, by height, go right and the
