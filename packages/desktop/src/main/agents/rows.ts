@@ -16,7 +16,7 @@ import type { AgentRow } from "../../shared/ipc-contract.ts";
 export async function agentRows(on: readonly AgentId[]): Promise<AgentRow[]> {
   const pathEnv = await loginPath();
   const rows = AGENT_IDS.filter((id) => AGENTS[id].runsThreads).map(async (id) => {
-    const base = { id, name: AGENTS[id].name, on: on.includes(id) };
+    const base = { id, name: AGENTS[id].name, on: on.includes(id), soon: false };
     if (id === "kiro") {
       const kiro = await findKiro(pathEnv);
       const version = kiro ? await kiroVersion(kiro) : null;
@@ -42,5 +42,21 @@ export async function agentRows(on: readonly AgentId[]): Promise<AgentRow[]> {
           fix: "Install Claude Code, then sign in once in a terminal",
         };
   });
-  return Promise.all(rows);
+  // Switched on but not here to run, such as Claude Code before it's installed: off, with its fix.
+  const found = (await Promise.all(rows)).map((r) => ({ ...r, on: r.on && r.ready }));
+  return [
+    ...found,
+    ...SOON.map((id) => ({
+      id,
+      name: AGENTS[id].name,
+      on: false,
+      ready: false,
+      soon: true,
+      version: null,
+      fix: null,
+    })),
+  ];
 }
+
+/** Agents shown in Settings as coming, before they can run threads. */
+const SOON: AgentId[] = ["codex"];

@@ -117,7 +117,9 @@ function AgentRows({
           key={r.id}
           title={r.name}
           icon={<AgentMark agent={r.id} />}
-          detail={r.fix ?? (r.version ? `Version ${r.version}` : undefined)}
+          detail={
+            r.soon ? "Coming soon" : (r.fix ?? (r.version ? `Version ${r.version}` : undefined))
+          }
         >
           <Switch
             on={r.on}

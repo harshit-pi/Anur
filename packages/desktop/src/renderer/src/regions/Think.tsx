@@ -2791,9 +2791,11 @@ export function Think({
         />
       ) : null}
       <div className="think-foot">
-        {notConnected(newAgent)}
+        {/* No agent on: only the way to turn one on, below. */}
+        {agentsOn?.length === 0 ? null : notConnected(newAgent)}
         {error ? <p className="think-error">{error}</p> : null}
         {features.actions &&
+        agentsOn?.length !== 0 &&
         writable &&
         docPath !== FOLDER_DOC &&
         AGENTS[newAgent].runsThreads &&

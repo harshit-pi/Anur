@@ -14,6 +14,8 @@ export const AgentRow = z.object({
   version: z.string().nullable(),
   /** What to do so it can run, such as "Run kiro-cli update". */
   fix: z.string().nullable(),
+  /** Coming to Anur, not yet able to run threads. */
+  soon: z.boolean(),
 });
 export type AgentRow = z.infer<typeof AgentRow>;
 import { INSERT_IDS } from "./insert-items.ts";

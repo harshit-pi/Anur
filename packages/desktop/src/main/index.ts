@@ -583,6 +583,8 @@ async function syncAgent(id: AgentId, on: boolean): Promise<void> {
     await taskHooks.remove();
     return;
   }
+  // Not installed yet: nothing to put Anur into; the next launch after it is installed does.
+  if (!(await claudeSkill.status()).claude) return;
   if (!(await claudeSkill.state()).added) await claudeSkill.add();
   if (!(await taskHooks.status()).added) await taskHooks.add();
 }
