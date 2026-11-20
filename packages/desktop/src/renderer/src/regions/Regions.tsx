@@ -3,7 +3,7 @@ import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { crumbs } from "../layout/path-row.ts";
 import type { SectionTree } from "@anur/core";
 import type { AgentStatus, FolderState } from "../../../shared/ipc-contract.ts";
-import { AGENTS } from "../../../shared/agents.ts";
+import { AGENTS, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { FileTree, type FileActions, type MakeRequest } from "./FileTree.tsx";
 import { OpenFromButtons, PluginStatusItem, usePluginStatuses } from "./PluginUI.tsx";
@@ -36,6 +36,7 @@ import { PROVIDERS, cloudSummary, markNoticeSeen, noticeSeen } from "./cloud-not
 
 /** 1. Ribbon: Files, Search, Plugins, Settings. */
 export function Ribbon({
+  files,
   filesOpen,
   onFiles,
   searchOpen,
@@ -43,6 +44,8 @@ export function Ribbon({
   onSettings,
   onPlugins,
 }: {
+  /** A space is open, so there are files to show. */
+  files: boolean;
   filesOpen: boolean;
   onFiles: () => void;
   searchOpen: boolean;
@@ -52,16 +55,18 @@ export function Ribbon({
 }) {
   return (
     <nav className="ribbon" aria-label="Ribbon">
-      <button
-        className={`ribbon-button${filesOpen ? " active" : ""}`}
-        type="button"
-        aria-label="Files"
-        aria-pressed={filesOpen}
-        title={filesOpen ? "Hide files (⌘\\)" : "Show files (⌘\\)"}
-        onClick={onFiles}
-      >
-        <FolderIcon />
-      </button>
+      {files ? (
+        <button
+          className={`ribbon-button${filesOpen ? " active" : ""}`}
+          type="button"
+          aria-label="Files"
+          aria-pressed={filesOpen}
+          title={filesOpen ? "Hide files (⌘\\)" : "Show files (⌘\\)"}
+          onClick={onFiles}
+        >
+          <FolderIcon />
+        </button>
+      ) : null}
       <button
         className={`ribbon-button${searchOpen ? " active" : ""}`}
         type="button"
@@ -392,20 +397,12 @@ export function LeftSidebar({
   );
 }
 
-/** Notices about where the folder lives and what its sync service left behind. */
-function FolderNotices({
-  folder,
-  onMerge,
-}: {
-  folder: FolderState;
-  onMerge: (copy: string) => void;
-}) {
+/** A notice about where the folder lives. */
+function FolderNotices({ folder }: { folder: FolderState }) {
   // Once per folder: dismissed, it stays dismissed on this Mac, and the
   // status bar's cloud item carries the same words.
   const [dismissed, setDismissed] = useState(() => noticeSeen(window.localStorage, folder.path));
   const summary = cloudSummary(folder);
-  // Closed for now; a conflict copy still there comes back with the next session.
-  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
   return (
     <>
       {summary && !dismissed ? (
@@ -420,33 +417,6 @@ function FolderNotices({
           {summary.join(" ")}
         </NoticeBar>
       ) : null}
-      {folder.conflicts
-        .filter((c) => !closed.has(c.copy))
-        .map((c) => (
-          <NoticeBar
-            key={c.copy}
-            tone="warn"
-            onClose={() => {
-              setClosed((s) => new Set([...s, c.copy]));
-            }}
-            actions={
-              <button
-                type="button"
-                className="toast-action"
-                onClick={() => {
-                  onMerge(c.copy);
-                }}
-              >
-                Review merge
-              </button>
-            }
-          >
-            <span className="truncate" title={c.copy}>
-              <strong>{c.copy}</strong> looks like{" "}
-              {c.service === "icloud" ? "an iCloud" : "a Dropbox"} conflict copy of {c.original}.
-            </span>
-          </NoticeBar>
-        ))}
     </>
   );
 }
@@ -462,10 +432,10 @@ export function Center({
   docError,
   spaceNotice = null,
   spaceOpening = null,
+  openOnMap = false,
   onOpenFolder,
   onNewFolder,
   onFirstDoc,
-  onMerge,
   onBack,
   onForward,
   onCrumb,
@@ -494,11 +464,12 @@ export function Center({
   spaceNotice?: string | null;
   /** The space this window is opening, before it's in: shown in place of the start page. */
   spaceOpening?: string | null;
+  /** Docs open on the map by default: a space opening shows on the map's canvas. */
+  openOnMap?: boolean;
   onOpenFolder: () => void;
   onNewFolder: () => void;
   /** Start the first doc in an empty folder. */
   onFirstDoc: () => void;
-  onMerge: (copy: string) => void;
 }) {
   const [copied, setCopied] = useState<string | null>(null);
   // Bars closed on this doc; another doc shows its own again.
@@ -514,93 +485,92 @@ export function Center({
   const isSystem = selected === SYSTEM_TAB || !!selected?.startsWith("anur:task/");
   return (
     <main className="center">
-      <div className="path-row">
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Back"
-          title="Back (⌘⌥←)"
-          disabled={!onBack}
-          onClick={onBack ?? undefined}
-        >
-          <BackIcon />
-        </button>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Forward"
-          title="Forward (⌘⌥→)"
-          disabled={!onForward}
-          onClick={onForward ?? undefined}
-        >
-          <ForwardIcon />
-        </button>
-        <nav className="path crumbs" aria-label="Path" title={selected ?? undefined}>
-          {isSystem ? (
-            <span className="crumb">{selected === SYSTEM_TAB ? "Repos" : "Task report"}</span>
-          ) : selected ? (
-            crumbs(selected).map((c, i) => (
-              <Fragment key={`${String(i)}-${c.label}`}>
-                {i > 0 ? (
-                  <span className="crumb-sep" aria-hidden="true">
-                    /
-                  </span>
-                ) : null}
-                <button
-                  type="button"
-                  className="crumb truncate"
-                  title={
-                    c.lists ? `What's in ${c.lists}` : `What's in ${folder?.name ?? "the folder"}`
-                  }
-                  onClick={() => {
-                    onCrumb(c.lists);
-                  }}
-                >
-                  {c.label}
-                </button>
-              </Fragment>
-            ))
-          ) : (
-            <span className="quiet">No doc</span>
-          )}
-        </nav>
-        <div className="path-actions" hidden={isSystem}>
-          {copied ? (
-            <span className="copied" role="status">
-              Copied <span className="copied-link">{copied}</span>
-            </span>
-          ) : null}
+      {/* With no space open, there's no doc to show a path for. */}
+      {folder ? (
+        <div className="path-row">
           <button
             className="icon-button"
             type="button"
-            aria-label="Copy a link to this section"
-            title="Copy a link to the section the cursor is in"
-            disabled={!selected}
-            onClick={() => {
-              void onCopyLink().then((link) => {
-                if (!link) return;
-                setCopied(link);
-                setTimeout(() => {
-                  setCopied((c) => (c === link ? null : c));
-                }, 2000);
-              });
-            }}
+            aria-label="Back"
+            title="Back (⌘⌥←)"
+            disabled={!onBack}
+            onClick={onBack ?? undefined}
           >
-            <LinkIcon />
+            <BackIcon />
           </button>
           <button
             className="icon-button"
             type="button"
-            aria-label="More"
-            title="More"
-            disabled={!selected}
-            onClick={onMore}
+            aria-label="Forward"
+            title="Forward (⌘⌥→)"
+            disabled={!onForward}
+            onClick={onForward ?? undefined}
           >
-            <MoreIcon />
+            <ForwardIcon />
           </button>
+          <nav className="path crumbs" aria-label="Path" title={selected ?? undefined}>
+            {isSystem ? (
+              <span className="crumb">{selected === SYSTEM_TAB ? "Repos" : "Task report"}</span>
+            ) : selected ? (
+              crumbs(selected).map((c, i) => (
+                <Fragment key={`${String(i)}-${c.label}`}>
+                  {i > 0 ? (
+                    <span className="crumb-sep" aria-hidden="true">
+                      /
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="crumb truncate"
+                    title={c.lists ? `What's in ${c.lists}` : `What's in ${folder.name}`}
+                    onClick={() => {
+                      onCrumb(c.lists);
+                    }}
+                  >
+                    {c.label}
+                  </button>
+                </Fragment>
+              ))
+            ) : null}
+          </nav>
+          <div className="path-actions" hidden={isSystem}>
+            {copied ? (
+              <span className="copied" role="status">
+                Copied <span className="copied-link">{copied}</span>
+              </span>
+            ) : null}
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Copy a link to this section"
+              title="Copy a link to the section the cursor is in"
+              disabled={!selected}
+              onClick={() => {
+                void onCopyLink().then((link) => {
+                  if (!link) return;
+                  setCopied(link);
+                  setTimeout(() => {
+                    setCopied((c) => (c === link ? null : c));
+                  }, 2000);
+                });
+              }}
+            >
+              <LinkIcon />
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="More"
+              title="More"
+              disabled={!selected}
+              onClick={onMore}
+            >
+              <MoreIcon />
+            </button>
+          </div>
         </div>
-      </div>
-      {folder ? <FolderNotices key={folder.path} folder={folder} onMerge={onMerge} /> : null}
+      ) : null}
+      {folder ? <FolderNotices key={folder.path} folder={folder} /> : null}
       {folder?.mode === "read-only" && !closedNow.has(`read-only:${folder.reason ?? ""}`) ? (
         <NoticeBar
           tone="info"
@@ -670,6 +640,14 @@ export function Center({
             {`${String(folder.docs.length)} Markdown files in ${folder.name}. Pick one on the left.`}
           </p>
         </div>
+      ) : spaceOpening && openOnMap ? (
+        // Map first, the space opens on the map's canvas, so no page shows before it.
+        <div className="map blank-map">
+          <div className="space-opening" role="status">
+            <h1>{`Opening ${spaceOpening}…`}</h1>
+            <div className="space-opening-bar" aria-hidden="true" />
+          </div>
+        </div>
       ) : spaceOpening ? (
         <div className="page-empty space-opening" role="status">
           <h1>{`Opening ${spaceOpening}…`}</h1>
@@ -679,12 +657,12 @@ export function Center({
         <div className="page-empty">
           <h1>Open a space</h1>
           <p>
-            Think beside your docs with your own agent. Each section gets its own threads, which
-            start from that section, the rules it links to and what earlier threads settled.
+            Think on maps with your own agent. Ask about any box and the thread starts from it, what
+            it links to and what earlier threads settled.
           </p>
           <p>
-            A space is a folder of Markdown docs you work in and share, with what Anur keeps about
-            them inside it. Your docs stay plain files that open in any editor.
+            A space is a folder you work in and share. Every map is also a Markdown file in it, so
+            it opens in any editor.
           </p>
           <div className="page-empty-buttons">
             <button className="primary-button" type="button" onClick={onNewFolder}>
@@ -805,20 +783,39 @@ const SAVE_LABELS: Record<SaveStatus, string> = {
   failed: "Not saved",
 };
 
-/** Whether the person's agent is connected; it connects when a thread first needs it. */
+/**
+ * Whether the agent in use is connected: the one Think is working with (the
+ * open thread's, or the one picked for a new thread), else the default. It
+ * connects when a thread first needs it.
+ */
 function AgentState() {
+  const [agent, setAgent] = useState<AgentId | null>(null);
   const [status, setStatus] = useState<AgentStatus | null>(null);
   useEffect(() => {
-    let shown: string | null = null;
-    void anur.call("agent:status", { connect: false }).then((s) => {
+    const onShown = (e: Event) => {
+      setAgent((e as CustomEvent<{ agent: AgentId }>).detail.agent);
+    };
+    window.addEventListener("anur:agent-shown", onShown);
+    return () => {
+      window.removeEventListener("anur:agent-shown", onShown);
+    };
+  }, []);
+  useEffect(() => {
+    let current = true;
+    let shown: string | null = agent;
+    void anur.call("agent:status", { connect: false, ...(agent ? { agent } : {}) }).then((s) => {
+      if (!current) return;
       shown = s.id;
       setStatus(s);
     });
-    // The default agent's status; another agent's doesn't replace it here.
-    return anur.on("agent:status", (s) => {
+    const off = anur.on("agent:status", (s) => {
       if (shown === null || s.id === shown) setStatus(s);
     });
-  }, []);
+    return () => {
+      current = false;
+      off();
+    };
+  }, [agent]);
   const on = status?.connected === true;
   return (
     <span className="status-item" title={status?.reason ?? undefined}>
@@ -826,8 +823,10 @@ function AgentState() {
       {on
         ? `${AGENTS[status.id].name} connected`
         : status?.connected === false
-          ? "Agent not connected"
-          : "Agent connects with the first thread"}
+          ? `${AGENTS[status.id].name} not connected`
+          : status
+            ? `${AGENTS[status.id].name} connects with the first thread`
+            : "Agent connects with the first thread"}
     </span>
   );
 }

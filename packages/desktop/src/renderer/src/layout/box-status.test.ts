@@ -23,6 +23,7 @@ const offers = (used: string | null) =>
     heading: null,
     several: false,
     added: used ? [used] : [],
+    skipped: [],
   }) as T["items"][number];
 
 describe("what a box says happened on it (mock 9)", () => {

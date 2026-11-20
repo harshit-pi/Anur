@@ -5,7 +5,7 @@ import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
 import { AGENTS, type AgentId } from "../shared/agents.ts";
 import type { AgentAdapter } from "./adapters.ts";
-import { checkedIn, hookSaw } from "./check-log.ts";
+import { checkedIn, hookSaw, toolsSeen } from "./check-log.ts";
 import type { Launch } from "./adapters.ts";
 import type {
   AgentAuth,
@@ -101,6 +101,10 @@ export class AgentHost {
   private readonly warming = new Set<string>();
   /** Each session's hook log, to match its tool calls against. */
   private readonly hookLogs = new Map<string, string>();
+  /** Each Kiro session's MCP servers and their state, as Kiro last reported them. */
+  private readonly mcpStates = new Map<string, Map<string, string>>();
+  /** Tool calls each Kiro session finished, matched by count against the hook log. */
+  private readonly callsDone = new Map<string, number>();
   /** Each thread's chosen mode and model, applied to its session whenever one starts. */
   private readonly chosen = new Map<string, Map<string, string>>();
   /** A sign-in running for an agent. */
@@ -192,7 +196,7 @@ export class AgentHost {
     const adapter = this.env.adapters[agent];
     if (!adapter)
       return this.fail(agent, AGENTS[agent].why ?? `${AGENTS[agent].name} can't run threads yet.`);
-    const failed = selfTest(this.env.node, this.env.nodeEnv, this.env.hook);
+    const failed = selfTest(this.env.node, this.env.nodeEnv, this.env.hook, adapter.hookFlavor);
     if (failed)
       return this.fail(
         agent,
@@ -235,6 +239,20 @@ export class AgentHost {
       .onRequest(acp.methods.client.session.requestPermission, ({ params }) =>
         this.askPermission(params),
       )
+      // Kiro's MCP servers connect in the background; it reports each one's state.
+      .onNotification(
+        "_kiro/mcp/status",
+        (raw: unknown) => raw,
+        ({ params }) => {
+          const p = params as { sessionId?: unknown; servers?: unknown };
+          if (typeof p.sessionId !== "string" || !Array.isArray(p.servers)) return;
+          const states = new Map<string, string>();
+          for (const s of p.servers as { name?: unknown; status?: unknown }[])
+            if (typeof s.name === "string" && typeof s.status === "string")
+              states.set(s.name, s.status);
+          this.mcpStates.set(p.sessionId, states);
+        },
+      )
       // ACP's auth extension is unstable, so it is called by name.
       .onNotification(
         "auth/status_update",
@@ -252,6 +270,7 @@ export class AgentHost {
         fs: { readTextFile: false, writeTextFile: false },
         terminal: false,
         auth: { terminal: true },
+        ...(adapter.clientMeta ? { _meta: adapter.clientMeta } : {}),
       },
     });
     const signIns = (init.authMethods ?? []).flatMap((m) => {
@@ -441,7 +460,12 @@ export class AgentHost {
     sessionId: string,
     options: unknown,
   ): Promise<void> {
-    if (!(await checkedIn(spec.hookLog, sessionId))) {
+    const adapter = this.env.adapters[spec.agent];
+    await adapter?.bindSession?.(sessionId, spec.guard);
+    // Kiro runs its start hook with the session's first prompt, not before: its
+    // check-in is checked with each finished tool call instead (matchCall).
+    const later = adapter?.hookFlavor === "kiro";
+    if (!later && !(await checkedIn(adapter?.startLog ?? spec.hookLog, sessionId))) {
       await conn.agent
         .request(acp.methods.agent.session.close, { sessionId })
         .catch(() => undefined);
@@ -454,6 +478,8 @@ export class AgentHost {
     this.report();
     void this.trim();
     this.hookLogs.set(sessionId, spec.hookLog);
+    // Kiro connects MCP servers after the session opens: Anur's tools must be there first.
+    if (later && spec.mcp) await this.mcpReady(sessionId, "anur");
     let current = optionsOf(options);
     for (const [id, value] of this.chosen.get(spec.thread) ?? []) {
       const res = await conn.agent
@@ -676,7 +702,9 @@ export class AgentHost {
         type: "tool",
         ...t,
         toolUse: u.toolCallId,
-        title: u.title ?? "",
+        title: u.title
+          ? (this.env.adapters[agent]?.toolTitle?.(u.title, u.rawInput) ?? u.title)
+          : "",
         kind: u.kind ?? null,
         status: u.status ?? "pending",
         input: u.rawInput ?? null,
@@ -696,6 +724,15 @@ export class AgentHost {
     }
   }
 
+  /** Wait until Kiro reports the server connected, or failed; never more than 20 s. */
+  private async mcpReady(sessionId: string, name: string): Promise<void> {
+    for (let i = 0; i < 200; i++) {
+      const state = this.mcpStates.get(sessionId)?.get(name);
+      if (state === "connected" || state === "failed" || state === "disabled") return;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+
   /** A tool call the agent finished must have passed through the hook first. */
   private async matchCall(
     agent: AgentId,
@@ -704,7 +741,16 @@ export class AgentHost {
     toolUse: string,
   ): Promise<void> {
     const log = this.hookLogs.get(sessionId);
-    if (!log || (await hookSaw(log, toolUse))) return;
+    if (!log) return;
+    const adapter = this.env.adapters[agent];
+    if (adapter?.hookFlavor === "kiro") {
+      // Kiro's hook input names no call: every finished call needs one the hook saw.
+      const done = (this.callsDone.get(sessionId) ?? 0) + 1;
+      this.callsDone.set(sessionId, done);
+      const start = adapter.startLog;
+      const started = !start || (await checkedIn(start, sessionId, 2000));
+      if (started && (await toolsSeen(log, sessionId)) >= done) return;
+    } else if (await hookSaw(log, toolUse)) return;
     const reason =
       "A tool call ran without passing through Anur's hook, so the turn stopped and threads are off until the check passes again.";
     const c = this.connected(agent);
@@ -725,7 +771,9 @@ export class AgentHost {
     if (!t) return Promise.resolve({ outcome: { outcome: "cancelled" } });
     // Anur's own tools are the thread talking to Anur, never something to ask
     // the person about, in any mode (plan mode asks for every MCP tool).
-    const own = (params.toolCall.title ?? "").startsWith("mcp__anur__");
+    // Claude Code names them "mcp__anur__…", Kiro "@anur/…".
+    const title = params.toolCall.title ?? "";
+    const own = title.startsWith("mcp__anur__") || title.startsWith("@anur/");
     const allow =
       params.options.find((o) => o.kind === "allow_once") ??
       params.options.find((o) => o.kind.startsWith("allow"));
@@ -772,13 +820,24 @@ const signInRequired = (e: unknown) =>
 class CheckFailed extends Error {}
 
 /** The mode and model choices from ACP's session config options. */
-function optionsOf(raw: unknown): SessionOption[] {
+/**
+ * A mode the agent ships, not one of the person's own agents or a hidden
+ * entry: Kiro lists every custom agent as a mode, marked by where it's from.
+ */
+function agentsOwnMode(c: Record<string, unknown>): boolean {
+  if (typeof c.value !== "string" || c.value.startsWith(".")) return false;
+  const source = (c._meta as { kiro?: { source?: unknown } } | undefined)?.kiro?.source;
+  return source === undefined || source === "bundled";
+}
+
+export function optionsOf(raw: unknown): SessionOption[] {
   if (!Array.isArray(raw)) return [];
   return (raw as Record<string, unknown>[]).flatMap((o) => {
     if (o.type !== "select" || (o.category !== "mode" && o.category !== "model")) return [];
     const choices = Array.isArray(o.options)
       ? (o.options as Record<string, unknown>[]).flatMap((c) =>
-          typeof c.value === "string"
+          typeof c.value === "string" &&
+          (o.category !== "mode" || c.value === o.currentValue || agentsOwnMode(c))
             ? [
                 {
                   value: c.value,

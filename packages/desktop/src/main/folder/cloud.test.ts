@@ -1,17 +1,9 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-  existsSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NotDownloaded, readDocBytes, type ReadDeps } from "../../vault/icloud.ts";
-import { mergeConflict, planConflict } from "./conflicts.ts";
+import { settleConflicts, type SettleDeps } from "./conflicts.ts";
 import { FolderService } from "./folder-service.ts";
 
 let home: string;
@@ -128,86 +120,58 @@ describe("a folder in iCloud", () => {
   });
 });
 
-describe("merging a conflict copy on disk", () => {
-  const ORIGINAL = "# Retry\n\n## Timing\n\nOne hour.\n";
-  const COPY = "# Retry\n\n## Timing\n\nThirty minutes.\n\n## Channel\n\nEmail first.\n";
-
-  async function opened() {
-    write("Retry.md", ORIGINAL);
-    write("Retry 2.md", COPY);
+describe("a conflict copy, settled quietly on disk", () => {
+  async function settle(files: Record<string, string | Buffer>, deps: Partial<SettleDeps> = {}) {
+    for (const [rel, text] of Object.entries(files)) writeFileSync(path.join(vault, rel), text);
     const r = await new FolderService(appSupport, home).open(1, vault);
     if (r.kind !== "opened") throw new Error("expected the folder to open");
-    return r.folder;
-  }
-
-  it("writes the picked sections into the original and moves the copy to the Trash", async () => {
-    const folder = await opened();
-    const plan = await planConflict(folder, "Retry 2.md");
-    if (plan.kind !== "plan") throw new Error(plan.reason);
     const trashed: string[] = [];
-    const result = await mergeConflict(
-      folder,
-      { copy: "Retry 2.md", hashes: plan.hashes, choices: { "1": "copy" } },
-      (f) => {
-        trashed.push(f);
+    const logged: string[] = [];
+    const changed = await settleConflicts(r.folder, {
+      history: () => Promise.resolve([]),
+      known: () => Promise.resolve(false),
+      trash: (f) => {
+        trashed.push(path.relative(vault, f));
+        rmSync(f);
         return Promise.resolve();
       },
-    );
-    expect(result).toEqual({ ok: true });
-    expect(readFileSync(path.join(vault, "Retry.md"), "utf8")).toBe(COPY);
-    expect(trashed).toEqual([path.join(vault, "Retry 2.md")]);
-  });
-
-  it("refuses when a file changed after the plan, and touches nothing", async () => {
-    const folder = await opened();
-    const plan = await planConflict(folder, "Retry 2.md");
-    if (plan.kind !== "plan") throw new Error(plan.reason);
-    write("Retry.md", `${ORIGINAL}\nTyped after the plan.\n`);
-    const result = await mergeConflict(
-      folder,
-      { copy: "Retry 2.md", hashes: plan.hashes, choices: {} },
-      () => Promise.resolve(),
-    );
-    expect(result).toMatchObject({
-      ok: false,
-      reason: expect.stringMatching(/changed since/) as unknown,
+      log: (m) => logged.push(m),
+      ...deps,
     });
-    expect(readFileSync(path.join(vault, "Retry.md"), "utf8")).toContain("Typed after the plan.");
-    expect(existsSync(path.join(vault, "Retry 2.md"))).toBe(true);
+    const read = (rel: string) => readFileSync(path.join(vault, rel), "utf8");
+    return { changed, trashed, logged, read };
+  }
+
+  it("trashes a copy that's the same", async () => {
+    const r = await settle({ "Notes.md": "# Notes\n\nHi.\n", "Notes 2.md": "# Notes\n\nHi.  \n" });
+    expect(r).toMatchObject({ changed: true, trashed: ["Notes 2.md"] });
+    expect(r.read("Notes.md")).toBe("# Notes\n\nHi.\n");
   });
 
-  it("keeps a Windows-ending original Windows-ending, and refuses a file that isn't UTF-8", async () => {
-    write("Crlf.md", "# Retry\r\n\r\n## Timing\r\n\r\nOne hour.\r\n");
-    write("Crlf 2.md", "# Retry\r\n\r\n## Timing\r\n\r\nThirty minutes.\r\n");
-    writeFileSync(
-      path.join(vault, "Latin.md"),
-      Buffer.from([0x23, 0x20, 0x43, 0x61, 0x66, 0xe9, 0x0a]),
-    );
-    writeFileSync(
-      path.join(vault, "Latin 2.md"),
-      Buffer.from([0x23, 0x20, 0x43, 0x61, 0x66, 0xe9, 0x21, 0x0a]),
-    );
-    const r = await new FolderService(appSupport, home).open(1, vault);
-    if (r.kind !== "opened") throw new Error("expected the folder to open");
-    const plan = await planConflict(r.folder, "Crlf 2.md");
-    if (plan.kind !== "plan") throw new Error(plan.reason);
-    await mergeConflict(
-      r.folder,
-      { copy: "Crlf 2.md", hashes: plan.hashes, choices: { "1": "copy" } },
-      () => Promise.resolve(),
-    );
-    expect(readFileSync(path.join(vault, "Crlf.md"), "utf8")).toBe(
-      "# Retry\r\n\r\n## Timing\r\n\r\nThirty minutes.\r\n",
-    );
-    expect(await planConflict(r.folder, "Latin 2.md")).toMatchObject({
-      kind: "failed",
-      reason: expect.stringMatching(/isn't UTF-8/) as unknown,
+  it("keeps the fuller one, in the original's own line endings", async () => {
+    const r = await settle({
+      "Crlf.md": "# Retry\r\n\r\n## Timing\r\n\r\nOne hour.\r\n",
+      "Crlf 2.md": "# Retry\n\n## Timing\n\nOne hour.\nThen a day.\n",
     });
+    expect(r.trashed).toEqual(["Crlf 2.md"]);
+    expect(r.read("Crlf.md")).toBe("# Retry\r\n\r\n## Timing\r\n\r\nOne hour.\r\nThen a day.\r\n");
+    expect(r.logged[0]).toMatch(/folded Crlf 2.md into Crlf.md/);
   });
 
-  it("only merges copies the folder listed", async () => {
-    const folder = await opened();
-    expect(await planConflict(folder, "../outside.md")).toMatchObject({ kind: "failed" });
-    expect(await planConflict(folder, "Retry.md")).toMatchObject({ kind: "failed" });
+  it("leaves both when they differ, when Anur knows the copy, or when it isn't UTF-8", async () => {
+    const r = await settle(
+      {
+        "Retry.md": "# Retry\n\n## Timing\n\nOne hour.\n",
+        "Retry 2.md": "# Retry\n\n## Timing\n\nThirty minutes.\n",
+        "Kept.md": "# Kept\n",
+        "Kept 2.md": "# Kept\n",
+        "Latin.md": Buffer.from([0x23, 0x20, 0x43, 0x61, 0x66, 0xe9, 0x0a]),
+        "Latin 2.md": Buffer.from([0x23, 0x20, 0x43, 0x61, 0x66, 0xe9, 0x21, 0x0a]),
+      },
+      { known: (rel) => Promise.resolve(rel === "Kept 2.md") },
+    );
+    expect(r).toMatchObject({ changed: false, trashed: [] });
+    expect(r.read("Retry.md")).toBe("# Retry\n\n## Timing\n\nOne hour.\n");
+    expect(r.logged).toEqual([expect.stringMatching(/kept Retry 2.md beside Retry.md/) as unknown]);
   });
 });

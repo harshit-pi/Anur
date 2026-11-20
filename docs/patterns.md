@@ -102,7 +102,7 @@ ANUR_SCREENSHOT=/tmp/shot.png ANUR_OPEN_FOLDER=/path/to/folder ANUR_SCREENSHOT_C
 
 - Never commit to `main`. Work on a branch such as `task/3.12-mcp`, open a PR, and turn on auto-merge (`gh pr merge --auto --squash`); it merges once CI passes.
 - Never force-push. If a branch falls behind after another PR squash-merges, merge `origin/main` into it.
-- Every PR description has a "## Release note" section: one line for people using Anur, as the app's What's new shows it, or "none". The release script gathers these into the GitHub release, the update feed and What's new, and lists PRs that have none.
+- Every PR description fills `.github/pull_request_template.md`: "## What changes, and why", "## Release note" and "## How it was checked". The release note is one line for people using Anur, as the app's What's new shows it, or "none". The release script gathers these into the GitHub release, the update feed and What's new, and lists PRs that have none. CI fails a PR whose description lacks a section or a release note (`scripts/pr-description.mjs`); fix the description and re-run the check.
 - The pre-commit hook formats, lints and type-checks; `pnpm check` runs what CI runs.
 - This repo is public: no personal names, emails or private notes in code, comments, docs or PR text.
 - `docs/what-anur-reads.md` lists every technology the engineering plugin reads, with Read, Partly or Not yet. A PR that adds, changes or removes a detector, build file, route or call pattern updates it in the same PR, so a miss can be told apart as a bug or a new technology.

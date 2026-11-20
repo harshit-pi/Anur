@@ -3,6 +3,21 @@ import { PreviewPart } from "@anur/core";
 import { AGENT_IDS } from "./agents.ts";
 
 const AgentIdSchema = z.enum(AGENT_IDS);
+
+/** An agent in Settings → Agents: switched on or not, and whether it can run here. */
+export const AgentRow = z.object({
+  id: AgentIdSchema,
+  name: z.string(),
+  on: z.boolean(),
+  /** Installed, and new enough; false shows `fix` and the switch can't turn on. */
+  ready: z.boolean(),
+  version: z.string().nullable(),
+  /** What to do so it can run, such as "Run kiro-cli update". */
+  fix: z.string().nullable(),
+  /** Coming to Anur, not yet able to run threads. */
+  soon: z.boolean(),
+});
+export type AgentRow = z.infer<typeof AgentRow>;
 import { INSERT_IDS } from "./insert-items.ts";
 
 /**
@@ -177,6 +192,8 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     several: z.boolean(),
     /** Every option put into the doc from this set. */
     added: z.array(z.string()),
+    /** Parts the person skipped: folded away, each with Undo. */
+    skipped: z.array(z.string()),
   }),
   /** An action the agent proposed and didn't run (Mock 10): ▶ Run starts it. */
   z.object({
@@ -352,6 +369,8 @@ export const ThreadView = z.object({
   /** When it started (ISO). */
   startedAt: z.string().optional(),
   agent: AgentIdSchema,
+  /** The agent each turn ran on, by turn: a thread switched to another agent keeps the earlier replies' marks. */
+  turnAgents: z.record(z.string(), AgentIdSchema).optional(),
 });
 export type ThreadView = z.infer<typeof ThreadView>;
 
@@ -602,6 +621,16 @@ export const ipcContract = {
     ]),
   },
   /** Settings main acts on (2.25): app-wide ones, and whether this window's folder commits `.anur/`. */
+  /** The agents Anur can run, each switched on or off, with what it needs to run (Settings → Agents). */
+  "agents:list": {
+    request: z.object({}).strict(),
+    response: z.object({ agents: z.array(AgentRow) }),
+  },
+  /** Switch an agent on, installing Anur into it, or off, removing it. */
+  "agents:set": {
+    request: z.object({ id: AgentIdSchema, on: z.boolean() }).strict(),
+    response: z.object({ agents: z.array(AgentRow), error: z.string().nullable() }),
+  },
   "settings:get": {
     request: z.object({}).strict(),
     response: z.object({
@@ -1255,55 +1284,6 @@ export const ipcContract = {
     request: z.object({ items: z.array(MenuEntry).max(300) }).strict(),
     response: z.object({ id: z.string().nullable() }),
   },
-  /** How a conflict copy would merge into its original, section by section. */
-  "conflict:plan": {
-    request: z.object({ copy: z.string() }).strict(),
-    response: z.discriminatedUnion("kind", [
-      z.object({
-        kind: z.literal("plan"),
-        original: z.string(),
-        copy: z.string(),
-        parts: z.array(
-          z.discriminatedUnion("kind", [
-            z.object({ kind: z.literal("same"), path: z.array(z.string()), text: z.string() }),
-            z.object({
-              kind: z.literal("differs"),
-              path: z.array(z.string()),
-              original: z.string(),
-              copy: z.string(),
-            }),
-            z.object({
-              kind: z.literal("only-original"),
-              path: z.array(z.string()),
-              text: z.string(),
-            }),
-            z.object({ kind: z.literal("only-copy"), path: z.array(z.string()), text: z.string() }),
-          ]),
-        ),
-        /** The two files as planned; the merge is refused if either changes before it runs. */
-        hashes: z.object({ original: z.string(), copy: z.string() }),
-      }),
-      z.object({ kind: z.literal("failed"), reason: z.string() }),
-    ]),
-  },
-  /** Write the merge into the original, then move the copy to the Trash. */
-  "conflict:merge": {
-    request: z
-      .object({
-        copy: z.string(),
-        hashes: z.object({ original: z.string(), copy: z.string() }),
-        choices: z.record(
-          z.string().regex(/^\d+$/),
-          z.union([z.enum(["original", "copy"]), z.boolean()]),
-        ),
-      })
-      .strict(),
-    response: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("merged"), folder: FolderState }),
-      z.object({ kind: z.literal("failed"), reason: z.string() }),
-    ]),
-  },
-
   /**
    * The doc's map (task 7): each section's ID, in the order of the page's
    * sections for `text`, and where a person put boxes, by section ID.
@@ -1468,6 +1448,19 @@ export const ipcContract = {
         text: z.string(),
         option: z.string().max(100),
         how: z.enum(["replace", "subsection", "also"]),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Skip a proposed part, or undo that: it folds away, and nothing in the doc changes. */
+  "thread:skip-option": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        path: z.string().max(4096),
+        text: z.string(),
+        option: z.string().max(100),
+        skip: z.boolean(),
       })
       .strict(),
     response: z.object({ ok: z.boolean() }),
@@ -1857,6 +1850,8 @@ export const ipcEvents = {
   }),
   /** Someone's people note changed in the open folder, this Mac's own included: read the list again. */
   "people:changed": z.object({}),
+  /** An agent was switched on or off, in any window. */
+  "agents:changed": z.object({}),
   /** The open doc changed outside Anur: its new text, or that it is gone or no longer readable. */
   "doc:changed": z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("changed"), path: z.string(), text: z.string(), hash: z.string() }),

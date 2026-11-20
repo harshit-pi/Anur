@@ -70,6 +70,7 @@ export function TabBar({
   view,
   onView,
   mapOnly = false,
+  space = true,
   onAsk,
 }: {
   open: Record<"left" | "right", boolean>;
@@ -83,6 +84,8 @@ export function TabBar({
   view: "page" | "map" | null;
   /** A tab that is only a map, such as the system: Page is shown but can't be picked. */
   mapOnly?: boolean;
+  /** A space is open: with none, there are no tabs to show or make. */
+  space?: boolean;
   onView: (view: "page" | "map") => void;
   /** Ask, the whole-doc thread (4.8); null with no doc open. */
   onAsk: (() => void) | null;
@@ -228,21 +231,22 @@ export function TabBar({
   const draggingPinned = drag ? tabs.tabs.find((x) => x.id === drag.id)?.pinned : undefined;
   return (
     <header className="tab-bar" aria-label="Tabs">
-      <button
-        className="icon-button"
-        type="button"
-        aria-label={open.left ? "Hide the files panel" : "Show the files panel"}
-        aria-pressed={open.left}
-        title={open.left ? "Hide files (⌘\\)" : "Show files (⌘\\)"}
-        onClick={() => {
-          onToggle("left");
-        }}
-      >
-        <SidebarLeftIcon />
-      </button>
-      <div className="tabs" role="tablist" aria-label="Open docs">
+      {space ? (
+        <button
+          className="icon-button"
+          type="button"
+          aria-label={open.left ? "Hide the files panel" : "Show the files panel"}
+          aria-pressed={open.left}
+          title={open.left ? "Hide files (⌘\\)" : "Show files (⌘\\)"}
+          onClick={() => {
+            onToggle("left");
+          }}
+        >
+          <SidebarLeftIcon />
+        </button>
+      ) : null}
+      <div className="tabs" role="tablist" aria-label="Open docs" hidden={!space}>
         <div className="tab-strip" ref={strip}>
-          {tabs.tabs.length === 0 ? <span className="quiet tab-empty">No docs open</span> : null}
           {tabs.tabs.map((t, i) => {
             const prev = tabs.tabs[i - 1];
             const next = tabs.tabs[i + 1];
@@ -369,30 +373,32 @@ export function TabBar({
           </button>
         ) : null}
       </div>
-      <div className="segmented" role="radiogroup" aria-label="View">
-        {(["page", "map"] as const).map((v) => (
-          <button
-            key={v}
-            type="button"
-            role="radio"
-            aria-checked={view === v}
-            className={view === v ? "segment selected" : "segment"}
-            disabled={view === null || (v === "page" && mapOnly)}
-            title={
-              v === "page" && mapOnly
-                ? "The system has no page: it's a map"
-                : v === "page"
-                  ? "Page (⇧⌘M)"
-                  : "Map (⇧⌘M)"
-            }
-            onClick={() => {
-              onView(v);
-            }}
-          >
-            {v === "page" ? "Page" : "Map"}
-          </button>
-        ))}
-      </div>
+      {space ? (
+        <div className="segmented" role="radiogroup" aria-label="View">
+          {(["page", "map"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              role="radio"
+              aria-checked={view === v}
+              className={view === v ? "segment selected" : "segment"}
+              disabled={view === null || (v === "page" && mapOnly)}
+              title={
+                v === "page" && mapOnly
+                  ? "The system has no page: it's a map"
+                  : v === "page"
+                    ? "Page (⇧⌘M)"
+                    : "Map (⇧⌘M)"
+              }
+              onClick={() => {
+                onView(v);
+              }}
+            >
+              {v === "page" ? "Page" : "Map"}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <button
         className="icon-button"
         type="button"
@@ -404,30 +410,34 @@ export function TabBar({
       >
         <GitHubIcon />
       </button>
-      <button
-        className="icon-button tab-ask"
-        type="button"
-        disabled={!onAsk}
-        aria-label="A thread on the whole doc"
-        title="A thread on the whole doc"
-        onClick={() => {
-          onAsk?.();
-        }}
-      >
-        <AnurIcon />
-      </button>
-      <button
-        className="icon-button"
-        type="button"
-        aria-label={open.right ? "Hide the section panel" : "Show the section panel"}
-        aria-pressed={open.right}
-        title={open.right ? "Hide the section panel (⌥⌘\\)" : "Show the section panel (⌥⌘\\)"}
-        onClick={() => {
-          onToggle("right");
-        }}
-      >
-        <SidebarRightIcon />
-      </button>
+      {space ? (
+        <>
+          <button
+            className="icon-button tab-ask"
+            type="button"
+            disabled={!onAsk}
+            aria-label="Ask about the whole space"
+            title="Ask about the whole space"
+            onClick={() => {
+              onAsk?.();
+            }}
+          >
+            <AnurIcon />
+          </button>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label={open.right ? "Hide the section panel" : "Show the section panel"}
+            aria-pressed={open.right}
+            title={open.right ? "Hide the section panel (⌥⌘\\)" : "Show the section panel (⌥⌘\\)"}
+            onClick={() => {
+              onToggle("right");
+            }}
+          >
+            <SidebarRightIcon />
+          </button>
+        </>
+      ) : null}
     </header>
   );
 }

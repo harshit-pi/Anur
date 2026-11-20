@@ -12,13 +12,21 @@ import {
   type SystemShape,
   boxCounts,
 } from "./threads/system-doc.ts";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { FORMAT_VERSION, PreviewPart, docsBefore, subtreeText } from "@anur/core";
-import { AGENTS, type AgentId } from "../shared/agents.ts";
+import { runsThreads, type AgentId } from "../shared/agents.ts";
 import type { SessionOption } from "../agent/protocol.ts";
 import {
   BrowserWindow,
@@ -46,14 +54,15 @@ import {
 import { AppSettingsStore, commitsAnur, setCommitsAnur } from "./app-settings.ts";
 import { fetchOffloaded } from "./folder/offloaded.ts";
 import { keepAnurCopiesIn } from "../vault/anur-copy.ts";
-import { mergeConflict, planConflict } from "./folder/conflicts.ts";
+import { settleConflicts } from "./folder/conflicts.ts";
 import { FolderService, type OpenOutcome } from "./folder/folder-service.ts";
 import { readEmbeddedBase } from "./folder/bases.ts";
 import { emptyDrawing, findDrawing, sceneOf, withScene } from "./drawings/drawing-file.ts";
 import { listDocs } from "./folder/list-docs.ts";
 import { ClaudeSkill, claudeHome } from "./claude-skill/install.ts";
 import { terminalHandler, writeTerminalFile } from "./claude-skill/terminal.ts";
-import { findClaude, loginPath } from "../agent/find-claude.ts";
+import { findClaude, findKiro, loginPath } from "../agent/find-claude.ts";
+import { SKILL_FILES } from "./claude-skill/skill-files.ts";
 import {
   baseAsMarkdown,
   today,
@@ -143,6 +152,9 @@ import { IndexProcess, indexEntry } from "./index-process/client.ts";
 import type { FolderRead } from "./index-process/protocol.ts";
 import { loadRead, saveRead } from "./system-saved.ts";
 import { TaskHooks } from "./claude-plugin/task-hooks.ts";
+import { KiroInstall } from "./agents/kiro-install.ts";
+import { agentRows } from "./agents/rows.ts";
+import { kiroDir } from "../agent/kiro-hook.ts";
 import { ReportWatch, listReports, readReport, writeReport } from "./task-reports.ts";
 import { codeRepos, looksLikeCode } from "./engineering-offer.ts";
 import { SystemReview } from "./system-review.ts";
@@ -186,11 +198,27 @@ const senders = trustedSenders(rendererUrl);
 const isRelease = app.isPackaged && app.getName() === "Anur";
 app.setName(isRelease ? "Anur" : "Anur Dev");
 const sharedProfile = path.join(app.getPath("appData"), "Anur Desktop");
+/** A check run's own profile, deleted when it quits; none when checks share one. */
+const throwawayProfile =
+  isCheck && !process.env.ANUR_CHECK_PROFILE
+    ? mkdtempSync(path.join(tmpdir(), "anur-check-"))
+    : null;
+// Profiles left by check runs that crashed or were killed, a day old or more.
+if (isCheck)
+  for (const name of readdirSync(tmpdir()).filter((n) => n.startsWith("anur-check-"))) {
+    const dir = path.join(tmpdir(), name);
+    try {
+      if (dir !== throwawayProfile && Date.now() - statSync(dir).mtimeMs > 86_400_000)
+        rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Gone already, or another run's: leave it.
+    }
+  }
 app.setPath(
   "userData",
   isCheck
     ? // ANUR_CHECK_PROFILE lets two check runs share one, to test what is remembered.
-      (process.env.ANUR_CHECK_PROFILE ?? mkdtempSync(path.join(tmpdir(), "anur-check-")))
+      (process.env.ANUR_CHECK_PROFILE ?? throwawayProfile ?? "")
     : isRelease
       ? sharedProfile
       : path.join(app.getPath("appData"), "Anur Dev"),
@@ -366,6 +394,8 @@ void anurSocket.start().catch((e: unknown) => {
 });
 /** Anur in the person's Claude Code (group 6); set up once the app is ready. */
 let claudeSkill: ClaudeSkill | null = null;
+/** Anur in the person's Kiro: hook, skill and MCP server, while Kiro is switched on. */
+let kiroInstall: KiroInstall | null = null;
 /** The `anur` Claude Code plugin with the task hooks (group 21). */
 let taskHooks: TaskHooks | null = null;
 /** Whether the person turned down making Anur the opener for Markdown files. */
@@ -396,6 +426,19 @@ async function startClaudeSkill(): Promise<void> {
       args: [path.join(here, "mcp-server.js")],
       env: { ELECTRON_RUN_AS_NODE: "1", ANUR_TERMINAL: terminalFile },
     },
+  });
+  kiroInstall = new KiroInstall({
+    dir: kiroDir(app.getPath("userData")),
+    node: process.execPath,
+    hook: hookEntry(here),
+    kiro: async () => findKiro(await loginPath()),
+    mcp: {
+      type: "stdio",
+      command: process.execPath,
+      args: [path.join(here, "mcp-server.js")],
+      env: { ELECTRON_RUN_AS_NODE: "1", ANUR_TERMINAL: terminalFile },
+    },
+    skillFiles: SKILL_FILES,
   });
   // The script repos' pre-commit hooks call, pointing at this app (23.6).
   void writeShim({
@@ -512,6 +555,38 @@ async function startClaudeSkill(): Promise<void> {
   const repaired = await claudeSkill.check().catch(() => []);
   if (repaired.length > 0)
     console.log(`Anur brought its Claude Code skill up to date: ${repaired.join(", ")}.`);
+  // Claude Code switched on has Anur in it: /anur, its tools and the task hooks.
+  if (!isCheck && appSettings.get().agents.includes("claude-code"))
+    await syncAgent("claude-code", true).catch((e: unknown) => {
+      logLine("warn", "agents", `Claude Code: ${(e as Error).message}`);
+    });
+  if (!isCheck && appSettings.get().agents.includes("kiro")) {
+    const fixed = await kiroInstall.check().catch(() => []);
+    if (fixed.length > 0) logLine("info", "agents", `Kiro brought up to date: ${fixed.join(", ")}`);
+    void kiroInstall.refreshMcp();
+  }
+}
+
+/**
+ * An agent switched on has Anur in it, and one switched off has none of it:
+ * Claude Code gets the /anur skill, Anur's tools and the task hooks; Kiro
+ * the skill, the tools and the guard that lets it run threads.
+ */
+async function syncAgent(id: AgentId, on: boolean): Promise<void> {
+  if (id === "kiro") {
+    await (on ? kiroInstall?.add() : kiroInstall?.remove());
+    return;
+  }
+  if (id !== "claude-code" || !claudeSkill || !taskHooks) return;
+  if (!on) {
+    await claudeSkill.remove();
+    await taskHooks.remove();
+    return;
+  }
+  // Not installed yet: nothing to put Anur into; the next launch after it is installed does.
+  if (!(await claudeSkill.status()).claude) return;
+  if (!(await claudeSkill.state()).added) await claudeSkill.add();
+  if (!(await taskHooks.status()).added) await taskHooks.add();
 }
 
 /** Agents whose choices were read this run; once per run is enough. */
@@ -888,6 +963,33 @@ function plainDrawings(root: string): Promise<string[]> {
   return files;
 }
 
+/** Folders settling their sync conflict copies now, so two passes never overlap. */
+const settling = new Set<string>();
+/** Sync conflict copies, settled without asking (folder/conflicts.ts). */
+async function settleCopies(windowId: number): Promise<void> {
+  const folder = folders.current(windowId);
+  const ids = folder ? versionsFor(folder) : null;
+  if (!folder || !ids || folder.conflicts.length === 0 || settling.has(folder.path)) return;
+  settling.add(folder.path);
+  try {
+    const changed = await settleConflicts(folder, {
+      history: async (rel, text, at) => (await ids.list(rel, text, at)).map((v) => v.text),
+      known: (rel) => ids.has(rel),
+      trash: async (file) => {
+        await shell.trashItem(file);
+      },
+      log: (message) => {
+        logLine("info", "conflicts", message);
+      },
+    });
+    const fresh = changed ? await folders.refresh(windowId) : null;
+    const win = windows.get(windowId);
+    if (fresh && win) send(win, "folder:changed", fresh);
+  } finally {
+    settling.delete(folder.path);
+  }
+}
+
 /** Files added, moved or removed outside Anur, as in Finder: the files panel catches up. */
 const folderWatch = new FolderWatch((windowId) => {
   void (async () => {
@@ -900,6 +1002,7 @@ const folderWatch = new FolderWatch((windowId) => {
     if (JSON.stringify(before.folders) !== JSON.stringify(now.folders))
       void versions.get(now.path)?.refresh();
     if (lists(before) !== lists(now)) send(win, "folder:changed", now);
+    void settleCopies(windowId);
   })();
 });
 
@@ -947,6 +1050,7 @@ async function openFolderIn(win: BrowserWindow, folder: string): Promise<OpenOut
         .catch(() => undefined);
     }
     folderWatch.start(target.webContents.id, outcome.folder.path);
+    void settleCopies(target.webContents.id);
     if (outcome.folder.mode === "writable") void plugins.startFolder(outcome.folder.path);
     // Asked for a folder inside a space: the space opened; say so once, once the page listens.
     if (outcome.inside) {
@@ -1209,6 +1313,31 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (!folder) return { kind: "failed", reason: "No folder is open." };
     return readEmbeddedBase(folder, target, from);
+  },
+  "agents:list": async () => ({ agents: await agentRows(appSettings.get().agents) }),
+  "agents:set": async ({ id, on }) => {
+    let error: string | null = null;
+    const was = appSettings.get().agents;
+    const rows = await agentRows(was);
+    if (on && !rows.find((r) => r.id === id)?.ready) error = "This agent can't run here yet.";
+    else {
+      try {
+        // Turning an agent on puts Anur into it; off takes it back out.
+        await syncAgent(id, on);
+        const agents = on ? [...new Set([...was, id])] : was.filter((a) => a !== id);
+        const def = appSettings.get().defaultAgent;
+        await appSettings.set({
+          agents,
+          defaultAgent: agents.includes(def) ? def : (agents[0] ?? def),
+        });
+        logLine("info", "agents", `${id} switched ${on ? "on" : "off"}`);
+      } catch (e) {
+        error = `Anur couldn't set up ${id === "kiro" ? "Kiro" : "the agent"}: ${(e as Error).message}`;
+        logLine("warn", "agents", error);
+      }
+    }
+    for (const win of windows.values()) send(win, "agents:changed", {});
+    return { agents: await agentRows(appSettings.get().agents), error };
   },
   "settings:get": async (_request, { webContentsId }) => {
     const folder = folders.current(webContentsId);
@@ -1921,11 +2050,6 @@ const handlers: { [C in Channel]: Handler<C> } = {
     }
     return { ok: (await shell.openPath(file)) === "" };
   },
-  "conflict:plan": async ({ copy }, { webContentsId }) => {
-    const folder = folders.current(webContentsId);
-    if (!folder) return { kind: "failed", reason: "No folder is open." };
-    return planConflict(folder, copy);
-  },
   "map:read": async ({ path: doc, text }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const ids = folder ? versionsFor(folder) : null;
@@ -1979,7 +2103,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return { threads: t ? await t.recent() : [] };
   },
   "agent:auth": ({ agent }) => {
-    if (AGENTS[agent].runsThreads) hub.send({ type: "auth", agent });
+    if (runsThreads(agent)) hub.send({ type: "auth", agent });
     return { agent, auth: hub.auth(agent), signIn: hub.signIn(agent) };
   },
   "agent:sign-in": ({ agent, method }) => {
@@ -1992,7 +2116,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     return {};
   },
   "agent:options": ({ agent }, { webContentsId }) => {
-    if (!probed.has(agent) && AGENTS[agent].runsThreads) {
+    if (!probed.has(agent) && runsThreads(agent)) {
       probed.add(agent);
       hub.send({
         type: "probe",
@@ -2383,6 +2507,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
       return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
     }
   },
+  "thread:skip-option": async ({ thread, path: rel, text, option, skip }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !t || !threadable(folder, rel)) return { ok: false };
+    return { ok: await t.skipOption(rel, text, thread, option, skip) };
+  },
   "thread:explore-option": async ({ thread, path: rel, text, option }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;
@@ -2410,18 +2540,6 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const folder = folders.current(webContentsId);
     if (folder) threadsFor(folder)?.answered(request);
     return {};
-  },
-  "conflict:merge": async (request, { webContentsId }) => {
-    const folder = folders.current(webContentsId);
-    if (!folder) return { kind: "failed", reason: "No folder is open." };
-    if (folder.mode === "read-only") return { kind: "failed", reason: "This folder is read-only." };
-    const result = await mergeConflict(folder, request, (file) => shell.trashItem(file));
-    if (!result.ok) return { kind: "failed", reason: result.reason };
-    const fresh = await folders.refresh(webContentsId);
-    if (!fresh) return { kind: "failed", reason: "The folder closed during the merge." };
-    const win = windows.get(webContentsId);
-    if (win) send(win, "folder:changed", fresh);
-    return { kind: "merged", folder: fresh };
   },
 };
 
@@ -2989,6 +3107,7 @@ app.on("will-quit", (event) => {
       console.error("Anur couldn't finish cleaning up before quitting:", e);
     })
     .finally(() => {
+      if (throwawayProfile) rmSync(throwawayProfile, { recursive: true, force: true });
       app.exit(0);
     });
 });

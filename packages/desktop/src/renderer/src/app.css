@@ -92,16 +92,17 @@ button {
   -webkit-app-region: no-drag;
 }
 
+/* No space open: the strip keeps its room so the right-hand buttons stay put. */
+.tabs[hidden] {
+  visibility: hidden;
+}
+
 .tabs {
   display: flex;
   align-items: center;
   gap: 4px;
   flex: 1;
   min-width: 0;
-}
-
-.tab-empty {
-  margin-right: 8px;
 }
 
 .icon-button {
@@ -790,116 +791,6 @@ body.resizing * {
   flex: none;
   color: var(--graphite);
   font-size: 12px;
-}
-
-/* The merge dialog. */
-.merge-dialog {
-  display: flex;
-  flex-direction: column;
-  width: min(980px, 100% - 48px);
-  max-height: calc(100% - 160px);
-  border: 1px solid var(--rule);
-  border-radius: 12px;
-  background: var(--sheet);
-  box-shadow: 0 18px 48px var(--shadow);
-}
-
-.merge-head {
-  padding: 18px 22px 8px;
-}
-
-.merge-head h2 {
-  margin: 0 0 6px;
-  font-size: 17px;
-}
-
-.merge-head p {
-  margin: 0;
-  font-size: 13px;
-}
-
-.merge-list {
-  flex: 1;
-  margin: 0;
-  padding: 8px 22px;
-  overflow: auto;
-  list-style: none;
-}
-
-.merge-part {
-  padding: 12px 0;
-  border-top: 1px solid var(--rule);
-}
-
-.merge-title {
-  margin: 0 0 8px;
-  font-weight: 600;
-}
-
-.merge-sides {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.merge-side {
-  display: block;
-  padding: 10px;
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.merge-side.picked {
-  border-color: var(--blue);
-  background: var(--blue-wash);
-}
-
-.merge-label {
-  margin-left: 6px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.merge-one {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 13.5px;
-}
-
-.merge-text {
-  max-height: 160px;
-  margin: 8px 0 0;
-  overflow: auto;
-  font-family: var(--font-doc);
-  font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  color: var(--ink2);
-}
-
-.merge-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 22px;
-  border-top: 1px solid var(--rule);
-  font-size: 13px;
-}
-
-.merge-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.merge-buttons .primary-button {
-  margin-top: 0;
-}
-
-.primary-button:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 
 /* The page: CodeMirror fills the center under the path row. */
@@ -1934,14 +1825,16 @@ body.resizing * {
   align-self: auto;
 }
 
+/*
+ * What a thread did to the docs (Used as it landed, Used all, Proposed, Made):
+ * plain text in the thread, like its replies. Amber is for what waits on the
+ * person; these are done, so they carry no bar and no wash (30.34).
+ */
 .think-changed {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
-  border-left: 3px solid var(--amber);
-  border-radius: 0 8px 8px 0;
-  background: var(--amber-wash);
+  padding: 2px 0;
 }
 
 /* An image opened in a tab from the files panel. */
@@ -2724,7 +2617,11 @@ body.resizing * {
   outline: none;
   cursor: grab;
   background-color: var(--paper);
-  background-image: radial-gradient(var(--rule) 1px, transparent 1px);
+  /* Dots a shade off the paper, so boxes and lines lead. */
+  background-image: radial-gradient(
+    color-mix(in srgb, var(--rule) 50%, var(--paper)) 1px,
+    transparent 1px
+  );
   background-size: 20px 20px;
   touch-action: none;
   user-select: none;
@@ -2991,32 +2888,34 @@ body.resizing * {
   position: absolute;
   width: 10px;
   height: 10px;
-  margin: -6px 0 0 -6px;
   border: 1px solid var(--blue);
+  /* Centred on its point by its own size, whatever that is. */
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   background: var(--sheet);
   cursor: crosshair;
   opacity: 0;
 }
 
+/* Each dot centred on the middle of the box's border, whatever its width (--bw). */
 .map-handle.left {
-  left: 0;
+  left: calc(var(--bw, 1px) / -2);
   top: 50%;
 }
 
 .map-handle.right {
-  left: 100%;
+  left: calc(100% + var(--bw, 1px) / 2);
   top: 50%;
 }
 
 .map-handle.top {
   left: 50%;
-  top: 0;
+  top: calc(var(--bw, 1px) / -2);
 }
 
 .map-handle.bottom {
   left: 50%;
-  top: 100%;
+  top: calc(100% + var(--bw, 1px) / 2);
 }
 
 .map-box:hover .map-handle,
@@ -3026,13 +2925,6 @@ body.resizing * {
 
 .map-handle:hover {
   background: var(--blue);
-}
-
-/* Dragging a box's handle: a dashed line to where its new box will go. */
-.map-drag-line {
-  stroke: var(--blue);
-  stroke-width: 1.5;
-  stroke-dasharray: 5 4;
 }
 
 /* What happened on a box (mock 9), beside its counts. */
@@ -4277,7 +4169,6 @@ body.resizing * {
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 10px;
 }
 
 .think-earlier {
@@ -5870,7 +5761,7 @@ button.file-card-name:hover {
 
 /*
  * Mock 11: three kinds on the map, one look each.
- * Section, in the doc: a rectangle with a solid border.
+ * Section, in the doc: a rounded box with a solid border.
  * Choice, not in the doc yet: a rounded blue card with a dashed edge.
  * Action, work: a pill in a lane under its section.
  * A thread is italic text on the line to its choices.
@@ -5878,7 +5769,7 @@ button.file-card-name:hover {
 .map-box {
   padding: 10px 16px;
   border: 1.5px solid var(--graphite);
-  border-radius: 4px;
+  border-radius: 10px;
   box-shadow: none;
 }
 
@@ -5942,22 +5833,6 @@ button.file-card-name:hover {
 .map-fold:hover {
   color: var(--blue);
   text-decoration: underline;
-}
-
-.map-chats {
-  flex: none;
-  margin-left: 8px;
-  padding: 0 7px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--hover);
-  color: var(--graphite);
-  font: 600 11px/18px var(--font-ui);
-  cursor: pointer;
-}
-
-.map-chats:hover {
-  color: var(--ink);
 }
 
 .map-lane {
@@ -6054,15 +5929,13 @@ button.file-card-name:hover {
   background: var(--hover);
 }
 
+/* A thread: the dashed line it hangs on, as on the map. */
 .map-key.thread {
-  width: auto;
-  height: auto;
+  width: 16px;
+  height: 0;
   border: 0;
-  font: italic 12px var(--font-doc);
-}
-
-.map-key.thread::before {
-  content: "Italic";
+  border-top: 1.5px dashed var(--slate);
+  border-radius: 0;
 }
 
 /*
@@ -6800,4 +6673,301 @@ button.file-card-name:hover {
   background: var(--blue-wash);
   color: var(--blue);
   cursor: default;
+}
+
+/* A new map before it's a file: its one box in the middle, ready for a name. */
+.blank-map {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.blank-map-box {
+  position: static;
+  min-width: 220px;
+  cursor: text;
+}
+
+.blank-map-box .map-rename::placeholder {
+  color: var(--slate);
+}
+
+.blank-page-title {
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-doc);
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.blank-page-title::placeholder {
+  color: var(--slate);
+}
+
+.blank-map .space-opening h1 {
+  margin: 0;
+  font-family: var(--font-doc);
+  font-size: 22px;
+}
+
+/* The tour's Tab and Enter demo: the key pressed, and the box it would add. */
+.tour-key {
+  position: fixed;
+  z-index: 2;
+  padding: 3px 9px;
+  border: 1px solid var(--rule);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--sheet);
+  color: var(--ink);
+  font: 600 12px var(--font-ui);
+  pointer-events: none;
+  animation: tour-fade 0.2s ease-out;
+}
+
+.tour-ghost-box {
+  position: fixed;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 14px;
+  border: 1.5px dashed var(--blue);
+  border-radius: 10px;
+  background: var(--sheet);
+  color: var(--slate);
+  font: 500 13px var(--font-ui);
+  pointer-events: none;
+  animation: tour-fade 0.3s ease-out;
+}
+
+@keyframes tour-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/*
+ * Use and Explore on a choice, Build and Check on a section (30.32): a
+ * toolbar on the box's top edge. A choice shows it while hovered or picked;
+ * a section only while hovered, since one is always selected.
+ */
+.map-acts {
+  position: absolute;
+  top: 0;
+  left: 12px;
+  z-index: 3;
+  display: none;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--sheet);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--ink) 12%, transparent);
+  transform: translateY(-60%);
+}
+
+.map-option:hover > .map-acts,
+.map-option.selected > .map-acts,
+.map-box:hover > .map-acts {
+  display: flex;
+}
+
+.map-act {
+  padding: 2px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--blue);
+  font: 600 12px/18px var(--font-ui);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.map-act:hover {
+  background: var(--blue-wash);
+}
+
+.map-act.primary {
+  background: var(--blue);
+  color: var(--sheet);
+}
+
+.map-act.primary:hover {
+  filter: brightness(1.1);
+}
+
+.map-act:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+/* An agent's mark before its name in Settings → Agents. */
+.settings-row-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  margin-right: 10px;
+}
+
+.settings-row-icon .agent-mark {
+  width: 20px;
+  height: 20px;
+}
+
+.settings-error {
+  margin: 8px 0 0;
+  color: var(--red);
+  font-size: 13px;
+}
+
+/* No agent switched on: where the chat box would be, the way to turn one on. */
+.think-no-agent {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: var(--sheet);
+}
+
+.think-no-agent p {
+  margin: 0;
+  color: var(--graphite);
+  font-size: 13px;
+}
+
+/* The agent's mark in the picker: the size of its name's letters, on its line, a small gap after. */
+.think-pick .agent-mark {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+/* The agent picker sizes to its mark and name, so "Claude" is never cut. */
+.think-pickers .think-option:has(select[aria-label="Agent"]) {
+  flex: none;
+}
+
+/* A thread's header stays at the top of Think while its chat scrolls under it. */
+.right-main .think-head {
+  position: sticky;
+  top: -16px;
+  z-index: 4;
+  margin: -16px -16px 6px;
+  padding: 16px 16px 8px;
+  background: var(--sheet);
+}
+
+/* A part the person skipped: one quiet line in its set, with Undo. */
+.think-offer-skipped {
+  margin: 6px 0;
+  font-size: 13px;
+}
+
+/* The legend shows its marks; hovered, each opens to its name, as the key bar's keys do. */
+.map-legend span.map-legend-what {
+  display: inline;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: max-width 160ms ease;
+}
+
+.map-legend:not(.map-hint) {
+  gap: 8px;
+}
+
+.map-legend:hover span.map-legend-what {
+  max-width: 160px;
+}
+
+.map-legend:not(.map-hint) > span {
+  gap: 0;
+}
+
+.map-legend:hover span.map-legend-what {
+  margin-left: 6px;
+}
+
+/* A wide, unseen band along a decision's line to its choices: hovered it shows faintly and names the thread. */
+.map-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14px;
+  stroke-linecap: round;
+  /* As wide on screen at any zoom. */
+  vector-effect: non-scaling-stroke;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.map-edge-hit:hover {
+  stroke: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+/* A thread's name beside the pointer on its line: shown at once, not after the system's delay. */
+.map-line-tip {
+  position: absolute;
+  z-index: 6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--sheet);
+  font: 12px var(--font-ui);
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(10px, 14px);
+}
+
+/*
+ * The doc's own box, the map's anchor: filled in the ink colour, so black in
+ * light mode and light in dark, with its name and counts on it in the paper colour.
+ */
+.map .map-box.title {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--sheet);
+  box-shadow: none;
+}
+
+.map .map-box.title .map-box-name,
+.map .map-box.title .map-rename {
+  color: var(--sheet);
+}
+
+.map .map-box.title .map-linkcount {
+  background: var(--sheet);
+  color: var(--ink);
+}
+
+/* Selected, it keeps its fill and gets the blue ring outside it. */
+.map .map-box.title.selected {
+  border-color: var(--ink);
+  background: var(--ink);
+  box-shadow: 0 0 0 3px var(--blue);
+}
+
+.map .map-box.title .map-handle {
+  background: var(--sheet);
+}
+
+/* The border widths the handles centre on. */
+.map .map-box {
+  --bw: 1.5px;
+}
+
+.map .map-box.title,
+.map .map-box.selected {
+  --bw: 2px;
 }

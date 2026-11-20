@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
-import type { FolderState, UpdateState } from "../../../shared/ipc-contract.ts";
-import { AGENTS, AGENT_IDS, type AgentId } from "../../../shared/agents.ts";
-import type { AgentStatus } from "../../../shared/ipc-contract.ts";
+import type { AgentRow, FolderState, UpdateState } from "../../../shared/ipc-contract.ts";
+import type { AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { useFeatures } from "../features.ts";
 import { FEATURES } from "../../../shared/features.ts";
+import { AgentMark } from "./AgentMark.tsx";
 import { CloseIcon } from "./Icons.tsx";
 import { type ThemePref, applyTheme, loadTheme, saveTheme } from "./theme-pref.ts";
 import { type PageFont, applyPageFont, loadPageFont, savePageFont } from "./font-pref.ts";
+import { type DocView, loadDocView, saveDocView } from "./doc-view-pref.ts";
 import { type MapStyle, loadMapStyle, saveMapStyle } from "./map-style-pref.ts";
 
 /**
@@ -21,9 +22,9 @@ export type SettingsSection = "general" | "appearance" | "agent" | "storage" | "
 const SECTIONS: { id: SettingsSection; label: string; group?: string }[] = [
   { id: "general", label: "General" },
   { id: "appearance", label: "Appearance" },
-  { id: "agent", label: "Agent" },
   { id: "storage", label: "Storage" },
-  { id: "core", label: "Core plugins", group: "Plugins" },
+  { id: "agent", label: "Agents", group: "Plugins" },
+  { id: "core", label: "Core plugins" },
   { id: "community", label: "Plugins" },
 ];
 
@@ -63,20 +64,101 @@ function Switch({
 function Row({
   title,
   detail,
+  icon,
   children,
 }: {
   title: string;
-  detail: string;
+  detail?: string | undefined;
+  /** A mark before the title, such as an agent's. */
+  icon?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   return (
     <div className="settings-row">
+      {icon ? <span className="settings-row-icon">{icon}</span> : null}
       <div className="settings-row-text">
         <div className="settings-row-title">{title}</div>
-        <div className="settings-row-detail">{detail}</div>
+        {detail ? <div className="settings-row-detail">{detail}</div> : null}
       </div>
       {children}
     </div>
+  );
+}
+
+/**
+ * Every agent Anur can run, each on its own switch: on puts Anur's skill,
+ * tools and hooks into it, off takes them back out. One that can't run here
+ * says the one thing to do, and its switch waits until it can.
+ */
+function AgentRows({
+  defaultAgent,
+  onDefault,
+}: {
+  defaultAgent: AgentId | null;
+  onDefault: (id: AgentId) => void;
+}) {
+  const [rows, setRows] = useState<AgentRow[] | null>(null);
+  const [busy, setBusy] = useState<AgentId | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const read = () => {
+      void anur.call("agents:list", {}).then((r) => {
+        setRows(r.agents);
+      });
+    };
+    read();
+    return anur.on("agents:changed", read);
+  }, []);
+  const on = (rows ?? []).filter((r) => r.on);
+  return (
+    <>
+      {(rows ?? []).map((r) => (
+        <Row
+          key={r.id}
+          title={r.name}
+          icon={<AgentMark agent={r.id} />}
+          detail={
+            r.soon ? "Coming soon" : (r.fix ?? (r.version ? `Version ${r.version}` : undefined))
+          }
+        >
+          <Switch
+            on={r.on}
+            label={r.name}
+            disabled={busy !== null || (!r.on && !r.ready)}
+            onChange={(next) => {
+              setBusy(r.id);
+              setError(null);
+              void anur.call("agents:set", { id: r.id, on: next }).then((res) => {
+                setRows(res.agents);
+                setError(res.error);
+                setBusy(null);
+                window.dispatchEvent(new CustomEvent("anur:settings-changed"));
+              });
+            }}
+          />
+        </Row>
+      ))}
+      {error ? <p className="settings-error">{error}</p> : null}
+      {on.length > 1 ? (
+        <Row title="Default agent">
+          <select
+            className="settings-select"
+            aria-label="Default agent"
+            value={defaultAgent ?? on[0]?.id}
+            onChange={(e) => {
+              const next = on.find((r) => r.id === e.target.value);
+              if (next) onDefault(next.id);
+            }}
+          >
+            {on.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </Row>
+      ) : null}
+    </>
   );
 }
 
@@ -233,85 +315,6 @@ function OpenerRow() {
   );
 }
 
-/** Anur in the person's Claude Code (6.2): added or not, with Add, Update and Remove. */
-function SkillRow() {
-  const [s, setS] = useState<{ added: boolean; claude: boolean; current: boolean } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const load = () => {
-    void anur.call("skill:status", {}).then(setS);
-  };
-  useEffect(load, []);
-  const act = (action: "add" | "update" | "remove") => {
-    setBusy(true);
-    setError(null);
-    void anur.call("skill:act", { action }).then((r) => {
-      setBusy(false);
-      if (r.kind === "failed") setError(r.reason);
-      load();
-    });
-  };
-  return (
-    <Row
-      title="Use Anur from Claude Code"
-      detail={
-        error ??
-        (!s
-          ? "Checking…"
-          : !s.claude
-            ? "Claude Code isn't on this computer."
-            : !s.added
-              ? "Adds /anur to Claude Code: /anur map turns a chat into a map here."
-              : s.current
-                ? "Added: /anur map, /anur new and /anur open work in Claude Code. Anur keeps them up to date."
-                : "Added, but out of date: Anur updates it on its next launch, or now.")
-      }
-    >
-      {s?.claude ? (
-        <div className="settings-actions">
-          {!s.added ? (
-            <button
-              type="button"
-              className="think-button primary"
-              disabled={busy}
-              onClick={() => {
-                act("add");
-              }}
-            >
-              Add
-            </button>
-          ) : (
-            <>
-              {!s.current ? (
-                <button
-                  type="button"
-                  className="think-button primary"
-                  disabled={busy}
-                  onClick={() => {
-                    act("update");
-                  }}
-                >
-                  Update
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="think-button"
-                disabled={busy}
-                onClick={() => {
-                  act("remove");
-                }}
-              >
-                Remove
-              </button>
-            </>
-          )}
-        </div>
-      ) : null}
-    </Row>
-  );
-}
-
 const sizeOf = (bytes: number) =>
   bytes < 1024
     ? `${String(bytes)} B`
@@ -423,65 +426,6 @@ function StoragePane({ folder }: { folder: FolderState | null }) {
   );
 }
 
-/**
- * The task hooks in Claude Code (group 21): Anur's own plugin, added on the
- * person's click, that reports what each task changed in folders opened here.
- */
-function TaskHooksRow() {
-  const [s, setS] = useState<{ claude: boolean; added: boolean; current: boolean } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    void anur.call("taskHooks:status", {}).then(setS);
-  }, [n]);
-  if (!s) return null;
-  const act = (action: "add" | "remove") => {
-    setBusy(true);
-    setNote(null);
-    void anur.call("taskHooks:act", { action }).then((r) => {
-      setBusy(false);
-      if (r.kind === "failed") setNote(r.reason);
-      setN((x) => x + 1);
-    });
-  };
-  const detail = !s.claude
-    ? "Claude Code isn't installed on this computer."
-    : s.added
-      ? "Added to Claude Code, for every folder on this Mac. After each task in a folder opened in Anur, a report of what it changed across the repos. Elsewhere it does nothing."
-      : "Adds Anur's plugin to Claude Code, once for this Mac: after each task in a folder opened in Anur, a report of what it changed across the repos, ranked. Elsewhere it does nothing.";
-  return (
-    <>
-      <Row title="Task reports in Claude Code, on this Mac" detail={detail}>
-        {s.claude ? (
-          <button
-            type="button"
-            className="settings-button"
-            disabled={busy}
-            onClick={() => {
-              act(s.added ? "remove" : "add");
-            }}
-          >
-            {busy ? "Working…" : s.added ? "Remove" : "Add to Claude Code"}
-          </button>
-        ) : null}
-      </Row>
-      {note ? <p className="settings-row-detail">{note}</p> : null}
-    </>
-  );
-}
-
-/** Engineering is on by itself in a folder of code repos; then its task reports can be added. */
-function PluginRows({ folder }: { folder: FolderState | null }) {
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    void anur.call("plugins:list", {}).then((r) => {
-      setOn(r.plugins.some((p) => p.id === "engineering" && p.on));
-    });
-  }, [folder?.path]);
-  return on ? <TaskHooksRow /> : null;
-}
-
 type MarketData = Awaited<ReturnType<typeof anur.call<"market:list">>>;
 type MarketPlugin = MarketData["installed"][number];
 
@@ -575,7 +519,6 @@ function Market({ folder }: { folder: FolderState | null }) {
         </>
       ) : (
         <>
-          <PluginRows folder={folder} />
           {(data?.installed ?? []).map((p) => (
             <InstalledPlugin
               key={p.id}
@@ -805,15 +748,6 @@ export function Settings({
     };
   }, [onClose]);
 
-  const [status, setStatus] = useState<AgentStatus | null>(null);
-  useEffect(() => {
-    if (!main) return;
-    void anur.call("agent:status", { connect: false, agent: main.defaultAgent }).then(setStatus);
-    return anur.on("agent:status", (s) => {
-      if (s.id === main.defaultAgent) setStatus(s);
-    });
-  }, [main]);
-
   const change = (c: Partial<Omit<MainSettings, "commitAnur"> & { commitAnur: boolean }>) => {
     void anur.call("settings:set", c).then((now) => {
       setMain(now);
@@ -823,6 +757,7 @@ export function Settings({
   };
   const [pageFont, setPageFont] = useState<PageFont>(() => loadPageFont(window.localStorage));
   const [mapStyle, setMapStyle] = useState<MapStyle>(() => loadMapStyle(window.localStorage));
+  const [docView, setDocView] = useState<DocView>(() => loadDocView(window.localStorage));
   const pickPageFont = (f: PageFont) => {
     setPageFont(f);
     savePageFont(window.localStorage, f);
@@ -844,6 +779,25 @@ export function Settings({
               <button type="button" className="settings-button" onClick={onOpenFolder}>
                 {folder ? "Open another folder…" : "Open a folder…"}
               </button>
+            </Row>
+            <Row title="Open docs in">
+              <div className="segmented" role="radiogroup" aria-label="Open docs in">
+                {(["map", "page"] as const).map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={docView === v}
+                    className="segmented-option"
+                    onClick={() => {
+                      setDocView(v);
+                      saveDocView(window.localStorage, v);
+                    }}
+                  >
+                    {v === "map" ? "Map" : "Page"}
+                  </button>
+                ))}
+              </div>
             </Row>
             <Row
               title="Your name"
@@ -979,69 +933,14 @@ export function Settings({
       case "agent":
         return (
           <>
-            <h2>Agent</h2>
-            <p className="settings-lede">
-              Anur runs your own agent, with your sign-in, settings and plugins. A thread keeps its
-              section's text and its chat in Anur, so you can move it to another agent and it
-              carries on from there.
-            </p>
-            <Row
-              title="Default agent"
-              detail="New threads run on this agent. Each thread can switch in the Think panel."
-            >
-              <select
-                className="settings-select"
-                aria-label="Default agent"
-                value={main?.defaultAgent ?? "claude-code"}
-                disabled={!main}
-                onChange={(e) => {
-                  const next = AGENT_IDS.find((id) => id === e.target.value);
-                  if (next) change({ defaultAgent: next });
-                }}
-              >
-                {AGENT_IDS.map((id) => (
-                  <option key={id} value={id} disabled={!AGENTS[id].runsThreads}>
-                    {AGENTS[id].runsThreads ? AGENTS[id].name : `${AGENTS[id].name} (not yet)`}
-                  </option>
-                ))}
-              </select>
-            </Row>
+            <h2>Agents</h2>
+            <AgentRows
+              defaultAgent={main?.defaultAgent ?? null}
+              onDefault={(id) => {
+                change({ defaultAgent: id });
+              }}
+            />
             <SessionsRow />
-            {/* Then each agent on its own: how it's connected, and what Anur adds to it. */}
-            {AGENT_IDS.map((id) => (
-              <section key={id} className="settings-group" aria-label={AGENTS[id].name}>
-                <h3>{AGENTS[id].name}</h3>
-                {!AGENTS[id].runsThreads ? (
-                  <Row title="Connection" detail={AGENTS[id].why ?? ""}>
-                    <span className="settings-status">Not yet</span>
-                  </Row>
-                ) : (
-                  <Row
-                    title="Connection"
-                    detail={
-                      id !== main?.defaultAgent
-                        ? "Connects when a thread on it first needs it."
-                        : status?.connected === true
-                          ? `Connected: version ${status.agent?.agent ?? "unknown"}, through its ACP adapter ${status.agent?.adapter ?? ""}.`
-                          : status?.connected === false
-                            ? (status.reason ?? "Not connected.")
-                            : "Connects when a thread first needs it."
-                    }
-                  >
-                    <span className="settings-status">
-                      {id !== main?.defaultAgent
-                        ? "Not started"
-                        : status?.connected === true
-                          ? "Connected"
-                          : status?.connected === false
-                            ? "Not connected"
-                            : "Not started"}
-                    </span>
-                  </Row>
-                )}
-                {id === "claude-code" ? <SkillRow /> : null}
-              </section>
-            ))}
           </>
         );
       case "core":

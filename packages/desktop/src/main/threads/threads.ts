@@ -5,7 +5,7 @@ import { LinkIndex } from "../folder/link-index.ts";
 import { editsLand } from "../../shared/edits-land.ts";
 import { actionPrompt, actionTitle, type Purpose } from "./actions.ts";
 import { writeFileAtomic } from "../../vault/anur-folder.ts";
-import { watch, type FSWatcher } from "node:fs";
+import { existsSync, watch, type FSWatcher } from "node:fs";
 import { cp, lstat, mkdir, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -48,7 +48,7 @@ import {
   DEFAULT_AGENT,
   TERMINAL_EDIT,
   UNSAVED_EDIT,
-  AGENTS,
+  runsThreads,
   isAgentId,
   type AgentId,
 } from "../../shared/agents.ts";
@@ -274,6 +274,8 @@ export type RecentThread = {
 type Live = {
   /** Where its agent runs: a repo for a repo's doc (18.15.6), else the opened folder. */
   cwd?: string;
+  /** It explores an option (30.31): its edits wait for Use, whatever the mode. */
+  explores?: boolean;
   threadId: string;
   doc: DocId;
   rel: string;
@@ -676,7 +678,7 @@ export class Threads {
   private async ensureSpare(): Promise<void> {
     const agent = this.d.defaultAgent();
     if (this.spare?.agent === agent || this.spareOpening || this.closed) return;
-    if (!AGENTS[agent].runsThreads || this.d.hub.status(agent).connected !== true) return;
+    if (!runsThreads(agent) || this.d.hub.status(agent).connected !== true) return;
     if (this.spare) this.d.hub.send({ type: "close", thread: this.spare.thread });
     this.spareOpening = true;
     try {
@@ -740,6 +742,8 @@ export class Threads {
         if (!names.length) continue;
         const rel = (await this.d.relOf?.(doc).catch(() => null)) ?? null;
         if (!rel || rel === SYSTEM_DOC) continue;
+        // A doc moved into another repo or deleted outside Anur: its old threads aren't recent.
+        if (rel !== FOLDER_DOC && !existsSync(path.join(this.d.folder, rel))) continue;
         this.docDirs.set(doc, anurDir);
         const at = rel === FOLDER_DOC ? null : await locate(rel);
         for (const thread of names) {
@@ -817,6 +821,8 @@ export class Threads {
     const used = new Map<string, string>();
     const undone = new Set(lines.flatMap((l) => (l.kind === "auto-undone" ? [l.used] : [])));
     const explored = new Set<string>();
+    /** Parts the person skipped, the latest Skip or Undo deciding. */
+    const skipped = new Set<string>();
     // When each option was last used: a choice switched to another option shows the latest.
     const usedAt = new Map<string, number>();
     lines.forEach((l, n) => {
@@ -826,6 +832,10 @@ export class Threads {
         if (l.how !== "also") usedAt.set(l.option, n);
       }
       if (l.kind === "option-explored") explored.add(l.option);
+      if (l.kind === "option-skipped") {
+        if (l.skipped) skipped.add(l.option);
+        else skipped.delete(l.option);
+      }
     });
     const ran = new Map(
       lines.flatMap((l) => (l.kind === "action-run" ? [[l.action, l.thread] as const] : [])),
@@ -934,6 +944,7 @@ export class Threads {
                 .filter((o) => usedAt.has(o.id))
                 .sort((a, b) => (usedAt.get(b.id) ?? 0) - (usedAt.get(a.id) ?? 0))[0]?.id ?? null),
           explored: l.options.filter((o) => explored.has(o.id)).map((o) => o.id),
+          skipped: l.options.filter((o) => skipped.has(o.id)).map((o) => o.id),
           within: l.within ?? null,
           heading: l.heading ?? null,
           several: l.several ?? false,
@@ -1000,6 +1011,13 @@ export class Threads {
       items,
       options: this.optionsOf(thread, this.agentOf(thread, lines)),
       agent: this.agentOf(thread, lines),
+      turnAgents: Object.fromEntries(
+        lines.flatMap((l) =>
+          l.kind === "turn" && l.event === "start" && l.agent && isAgentId(l.agent.name)
+            ? [[l.turn, l.agent.name] as const]
+            : [],
+        ),
+      ),
       tokens: tokensOf(lines),
       purpose: start.purpose ?? null,
       explores: start.explores ?? null,
@@ -1159,6 +1177,7 @@ export class Threads {
       merged: new Map(),
     };
     live.cwd = this.cwdOf(lines);
+    live.explores = Boolean(start.explores);
     live.rel = rel;
     live.docText = text;
     this.live.set(thread, live);
@@ -1419,6 +1438,7 @@ export class Threads {
           command: "/usr/bin/env",
           args: ["ELECTRON_RUN_AS_NODE=1", this.d.node, this.d.hookScript, config],
         },
+        config,
         anurDir,
         anurDirs,
         copies: this.copiesOf(thread),
@@ -1644,8 +1664,12 @@ export class Threads {
     return threads.filter((t) => this.editsLand(t));
   }
 
-  /** Edits land as they come in a mode that acts without asking; otherwise they're proposals. */
+  /**
+   * Edits land as they come in a mode that acts without asking; otherwise they're proposals.
+   * An explored option's edits always wait: nothing from an option reaches the doc until Use (30.31).
+   */
   private editsLand(thread: string): boolean {
+    if (this.live.get(thread)?.explores) return false;
     return editsLand(
       this.options.get(thread) ??
         this.d.knownOptions?.(this.picked.get(thread) ?? this.d.defaultAgent()),
@@ -2934,6 +2958,21 @@ export class Threads {
     return true;
   }
 
+  /** The person skipped a proposed part, or undid that; the doc is untouched. */
+  async skipOption(
+    rel: string,
+    text: string,
+    thread: string,
+    option: string,
+    skip: boolean,
+  ): Promise<boolean> {
+    const at = await this.d.locate(rel, text);
+    if (!at) return false;
+    await this.append(at.doc, thread, { kind: "option-skipped", option, skipped: skip });
+    await this.refresh(rel, text, thread);
+    return true;
+  }
+
   /**
    * The person wants to dig into one option before picking: the thread
    * remembers it, and asks the agent to work it through.
@@ -2984,6 +3023,8 @@ export class Threads {
         "",
         c.text,
       ]),
+      "",
+      "Nothing you write reaches the doc until the person picks this option: an edit you make waits as a proposal under it. So don't write the doc as if it were chosen.",
       "",
       `Work it through: what it would take, what could go wrong, and what it costs. If it splits into narrower choices, offer those as options${heading ? ` with the heading "${heading}"` : "; each is still the section's whole text"}.`,
     ].join("\n");
@@ -3825,6 +3866,7 @@ const KNOWN = new Set([
   "options",
   "option-used",
   "option-explored",
+  "option-skipped",
   "input",
   "input-removed",
   "added-input",
@@ -4004,12 +4046,8 @@ function actionOf(
     return { state: "stopped", detail: `At step ${String(tools.length)}`, ask: null };
   if (why.startsWith("error:"))
     return { state: "failed", detail: why.slice(6).trim().slice(0, 40) || "It failed", ask: null };
-  // It stopped on a choice the person hasn't made: it waits on them, it isn't done.
-  const open = items.find(
-    (i) => i.kind === "options" && i.used === null && !(i.several && i.added.length > 0),
-  );
-  if (open?.kind === "options")
-    return { state: "needs", detail: `Pick: ${open.heading ?? "an option"}`, ask: null };
+  // A choice it ends on is no warning (30.33): its options already hang off it on the
+  // map, and one picked while exploring them lives in another thread, so "!" would stay.
   // It ended saying it couldn't do the work: a ✓ would claim what isn't there.
   const last = [...items].reverse().find((i) => i.kind === "message" && i.role === "agent");
   if (last?.kind === "message" && COULD_NOT.test(last.text))

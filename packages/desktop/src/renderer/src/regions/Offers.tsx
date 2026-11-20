@@ -19,7 +19,6 @@ const SETTLE_MS = 5000;
 
 const OFFERS: Offer[] = [
   { id: "public-repo", due: publicRepoDue },
-  { id: "claude-code", due: claudeCodeDue },
   { id: "opener", due: openerDue },
   { id: "star", due: starDue },
 ];
@@ -45,8 +44,6 @@ export function Offers() {
       const was = running.current.size;
       if (e.thread.busy) running.current.add(e.thread.id);
       else running.current.delete(e.thread.id);
-      if (!e.thread.busy && e.thread.items.some((i) => i.kind === "message" && i.role === "agent"))
-        noteThreadAnswered();
       if (running.current.size !== was) setBusy(running.current.size);
     });
     return () => {
@@ -98,11 +95,6 @@ function setFlag(key: string) {
   }
 }
 
-const ANSWERED = "anur.threadAnswered";
-const noteThreadAnswered = () => {
-  setFlag(ANSWERED);
-};
-
 // --- This repo is public on GitHub (18.13): first, since it's about privacy.
 
 const publicAsked = (folder: string) => `anur.publicRepoAsked:${folder}`;
@@ -148,98 +140,6 @@ function PublicRepoCard({
         </button>
         <button type="button" className="think-more" disabled={busy} onClick={finish}>
           Commit them
-        </button>
-      </div>
-    </aside>
-  );
-}
-
-// --- Use Anur from Claude Code: /anur, and task reports in folders of code, in one Add.
-
-async function claudeCodeDue() {
-  const [skill, hooks, plugins] = await Promise.all([
-    anur.call("skill:status", {}),
-    anur.call("taskHooks:status", {}),
-    anur.call("plugins:list", {}),
-  ]);
-  if (!skill.claude || skill.dismissed) return null;
-  const code = plugins.plugins.some((p) => p.id === "engineering" && p.on);
-  // The skill once a thread has answered; task reports as soon as a folder of code opens.
-  const wantSkill = !skill.added && flag(ANSWERED);
-  const wantHooks = code && hooks.claude && !hooks.added;
-  if (!wantSkill && !wantHooks) return null;
-  const add = { skill: !skill.added, hooks: hooks.claude && !hooks.added };
-  return (done: () => void) => <ClaudeCodeCard add={add} code={code} done={done} />;
-}
-
-function ClaudeCodeCard({
-  add,
-  code,
-  done,
-}: {
-  add: { skill: boolean; hooks: boolean };
-  code: boolean;
-  done: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [added, setAdded] = useState(false);
-  if (added)
-    return (
-      <aside className="skill-card" role="dialog" aria-label="Added to Claude Code">
-        <strong>Added to Claude Code</strong>
-        <p>
-          In a Claude Code chat: <code>/anur map</code>, <code>/anur new</code>,{" "}
-          <code>/anur open</code>.
-        </p>
-        <div className="skill-card-actions">
-          <button type="button" className="think-button primary" onClick={done}>
-            Got it
-          </button>
-        </div>
-      </aside>
-    );
-  return (
-    <aside className="skill-card" role="dialog" aria-label="Use Anur from Claude Code">
-      <strong>Use Anur from Claude Code</strong>
-      <p>
-        <code>/anur map</code> turns a Claude Code chat into a map here
-        {code ? ", and each task in a folder of code gets a report of what it changed." : "."}
-      </p>
-      {error ? <p className="skill-card-error">{error}</p> : null}
-      <div className="skill-card-actions">
-        <button
-          type="button"
-          className="think-button primary"
-          disabled={busy}
-          onClick={() => {
-            setBusy(true);
-            setError(null);
-            void (async () => {
-              const results = await Promise.all([
-                add.skill ? anur.call("skill:act", { action: "add" }) : null,
-                add.hooks ? anur.call("taskHooks:act", { action: "add" }) : null,
-              ]);
-              setBusy(false);
-              const failed = results.find((r) => r?.kind === "failed");
-              if (failed?.kind === "failed") setError(failed.reason);
-              else if (add.skill) setAdded(true);
-              else done();
-            })();
-          }}
-        >
-          {busy ? "Adding…" : "Add to Claude Code"}
-        </button>
-        <button
-          type="button"
-          className="think-more"
-          disabled={busy}
-          onClick={() => {
-            void anur.call("skill:act", { action: "dismiss" });
-            done();
-          }}
-        >
-          Not now
         </button>
       </div>
     </aside>

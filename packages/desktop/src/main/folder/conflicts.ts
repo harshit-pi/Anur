@@ -1,98 +1,77 @@
-import { createHash } from "node:crypto";
+import { stat } from "node:fs/promises";
 import path from "node:path";
-import { applyMerge, normalizeDocPath, planConflictMerge, type MergeChoices } from "@anur/core";
-import type { FolderState, Response } from "../../shared/ipc-contract.ts";
-import { readDoc, writeDoc, type DocFile } from "../../vault/doc-file.ts";
+import { decideConflict, planConflictMerge } from "@anur/core";
+import type { FolderState } from "../../shared/ipc-contract.ts";
+import { readDoc, writeDoc } from "../../vault/doc-file.ts";
 
 /**
- * Merging a sync conflict copy into its original (task 2.3). The person sees
- * the plan section by section and picks; the merge writes the original in
- * one atomic step, with its own line endings and byte-order mark, refuses if
- * either file changed since the plan, and moves the copy to the Trash, never
- * deleting it outright. A file Anur can't write safely, such as one that
- * isn't UTF-8, is never merged.
+ * Sync conflict copies ("Notes 2.md"), settled without asking, as Obsidian
+ * asks nothing: a copy that adds nothing goes to the Trash, one that can be
+ * folded in without losing a word is, and any other stays as a note of its own.
  */
 
-/** Fingerprints a file as written: its text, line ending and byte-order mark. */
-const hash = (doc: DocFile) =>
-  createHash("sha256")
-    .update(`${doc.eol}\u0000${String(doc.bom)}\u0000${doc.text}`)
-    .digest("hex");
+export type SettleDeps = {
+  /** Earlier versions of one section of a doc, from Anur's history. */
+  history: (rel: string, text: string, sectionPath: readonly string[]) => Promise<string[]>;
+  /** Whether Anur already keeps threads or history for this doc. */
+  known: (rel: string) => Promise<boolean>;
+  trash: (file: string) => Promise<void>;
+  log: (message: string) => void;
+};
 
-function pairFor(folder: FolderState, copy: string) {
-  const norm = normalizeDocPath(copy);
-  const pair = folder.conflicts.find((c) => c.copy === norm);
-  if (!pair) throw new Error(`${copy} is not a conflict copy in this folder`);
-  return {
-    original: path.join(folder.path, pair.original),
-    copy: path.join(folder.path, pair.copy),
-    pair,
-  };
+/** Pairs left as two notes, by both files' size and time, so they aren't read again. */
+const keptBoth = new Set<string>();
+
+async function stamp(file: string): Promise<string> {
+  const s = await stat(file);
+  return `${String(s.size)}:${String(s.mtimeMs)}`;
 }
 
-/** Both files, decoded; refuses either one Anur can't write safely. */
-async function readPair(files: { original: string; copy: string }) {
-  const [original, copy] = await Promise.all([readDoc(files.original), readDoc(files.copy)]);
-  for (const [doc, file] of [
-    [original, files.original],
-    [copy, files.copy],
-  ] as const) {
-    if (doc.mode !== "editable") {
-      throw new Error(`${path.basename(file)}: ${doc.note ?? "Anur can't merge it"}`);
+/** Settles each conflict copy in the folder; true when any file changed. */
+export async function settleConflicts(folder: FolderState, deps: SettleDeps): Promise<boolean> {
+  if (folder.mode !== "writable") return false;
+  let changed = false;
+  for (const pair of folder.conflicts) {
+    const original = path.join(folder.path, pair.original);
+    const copy = path.join(folder.path, pair.copy);
+    try {
+      const keyNow = async () =>
+        `${original}\u0000${await stamp(original)}\u0000${await stamp(copy)}`;
+      const key = await keyNow();
+      if (keptBoth.has(key)) continue;
+      // A copy someone opened in Anur may carry threads or history of its own.
+      if (await deps.known(pair.copy)) {
+        keptBoth.add(key);
+        continue;
+      }
+      const [a, b] = await Promise.all([readDoc(original), readDoc(copy)]);
+      if (a.mode !== "editable" || b.mode !== "editable") {
+        keptBoth.add(key);
+        continue;
+      }
+      const differs = planConflictMerge(a.text, b.text).parts.filter((p) => p.kind === "differs");
+      const known = new Map<string, string[]>();
+      for (const p of differs)
+        known.set(p.path.join("\u0000"), await deps.history(pair.original, a.text, p.path));
+      const outcome = decideConflict(a.text, b.text, (p) => known.get(p.join("\u0000")) ?? []);
+      // Either file changed while it was read: settle it on the next pass.
+      if (key !== (await keyNow())) continue;
+      if (outcome.kind === "keep-both") {
+        keptBoth.add(key);
+        deps.log(`kept ${pair.copy} beside ${pair.original}: ${outcome.why}`);
+        continue;
+      }
+      if (outcome.kind === "write") await writeDoc(original, outcome.text, a);
+      await deps.trash(copy);
+      changed = true;
+      deps.log(
+        outcome.kind === "write"
+          ? `folded ${pair.copy} into ${pair.original} (${outcome.why}); copy moved to the Trash`
+          : `moved ${pair.copy} to the Trash: ${outcome.kind === "same" ? "same as the original" : outcome.why}`,
+      );
+    } catch (e) {
+      deps.log(`left ${pair.copy} alone: ${(e as Error).message}`);
     }
   }
-  return { original, copy };
-}
-
-export async function planConflict(
-  folder: FolderState,
-  copy: string,
-): Promise<Response<"conflict:plan">> {
-  try {
-    const files = pairFor(folder, copy);
-    const docs = await readPair(files);
-    const plan = planConflictMerge(docs.original.text, docs.copy.text);
-    return {
-      kind: "plan",
-      original: files.pair.original,
-      copy: files.pair.copy,
-      parts: plan.parts,
-      hashes: { original: hash(docs.original), copy: hash(docs.copy) },
-    };
-  } catch (e) {
-    return { kind: "failed", reason: (e as Error).message };
-  }
-}
-
-export async function mergeConflict(
-  folder: FolderState,
-  request: {
-    copy: string;
-    hashes: { original: string; copy: string };
-    choices: Record<string, "original" | "copy" | boolean>;
-  },
-  trash: (file: string) => Promise<void>,
-): Promise<{ ok: true } | { ok: false; reason: string }> {
-  try {
-    const files = pairFor(folder, request.copy);
-    const docs = await readPair(files);
-    if (
-      hash(docs.original) !== request.hashes.original ||
-      hash(docs.copy) !== request.hashes.copy
-    ) {
-      return {
-        ok: false,
-        reason: "One of the two files changed since you reviewed the merge. Review it again.",
-      };
-    }
-    const choices: MergeChoices = Object.fromEntries(
-      Object.entries(request.choices).map(([k, v]) => [Number(k), v]),
-    );
-    const merged = applyMerge(planConflictMerge(docs.original.text, docs.copy.text), choices);
-    await writeDoc(files.original, merged, docs.original);
-    await trash(files.copy);
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, reason: (e as Error).message };
-  }
+  return changed;
 }

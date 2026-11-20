@@ -66,7 +66,6 @@ import { SCOPE_EVENT, type Scope } from "./regions/ThinkScope.tsx";
 import { setPeople } from "./layout/people.ts";
 import { Settings, type SettingsSection } from "./regions/Settings.tsx";
 import { newDocPath } from "./layout/new-doc.ts";
-import { MergeDialog } from "./regions/MergeDialog.tsx";
 import {
   Center,
   LeftSidebar,
@@ -79,6 +78,8 @@ import { TabBar } from "./regions/TabBar.tsx";
 import { Tour } from "./regions/Tour.tsx";
 import { tourSteps } from "./layout/tour.ts";
 import { useFeatures } from "./features.ts";
+import { BlankMap, BlankPage } from "./regions/BlankMap.tsx";
+import { loadDocView, useDocView } from "./regions/doc-view-pref.ts";
 import { MapView } from "./regions/MapView.tsx";
 import { Offers } from "./regions/Offers.tsx";
 import { keepSame } from "./layout/keep-same.ts";
@@ -111,7 +112,6 @@ export function App() {
   const [reveal, setReveal] = useState(0);
   /** The doc in the active tab. */
   const selected = currentDoc(tabs);
-  const [merging, setMerging] = useState<string | null>(null);
   const [doc, setDoc] = useState<OpenDoc | null>(null);
   const [opening, setOpening] = useState<string | null>(null);
   const [docError, setDocError] = useState<string | null>(null);
@@ -146,7 +146,10 @@ export function App() {
   /** When the cursor or a pick last set the mark: the scroll a jump causes doesn't move it. */
   const markedAt = useRef(0);
   /** Page or Map in the centre (task 7). */
-  const [centerView, setCenterView] = useState<"page" | "map">("page");
+  const docView = useDocView();
+  const [centerView, setCenterView] = useState<"page" | "map">(() =>
+    loadDocView(window.localStorage),
+  );
   const TOUR = tourSteps(useFeatures());
   /** The tour's step while it runs (null otherwise), and Help → Show the Tour Again. */
   const [tourStep, setTourStep] = useState<number | null>(null);
@@ -288,11 +291,21 @@ export function App() {
       return next;
     });
   }, [folderPath, selected]);
+  // Each space opens in the view picked in Settings, not the one the last space was left in.
+  useEffect(() => {
+    if (folderPath) setCenterView(loadDocView(window.localStorage));
+  }, [folderPath]);
   const folderDocs = folder?.docs;
   useEffect(() => {
-    setTabs(
-      folderPath && folderDocs ? loadTabs(window.localStorage, folderPath, folderDocs) : noTabs,
-    );
+    const loaded =
+      folderPath && folderDocs ? loadTabs(window.localStorage, folderPath, folderDocs) : noTabs;
+    setTabs(loaded);
+    // Map first, a space with no tabs to bring back opens its latest doc.
+    if (folderDocs && loaded.tabs.length === 0 && loadDocView(window.localStorage) === "map") {
+      const times = folder.times;
+      const latest = [...folderDocs].sort((a, b) => (times[b]?.[0] ?? 0) - (times[a]?.[0] ?? 0))[0];
+      if (latest) openDocNow.current(latest, false);
+    }
     // Only when another folder opens: a changed list keeps the tabs as they are.
   }, [folderPath]);
   useEffect(() => {
@@ -306,9 +319,12 @@ export function App() {
     if (!folderPath || settings) return;
     let current = true;
     void anur.call("plugins:list", {}).then((r) => {
-      if (!current) return;
+      // An answer for the space this window showed before is no answer for this one.
+      if (!current || r.folder !== folderPath) return;
       const on = r.plugins.some((p) => p.id === "engineering" && p.on);
       setEngineeringOn(on);
+      // No code here: a Repos tab saved or carried over closes.
+      if (!on) setTabs((t) => closeWhere(t, (tab) => docOf(tab) === SYSTEM_TAB));
       // A folder opened with Engineering on starts on its System tab.
       if (on && systemShownFor.current !== folderPath) {
         systemShownFor.current = folderPath;
@@ -414,6 +430,26 @@ export function App() {
       });
     },
     [folder, selected, openDoc],
+  );
+  /** A doc named on a blank map or page: made, and shown there; on the map, Tab adds a box under it. */
+  const [childFor, setChildFor] = useState<string | null>(null);
+  const madeIn = useRef<{ path: string; view: "page" | "map" } | null>(null);
+  const nameMap = useCallback(
+    async (name: string, child: boolean, view: "page" | "map" = "map"): Promise<boolean> => {
+      if (!folder || folder.mode !== "writable") return false;
+      const r = await anur.call("doc:create", { path: newDocPath(folder.docs, null, name) });
+      if (r.kind !== "created") {
+        console.warn("Anur couldn't make the map:", r.reason);
+        return false;
+      }
+      setFolder(r.folder);
+      setChildFor(child ? r.path : null);
+      madeIn.current = { path: r.path, view };
+      setCenterView(view);
+      openDoc(r.path, false);
+      return true;
+    },
+    [folder, openDoc],
   );
   /** While true the page is put away, so a doc being moved saves first and isn't written behind. */
   const [holding, setHolding] = useState(false);
@@ -828,9 +864,10 @@ export function App() {
       }, 60);
     }, 60);
   }, []);
-  /** Ask (4.8): a thread on the doc's title, whose text is the whole doc. */
+  /** The ◆ in the tab bar: Think on the whole space, ready to ask. */
   const ask = useCallback(() => {
-    thinkOn(0);
+    window.dispatchEvent(new CustomEvent(SCOPE_EVENT, { detail: { scope: "folder" } }));
+    thinkOn(null);
   }, [thinkOn]);
   /**
    * A section added on the map: a heading one level under `parent`, after
@@ -1001,7 +1038,11 @@ export function App() {
     placedFor.current = doc.path;
     if (pendingHeading?.path === doc.path || pendingLine?.path === doc.path) return;
     const place = loadPlace(window.localStorage, folderPath, doc.path);
-    if (!place) return;
+    if (!place) {
+      // Made on a blank page or map: it stays in the view it was made in.
+      setCenterView(madeIn.current?.path === doc.path ? madeIn.current.view : docView);
+      return;
+    }
     setCenterView(place.view);
     const index = sectionIndexOf(sections.sections, place.section);
     if (index < 0) return;
@@ -1011,7 +1052,7 @@ export function App() {
       requestAnimationFrame(() => {
         jumpTo(index);
       });
-  }, [doc, sections, folderPath, pendingHeading, pendingLine, jumpTo]);
+  }, [doc, sections, folderPath, pendingHeading, pendingLine, jumpTo, docView]);
   useEffect(() => {
     if (!doc || !sections || !folderPath || placedFor.current !== doc.path) return;
     const section = sections.sections[outlineAt]?.path;
@@ -1034,7 +1075,11 @@ export function App() {
     v.focus();
   }, [pendingLine, doc, sections]);
   const [widths, setWidths] = useState(() => loadWidths(window.localStorage));
-  const [open, setOpen] = useState(() => loadOpen(window.localStorage));
+  // Map first, the files panel starts closed so the map has the room; opened, it stays.
+  const [open, setOpen] = useState(() => {
+    const o = loadOpen(window.localStorage);
+    return loadDocView(window.localStorage) === "map" ? { ...o, left: false } : o;
+  });
   const docReady = doc !== null && sections !== null;
   // The tour starts once, the first time a doc is open, unless it's been seen.
   useEffect(() => {
@@ -1064,7 +1109,8 @@ export function App() {
   }, [tourStep]);
   const endTour = useCallback(() => {
     setTourStep(null);
-    setCenterView("page");
+    // Back to the view picked in Settings, where the person works.
+    setCenterView(loadDocView(window.localStorage));
     void anur.call("tour:done", {});
   }, []);
   const toggle = useCallback((side: Side) => {
@@ -1268,7 +1314,8 @@ export function App() {
     <div
       className="shell"
       style={{
-        gridTemplateColumns: `48px ${String(open.left ? widths.left : 0)}px minmax(0, 1fr) ${String(open.right ? widths.right : 0)}px`,
+        // No space open: no files or Think to show, so neither panel takes room.
+        gridTemplateColumns: `48px ${String(open.left && folder ? widths.left : 0)}px minmax(0, 1fr) ${String(open.right && folder ? widths.right : 0)}px`,
       }}
     >
       <TabBar
@@ -1284,12 +1331,20 @@ export function App() {
           setTabs((t) => newTab(t));
         }}
         onListTabs={listTabs}
-        view={selected === SYSTEM_TAB ? "map" : doc && sections ? centerView : null}
+        view={
+          selected === SYSTEM_TAB
+            ? "map"
+            : (doc && sections) || (!selected && folder?.mode === "writable")
+              ? centerView
+              : null
+        }
         mapOnly={selected === SYSTEM_TAB}
+        space={folder !== null}
         onView={setCenterView}
-        onAsk={doc && sections ? ask : null}
+        onAsk={folder ? ask : null}
       />
       <Ribbon
+        files={folder !== null}
         filesOpen={open.left}
         onFiles={() => {
           toggle("left");
@@ -1329,7 +1384,7 @@ export function App() {
         }
         selected={selected}
         onSelect={openDoc}
-        hidden={!open.left}
+        hidden={!open.left || !folder}
         reveal={reveal}
         actions={fileActions}
         notice={fileNotice}
@@ -1342,12 +1397,7 @@ export function App() {
         page={
           // Only the doc the tab shows: after a rename the old one mustn't mount for a moment.
           selected === SYSTEM_TAB ? (
-            <SystemView
-              folder={folderPath}
-              onPlugins={() => {
-                setSettings("core");
-              }}
-            />
+            <SystemView folder={folderPath} />
           ) : taskIdOf(selected) ? (
             <TaskView id={taskIdOf(selected) ?? ""} onSystem={openSystem} />
           ) : selected && isViewable(selected) ? (
@@ -1392,11 +1442,19 @@ export function App() {
               onRedo={redoOnPage}
               writable={folder?.mode === "writable" && doc.mode === "editable"}
               docs={folder?.docs ?? []}
+              childOnOpen={childFor === doc.path}
             />
           ) : centerView === "map" && selected && /\.md$/i.test(selected) ? (
             // While a doc's sections are read, or the doc is moved or renamed, an
             // empty map, so neither the page nor "Pick a doc" shows through.
             <div className="map" aria-hidden="true" />
+          ) : !selected && folder?.mode === "writable" && !opening ? (
+            // A new tab is blank in the view the person is in.
+            centerView === "map" ? (
+              <BlankMap onName={nameMap} />
+            ) : (
+              <BlankPage onName={(name) => nameMap(name, false, "page")} />
+            )
           ) : null
         }
         opening={opening}
@@ -1404,10 +1462,10 @@ export function App() {
         docError={docError ?? save.detail}
         spaceNotice={spaceNotice}
         spaceOpening={spaceOpening}
+        openOnMap={docView === "map"}
         onOpenFolder={openFolder}
         onNewFolder={newFolder}
         onFirstDoc={firstDoc}
-        onMerge={setMerging}
         onCrumb={showFolder}
         onCopyLink={copySectionLink}
         onMore={showMore}
@@ -1427,7 +1485,7 @@ export function App() {
         }
       />
       <RightSidebar
-        hidden={!open.right}
+        hidden={!open.right || !folder}
         think={
           selected === SYSTEM_TAB ? (
             // The system's map fills this with recent tasks, a line's calls and its repos.
@@ -1494,14 +1552,6 @@ export function App() {
           onChange={setWidth("right")}
         />
       ) : null}
-      {merging ? (
-        <MergeDialog
-          copy={merging}
-          onClose={() => {
-            setMerging(null);
-          }}
-        />
-      ) : null}
       {tourStep !== null ? (
         <Tour
           step={tourStep}
@@ -1538,7 +1588,7 @@ export function App() {
               }
             : null
         }
-        onAsk={doc && sections ? ask : null}
+        onAsk={folder ? ask : null}
         onSystem={engineeringOn ? openSystem : null}
       />
       {settings ? (

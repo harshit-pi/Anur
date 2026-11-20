@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EventPayload } from "../../shared/ipc-contract.ts";
 import type { ToHost, ToMain } from "../../agent/protocol.ts";
 import { SectionVersions } from "../folder/versions.ts";
@@ -19,6 +19,10 @@ import {
   systemDocText,
   systemIndexOf,
 } from "@anur/core";
+
+/** Waits for edits made after a turn to reach the doc: the watch and its debounce run late under load. */
+const eventually = (check: () => Promise<void>) =>
+  vi.waitFor(check, { timeout: 8000, interval: 100 });
 
 const DOC = `# Plan
 
@@ -305,10 +309,11 @@ describe("Threads", () => {
       copy,
       DOC.replace("The host is untested.", "The host has no tests yet; CI is red."),
     );
-    await new Promise((res) => setTimeout(res, 1500));
-    const [preview] = await t.listPreviews("plan.md", DOC);
-    expect(preview?.parts[0]?.proposed).toContain("The host has no tests yet; CI is red.");
-  });
+    await eventually(async () => {
+      const [preview] = await t.listPreviews("plan.md", DOC);
+      expect(preview?.parts[0]?.proposed).toContain("The host has no tests yet; CI is red.");
+    });
+  }, 15_000);
 
   it("opens a session ahead, and the next thread takes it", async () => {
     const { threads: t, sent } = await setup();
@@ -403,6 +408,86 @@ describe("Threads", () => {
     expect(d).toMatchObject({ claim: "No deploys for this launch.", scope: "doc" });
   });
 
+  it("calls a build that ends on a choice done, not waiting on the person (30.33)", async () => {
+    const { threads: t, reply } = await setup();
+    const b = await t.start("plan.md", DOC, risks, "-", undefined, [], "build");
+    if (b.kind !== "started") throw new Error(b.reason);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    await tool(b.thread.id, "anur_offer_options", {
+      heading: "Host",
+      options: [
+        { title: "Fly", text: "Run it on Fly." },
+        { title: "Render", text: "Run it on Render." },
+      ],
+    });
+    await reply(b.thread.id, "Built it; two hosts to pick from.");
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === b.thread.id);
+    expect(view?.action?.state).toBe("done");
+  });
+
+  it("keeps an explored option's edits as a proposal in Auto, where a plain thread's land (30.31)", async () => {
+    const auto = [
+      {
+        id: "mode",
+        name: "Mode",
+        current: "auto",
+        choices: [{ value: "default" }, { value: "auto" }, { value: "plan" }],
+      },
+    ];
+    const {
+      folder,
+      support,
+      threads: t,
+      reply,
+      sent,
+    } = await setup({
+      knownOptions: () => auto as never,
+    });
+    await writeFile(path.join(folder, "plan.md"), DOC);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    const a = await t.start("plan.md", DOC, risks, "How do we host it?");
+    if (a.kind !== "started") throw new Error(a.reason);
+    await tool(a.thread.id, "anur_offer_options", {
+      heading: "Host",
+      options: [
+        { title: "Fly", text: "Run it on Fly." },
+        { title: "Render", text: "Run it on Render." },
+      ],
+    });
+    await reply(a.thread.id, "Two hosts.");
+    const fly = (await t.list("plan.md", DOC))
+      .find((x) => x.id === a.thread.id)
+      ?.items.flatMap((i) => (i.kind === "options" ? i.options : []))[0];
+    if (!fly) throw new Error("no options");
+    const e = await t.exploreOption("plan.md", DOC, a.thread.id, fly.id);
+    if (e.kind !== "started") throw new Error(e.reason);
+    const asked = sent.filter((m) => m.type === "prompt").at(-1);
+    expect(asked?.type === "prompt" && asked.text).toContain("Nothing you write reaches the doc");
+    // The explore thread writes its deep-dive into the section, as an agent may.
+    const copy = path.join(support, "agent", "copies", e.thread.id, "plan.md");
+    await writeFile(copy, DOC.replace("The host is untested.", "Working option: Fly."));
+    await reply(e.thread.id, "Worked through.");
+    expect(await readFile(path.join(folder, "plan.md"), "utf8")).toBe(DOC);
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === e.thread.id);
+    expect(view?.explores).toEqual({ thread: a.thread.id, option: fly.id });
+    expect(view?.items.some((i) => i.kind === "auto-used")).toBe(false);
+    const previews = await t.listPreviews("plan.md", DOC);
+    expect(
+      previews.some((p) => p.parts.some((x) => x.proposed.includes("Working option: Fly."))),
+    ).toBe(true);
+    // A plain thread in the same mode still lands its edit.
+    const b = await t.start("plan.md", DOC, risks, "Tighten the risk.");
+    if (b.kind !== "started") throw new Error(b.reason);
+    const copyB = path.join(support, "agent", "copies", b.thread.id, "plan.md");
+    await writeFile(copyB, DOC.replace("The host is untested.", "The host has no tests yet."));
+    await reply(b.thread.id, "Done.");
+    expect(await readFile(path.join(folder, "plan.md"), "utf8")).toContain("no tests yet");
+  });
+
   it("shows the option used last when a choice is switched to another", async () => {
     const { threads: t, reply } = await setup();
     const a = await t.start("plan.md", DOC, risks, "How do we host it?");
@@ -432,6 +517,33 @@ describe("Threads", () => {
     // Added beside the pick: both are in the doc, and the pick stays.
     await t.useOption("plan.md", DOC, a.thread.id, fly.id, "also");
     expect(await offer()).toMatchObject({ used: render.id, added: [fly.id] });
+  });
+
+  it("remembers a skipped part, and an Undo, without touching the doc", async () => {
+    const { threads: t, reply } = await setup();
+    const a = await t.start("plan.md", DOC, risks, "What else belongs here?");
+    if (a.kind !== "started") throw new Error(a.reason);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    await tool(a.thread.id, "anur_offer_options", {
+      several: true,
+      options: [
+        { title: "Failure", text: "What counts as failure." },
+        { title: "Exhausted", text: "After retries are exhausted." },
+      ],
+    });
+    await reply(a.thread.id, "Two parts.");
+    const offer = async () =>
+      (await t.list("plan.md", DOC))
+        .find((x) => x.id === a.thread.id)
+        ?.items.flatMap((i) => (i.kind === "options" ? [i] : []))[0];
+    const [failure] = (await offer())?.options ?? [];
+    if (!failure) throw new Error("no options");
+    expect(await t.skipOption("plan.md", DOC, a.thread.id, failure.id, true)).toBe(true);
+    expect((await offer())?.skipped).toEqual([failure.id]);
+    await t.skipOption("plan.md", DOC, a.thread.id, failure.id, false);
+    expect((await offer())?.skipped).toEqual([]);
   });
 
   it("carries a kept finding to new threads on the section, and never an unkept one", async () => {
@@ -837,8 +949,9 @@ describe("Threads", () => {
     expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe("# FAQ\n");
     // Background work revises it after the turn: the made doc follows.
     await writeFile(path.join(copies, "FAQ.md"), "# FAQ\n\nOne question.\n");
-    await new Promise((res) => setTimeout(res, 1500));
-    expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe("# FAQ\n\nOne question.\n");
+    await eventually(async () => {
+      expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe("# FAQ\n\nOne question.\n");
+    });
     const view = (await t.list("plan.md", DOC)).find((x) => x.id === r.thread.id);
     const made = view?.items.find((i) => i.kind === "created");
     if (made?.kind !== "created") throw new Error("no created note");
@@ -846,7 +959,7 @@ describe("Threads", () => {
     expect(made.undoable).toBe(true);
     expect((await t.undoCreated(r.thread.id, made.id)).kind).toBe("undone");
     expect(await readdir(folder)).not.toContain("FAQ.md");
-  });
+  }, 15_000);
 
   it("gives a doc the agent makes its owner and day, kept through the agent's later edits", async () => {
     const {
@@ -867,9 +980,10 @@ describe("Threads", () => {
     // Its copy has them too, so the agent's next edit keeps them.
     expect(await readFile(path.join(copies, "FAQ.md"), "utf8")).toBe(made);
     await writeFile(path.join(copies, "FAQ.md"), `${made}\nOne question.\n`);
-    await new Promise((res) => setTimeout(res, 1500));
-    expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe(`${made}\nOne question.\n`);
-  });
+    await eventually(async () => {
+      expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe(`${made}\nOne question.\n`);
+    });
+  }, 15_000);
 
   it("shows nothing for a doc changed outside Anur during the turn", async () => {
     const { folder, threads: t, reply } = await setup();
