@@ -16,30 +16,14 @@ export type TourStep = {
   feature?: "links" | "history" | "actions";
   /** A side panel the step points into, opened for it. */
   panel?: "left" | "right";
-  /** Show the map's moves with a ghost pointer: drag a box, then pick one. */
-  demo?: "map";
+  /** A ghost pointer shows it: "map" drags a box and picks one; "keys" adds boxes with Tab and Enter. */
+  demo?: "map" | "keys";
 };
 
 export const TOUR: readonly TourStep[] = [
   {
-    title: "Your docs are plain files",
-    text: "Everything here is Markdown in this folder. Anur reads and writes it, and any other editor still can.",
-    target: ".left-sidebar",
-    side: "right",
-    view: "page",
-    panel: "left",
-  },
-  {
-    title: "Ask about a section",
-    text: "Click in a section and ask, on your own agent. It starts from that section, the rules it links to and what earlier threads settled, not a blank chat.",
-    target: ".right-sidebar",
-    side: "left",
-    view: "page",
-    panel: "right",
-  },
-  {
-    title: "Brainstorm on the map",
-    text: "Every section is a box. Threads hang off the box they're about, and their ideas come back as options you can explore side by side.",
+    title: "Think on a map",
+    text: "Each box is one idea, and you arrange them as you think. Every map is also a doc: Page shows it as text.",
     target: ".map",
     fallback: ".center",
     side: "left",
@@ -47,9 +31,26 @@ export const TOUR: readonly TourStep[] = [
     demo: "map",
   },
   {
+    title: "Add with Tab and Enter",
+    text: "Pick a box: Tab adds one under it, Enter one beside it. Double-click a box to rename it.",
+    target: ".map",
+    fallback: ".center",
+    side: "left",
+    view: "map",
+    demo: "keys",
+  },
+  {
+    title: "Ask about a box",
+    text: "Pick a box and ask, on your own agent. It starts from that box, not a blank chat, and the thread and its options hang off the box.",
+    target: ".right-sidebar",
+    side: "left",
+    view: "map",
+    panel: "right",
+  },
+  {
     title: "Build and check from the map",
     feature: "actions",
-    text: "Pick a box, then Build this section: the agent does what it says with its own tools, drafts, docs or code. Check this section tests its claims. The work hangs off the box.",
+    text: "Build this section has the agent do what the box says, with its own tools. Check this section tests its claims. The work hangs under the box.",
     target: ".think-actions",
     fallback: ".right-sidebar",
     side: "left",
@@ -62,7 +63,7 @@ export const TOUR: readonly TourStep[] = [
     code: "/anur map",
     target: ".status-bar .status-item",
     side: "top",
-    view: "page",
+    view: "map",
   },
 ];
 
