@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EventPayload } from "../../shared/ipc-contract.ts";
 import type { ToHost, ToMain } from "../../agent/protocol.ts";
 import { SectionVersions } from "../folder/versions.ts";
@@ -19,6 +19,10 @@ import {
   systemDocText,
   systemIndexOf,
 } from "@anur/core";
+
+/** Waits for edits made after a turn to reach the doc: the watch and its debounce run late under load. */
+const eventually = (check: () => Promise<void>) =>
+  vi.waitFor(check, { timeout: 8000, interval: 100 });
 
 const DOC = `# Plan
 
@@ -305,10 +309,11 @@ describe("Threads", () => {
       copy,
       DOC.replace("The host is untested.", "The host has no tests yet; CI is red."),
     );
-    await new Promise((res) => setTimeout(res, 1500));
-    const [preview] = await t.listPreviews("plan.md", DOC);
-    expect(preview?.parts[0]?.proposed).toContain("The host has no tests yet; CI is red.");
-  });
+    await eventually(async () => {
+      const [preview] = await t.listPreviews("plan.md", DOC);
+      expect(preview?.parts[0]?.proposed).toContain("The host has no tests yet; CI is red.");
+    });
+  }, 15_000);
 
   it("opens a session ahead, and the next thread takes it", async () => {
     const { threads: t, sent } = await setup();
@@ -944,8 +949,9 @@ describe("Threads", () => {
     expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe("# FAQ\n");
     // Background work revises it after the turn: the made doc follows.
     await writeFile(path.join(copies, "FAQ.md"), "# FAQ\n\nOne question.\n");
-    await new Promise((res) => setTimeout(res, 1500));
-    expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe("# FAQ\n\nOne question.\n");
+    await eventually(async () => {
+      expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe("# FAQ\n\nOne question.\n");
+    });
     const view = (await t.list("plan.md", DOC)).find((x) => x.id === r.thread.id);
     const made = view?.items.find((i) => i.kind === "created");
     if (made?.kind !== "created") throw new Error("no created note");
@@ -953,7 +959,7 @@ describe("Threads", () => {
     expect(made.undoable).toBe(true);
     expect((await t.undoCreated(r.thread.id, made.id)).kind).toBe("undone");
     expect(await readdir(folder)).not.toContain("FAQ.md");
-  });
+  }, 15_000);
 
   it("gives a doc the agent makes its owner and day, kept through the agent's later edits", async () => {
     const {
@@ -974,9 +980,10 @@ describe("Threads", () => {
     // Its copy has them too, so the agent's next edit keeps them.
     expect(await readFile(path.join(copies, "FAQ.md"), "utf8")).toBe(made);
     await writeFile(path.join(copies, "FAQ.md"), `${made}\nOne question.\n`);
-    await new Promise((res) => setTimeout(res, 1500));
-    expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe(`${made}\nOne question.\n`);
-  });
+    await eventually(async () => {
+      expect(await readFile(path.join(folder, "FAQ.md"), "utf8")).toBe(`${made}\nOne question.\n`);
+    });
+  }, 15_000);
 
   it("shows nothing for a doc changed outside Anur during the turn", async () => {
     const { folder, threads: t, reply } = await setup();
