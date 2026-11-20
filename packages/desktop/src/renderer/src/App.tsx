@@ -77,7 +77,6 @@ import {
 import { TabBar } from "./regions/TabBar.tsx";
 import { SkillCard } from "./regions/SkillCard.tsx";
 import { PublicRepoCard } from "./regions/PublicRepoCard.tsx";
-import { EngineeringCard } from "./regions/EngineeringCard.tsx";
 import { UpdateCard, WhatsNewCard } from "./regions/UpdateCard.tsx";
 import { OpenerCard } from "./regions/OpenerCard.tsx";
 import { Tour } from "./regions/Tour.tsx";
@@ -359,24 +358,6 @@ export function App() {
   const openSystem = useCallback(() => {
     setTabs((t) => showSystem(t));
   }, []);
-  // Engineering switched on, from Settings or the card: the System tab at once.
-  useEffect(() => {
-    const on = () => {
-      setSettings(null);
-      setEngineeringOn(true);
-      openSystem();
-    };
-    // Undo on the notice: the System row goes at once.
-    const off = () => {
-      setEngineeringOn(false);
-    };
-    window.addEventListener("anur:engineering-on", on);
-    window.addEventListener("anur:engineering-off", off);
-    return () => {
-      window.removeEventListener("anur:engineering-on", on);
-      window.removeEventListener("anur:engineering-off", off);
-    };
-  }, [openSystem]);
   const openDocNow = useRef<(path: string, inNewTab: boolean) => void>(() => undefined);
   const openDoc = useCallback((path: string, inNewTab: boolean) => {
     setTabs((t) => openInTab(t, path, inNewTab));
@@ -1501,7 +1482,6 @@ export function App() {
           <UpdateCard />
           <WhatsNewCard />
           <PublicRepoCard />
-          <EngineeringCard />
           <OpenerCard />
           <SkillCard />
           <StarPrompt />

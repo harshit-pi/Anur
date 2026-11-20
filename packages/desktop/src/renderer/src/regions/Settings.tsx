@@ -471,45 +471,15 @@ function TaskHooksRow() {
   );
 }
 
-/** Plugins Anur ships, each with a switch for this window's folder (19.4). */
+/** Engineering is on by itself in a folder of code repos; then its task reports can be added. */
 function PluginRows({ folder }: { folder: FolderState | null }) {
-  const [list, setList] = useState<{ id: string; name: string; what: string; on: boolean }[]>([]);
-  const [note, setNote] = useState<string | null>(null);
-  const [n, setN] = useState(0);
+  const [on, setOn] = useState(false);
   useEffect(() => {
     void anur.call("plugins:list", {}).then((r) => {
-      setList(r.plugins);
+      setOn(r.plugins.some((p) => p.id === "engineering" && p.on));
     });
-  }, [folder?.path, n]);
-  return (
-    <>
-      {list.map((p) => (
-        <Row
-          key={p.id}
-          title={p.name}
-          detail={folder ? p.what : `${p.what} Open a folder to switch it on.`}
-        >
-          <Switch
-            on={p.on}
-            label={`${p.name} for this folder`}
-            disabled={!folder}
-            onChange={(on) => {
-              setNote(null);
-              void anur.call("plugins:set", { id: p.id, on }).then((r) => {
-                if (r.kind === "refused") setNote(r.reason);
-                setN((x) => x + 1);
-                // Engineering on: show what it does at once, in the System tab.
-                if (r.kind === "ok" && on && p.id === "engineering")
-                  window.dispatchEvent(new CustomEvent("anur:engineering-on"));
-              });
-            }}
-          />
-        </Row>
-      ))}
-      {list.some((p) => p.id === "engineering") ? <TaskHooksRow /> : null}
-      {note ? <p className="settings-row-detail">{note}</p> : null}
-    </>
-  );
+  }, [folder?.path]);
+  return on ? <TaskHooksRow /> : null;
 }
 
 type MarketData = Awaited<ReturnType<typeof anur.call<"market:list">>>;

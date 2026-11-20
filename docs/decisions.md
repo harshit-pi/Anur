@@ -428,4 +428,4 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 - What a doc's tab shows in Think, the system shows in the right sidebar: recent tasks, the calls of a line clicked on the map with their files and lines, and Choose repos. The map has the whole centre.
 - The lines are drawn on the map, so no list repeats them: a click on a line opens a card beside it with its calls or links, each with where it was found and Hide. Recent task reports sit under System in the files panel.
 - The right sidebar is kept for the agent on the map, which comes next.
-- Engineering switches itself on when a folder that holds code repos opens for the first time, with a notice and Undo; the answer is remembered per folder, so the notice shows once. Adding task reports to Claude Code stays a button on the notice, since it changes Claude Code for the whole Mac.
+- Engineering is on exactly when a folder holds code repos, read each time it opens: no switch, no notice, no Undo (2026-11-19, replacing the notice). Adding task reports to Claude Code is a button in Settings → Plugins while it's on, since it changes Claude Code for the whole Mac.
