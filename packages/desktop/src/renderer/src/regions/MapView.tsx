@@ -758,8 +758,8 @@ export function MapView({
             nodes.push({
               id: did,
               parent: at,
-              w: bare ? 24 : labelWidth(label ?? t.title),
-              h: bare ? 16 : 36,
+              w: bare ? 28 : labelWidth(label ?? t.title),
+              h: bare ? 28 : 36,
             });
             info.set(did, {
               id: did,
@@ -1724,6 +1724,29 @@ export function MapView({
   };
 
   const v = view ?? { x: 0, y: 0, z: 1 };
+  /** A thread's line under one of its decisions: hovered, it names the thread; clicked, opens it. */
+  const threadHit = (b: Box, p: Box, d: string) => {
+    const t = b.bare ? b.thread : p.bare ? p.thread : undefined;
+    if (!t) return [];
+    return [
+      <path
+        key={`hit:${b.id}`}
+        className="map-edge-hit"
+        d={d}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          clickedAt.current = Date.now();
+          const own = t.path
+            ? tree.sections.find((x) => samePath(x.path, t.path ?? []))?.index
+            : undefined;
+          if (own !== undefined) onSelect(own);
+          window.dispatchEvent(new CustomEvent("anur:open-thread", { detail: { thread: t.id } }));
+        }}
+      >
+        <title>{`from ${t.title}`}</title>
+      </path>,
+    ];
+  };
   const edges = boxes.flatMap((b) => {
     const p = b.parent ? byId.get(b.parent) : undefined;
     if (!p) return [];
@@ -1749,11 +1772,11 @@ export function MapView({
               [b.x, rail],
               [b.x, top],
             ];
-      return line(
-        b.id,
-        b.kind === "section" ? "map-edge rail" : "map-edge rail thread",
-        pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" "),
-      );
+      const d = pts.map(([x, y], k) => `${k ? "L" : "M"} ${String(x)} ${String(y)}`).join(" ");
+      return [
+        ...line(b.id, b.kind === "section" ? "map-edge rail" : "map-edge rail thread", d),
+        ...threadHit(b, p, d),
+      ];
     }
     // From the parent's bottom to the child's top, a soft S; sideways when a
     // moved box sits beside, and always in the mind map, which branches sideways.
@@ -1774,7 +1797,10 @@ export function MapView({
       const mid = (x1 + x2) / 2;
       d = `M ${String(x1)} ${String(p.y)} C ${String(mid)} ${String(p.y)}, ${String(mid)} ${String(b.y)}, ${String(x2)} ${String(b.y)}`;
     }
-    return [...line(b.id, b.kind === "section" ? "map-edge" : "map-edge thread", d)];
+    return [
+      ...line(b.id, b.kind === "section" ? "map-edge" : "map-edge thread", d),
+      ...threadHit(b, p, d),
+    ];
   });
 
   return (
@@ -1803,7 +1829,7 @@ export function MapView({
           visibility: view ? "visible" : "hidden",
         }}
       >
-        <svg className="map-edges" aria-hidden="true">
+        <svg className="map-edges">
           {edges}
           {linking
             ? (() => {
@@ -1974,7 +2000,7 @@ export function MapView({
                 onBoxDown(e, b);
               }}
             >
-              {hand ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed /> : null}
+              {hand && !b.bare ? <BoxSketch id={b.id} w={b.w} h={b.h} dashed /> : null}
               {/* The services it acted in, such as Linear or Gmail, by their marks. */}
               {servicesUsed(b.label || b.bare ? [] : b.thread.items)
                 .slice(0, MARKS_SHOWN)
