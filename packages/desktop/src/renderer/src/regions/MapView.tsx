@@ -1024,6 +1024,47 @@ export function MapView({
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
 
+  // Sections stay where they were drawn: when the layout would move one only because
+  // something else changed (a new section, a thread's choices), it's kept in place,
+  // and a new one goes to the first free spot below where the layout puts it. Tidy,
+  // a drag, an undo or a switch of layout re-lays them, and that becomes the place kept.
+  const drawnAt = useRef(new Map<string, Pos>());
+  const relayout = useRef(true);
+  useLayoutEffect(() => {
+    if (!loaded || drag) return;
+    const sections = boxes.filter((b) => b.kind === "section");
+    if (relayout.current) {
+      relayout.current = false;
+      drawnAt.current = new Map(sections.map((b) => [b.id, { x: b.x, y: b.y }]));
+      return;
+    }
+    const keep: Record<string, Pos> = {};
+    const placed: Box[] = [];
+    for (const b of sections) {
+      const was = drawnAt.current.get(b.id);
+      if (was) {
+        if (Math.abs(was.x - b.x) > 0.5 || Math.abs(was.y - b.y) > 0.5) keep[b.id] = was;
+        placed.push({ ...b, ...(keep[b.id] ?? {}) });
+      }
+    }
+    const clash = (a: Box, x: number, y: number) =>
+      placed.some(
+        (o) => Math.abs(o.x - x) < (o.w + a.w) / 2 + 12 && Math.abs(o.y - y) < (o.h + a.h) / 2 + 8,
+      );
+    for (const b of sections) {
+      if (drawnAt.current.has(b.id)) continue;
+      let y = b.y;
+      for (let n = 0; n < 60 && clash(b, b.x, y); n++) y += b.h + 12;
+      if (y !== b.y) keep[b.id] = { x: b.x, y };
+      placed.push({ ...b, y });
+    }
+    drawnAt.current = new Map(sections.map((b) => [b.id, keep[b.id] ?? { x: b.x, y: b.y }]));
+    if (Object.keys(keep).length > 0) {
+      setMoved((m) => ({ ...m, ...keep }));
+      save(keep);
+    }
+  }, [boxes, loaded, drag]);
+
   // A box's drawn height, by section index: a name that wraps makes it taller than
   // the layout's estimate, and the lane under it must start below it.
   const [drawnH, setDrawnH] = useState<ReadonlyMap<number, number>>(new Map());
@@ -1285,6 +1326,7 @@ export function MapView({
 
   /** Put boxes at `positions` (null: back in the layout), as one step to undo. */
   const place = (positions: Record<string, Pos | null>) => {
+    relayout.current = true;
     setMoved((m) => {
       const next = { ...m };
       for (const [id, p] of Object.entries(positions)) {
@@ -2501,6 +2543,7 @@ export function MapView({
               : "Lay the map out as a mind map, the title in the middle"
           }
           onClick={() => {
+            relayout.current = true;
             setLayout(layout === "mind" ? "tree" : "mind");
             userMoved.current = false;
             setView(null);
@@ -2523,7 +2566,7 @@ export function MapView({
         <button
           type="button"
           className="map-tool"
-          title="Put moved boxes back in the layout"
+          title="Lay the map out afresh; boxes otherwise stay where they are"
           disabled={Object.keys(moved).length === 0}
           onClick={() => {
             moveBoxes(Object.fromEntries(Object.keys(moved).map((id) => [id, null])));
