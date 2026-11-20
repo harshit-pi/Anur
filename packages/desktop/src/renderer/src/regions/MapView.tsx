@@ -9,6 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import {
   FOLDER_DOC,
   boxSize,
+  keptSides,
   mapLayout,
   mindLayout,
   resolveWiki,
@@ -21,6 +22,8 @@ import { useFeatures } from "../features.ts";
 import type { BoxStatus } from "../layout/box-status.ts";
 import { changeSummary } from "../layout/change-summary.ts";
 import { choiceActs } from "../layout/map-acts.ts";
+import { ownOffsets } from "../layout/map-moves.ts";
+import { sidesSeen, withNames } from "../layout/map-sides.ts";
 import { mapSkeleton } from "../layout/map-drawing.ts";
 import { BoxSketch, sketchLine } from "./MapSketch.tsx";
 import { useMapLayout } from "./map-layout-pref.ts";
@@ -888,17 +891,25 @@ export function MapView({
       nodes.find((n) => n.parent === null),
       ...nodes.filter((n) => n.parent !== null),
     ].filter((n): n is MapNode => Boolean(n));
-    const placed = layout === "mind" ? mindLayout(ordered, sidesKept.current) : mapLayout(ordered);
-    // Each box under the title keeps the side it was given while the map is open.
-    if (layout === "mind") {
-      const root = ordered[0]?.id;
-      sidesKept.current = new Map(
-        ordered.flatMap((n) => {
-          const side = placed.get(n.id)?.side;
-          return n.parent === root && (side === 1 || side === -1) ? [[n.id, side] as const] : [];
-        }),
-      );
-    }
+    // Each box keeps the side it was given while the map is open; a new branch
+    // takes the side its boxes were on, so a Use never swaps the map round (30.35).
+    // A decision's name, on its label or the section a Use of it makes.
+    const nameOf = (id: string) => {
+      const i = info.get(id);
+      if (i?.kind === "section" || id.startsWith("d:")) return i?.heading;
+      // A thread's label carries the name of its one named set, if it has one.
+      if (id.startsWith("t:") && i?.thread) {
+        const sets = i.thread.items.filter((x) => x.kind === "options");
+        const only = sets.length === 1 ? sets[0] : undefined;
+        return only?.kind === "options" && only.heading ? only.heading : undefined;
+      }
+      return undefined;
+    };
+    const placed =
+      layout === "mind"
+        ? mindLayout(ordered, keptSides(ordered, withNames(ordered, sidesKept.current, nameOf)))
+        : mapLayout(ordered);
+    if (layout === "mind") sidesKept.current = sidesSeen(placed, nameOf);
     const out: Box[] = [];
     for (const [id, p] of placed) {
       const i = info.get(id);
@@ -944,6 +955,15 @@ export function MapView({
         b.y += dy;
         if (dx !== 0 || dy !== 0) b.shifted = true;
       }
+    }
+    // A choice, thread or edit dragged on its own (30.35) carries what hangs off it.
+    const own = ownOffsets(out, moved, drag);
+    for (const [id, d] of own) {
+      const b = byId.get(id);
+      if (!b) continue;
+      b.x += d.dx;
+      b.y += d.dy;
+      b.shifted = true;
     }
     for (const b of out) {
       if (b.kind !== "section") continue;
@@ -1358,17 +1378,56 @@ export function MapView({
       (b.kind === "thread" || b.kind === "option" || b.kind === "edit" || b.kind === "action") &&
       b.thread
     ) {
-      picked.current = b.kind === "thread" ? b.thread.id : null;
-      onSelect(b.index);
-      window.dispatchEvent(
-        new CustomEvent("anur:open-thread", { detail: { thread: b.thread.id } }),
-      );
-      // An option: its card in the thread, once the thread has drawn.
-      const option = b.kind === "option" ? b.option?.id : undefined;
-      if (option)
-        window.setTimeout(() => {
-          window.dispatchEvent(new CustomEvent("anur:show-option", { detail: { option } }));
-        }, 250);
+      const thread = b.thread;
+      const open = () => {
+        picked.current = b.kind === "thread" ? thread.id : null;
+        onSelect(b.index);
+        window.dispatchEvent(
+          new CustomEvent("anur:open-thread", { detail: { thread: thread.id } }),
+        );
+        // An option: its card in the thread, once the thread has drawn.
+        const option = b.kind === "option" ? b.option?.id : undefined;
+        if (option)
+          window.setTimeout(() => {
+            window.dispatchEvent(new CustomEvent("anur:show-option", { detail: { option } }));
+          }, 250);
+      };
+      // An action stays in its lane; a choice, a thread or an edit can be dragged
+      // anywhere (30.35), and a click that doesn't move opens its thread.
+      if (b.kind === "action") {
+        open();
+        return;
+      }
+      const z = view?.z ?? 1;
+      const start = { x: e.clientX, y: e.clientY };
+      let moving = false;
+      const move = (ev: PointerEvent) => {
+        const dx = (ev.clientX - start.x) / z;
+        const dy = (ev.clientY - start.y) / z;
+        if (!moving && Math.hypot(dx, dy) < 3) return;
+        moving = true;
+        setDrag({ id: b.id, dx, dy });
+      };
+      const up = (ev: PointerEvent) => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+        setDrag(null);
+        if (!moving) {
+          open();
+          return;
+        }
+        // Kept as how far it moved from its place in the layout, so it still
+        // follows its section, and what hangs off it follows it.
+        const was = moved[b.id] ?? { x: 0, y: 0 };
+        moveBoxes({
+          [b.id]: {
+            x: was.x + (ev.clientX - start.x) / z,
+            y: was.y + (ev.clientY - start.y) / z,
+          },
+        });
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
       return;
     }
     picked.current = null;

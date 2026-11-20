@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxSize, mapLayout, mindLayout, type MapNode } from "./layout.ts";
+import { boxSize, keptSides, mapLayout, mindLayout, type MapNode } from "./layout.ts";
 
 const box = (id: string, parent: string | null, h = 40): MapNode => ({ id, parent, w: 160, h });
 
@@ -126,5 +126,55 @@ describe("the mind map's sides", () => {
     );
     // The new box goes to the side holding less: here they're even, so right.
     expect(next.get("c")?.side).toBe(1);
+  });
+});
+
+describe("sides kept when a box changes hands (30.35)", () => {
+  it("gives a new section the side its boxes had, so Use doesn't swap the map round", () => {
+    // Before Use: a Build's choices hang off its label, one of them explored,
+    // with the explore thread's narrower choices off that one: all one branch.
+    const before = [
+      box("title", null),
+      box("d:build", "title"),
+      box("o:3days", "d:build"),
+      box("o:24h", "d:build"),
+      box("t:explore", "o:3days"),
+      box("o:12h", "t:explore", 60),
+      box("o:6h", "t:explore", 60),
+      box("o:probe", "t:explore", 60),
+    ];
+    const first = mindLayout(before);
+    const seen = new Map(
+      [...first].flatMap(([id, p]) => (p.side === 0 ? [] : [[id, p.side] as const])),
+    );
+    // The map's fold of a set's choices is named for its first: it stands where that one stood.
+    seen.set("f:3days", seen.get("o:3days") ?? 1);
+    const was = first.get("o:12h")?.side;
+    // After Use: the choices hang off a new section, the rest fold, and the
+    // explore thread becomes a branch of its own.
+    const after = [
+      box("title", null),
+      box("t:explore", "title"),
+      box("o:12h", "t:explore", 60),
+      box("o:6h", "t:explore", 60),
+      box("o:probe", "t:explore", 60),
+      box("s:window", "title"),
+      box("f:3days", "s:window"),
+    ];
+    // Keeping only the title's own children, as before 30.35, swaps a branch over.
+    const onlyOwn = new Map(
+      [...seen].filter(([id]) => after.some((n) => n.id === id && n.parent === "title")),
+    );
+    expect(mindLayout(after, onlyOwn).get("s:window")?.side).not.toBe(first.get("o:3days")?.side);
+    // Kept from the boxes under each branch, nothing moves sides.
+    const second = mindLayout(after, keptSides(after, seen));
+    expect(second.get("s:window")?.side).toBe(first.get("o:3days")?.side);
+    expect(second.get("o:12h")?.side).toBe(was);
+  });
+
+  it("leaves a box with nothing seen before to the lighter side, and keeps nothing on a first map", () => {
+    const nodes = [box("title", null), box("a", "title"), box("b", "title")];
+    expect(keptSides(nodes, new Map()).size).toBe(0);
+    expect(keptSides(nodes, new Map([["a", 1]])).has("b")).toBe(false);
   });
 });

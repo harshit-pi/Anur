@@ -182,6 +182,7 @@ export {
 export {
   MapLayoutFile,
   boxSize,
+  keptSides,
   mapLayout,
   mindLayout,
   type MapNode,
