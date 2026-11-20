@@ -95,6 +95,7 @@ ANUR_SCREENSHOT=/tmp/shot.png ANUR_OPEN_FOLDER=/path/to/folder ANUR_SCREENSHOT_C
 - A session's working copies are one of its working folders, so Claude Code applies the person's relative deny rules there too.
 - `open Anur.app` on an app that is already running only brings the old copy forward: quit it first to get a new build.
 - `pnpm package` packs only `out/**`. Anything the app runs must be a build entry, not a dependency.
+- A hover must never change the size of anything above or beside a button: the button moves from under the pointer and the click misses. A choice card's text opened on hover and pushed Use, Add as subsection and Explore this down, so people clicked twice (30.30). Open things on a click, or reserve the room.
 
 ## Git and PRs
 

@@ -3209,7 +3209,8 @@ body.resizing * {
   mask-image: linear-gradient(to bottom, #000 75%, transparent);
 }
 
-.think-offer:hover .think-offer-text,
+/* Opened by a click on the text, never by hover: hovering moved the buttons below it (30.30). */
+.think-offer-text.open,
 .think-offer.used .think-offer-text {
   max-height: none;
   mask-image: none;
@@ -3217,6 +3218,10 @@ body.resizing * {
 
 .think-offer-text p {
   margin: 0 0 6px;
+}
+
+.think-offer:not(.used) .think-offer-text {
+  cursor: pointer;
 }
 
 .think-offer-actions {
