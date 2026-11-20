@@ -2198,23 +2198,34 @@ export function MapView({
                   ))}
                 </div>
               ) : null}
-              {/* Build and Check on the section's box (30.32): the links under it in Think. */}
-              {features.actions && writable && docPath !== FOLDER_DOC && renaming !== b.index ? (
+              {/* New thread, Build and Check on the section's box (30.32, 30.37): the links under it in Think. */}
+              {writable && docPath !== FOLDER_DOC && renaming !== b.index ? (
                 <MapActs
-                  acts={(["build", "check"] as const).map((purpose) => ({
-                    label: purpose === "build" ? "Build" : "Check",
-                    primary: purpose === "build",
-                    run: () => {
-                      clickedAt.current = Date.now();
-                      const path = tree.sections[b.index]?.path;
-                      if (!path) return;
-                      window.dispatchEvent(
-                        new CustomEvent("anur:map-section-action", {
-                          detail: { index: b.index, path, purpose },
-                        }),
-                      );
+                  acts={[
+                    // A new thread on this box (30.37): selected, with its box to type in focused.
+                    {
+                      label: "New thread",
+                      run: () => {
+                        clickedAt.current = Date.now();
+                        onSelect(b.index);
+                        window.dispatchEvent(new CustomEvent("anur:map-new-thread"));
+                      },
                     },
-                  }))}
+                    ...(features.actions ? (["build", "check"] as const) : []).map((purpose) => ({
+                      label: purpose === "build" ? "Build" : "Check",
+                      primary: purpose === "build",
+                      run: () => {
+                        clickedAt.current = Date.now();
+                        const path = tree.sections[b.index]?.path;
+                        if (!path) return;
+                        window.dispatchEvent(
+                          new CustomEvent("anur:map-section-action", {
+                            detail: { index: b.index, path, purpose },
+                          }),
+                        );
+                      },
+                    })),
+                  ]}
                 />
               ) : null}
               {/* A section is just its name (Mock 10): its threads and actions hang off it. */}

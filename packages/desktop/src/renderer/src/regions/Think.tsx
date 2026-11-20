@@ -1362,6 +1362,19 @@ export function Think({
     },
     [tree, docPath, docText, newAgent, newChoices, setThreads],
   );
+  // New thread pressed on a box on the map (30.37): the map selected it; its box to type in is ready.
+  useEffect(() => {
+    const on = () => {
+      setOpen(null);
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLTextAreaElement>(".think .think-input")?.focus();
+      });
+    };
+    window.addEventListener("anur:map-new-thread", on);
+    return () => {
+      window.removeEventListener("anur:map-new-thread", on);
+    };
+  }, []);
   // Build or Check pressed on a section's box on the map (30.32): the same as the links here.
   useEffect(() => {
     const on = (e: Event) => {
