@@ -2329,7 +2329,11 @@ export function Think({
           : null}
         {/* Last before the reply box, so Use all is on screen where the chat ends. */}
         {!thread.busy ? (
-          <ChangeSet thread={thread} writable={writable} autoApply={editsLand(thread.options)} />
+          <ChangeSet
+            thread={thread}
+            writable={writable}
+            autoApply={!thread.explores && editsLand(thread.options)}
+          />
         ) : null}
         {signedOut(thread.agent) ?? (
           <Composer

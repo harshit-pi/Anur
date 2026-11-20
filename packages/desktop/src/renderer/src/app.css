@@ -6921,15 +6921,7 @@ button.file-card-name:hover {
   margin-left: 6px;
 }
 
-/* A thread's place under one of its decisions: nothing drawn but its line, which is hoverable. */
-.map-thread.bare {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  outline: none;
-}
-
-/* A wide, unseen band along a thread's line: hovered it shows faintly and names the thread. */
+/* A wide, unseen band along a decision's line to its choices: hovered it shows faintly and names the thread. */
 .map-edge-hit {
   fill: none;
   stroke: transparent;

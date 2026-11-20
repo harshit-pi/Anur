@@ -274,6 +274,8 @@ export type RecentThread = {
 type Live = {
   /** Where its agent runs: a repo for a repo's doc (18.15.6), else the opened folder. */
   cwd?: string;
+  /** It explores an option (30.31): its edits wait for Use, whatever the mode. */
+  explores?: boolean;
   threadId: string;
   doc: DocId;
   rel: string;
@@ -1168,6 +1170,7 @@ export class Threads {
       merged: new Map(),
     };
     live.cwd = this.cwdOf(lines);
+    live.explores = Boolean(start.explores);
     live.rel = rel;
     live.docText = text;
     this.live.set(thread, live);
@@ -1654,8 +1657,12 @@ export class Threads {
     return threads.filter((t) => this.editsLand(t));
   }
 
-  /** Edits land as they come in a mode that acts without asking; otherwise they're proposals. */
+  /**
+   * Edits land as they come in a mode that acts without asking; otherwise they're proposals.
+   * An explored option's edits always wait: nothing from an option reaches the doc until Use (30.31).
+   */
   private editsLand(thread: string): boolean {
+    if (this.live.get(thread)?.explores) return false;
     return editsLand(
       this.options.get(thread) ??
         this.d.knownOptions?.(this.picked.get(thread) ?? this.d.defaultAgent()),
@@ -3009,6 +3016,8 @@ export class Threads {
         "",
         c.text,
       ]),
+      "",
+      "Nothing you write reaches the doc until the person picks this option: an edit you make waits as a proposal under it. So don't write the doc as if it were chosen.",
       "",
       `Work it through: what it would take, what could go wrong, and what it costs. If it splits into narrower choices, offer those as options${heading ? ` with the heading "${heading}"` : "; each is still the section's whole text"}.`,
     ].join("\n");

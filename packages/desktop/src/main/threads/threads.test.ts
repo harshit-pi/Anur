@@ -422,6 +422,67 @@ describe("Threads", () => {
     expect(view?.action?.state).toBe("done");
   });
 
+  it("keeps an explored option's edits as a proposal in Auto, where a plain thread's land (30.31)", async () => {
+    const auto = [
+      {
+        id: "mode",
+        name: "Mode",
+        current: "auto",
+        choices: [{ value: "default" }, { value: "auto" }, { value: "plan" }],
+      },
+    ];
+    const {
+      folder,
+      support,
+      threads: t,
+      reply,
+      sent,
+    } = await setup({
+      knownOptions: () => auto as never,
+    });
+    await writeFile(path.join(folder, "plan.md"), DOC);
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    const a = await t.start("plan.md", DOC, risks, "How do we host it?");
+    if (a.kind !== "started") throw new Error(a.reason);
+    await tool(a.thread.id, "anur_offer_options", {
+      heading: "Host",
+      options: [
+        { title: "Fly", text: "Run it on Fly." },
+        { title: "Render", text: "Run it on Render." },
+      ],
+    });
+    await reply(a.thread.id, "Two hosts.");
+    const fly = (await t.list("plan.md", DOC))
+      .find((x) => x.id === a.thread.id)
+      ?.items.flatMap((i) => (i.kind === "options" ? i.options : []))[0];
+    if (!fly) throw new Error("no options");
+    const e = await t.exploreOption("plan.md", DOC, a.thread.id, fly.id);
+    if (e.kind !== "started") throw new Error(e.reason);
+    const asked = sent.filter((m) => m.type === "prompt").at(-1);
+    expect(asked?.type === "prompt" && asked.text).toContain("Nothing you write reaches the doc");
+    // The explore thread writes its deep-dive into the section, as an agent may.
+    const copy = path.join(support, "agent", "copies", e.thread.id, "plan.md");
+    await writeFile(copy, DOC.replace("The host is untested.", "Working option: Fly."));
+    await reply(e.thread.id, "Worked through.");
+    expect(await readFile(path.join(folder, "plan.md"), "utf8")).toBe(DOC);
+    const view = (await t.list("plan.md", DOC)).find((x) => x.id === e.thread.id);
+    expect(view?.explores).toEqual({ thread: a.thread.id, option: fly.id });
+    expect(view?.items.some((i) => i.kind === "auto-used")).toBe(false);
+    const previews = await t.listPreviews("plan.md", DOC);
+    expect(
+      previews.some((p) => p.parts.some((x) => x.proposed.includes("Working option: Fly."))),
+    ).toBe(true);
+    // A plain thread in the same mode still lands its edit.
+    const b = await t.start("plan.md", DOC, risks, "Tighten the risk.");
+    if (b.kind !== "started") throw new Error(b.reason);
+    const copyB = path.join(support, "agent", "copies", b.thread.id, "plan.md");
+    await writeFile(copyB, DOC.replace("The host is untested.", "The host has no tests yet."));
+    await reply(b.thread.id, "Done.");
+    expect(await readFile(path.join(folder, "plan.md"), "utf8")).toContain("no tests yet");
+  });
+
   it("shows the option used last when a choice is switched to another", async () => {
     const { threads: t, reply } = await setup();
     const a = await t.start("plan.md", DOC, risks, "How do we host it?");
