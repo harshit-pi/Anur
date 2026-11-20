@@ -1313,7 +1313,8 @@ export function App() {
     <div
       className="shell"
       style={{
-        gridTemplateColumns: `48px ${String(open.left ? widths.left : 0)}px minmax(0, 1fr) ${String(open.right ? widths.right : 0)}px`,
+        // No space open: no files or Think to show, so neither panel takes room.
+        gridTemplateColumns: `48px ${String(open.left && folder ? widths.left : 0)}px minmax(0, 1fr) ${String(open.right && folder ? widths.right : 0)}px`,
       }}
     >
       <TabBar
@@ -1337,10 +1338,12 @@ export function App() {
               : null
         }
         mapOnly={selected === SYSTEM_TAB}
+        space={folder !== null}
         onView={setCenterView}
         onAsk={doc && sections ? ask : null}
       />
       <Ribbon
+        files={folder !== null}
         filesOpen={open.left}
         onFiles={() => {
           toggle("left");
@@ -1380,7 +1383,7 @@ export function App() {
         }
         selected={selected}
         onSelect={openDoc}
-        hidden={!open.left}
+        hidden={!open.left || !folder}
         reveal={reveal}
         actions={fileActions}
         notice={fileNotice}
@@ -1481,7 +1484,7 @@ export function App() {
         }
       />
       <RightSidebar
-        hidden={!open.right}
+        hidden={!open.right || !folder}
         think={
           selected === SYSTEM_TAB ? (
             // The system's map fills this with recent tasks, a line's calls and its repos.

@@ -36,6 +36,7 @@ import { PROVIDERS, cloudSummary, markNoticeSeen, noticeSeen } from "./cloud-not
 
 /** 1. Ribbon: Files, Search, Plugins, Settings. */
 export function Ribbon({
+  files,
   filesOpen,
   onFiles,
   searchOpen,
@@ -43,6 +44,8 @@ export function Ribbon({
   onSettings,
   onPlugins,
 }: {
+  /** A space is open, so there are files to show. */
+  files: boolean;
   filesOpen: boolean;
   onFiles: () => void;
   searchOpen: boolean;
@@ -52,16 +55,18 @@ export function Ribbon({
 }) {
   return (
     <nav className="ribbon" aria-label="Ribbon">
-      <button
-        className={`ribbon-button${filesOpen ? " active" : ""}`}
-        type="button"
-        aria-label="Files"
-        aria-pressed={filesOpen}
-        title={filesOpen ? "Hide files (⌘\\)" : "Show files (⌘\\)"}
-        onClick={onFiles}
-      >
-        <FolderIcon />
-      </button>
+      {files ? (
+        <button
+          className={`ribbon-button${filesOpen ? " active" : ""}`}
+          type="button"
+          aria-label="Files"
+          aria-pressed={filesOpen}
+          title={filesOpen ? "Hide files (⌘\\)" : "Show files (⌘\\)"}
+          onClick={onFiles}
+        >
+          <FolderIcon />
+        </button>
+      ) : null}
       <button
         className={`ribbon-button${searchOpen ? " active" : ""}`}
         type="button"
@@ -480,92 +485,91 @@ export function Center({
   const isSystem = selected === SYSTEM_TAB || !!selected?.startsWith("anur:task/");
   return (
     <main className="center">
-      <div className="path-row">
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Back"
-          title="Back (⌘⌥←)"
-          disabled={!onBack}
-          onClick={onBack ?? undefined}
-        >
-          <BackIcon />
-        </button>
-        <button
-          className="icon-button"
-          type="button"
-          aria-label="Forward"
-          title="Forward (⌘⌥→)"
-          disabled={!onForward}
-          onClick={onForward ?? undefined}
-        >
-          <ForwardIcon />
-        </button>
-        <nav className="path crumbs" aria-label="Path" title={selected ?? undefined}>
-          {isSystem ? (
-            <span className="crumb">{selected === SYSTEM_TAB ? "Repos" : "Task report"}</span>
-          ) : selected ? (
-            crumbs(selected).map((c, i) => (
-              <Fragment key={`${String(i)}-${c.label}`}>
-                {i > 0 ? (
-                  <span className="crumb-sep" aria-hidden="true">
-                    /
-                  </span>
-                ) : null}
-                <button
-                  type="button"
-                  className="crumb truncate"
-                  title={
-                    c.lists ? `What's in ${c.lists}` : `What's in ${folder?.name ?? "the folder"}`
-                  }
-                  onClick={() => {
-                    onCrumb(c.lists);
-                  }}
-                >
-                  {c.label}
-                </button>
-              </Fragment>
-            ))
-          ) : (
-            <span className="quiet">No doc</span>
-          )}
-        </nav>
-        <div className="path-actions" hidden={isSystem}>
-          {copied ? (
-            <span className="copied" role="status">
-              Copied <span className="copied-link">{copied}</span>
-            </span>
-          ) : null}
+      {/* With no space open, there's no doc to show a path for. */}
+      {folder ? (
+        <div className="path-row">
           <button
             className="icon-button"
             type="button"
-            aria-label="Copy a link to this section"
-            title="Copy a link to the section the cursor is in"
-            disabled={!selected}
-            onClick={() => {
-              void onCopyLink().then((link) => {
-                if (!link) return;
-                setCopied(link);
-                setTimeout(() => {
-                  setCopied((c) => (c === link ? null : c));
-                }, 2000);
-              });
-            }}
+            aria-label="Back"
+            title="Back (⌘⌥←)"
+            disabled={!onBack}
+            onClick={onBack ?? undefined}
           >
-            <LinkIcon />
+            <BackIcon />
           </button>
           <button
             className="icon-button"
             type="button"
-            aria-label="More"
-            title="More"
-            disabled={!selected}
-            onClick={onMore}
+            aria-label="Forward"
+            title="Forward (⌘⌥→)"
+            disabled={!onForward}
+            onClick={onForward ?? undefined}
           >
-            <MoreIcon />
+            <ForwardIcon />
           </button>
+          <nav className="path crumbs" aria-label="Path" title={selected ?? undefined}>
+            {isSystem ? (
+              <span className="crumb">{selected === SYSTEM_TAB ? "Repos" : "Task report"}</span>
+            ) : selected ? (
+              crumbs(selected).map((c, i) => (
+                <Fragment key={`${String(i)}-${c.label}`}>
+                  {i > 0 ? (
+                    <span className="crumb-sep" aria-hidden="true">
+                      /
+                    </span>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="crumb truncate"
+                    title={c.lists ? `What's in ${c.lists}` : `What's in ${folder.name}`}
+                    onClick={() => {
+                      onCrumb(c.lists);
+                    }}
+                  >
+                    {c.label}
+                  </button>
+                </Fragment>
+              ))
+            ) : null}
+          </nav>
+          <div className="path-actions" hidden={isSystem}>
+            {copied ? (
+              <span className="copied" role="status">
+                Copied <span className="copied-link">{copied}</span>
+              </span>
+            ) : null}
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Copy a link to this section"
+              title="Copy a link to the section the cursor is in"
+              disabled={!selected}
+              onClick={() => {
+                void onCopyLink().then((link) => {
+                  if (!link) return;
+                  setCopied(link);
+                  setTimeout(() => {
+                    setCopied((c) => (c === link ? null : c));
+                  }, 2000);
+                });
+              }}
+            >
+              <LinkIcon />
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="More"
+              title="More"
+              disabled={!selected}
+              onClick={onMore}
+            >
+              <MoreIcon />
+            </button>
+          </div>
         </div>
-      </div>
+      ) : null}
       {folder ? <FolderNotices key={folder.path} folder={folder} /> : null}
       {folder?.mode === "read-only" && !closedNow.has(`read-only:${folder.reason ?? ""}`) ? (
         <NoticeBar
