@@ -153,7 +153,10 @@ export const livePreviewTheme = EditorView.theme({
     flexDirection: "column",
     alignItems: "flex-start",
     gap: "6px",
-    margin: "8px 0 12px",
+    // Padding, not margin: CodeMirror measures a block widget without its margins, so the
+    // height map falls short by the margin per image and Up/Down land on the wrong line.
+    margin: "0px",
+    padding: "8px 0 12px",
   },
   ".cm-lp-image-frame": { position: "relative", maxWidth: "100%", lineHeight: "0" },
   ".cm-lp-image img": {
