@@ -29,6 +29,7 @@ import {
   dialog,
   ipcMain,
   nativeTheme,
+  screen,
   session,
   shell,
 } from "electron";
@@ -108,7 +109,12 @@ import { loadDeviceId } from "../device/device-id.ts";
 import { RecoveryStore } from "./folder/recovery.ts";
 import { saveDoc } from "./folder/save-doc.ts";
 import { readRecent } from "./folder/recent.ts";
-import { readOpenWindows, saveOpenWindows } from "./folder/open-windows.ts";
+import {
+  readOpenWindows,
+  saveOpenWindows,
+  type OpenWindow,
+  type WindowBounds,
+} from "./folder/open-windows.ts";
 import { onGitHub, spacesIn } from "./folder/spaces.ts";
 import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
@@ -2573,6 +2579,16 @@ async function openDocIn(win: BrowserWindow, rel: string, section: string | null
   send(win, "app:open-doc", { path: rel, section, ...(view ? { view } : {}) });
 }
 
+/** A saved window spot still on a screen: one left on an unplugged display opens where new ones do. */
+function onSomeScreen(b: WindowBounds): boolean {
+  return screen.getAllDisplays().some((d) => {
+    const a = d.workArea;
+    const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+    const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+    return w >= 100 && h >= 50;
+  });
+}
+
 /** The Dock's menu, as VS Code's: New Window, then the last five spaces; macOS adds the open windows. */
 async function refreshDockMenu(): Promise<void> {
   if (process.platform !== "darwin" || isCheck) return;
@@ -2865,16 +2881,16 @@ void app.whenReady().then(async () => {
   // space at the last quit, else the last one opened; a file double-clicked in
   // Finder opens its own folder instead.
   const userData = app.getPath("userData");
-  const stillThere = (restoresWindows ? await readOpenWindows(userData) : []).filter((f) =>
-    existsSync(f),
+  const stillThere = (restoresWindows ? await readOpenWindows(userData) : []).filter((w) =>
+    existsSync(w.folder),
   );
-  const reopenAll = process.env.ANUR_OPEN_FOLDER
-    ? [process.env.ANUR_OPEN_FOLDER]
+  const reopenAll: OpenWindow[] = process.env.ANUR_OPEN_FOLDER
+    ? [{ folder: process.env.ANUR_OPEN_FOLDER, bounds: null }]
     : (isCheck && !restoresWindows) || filesToOpen.length > 0
       ? []
       : stillThere.length > 0
         ? stillThere
-        : (await readRecent(userData)).slice(0, 1);
+        : (await readRecent(userData)).slice(0, 1).map((folder) => ({ folder, bounds: null }));
   const reopen = reopenAll[0];
   readyForFiles = true;
   for (const file of filesToOpen.splice(0)) await openMarkdownFile(file);
@@ -2884,7 +2900,12 @@ void app.whenReady().then(async () => {
     win.webContents.once("did-finish-load", () => {
       void (async () => {
         // The first in this window; each next in a window of its own, the front one focused last.
-        for (const f of reopenAll) await openFolderIn(win, f).catch(() => undefined);
+        for (const w of reopenAll) {
+          const outcome = await openFolderIn(win, w.folder).catch(() => null);
+          const id = outcome?.kind === "opened" ? folders.windowFor(outcome.folder.path) : null;
+          const at = id === null ? undefined : windows.get(id);
+          if (at && w.bounds && onSomeScreen(w.bounds)) at.setBounds(w.bounds);
+        }
         if (reopenAll.length > 1 && !win.isDestroyed()) win.focus();
       })();
     });
@@ -2951,7 +2972,11 @@ app.on("before-quit", () => {
     // Every window's space, the front one first, so the next launch opens them all again.
     const front = BrowserWindow.getFocusedWindow();
     const order = [...windows.values()].sort((a, b) => Number(b === front) - Number(a === front));
-    const open = order.flatMap((w) => folders.current(w.webContents.id)?.path ?? []);
+    const open = order.flatMap((w) => {
+      const folder = folders.current(w.webContents.id)?.path;
+      // Where it sits when not full screen or maximized, as macOS restores a window.
+      return folder ? [{ folder, bounds: w.getNormalBounds() }] : [];
+    });
     quitNotes.add(saveOpenWindows(app.getPath("userData"), open).catch(() => undefined));
   }
   quitting = true;
