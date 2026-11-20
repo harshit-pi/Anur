@@ -286,6 +286,8 @@ type Live = {
   written: Set<string>;
   /** The bundle last sent, to tell the agent when its sections changed. */
   lastBundle: string | null;
+  /** Whether the agent was last told its edits land at once; unset until told (30.38). */
+  toldLands?: boolean;
   /** The text a turn was asked with, kept to retry it when a session can't resume. */
   pending: { message: string; docText: string } | null;
   /** The doc's text as the page last sent it: the editor's, unsaved typing included. */
@@ -1381,6 +1383,12 @@ export class Threads {
           .filter(Boolean)
           .join(" "),
       );
+    }
+    // How its edits reach the doc in the person's mode now, told again when that changes (30.38).
+    const lands = this.editsLand(live.threadId);
+    if (rebuildFrom || live.toldLands !== lands) {
+      parts.push(landingNote(lands));
+      live.toldLands = lands;
     }
     parts.push(parts.length > 0 ? `---\n\n${message}` : message);
     return parts.join("\n\n");
@@ -4109,4 +4117,15 @@ function stepName(title: string): string {
   // just its text, which means nothing on a map pill.
   if (/^[A-Z][a-z]+(?:\s|$)/.test(title)) return title.slice(0, 40);
   return "Running a command";
+}
+
+/**
+ * What the agent is told about how its edits reach the doc, so its reply
+ * matches what the person sees: in a mode that acts without asking they land
+ * at once, so it never says one "is ready to use" (30.38).
+ */
+export function landingNote(lands: boolean): string {
+  return lands
+    ? "In the person's mode your edits land in the doc as you make them, and ⌘Z on the page takes one back. Say what you changed in the doc; never that an edit is ready for them to use."
+    : "In the person's mode your edits wait as proposals on their sections, and the doc changes only when the person uses one. Say your edit is ready for them to use; never that you've updated the doc.";
 }

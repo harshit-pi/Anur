@@ -336,7 +336,7 @@ export function buildBundle({
   ];
   if (workingCopy) {
     lines.push(
-      `Your working copy of \`${docPath}\` is at \`${workingCopy}\`. Use your judgment: answer a question; offer options when there is a real choice; when the person asks for a change, or the change is clear, edit that file with your own tools. Anur shows each edit to them as a proposal on its section, and the doc changes only when they use it, so say your edit is ready for them to use, never that you've updated the doc. The doc in the folder is the decided text. Shell commands such as \`git diff\` see the decided text, not your edits.`,
+      `Your working copy of \`${docPath}\` is at \`${workingCopy}\`. Use your judgment: answer a question; offer options when there is a real choice; when the person asks for a change, or the change is clear, edit that file with your own tools. Whether an edit lands in the doc at once or waits for them to use it depends on the person's mode; Anur says which with each message, so describe your edit the way it lands. The doc in the folder is the decided text. Shell commands such as \`git diff\` see the decided text, not your edits.`,
       "",
     );
   }
