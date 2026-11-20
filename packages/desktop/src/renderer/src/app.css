@@ -7036,3 +7036,41 @@ button.file-card-name:hover {
     transition: none;
   }
 }
+
+/* "▶ N planned": the fold and, beside it, Run all (30.28). */
+.map-pill-group {
+  padding-right: 4px;
+}
+
+.map-pill-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.map-pill-group .map-action-go {
+  margin-left: 6px;
+}
+
+/* A planned action that can't run yet (30.26): why, on hover. */
+.map-action-waits {
+  flex: none;
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px dashed var(--pencil);
+  border-radius: 6px;
+  color: var(--graphite);
+  font: 600 11.5px var(--font-ui);
+  cursor: help;
+}
+
+.think-action-waits {
+  color: var(--graphite);
+  font: 500 12.5px var(--font-ui);
+}
