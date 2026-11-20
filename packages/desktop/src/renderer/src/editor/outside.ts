@@ -22,6 +22,15 @@ export function diffSpan(a: string, b: string): Span | null {
   return { from: start, to: endA, insert: b.slice(start, endB) };
 }
 
+/**
+ * The change that turns the text at `offset` in the page from `a` into `b`,
+ * touching only what differs, so unchanged lines are not rebuilt (no flash).
+ */
+export function changeWithin(offset: number, a: string, b: string): Span | null {
+  const s = diffSpan(a, b);
+  return s && { from: offset + s.from, to: offset + s.to, insert: s.insert };
+}
+
 const apply = (text: string, s: Span) => text.slice(0, s.from) + s.insert + text.slice(s.to);
 
 /**
