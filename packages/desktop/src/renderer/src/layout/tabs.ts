@@ -18,9 +18,18 @@ export type Tab = {
 export const GROUP_COLORS = ["blue", "green", "amber", "red", "slate"] as const;
 export type GroupColor = (typeof GROUP_COLORS)[number];
 export type Group = { id: string; name: string; color: GroupColor; folded: boolean };
-export type Tabs = { tabs: Tab[]; active: string | null; groups: Group[] };
+export type Tabs = {
+  tabs: Tab[];
+  active: string | null;
+  groups: Group[];
+  /**
+   * A tab just opened from another, and that one: closing it straight away
+   * goes back there, as in a browser. Switching to any tab forgets it.
+   */
+  opener?: { tab: string; from: string } | null | undefined;
+};
 
-export const noTabs: Tabs = { tabs: [], active: null, groups: [] };
+export const noTabs: Tabs = { tabs: [], active: null, groups: [], opener: null };
 
 let counter = 0;
 const newId = (prefix = "t") => `${prefix}${String(Date.now())}-${String(++counter)}`;
@@ -85,7 +94,8 @@ export function newTab(t: Tabs, path: string | null = null): Tabs {
   const tab: Tab = { id: newId(), history: path ? [path] : [], index: path ? 0 : -1, group };
   const at = t.tabs.findIndex((x) => x.id === t.active);
   const tabs = [...t.tabs.slice(0, at + 1), tab, ...t.tabs.slice(at + 1)];
-  return tidy({ ...t, tabs, active: tab.id });
+  const opener = t.active ? { tab: tab.id, from: t.active } : null;
+  return tidy({ ...t, tabs, active: tab.id, opener });
 }
 
 /**
@@ -114,7 +124,7 @@ export function select(t: Tabs, id: string): Tabs {
   const groups = t.groups.map((g) =>
     g.id === tab.group && g.folded ? { ...g, folded: false } : g,
   );
-  return { ...t, active: id, groups };
+  return { ...t, active: id, groups, opener: id === t.active ? t.opener : null };
 }
 
 /** A new tab at the end of a group, unfolding it. */
@@ -132,14 +142,29 @@ function nearestShown(t: Tabs, at: number, skip: (tab: Tab) => boolean): string 
   return (right ?? left)?.id ?? null;
 }
 
-/** Close tabs; if the active one goes, the nearest tab on show to its right takes focus, else to its left. */
+/**
+ * Close tabs; if the active one goes, the tab it was opened from takes focus
+ * when nothing else was shown since, else the nearest on show to its right,
+ * else to its left.
+ */
 export function closeWhere(t: Tabs, gone: (tab: Tab) => boolean): Tabs {
   const at = t.tabs.findIndex((x) => x.id === t.active);
-  const active = at >= 0 && gone(t.tabs[at] as Tab) ? nearestShown(t, at, gone) : t.active;
-  return tidy({ ...t, tabs: t.tabs.filter((x) => !gone(x)), active });
+  const closing = at >= 0 && gone(t.tabs[at] as Tab);
+  // Just opened from another tab, and closed before going anywhere else: back to that tab.
+  const back =
+    closing && t.opener?.tab === t.active
+      ? t.tabs.find((x) => x.id === t.opener?.from && !gone(x) && isShown(t, x))
+      : undefined;
+  const active = closing ? (back?.id ?? nearestShown(t, at, gone)) : t.active;
+  return tidy({
+    ...t,
+    tabs: t.tabs.filter((x) => !gone(x)),
+    active,
+    opener: closing ? null : t.opener,
+  });
 }
 
-/** Close a tab; the one to its right takes focus, or else the one to its left. */
+/** Close a tab; focus goes as `closeWhere` says. */
 export function close(t: Tabs, id: string): Tabs {
   if (!t.tabs.some((x) => x.id === id)) return t;
   return closeWhere(t, (x) => x.id === id);

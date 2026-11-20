@@ -6950,3 +6950,36 @@ button.file-card-name:hover {
   pointer-events: none;
   transform: translate(10px, 14px);
 }
+
+/*
+ * The doc's own box, the map's anchor: filled in the ink colour, so black in
+ * light mode and light in dark, with its name and counts on it in the paper colour.
+ */
+.map .map-box.title {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--sheet);
+  box-shadow: none;
+}
+
+.map .map-box.title .map-box-name,
+.map .map-box.title .map-rename {
+  color: var(--sheet);
+}
+
+.map .map-box.title .map-chats,
+.map .map-box.title .map-linkcount {
+  background: var(--sheet);
+  color: var(--ink);
+}
+
+/* Selected, it keeps its fill and gets the blue ring outside it. */
+.map .map-box.title.selected {
+  border-color: var(--ink);
+  background: var(--ink);
+  box-shadow: 0 0 0 3px var(--blue);
+}
+
+.map .map-box.title .map-handle {
+  background: var(--sheet);
+}
