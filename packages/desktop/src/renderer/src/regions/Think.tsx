@@ -1082,6 +1082,26 @@ export function Think({
     (starting && starting.id === open ? starting : null) ??
     (draft && draft.id === open ? draft : null);
   const isDraft = thread !== null && thread === draft;
+  // While a reply streams, the panel keeps its end in view, unless the person scrolled up.
+  const chatRef = useRef<HTMLDivElement>(null);
+  const following = useRef(true);
+  useEffect(() => {
+    following.current = true;
+    const scroller = chatRef.current?.closest<HTMLElement>(".right-main");
+    if (!scroller) return;
+    const onScroll = () => {
+      following.current = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+    };
+  }, [open]);
+  useEffect(() => {
+    if (!thread?.busy || !following.current) return;
+    const scroller = chatRef.current?.closest<HTMLElement>(".right-main");
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }, [thread]);
   // A branch opens ready to type in.
   const draftId = draft?.id ?? null;
   useEffect(() => {
@@ -1673,7 +1693,7 @@ export function Think({
             }}
           />
         ) : null}
-        <div className="think-chat" aria-live="polite">
+        <div className="think-chat" aria-live="polite" ref={chatRef}>
           {inherited.map((m, n) =>
             m.role === "agent" ? (
               <Fragment key={`from${String(n)}`}>
@@ -3072,9 +3092,6 @@ function FileCard({
   );
 }
 
-/** Past this, a reply folds, with Show all. */
-const LONG_REPLY = 1400;
-
 /** An agent's reply: who answered (on the first of a turn), the text, and its actions on hover. */
 function AgentReply({
   text,
@@ -3090,8 +3107,6 @@ function AgentReply({
   /** Under the reply's actions: what this answer made, when its cards follow (answer first). */
   after?: React.ReactNode;
 }) {
-  const long = text.length > LONG_REPLY;
-  const [all, setAll] = useState(false);
   const [copied, setCopied] = useState(false);
   return (
     <div className="think-reply">
@@ -3101,20 +3116,10 @@ function AgentReply({
           {who.label}
         </div>
       ) : null}
-      <div className={`think-message agent${long && !all ? " folded" : ""}`}>
+      {/* Always whole, as in Claude chat: a reply grows on screen as it streams. */}
+      <div className="think-message agent">
         <Markdown text={text} />
       </div>
-      {long ? (
-        <button
-          type="button"
-          className="think-showall"
-          onClick={() => {
-            setAll((x) => !x);
-          }}
-        >
-          {all ? "Show less" : "Show all"}
-        </button>
-      ) : null}
       <div className="think-reply-actions">
         <button
           type="button"
