@@ -13,7 +13,7 @@ import type {
   PluginInstance,
 } from "../../../packages/core/src/index.ts";
 
-import { readdir, realpath } from "node:fs/promises";
+import { readdir, readFile, realpath, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -64,6 +64,55 @@ export async function holdsRepos(folder: string, depth = 4): Promise<boolean> {
     return false;
   };
   return walk(folder, depth);
+}
+
+/**
+ * Locks git left behind and nothing holds: git keeps one for milliseconds, so
+ * one minutes old is from a crash or iCloud stopping its rename. A branch's
+ * lock holds the commit it was moving to; with the branch gone, that's put back.
+ */
+export async function healStaleLocks(
+  gitDir: string,
+  git: (...args: string[]) => Promise<{ code: number; stdout: string }>,
+  staleMs = 10 * 60_000,
+  now = Date.now(),
+): Promise<string[]> {
+  const healed: string[] = [];
+  const old = async (file: string) => {
+    try {
+      return now - (await stat(file)).mtimeMs > staleMs;
+    } catch {
+      return false;
+    }
+  };
+  if (await old(path.join(gitDir, "index.lock"))) {
+    await unlink(path.join(gitDir, "index.lock")).catch(() => undefined);
+    healed.push("index");
+  }
+  const heads = path.join(gitDir, "refs", "heads");
+  const walk = async (dir: string): Promise<string[]> => {
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    const out: string[] = [];
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) out.push(...(await walk(p)));
+      else if (e.name.endsWith(".lock")) out.push(p);
+    }
+    return out;
+  };
+  for (const lock of await walk(heads)) {
+    if (!(await old(lock))) continue;
+    const ref = `refs/heads/${path.relative(heads, lock).slice(0, -".lock".length)}`;
+    const sha = (await readFile(lock, "utf8").catch(() => "")).trim();
+    await unlink(lock).catch(() => undefined);
+    const has = (await git("rev-parse", "-q", "--verify", ref)).code === 0;
+    const isCommit =
+      /^[0-9a-f]{40,64}$/.test(sha) &&
+      (await git("cat-file", "-t", sha)).stdout.trim() === "commit";
+    if (!has && isCommit) await git("update-ref", ref, sha);
+    healed.push(ref);
+  }
+  return healed;
 }
 
 /** A remote's page on GitHub, from its URL. */
@@ -248,6 +297,8 @@ export function activate(ctx: PluginContext): PluginInstance {
     syncing = true;
     await report({ kind: "syncing" });
     try {
+      const gitDir = (await git("rev-parse", "--absolute-git-dir")).stdout.trim();
+      if (gitDir) await healStaleLocks(gitDir, git);
       const before = (await git("rev-parse", "HEAD")).stdout.trim();
       // A merge left half-done: finish it once no markers are left.
       const merging = (await git("rev-parse", "-q", "--verify", "MERGE_HEAD")).code === 0;
@@ -261,14 +312,21 @@ export function activate(ctx: PluginContext): PluginInstance {
         await git(...who(), "commit", "--no-edit", "-q");
       }
       await git("add", "-A");
-      if ((await git("status", "--porcelain")).stdout.trim())
-        await git(
+      if ((await git("status", "--porcelain")).stdout.trim()) {
+        const committed = await git(
           ...who(),
           "commit",
           "-q",
           "-m",
           message(ctx.setting<string>("commitMessage"), ctx.person.name),
         );
+        // A commit that fails is the reason, not the pull that would fail after it.
+        if (committed.code !== 0) {
+          const why = committed.stderr.trim().split("\n")[0] || "the commit failed";
+          await report({ kind: "failed", why });
+          return committed.stderr.trim() || "The commit didn't go through.";
+        }
+      }
       const branch = (await git("rev-parse", "--abbrev-ref", "HEAD")).stdout.trim() || "main";
       const fetched = await git("fetch", "-q", "origin");
       if (fetched.code !== 0) {
