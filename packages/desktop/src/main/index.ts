@@ -12,7 +12,15 @@ import {
   type SystemShape,
   boxCounts,
 } from "./threads/system-doc.ts";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -186,11 +194,27 @@ const senders = trustedSenders(rendererUrl);
 const isRelease = app.isPackaged && app.getName() === "Anur";
 app.setName(isRelease ? "Anur" : "Anur Dev");
 const sharedProfile = path.join(app.getPath("appData"), "Anur Desktop");
+/** A check run's own profile, deleted when it quits; none when checks share one. */
+const throwawayProfile =
+  isCheck && !process.env.ANUR_CHECK_PROFILE
+    ? mkdtempSync(path.join(tmpdir(), "anur-check-"))
+    : null;
+// Profiles left by check runs that crashed or were killed, a day old or more.
+if (isCheck)
+  for (const name of readdirSync(tmpdir()).filter((n) => n.startsWith("anur-check-"))) {
+    const dir = path.join(tmpdir(), name);
+    try {
+      if (dir !== throwawayProfile && Date.now() - statSync(dir).mtimeMs > 86_400_000)
+        rmSync(dir, { recursive: true, force: true });
+    } catch {
+      // Gone already, or another run's: leave it.
+    }
+  }
 app.setPath(
   "userData",
   isCheck
     ? // ANUR_CHECK_PROFILE lets two check runs share one, to test what is remembered.
-      (process.env.ANUR_CHECK_PROFILE ?? mkdtempSync(path.join(tmpdir(), "anur-check-")))
+      (process.env.ANUR_CHECK_PROFILE ?? throwawayProfile ?? "")
     : isRelease
       ? sharedProfile
       : path.join(app.getPath("appData"), "Anur Dev"),
@@ -3001,6 +3025,7 @@ app.on("will-quit", (event) => {
       console.error("Anur couldn't finish cleaning up before quitting:", e);
     })
     .finally(() => {
+      if (throwawayProfile) rmSync(throwawayProfile, { recursive: true, force: true });
       app.exit(0);
     });
 });
