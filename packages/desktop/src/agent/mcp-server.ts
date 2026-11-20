@@ -223,6 +223,11 @@ const TOOLS = [
           description:
             "The heading of the section the work belongs to, such as the part of the plan it carries out, so it shows under that box on the map. Leave it out only when the work is about this thread's own section.",
         },
+        service: {
+          type: "string",
+          description:
+            'The service whose tools will do it, by its tool server\'s name, such as "gmail", "linear", "github" or "notion", so its mark shows on the map. Leave it out for work on files here.',
+        },
       },
       required: ["title", "what"],
       additionalProperties: false,

@@ -346,6 +346,8 @@ export const ActionProposedLine = LineEnvelope.extend({
   what: z.string().min(1),
   /** The section it acts on, by heading path; the thread's own when left out. */
   path: z.array(z.string()).nullable().optional(),
+  /** The service that will do it, by its tool server's name ("gmail", "linear"), when the agent named one. */
+  service: z.string().max(60).optional(),
 });
 
 /** A proposed action was run: the Build thread that carries it out. */

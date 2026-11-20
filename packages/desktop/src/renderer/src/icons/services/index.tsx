@@ -113,6 +113,19 @@ export function servicesNamed(text: string): Service[] {
   return [...out.values()];
 }
 
+/** A service by the name an agent gave it ("gmail", "Linear", "google_drive"), or null for none. */
+export function serviceByKey(given: string | null | undefined): Service | null {
+  const key = given
+    ?.trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (!key) return null;
+  const mark = MARKS[key] ?? MARKS[key.split("_")[0] ?? ""] ?? null;
+  const name =
+    mark?.title ?? NAMES[key] ?? key.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase());
+  return { key, name, mark };
+}
+
 /** A service's mark, or the plain action mark when it has none. */
 export function ServiceIcon({ service }: { service: Service | null }) {
   const mark = service?.mark;
