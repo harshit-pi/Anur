@@ -188,6 +188,8 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     path: z.array(z.string()).nullable(),
     /** The Build thread that ran it, once run. */
     run: z.string().nullable(),
+    /** The service the agent said will do it ("gmail"), so its mark shows before it runs. */
+    service: z.string().nullable().optional(),
   }),
   /** A check of the section (15.5): each claim, its verdict and source. */
   z.object({

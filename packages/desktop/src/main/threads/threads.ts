@@ -839,6 +839,7 @@ export class Threads {
           what: l.what,
           path: l.path ?? null,
           run: ran.get(l.action) ?? null,
+          service: l.service ?? null,
         });
         continue;
       }
@@ -2881,6 +2882,7 @@ export class Threads {
     const title = str(a.title, 80);
     const what = str(a.what, 2000);
     if (!title || !what) return { error: "Give the action a title and what it should do." };
+    const service = str(a.service, 60)?.toLowerCase();
     // A named section, found by its heading; the thread's own otherwise.
     const heading = str(a.section, 200);
     let sectionPath: string[] | null = null;
@@ -2909,6 +2911,7 @@ export class Threads {
       title,
       what,
       path: sectionPath,
+      ...(service ? { service } : {}),
     });
     await this.refresh(live.rel, live.docText, thread);
     return {
