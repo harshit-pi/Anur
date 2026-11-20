@@ -15,6 +15,7 @@
   --paper: light-dark(#eef1f4, #0e1420); /* the app background behind the page */
   --sheet: light-dark(#ffffff, #151c2a); /* the page, panels and cards */
   --hover: light-dark(#f5f7fa, #1b2334);
+  --pressed: light-dark(#dfe4eb, #253047); /* a toggle held down, such as a docked panel */
   --rule: light-dark(#d8dee6, #2a3446); /* borders and dividers */
 
   /* Text */

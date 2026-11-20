@@ -208,9 +208,41 @@ button {
 }
 
 .ribbon-button:hover,
-.ribbon-button.active {
+.ribbon-button.active,
+.ribbon-button.peeking {
   background: var(--hover);
   color: var(--ink);
+}
+
+/* Docked files: held down, like a selected toggle. */
+.ribbon-button.pressed {
+  background: var(--pressed);
+  color: var(--ink);
+  box-shadow: inset 0 1px 2px var(--scrim);
+}
+
+/* Undocked files float over the page while hovered (from the folder or this edge). */
+/* Kept in the files column, which is 0 wide: it spills over the page. */
+.left-sidebar.peek {
+  position: relative;
+  z-index: 30;
+  background: var(--paper);
+  box-shadow: 4px 0 14px var(--scrim);
+  animation: peek-in 120ms ease-out;
+}
+
+@keyframes peek-in {
+  from {
+    transform: translateX(-12px);
+    opacity: 0;
+  }
+}
+
+.peek-edge {
+  grid-area: left;
+  position: relative;
+  width: 6px;
+  z-index: 29;
 }
 
 /* 2. Left and 5. right sidebars. */
@@ -6970,4 +7002,10 @@ button.file-card-name:hover {
 .map .map-box.title,
 .map .map-box.selected {
   --bw: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .left-sidebar.peek {
+    animation: none;
+  }
 }

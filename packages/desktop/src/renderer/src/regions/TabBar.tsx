@@ -31,7 +31,6 @@ import {
   CloseIcon,
   DocIcon,
   PlusIcon,
-  SidebarLeftIcon,
   SidebarRightIcon,
   AnurIcon,
 } from "./Icons.tsx";
@@ -231,20 +230,6 @@ export function TabBar({
   const draggingPinned = drag ? tabs.tabs.find((x) => x.id === drag.id)?.pinned : undefined;
   return (
     <header className="tab-bar" aria-label="Tabs">
-      {space ? (
-        <button
-          className="icon-button"
-          type="button"
-          aria-label={open.left ? "Hide the files panel" : "Show the files panel"}
-          aria-pressed={open.left}
-          title={open.left ? "Hide files (⌘\\)" : "Show files (⌘\\)"}
-          onClick={() => {
-            onToggle("left");
-          }}
-        >
-          <SidebarLeftIcon />
-        </button>
-      ) : null}
       <div className="tabs" role="tablist" aria-label="Open docs" hidden={!space}>
         <div className="tab-strip" ref={strip}>
           {tabs.tabs.map((t, i) => {

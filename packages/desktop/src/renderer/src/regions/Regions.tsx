@@ -38,7 +38,9 @@ import { PROVIDERS, cloudSummary, markNoticeSeen, noticeSeen } from "./cloud-not
 export function Ribbon({
   files,
   filesOpen,
+  filesPeek = false,
   onFiles,
+  onFilesHover,
   searchOpen,
   onSearch,
   onSettings,
@@ -46,8 +48,12 @@ export function Ribbon({
 }: {
   /** A space is open, so there are files to show. */
   files: boolean;
+  /** Docked: the files panel stays open beside the page. */
   filesOpen: boolean;
+  /** Undocked, the files panel floating over the page while hovered. */
+  filesPeek?: boolean;
   onFiles: () => void;
+  onFilesHover?: (over: boolean) => void;
   searchOpen: boolean;
   onSearch: () => void;
   onSettings: () => void;
@@ -57,12 +63,14 @@ export function Ribbon({
     <nav className="ribbon" aria-label="Ribbon">
       {files ? (
         <button
-          className={`ribbon-button${filesOpen ? " active" : ""}`}
+          className={`ribbon-button${filesOpen ? " pressed" : filesPeek ? " peeking" : ""}`}
           type="button"
           aria-label="Files"
           aria-pressed={filesOpen}
-          title={filesOpen ? "Hide files (⌘\\)" : "Show files (⌘\\)"}
+          title={filesOpen ? "Hide files (⌘\\)" : "Keep files open (⌘\\)"}
           onClick={onFiles}
+          onMouseEnter={() => onFilesHover?.(true)}
+          onMouseLeave={() => onFilesHover?.(false)}
         >
           <FolderIcon />
         </button>
@@ -140,7 +148,15 @@ export function LeftSidebar({
   onNewSpace,
   onOpenFolder: onOpenSpaceFolder,
   opening = false,
+  peek = null,
 }: {
+  /** Undocked and hovered: the panel floats over the page at this width. */
+  peek?: {
+    width: number;
+    onHover: (over: boolean) => void;
+    /** Dragging from it: it stays until the drag ends. */
+    onHold: (hold: boolean) => void;
+  } | null;
   /** The folder's system map, when Engineering is on: a row above the files. */
   system?: {
     open: boolean;
@@ -199,11 +215,28 @@ export function LeftSidebar({
   useEffect(() => {
     if (folderPath) setSort(loadSort(folderPath));
   }, [folderPath]);
-  if (!folder && opening)
-    return <aside className="left-sidebar" aria-label="Files" hidden={hidden} />;
+  const aside = peek
+    ? {
+        className: "left-sidebar peek",
+        style: { width: peek.width },
+        onMouseEnter: () => {
+          peek.onHover(true);
+        },
+        onMouseLeave: () => {
+          peek.onHover(false);
+        },
+        onDragStartCapture: () => {
+          peek.onHold(true);
+        },
+        onDragEndCapture: () => {
+          peek.onHold(false);
+        },
+      }
+    : { className: "left-sidebar" };
+  if (!folder && opening) return <aside {...aside} aria-label="Files" hidden={hidden} />;
   if (!folder) {
     return (
-      <aside className="left-sidebar" aria-label="Files" hidden={hidden}>
+      <aside {...aside} aria-label="Files" hidden={hidden}>
         <p className="sidebar-title truncate" title="No folder open">
           No folder open
         </p>
@@ -232,7 +265,7 @@ export function LeftSidebar({
       });
   };
   return (
-    <aside className="left-sidebar" aria-label="Files" hidden={hidden}>
+    <aside {...aside} aria-label="Files" hidden={hidden}>
       <div className="sidebar-head">
         {/* The space's name sits at the foot, in its switcher (Spaces mock). */}
         <span className="sidebar-title" />
