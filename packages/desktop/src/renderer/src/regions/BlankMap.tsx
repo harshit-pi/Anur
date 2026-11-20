@@ -36,3 +36,29 @@ export function BlankMap({
     </div>
   );
 }
+
+/** The page's own blank: the title line, ready for a name; naming it makes the doc. */
+export function BlankPage({ onName }: { onName: (name: string) => Promise<boolean> }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="page-empty blank-page">
+      <input
+        className="blank-page-title"
+        aria-label="Doc name"
+        placeholder="Untitled"
+        autoFocus
+        disabled={busy}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          const name = e.currentTarget.value.trim();
+          if (!name) return;
+          setBusy(true);
+          void onName(name).then((made) => {
+            if (!made) setBusy(false);
+          });
+        }}
+      />
+    </div>
+  );
+}

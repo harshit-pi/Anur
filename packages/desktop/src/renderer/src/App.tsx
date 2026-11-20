@@ -78,7 +78,7 @@ import { TabBar } from "./regions/TabBar.tsx";
 import { Tour } from "./regions/Tour.tsx";
 import { tourSteps } from "./layout/tour.ts";
 import { useFeatures } from "./features.ts";
-import { BlankMap } from "./regions/BlankMap.tsx";
+import { BlankMap, BlankPage } from "./regions/BlankMap.tsx";
 import { loadDocView, useDocView } from "./regions/doc-view-pref.ts";
 import { MapView } from "./regions/MapView.tsx";
 import { Offers } from "./regions/Offers.tsx";
@@ -315,9 +315,12 @@ export function App() {
     if (!folderPath || settings) return;
     let current = true;
     void anur.call("plugins:list", {}).then((r) => {
-      if (!current) return;
+      // An answer for the space this window showed before is no answer for this one.
+      if (!current || r.folder !== folderPath) return;
       const on = r.plugins.some((p) => p.id === "engineering" && p.on);
       setEngineeringOn(on);
+      // No code here: a Repos tab saved or carried over closes.
+      if (!on) setTabs((t) => closeWhere(t, (tab) => docOf(tab) === SYSTEM_TAB));
       // A folder opened with Engineering on starts on its System tab.
       if (on && systemShownFor.current !== folderPath) {
         systemShownFor.current = folderPath;
@@ -424,10 +427,11 @@ export function App() {
     },
     [folder, selected, openDoc],
   );
-  /** A map named on the blank map: its doc made, shown on the map, with Tab a box under it. */
+  /** A doc named on a blank map or page: made, and shown there; on the map, Tab adds a box under it. */
   const [childFor, setChildFor] = useState<string | null>(null);
+  const madeIn = useRef<{ path: string; view: "page" | "map" } | null>(null);
   const nameMap = useCallback(
-    async (name: string, child: boolean): Promise<boolean> => {
+    async (name: string, child: boolean, view: "page" | "map" = "map"): Promise<boolean> => {
       if (!folder || folder.mode !== "writable") return false;
       const r = await anur.call("doc:create", { path: newDocPath(folder.docs, null, name) });
       if (r.kind !== "created") {
@@ -436,7 +440,8 @@ export function App() {
       }
       setFolder(r.folder);
       setChildFor(child ? r.path : null);
-      setCenterView("map");
+      madeIn.current = { path: r.path, view };
+      setCenterView(view);
       openDoc(r.path, false);
       return true;
     },
@@ -1029,7 +1034,8 @@ export function App() {
     if (pendingHeading?.path === doc.path || pendingLine?.path === doc.path) return;
     const place = loadPlace(window.localStorage, folderPath, doc.path);
     if (!place) {
-      setCenterView(docView);
+      // Made on a blank page or map: it stays in the view it was made in.
+      setCenterView(madeIn.current?.path === doc.path ? madeIn.current.view : docView);
       return;
     }
     setCenterView(place.view);
@@ -1376,12 +1382,7 @@ export function App() {
         page={
           // Only the doc the tab shows: after a rename the old one mustn't mount for a moment.
           selected === SYSTEM_TAB ? (
-            <SystemView
-              folder={folderPath}
-              onPlugins={() => {
-                setSettings("core");
-              }}
-            />
+            <SystemView folder={folderPath} />
           ) : taskIdOf(selected) ? (
             <TaskView id={taskIdOf(selected) ?? ""} onSystem={openSystem} />
           ) : selected && isViewable(selected) ? (
@@ -1432,8 +1433,13 @@ export function App() {
             // While a doc's sections are read, or the doc is moved or renamed, an
             // empty map, so neither the page nor "Pick a doc" shows through.
             <div className="map" aria-hidden="true" />
-          ) : !selected && docView === "map" && folder?.mode === "writable" && !opening ? (
-            <BlankMap onName={nameMap} />
+          ) : !selected && folder?.mode === "writable" && !opening ? (
+            // A new tab is blank in the view the person is in.
+            centerView === "map" ? (
+              <BlankMap onName={nameMap} />
+            ) : (
+              <BlankPage onName={(name) => nameMap(name, false, "page")} />
+            )
           ) : null
         }
         opening={opening}

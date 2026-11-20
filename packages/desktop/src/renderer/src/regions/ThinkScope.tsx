@@ -52,16 +52,23 @@ export function ScopeChip({
       : scope.value === "doc" || section.index === 0
         ? (scope.docName ?? "This doc")
         : heading;
+  // On the title, this section is the whole doc: one choice, not two.
+  const onTitle = section.index === 0;
   const items: { value: Scope; name: string; detail: string; off: boolean }[] = [
-    {
-      value: "section",
-      name: "This section",
-      detail: scope.docName && section.index > 0 ? heading : "",
-      off: !scope.docName,
-    },
+    ...(onTitle
+      ? []
+      : [
+          {
+            value: "section" as const,
+            name: "This section",
+            detail: scope.docName ? heading : "",
+            off: !scope.docName,
+          },
+        ]),
     { value: "doc", name: "This doc", detail: scope.docName ?? "", off: !scope.docName },
     { value: "folder", name: "The whole space", detail: scope.folderName, off: false },
   ];
+  const picked = onTitle && scope.value === "section" ? "doc" : scope.value;
   return (
     <span className="think-scope-pick" ref={host}>
       <button
@@ -87,8 +94,8 @@ export function ScopeChip({
               key={it.value}
               type="button"
               role="menuitemradio"
-              aria-checked={scope.value === it.value}
-              className={`think-scope-item${scope.value === it.value ? " on" : ""}`}
+              aria-checked={picked === it.value}
+              className={`think-scope-item${picked === it.value ? " on" : ""}`}
               disabled={it.off}
               onClick={() => {
                 setOpen(false);
