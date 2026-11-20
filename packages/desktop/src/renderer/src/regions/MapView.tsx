@@ -23,7 +23,7 @@ import type { BoxStatus } from "../layout/box-status.ts";
 import { changeSummary } from "../layout/change-summary.ts";
 import { choiceActs } from "../layout/map-acts.ts";
 import { ownOffsets } from "../layout/map-moves.ts";
-import { sidesSeen } from "../layout/map-sides.ts";
+import { sidesSeen, withNames } from "../layout/map-sides.ts";
 import { mapSkeleton } from "../layout/map-drawing.ts";
 import { BoxSketch, sketchLine } from "./MapSketch.tsx";
 import { useMapLayout } from "./map-layout-pref.ts";
@@ -893,11 +893,23 @@ export function MapView({
     ].filter((n): n is MapNode => Boolean(n));
     // Each box keeps the side it was given while the map is open; a new branch
     // takes the side its boxes were on, so a Use never swaps the map round (30.35).
+    // A decision's name, on its label or the section a Use of it makes.
+    const nameOf = (id: string) => {
+      const i = info.get(id);
+      if (i?.kind === "section" || id.startsWith("d:")) return i?.heading;
+      // A thread's label carries the name of its one named set, if it has one.
+      if (id.startsWith("t:") && i?.thread) {
+        const sets = i.thread.items.filter((x) => x.kind === "options");
+        const only = sets.length === 1 ? sets[0] : undefined;
+        return only?.kind === "options" && only.heading ? only.heading : undefined;
+      }
+      return undefined;
+    };
     const placed =
       layout === "mind"
-        ? mindLayout(ordered, keptSides(ordered, sidesKept.current))
+        ? mindLayout(ordered, keptSides(ordered, withNames(ordered, sidesKept.current, nameOf)))
         : mapLayout(ordered);
-    if (layout === "mind") sidesKept.current = sidesSeen(placed);
+    if (layout === "mind") sidesKept.current = sidesSeen(placed, nameOf);
     const out: Box[] = [];
     for (const [id, p] of placed) {
       const i = info.get(id);
