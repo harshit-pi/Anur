@@ -555,11 +555,36 @@ async function startClaudeSkill(): Promise<void> {
   const repaired = await claudeSkill.check().catch(() => []);
   if (repaired.length > 0)
     console.log(`Anur brought its Claude Code skill up to date: ${repaired.join(", ")}.`);
+  // Claude Code switched on has Anur in it: /anur, its tools and the task hooks.
+  if (!isCheck && appSettings.get().agents.includes("claude-code"))
+    await syncAgent("claude-code", true).catch((e: unknown) => {
+      logLine("warn", "agents", `Claude Code: ${(e as Error).message}`);
+    });
   if (!isCheck && appSettings.get().agents.includes("kiro")) {
     const fixed = await kiroInstall.check().catch(() => []);
     if (fixed.length > 0) logLine("info", "agents", `Kiro brought up to date: ${fixed.join(", ")}`);
     void kiroInstall.refreshMcp();
   }
+}
+
+/**
+ * An agent switched on has Anur in it, and one switched off has none of it:
+ * Claude Code gets the /anur skill, Anur's tools and the task hooks; Kiro
+ * the skill, the tools and the guard that lets it run threads.
+ */
+async function syncAgent(id: AgentId, on: boolean): Promise<void> {
+  if (id === "kiro") {
+    await (on ? kiroInstall?.add() : kiroInstall?.remove());
+    return;
+  }
+  if (id !== "claude-code" || !claudeSkill || !taskHooks) return;
+  if (!on) {
+    await claudeSkill.remove();
+    await taskHooks.remove();
+    return;
+  }
+  if (!(await claudeSkill.state()).added) await claudeSkill.add();
+  if (!(await taskHooks.status()).added) await taskHooks.add();
 }
 
 /** Agents whose choices were read this run; once per run is enough. */
@@ -1296,7 +1321,7 @@ const handlers: { [C in Channel]: Handler<C> } = {
     else {
       try {
         // Turning an agent on puts Anur into it; off takes it back out.
-        if (id === "kiro") await (on ? kiroInstall?.add() : kiroInstall?.remove());
+        await syncAgent(id, on);
         const agents = on ? [...new Set([...was, id])] : was.filter((a) => a !== id);
         const def = appSettings.get().defaultAgent;
         await appSettings.set({

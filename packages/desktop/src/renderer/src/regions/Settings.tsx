@@ -313,85 +313,6 @@ function OpenerRow() {
   );
 }
 
-/** Anur in the person's Claude Code (6.2): added or not, with Add, Update and Remove. */
-function SkillRow() {
-  const [s, setS] = useState<{ added: boolean; claude: boolean; current: boolean } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const load = () => {
-    void anur.call("skill:status", {}).then(setS);
-  };
-  useEffect(load, []);
-  const act = (action: "add" | "update" | "remove") => {
-    setBusy(true);
-    setError(null);
-    void anur.call("skill:act", { action }).then((r) => {
-      setBusy(false);
-      if (r.kind === "failed") setError(r.reason);
-      load();
-    });
-  };
-  return (
-    <Row
-      title="Use Anur from Claude Code"
-      detail={
-        error ??
-        (!s
-          ? "Checking…"
-          : !s.claude
-            ? "Claude Code isn't on this computer."
-            : !s.added
-              ? "Adds /anur to Claude Code: /anur map turns a chat into a map here."
-              : s.current
-                ? "Added: /anur map, /anur new and /anur open work in Claude Code. Anur keeps them up to date."
-                : "Added, but out of date: Anur updates it on its next launch, or now.")
-      }
-    >
-      {s?.claude ? (
-        <div className="settings-actions">
-          {!s.added ? (
-            <button
-              type="button"
-              className="think-button primary"
-              disabled={busy}
-              onClick={() => {
-                act("add");
-              }}
-            >
-              Add
-            </button>
-          ) : (
-            <>
-              {!s.current ? (
-                <button
-                  type="button"
-                  className="think-button primary"
-                  disabled={busy}
-                  onClick={() => {
-                    act("update");
-                  }}
-                >
-                  Update
-                </button>
-              ) : null}
-              <button
-                type="button"
-                className="think-button"
-                disabled={busy}
-                onClick={() => {
-                  act("remove");
-                }}
-              >
-                Remove
-              </button>
-            </>
-          )}
-        </div>
-      ) : null}
-    </Row>
-  );
-}
-
 const sizeOf = (bytes: number) =>
   bytes < 1024
     ? `${String(bytes)} B`
@@ -503,65 +424,6 @@ function StoragePane({ folder }: { folder: FolderState | null }) {
   );
 }
 
-/**
- * The task hooks in Claude Code (group 21): Anur's own plugin, added on the
- * person's click, that reports what each task changed in folders opened here.
- */
-function TaskHooksRow() {
-  const [s, setS] = useState<{ claude: boolean; added: boolean; current: boolean } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    void anur.call("taskHooks:status", {}).then(setS);
-  }, [n]);
-  if (!s) return null;
-  const act = (action: "add" | "remove") => {
-    setBusy(true);
-    setNote(null);
-    void anur.call("taskHooks:act", { action }).then((r) => {
-      setBusy(false);
-      if (r.kind === "failed") setNote(r.reason);
-      setN((x) => x + 1);
-    });
-  };
-  const detail = !s.claude
-    ? "Claude Code isn't installed on this computer."
-    : s.added
-      ? "Added to Claude Code, for every folder on this Mac. After each task in a folder opened in Anur, a report of what it changed across the repos. Elsewhere it does nothing."
-      : "Adds Anur's plugin to Claude Code, once for this Mac: after each task in a folder opened in Anur, a report of what it changed across the repos, ranked. Elsewhere it does nothing.";
-  return (
-    <>
-      <Row title="Task reports in Claude Code, on this Mac" detail={detail}>
-        {s.claude ? (
-          <button
-            type="button"
-            className="settings-button"
-            disabled={busy}
-            onClick={() => {
-              act(s.added ? "remove" : "add");
-            }}
-          >
-            {busy ? "Working…" : s.added ? "Remove" : "Add to Claude Code"}
-          </button>
-        ) : null}
-      </Row>
-      {note ? <p className="settings-row-detail">{note}</p> : null}
-    </>
-  );
-}
-
-/** Engineering is on by itself in a folder of code repos; then its task reports can be added. */
-function PluginRows({ folder }: { folder: FolderState | null }) {
-  const [on, setOn] = useState(false);
-  useEffect(() => {
-    void anur.call("plugins:list", {}).then((r) => {
-      setOn(r.plugins.some((p) => p.id === "engineering" && p.on));
-    });
-  }, [folder?.path]);
-  return on ? <TaskHooksRow /> : null;
-}
-
 type MarketData = Awaited<ReturnType<typeof anur.call<"market:list">>>;
 type MarketPlugin = MarketData["installed"][number];
 
@@ -655,7 +517,6 @@ function Market({ folder }: { folder: FolderState | null }) {
         </>
       ) : (
         <>
-          <PluginRows folder={folder} />
           {(data?.installed ?? []).map((p) => (
             <InstalledPlugin
               key={p.id}
@@ -1078,7 +939,6 @@ export function Settings({
               }}
             />
             <SessionsRow />
-            <SkillRow />
           </>
         );
       case "core":
