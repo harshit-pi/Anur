@@ -6868,3 +6868,16 @@ button.file-card-name:hover {
   color: var(--graphite);
   font-size: 13px;
 }
+
+/* The agent's mark in the picker: the size of its name's letters, on its line, a small gap after. */
+.think-pick .agent-mark {
+  width: 12px;
+  height: 12px;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+/* The agent picker sizes to its mark and name, so "Claude" is never cut. */
+.think-pickers .think-option:has(select[aria-label="Agent"]) {
+  flex: none;
+}
