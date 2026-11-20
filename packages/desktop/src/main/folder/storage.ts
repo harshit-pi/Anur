@@ -5,6 +5,7 @@ import { writeFileAtomic } from "../../vault/anur-folder.ts";
 import { IMAGE_TYPES } from "./images.ts";
 import { namesByDevice } from "./people.ts";
 import { readFile } from "../../vault/anur-copy.ts";
+import { findHomes } from "./homes.ts";
 
 /**
  * `.anur/` upkeep (group 11): each device notes when it opened the folder
@@ -144,17 +145,23 @@ function kindOf(rel: string): StorageKind {
   return "other";
 }
 
-/** What `.anur/` holds, by kind: bytes and file count. */
+/** Every `.anur/` in a space: its own, then each home's beneath it ("" is the space). */
+async function anurDirs(folder: string): Promise<{ home: string; root: string }[]> {
+  const homes = ["", ...(await findHomes(folder))];
+  return homes.map((home) => ({ home, root: path.join(folder, home, ANUR_DIR) }));
+}
+
+/** What the space's `.anur/` folders hold, its repos' too, by kind: bytes and file count. */
 export async function storageOf(
   folder: string,
 ): Promise<{ kind: StorageKind; bytes: number; files: number }[]> {
-  const root = path.join(folder, ANUR_DIR);
   const by = new Map<StorageKind, { bytes: number; files: number }>();
-  await walk(root, (file, size) => {
-    const k = kindOf(path.relative(root, file));
-    const now = by.get(k) ?? { bytes: 0, files: 0 };
-    by.set(k, { bytes: now.bytes + size, files: now.files + 1 });
-  });
+  for (const { root } of await anurDirs(folder))
+    await walk(root, (file, size) => {
+      const k = kindOf(path.relative(root, file));
+      const now = by.get(k) ?? { bytes: 0, files: 0 };
+      by.set(k, { bytes: now.bytes + size, files: now.files + 1 });
+    });
   const order: StorageKind[] = [
     "threads",
     "history",
@@ -176,32 +183,39 @@ export const UNUSED_DAYS = 30;
 const HASH = /\b[0-9a-f]{64}\b/g;
 
 /**
- * Snapshots Clean up may remove: older than 30 days and named by no line
- * in `.anur/`. A hash is looked for in every record, whatever its kind, so
- * a record this app doesn't know yet still keeps its snapshot.
+ * Snapshots Clean up may remove, in any home of the space: older than 30
+ * days and named by no line in any of its `.anur/` folders. A hash is looked
+ * for in every record, whatever its kind, so a record this app doesn't know
+ * yet still keeps its snapshot.
  */
 export async function unusedSnapshots(
   folder: string,
   now = new Date(),
-): Promise<{ hash: string; bytes: number }[]> {
-  const root = path.join(folder, ANUR_DIR);
-  const snapshots = path.join(root, "snapshots");
+): Promise<{ home: string; hash: string; bytes: number }[]> {
+  const dirs = await anurDirs(folder);
   const used = new Set<string>();
   const records: string[] = [];
-  await walk(root, (file) => {
-    if (!file.startsWith(snapshots + path.sep) && /\.(jsonl|json)$/.test(file)) records.push(file);
-  });
+  for (const { root } of dirs) {
+    const snapshots = path.join(root, "snapshots");
+    await walk(root, (file) => {
+      if (!file.startsWith(snapshots + path.sep) && /\.(jsonl|json)$/.test(file))
+        records.push(file);
+    });
+  }
   for (const f of records) {
     const text = await readFile(f, "utf8").catch(() => "");
     for (const m of text.matchAll(HASH)) used.add(m[0]);
   }
   const cutoff = now.getTime() - UNUSED_DAYS * 24 * 60 * 60 * 1000;
-  const out: { hash: string; bytes: number }[] = [];
-  const names = await readdir(snapshots).catch(() => [] as string[]);
-  for (const n of names) {
-    if (!/^[0-9a-f]{64}$/.test(n) || used.has(n)) continue;
-    const s = await stat(path.join(snapshots, n)).catch(() => null);
-    if (s?.isFile() && s.mtime.getTime() < cutoff) out.push({ hash: n, bytes: s.size });
+  const out: { home: string; hash: string; bytes: number }[] = [];
+  for (const { home, root } of dirs) {
+    const snapshots = path.join(root, "snapshots");
+    const names = await readdir(snapshots).catch(() => [] as string[]);
+    for (const n of names) {
+      if (!/^[0-9a-f]{64}$/.test(n) || used.has(n)) continue;
+      const s = await stat(path.join(snapshots, n)).catch(() => null);
+      if (s?.isFile() && s.mtime.getTime() < cutoff) out.push({ home, hash: n, bytes: s.size });
+    }
   }
   return out;
 }
@@ -270,14 +284,15 @@ export async function unusedAttachments(
 /** Remove snapshots Clean up found, checking each again first. */
 export async function removeSnapshots(
   folder: string,
-  hashes: readonly string[],
-  remove: (hash: string) => Promise<void>,
+  found: readonly { home: string; hash: string }[],
+  remove: (home: string, hash: string) => Promise<void>,
 ): Promise<number> {
-  const still = new Set((await unusedSnapshots(folder)).map((s) => s.hash));
+  const key = (s: { home: string; hash: string }) => `${s.home}\u0000${s.hash}`;
+  const still = new Set((await unusedSnapshots(folder)).map(key));
   let n = 0;
-  for (const h of hashes) {
-    if (!still.has(h)) continue;
-    await remove(h);
+  for (const s of found) {
+    if (!still.has(key(s))) continue;
+    await remove(s.home, s.hash);
     n++;
   }
   return n;
