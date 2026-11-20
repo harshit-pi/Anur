@@ -96,6 +96,7 @@ run("node", ["scripts/plugins.mjs", "check"]);
 // 3. Checks, then the app.
 step("Checks");
 run("pnpm", ["check"]);
+run("pnpm", ["test:browser"]);
 step("Build");
 run("pnpm", ["--filter", "@anur/desktop", "build"]);
 step("Package, sign and notarise (several minutes)");

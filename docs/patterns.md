@@ -86,6 +86,7 @@ ANUR_SCREENSHOT=/tmp/shot.png ANUR_OPEN_FOLDER=/path/to/folder ANUR_SCREENSHOT_C
 - The context eval runs on demand, never in CI, since it spends the person's tokens: `pnpm eval:context [runs] [modes]`, modes from `one-chat`, `outline`, `full` and `fetch`. Results land in `evals/context/results/`.
 - Code the eval imports runs under Node's own TypeScript support, which can't strip constructor parameter properties: write such classes with plain fields.
 - For hand-written algorithms, add a test over many random inputs (see the diff test in `core/src/text/diff.test.ts`).
+- Anything that needs real layout (the editor's line positions, a widget's size) goes in a `*.browser.test.ts`, run in headless Chromium by `pnpm test:browser` (`packages/desktop/vitest.browser.config.ts`). Local only, not in CI; the release runs it. First time: `npx playwright install --only-shell chromium`.
 
 ## Gotchas found the hard way
 
@@ -96,6 +97,7 @@ ANUR_SCREENSHOT=/tmp/shot.png ANUR_OPEN_FOLDER=/path/to/folder ANUR_SCREENSHOT_C
 - `open Anur.app` on an app that is already running only brings the old copy forward: quit it first to get a new build.
 - `pnpm package` packs only `out/**`. Anything the app runs must be a build entry, not a dependency.
 - A hover must never change the size of anything above or beside a button: the button moves from under the pointer and the click misses. A choice card's text opened on hover and pushed Use, Add as subsection and Explore this down, so people clicked twice (30.30). Open things on a click, or reserve the room.
+- A block widget (an image, a diagram, a preview) must put its vertical space in `padding`, never `margin`: CodeMirror's height map misses the margin below it, so every widget above a line shifts where the editor thinks that line is, and Up and Down land several lines away. A `figure` also carries a browser margin of its own, so set `margin: 0px` (style-mod drops a bare `0`). A widget with a border or background draws it on `::before`, inset by what was the margin. `block-widgets.browser.test.ts` checks every kind.
 
 ## Git and PRs
 

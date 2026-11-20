@@ -66,19 +66,30 @@ export const livePreviewTheme = EditorView.theme({
     lineHeight: "0.8",
   },
   // A Mermaid diagram, drawn in place of its source.
+  // Block widgets keep vertical space in padding (see .cm-lp-image); the box is drawn
+  // by ::before, inset by what was the margin.
   ".cm-lp-mermaid": {
+    position: "relative",
+    isolation: "isolate",
     display: "flex",
     justifyContent: "center",
-    margin: "8px 0",
-    padding: "16px",
-    border: "1px solid var(--rule)",
-    borderRadius: "10px",
-    background: "var(--sheet)",
+    padding: "25px 17px",
     cursor: "pointer",
     overflowX: "auto",
   },
+  ".cm-lp-mermaid::before": {
+    content: '""',
+    position: "absolute",
+    inset: "8px 0",
+    zIndex: "-1",
+    border: "1px solid var(--rule)",
+    borderRadius: "10px",
+    background: "var(--sheet)",
+    pointerEvents: "none",
+  },
   ".cm-lp-mermaid svg": { maxWidth: "100%", height: "auto" },
-  ".cm-lp-mermaid-live": { marginTop: "4px", borderStyle: "dashed", cursor: "text" },
+  ".cm-lp-mermaid-live": { paddingTop: "21px", cursor: "text" },
+  ".cm-lp-mermaid-live::before": { top: "4px", borderStyle: "dashed" },
   ".cm-lp-mermaid-error": {
     color: "var(--red)",
     fontFamily: "var(--font-ui)",
@@ -86,19 +97,27 @@ export const livePreviewTheme = EditorView.theme({
   },
   // An embedded Excalidraw drawing, drawn as the picture; a click opens it.
   ".cm-lp-drawing": {
+    position: "relative",
+    isolation: "isolate",
     display: "flex",
     justifyContent: "center",
-    margin: "8px 0",
-    padding: "12px",
-    border: "1px solid var(--rule)",
-    borderRadius: "10px",
+    padding: "21px 13px",
     cursor: "pointer",
     color: "var(--graphite)",
     fontFamily: "var(--font-ui)",
     fontSize: "13px",
   },
+  ".cm-lp-drawing::before": {
+    content: '""',
+    position: "absolute",
+    inset: "8px 0",
+    zIndex: "-1",
+    border: "1px solid var(--rule)",
+    borderRadius: "10px",
+    pointerEvents: "none",
+  },
   ".cm-lp-drawing svg": { maxWidth: "100%", height: "auto", maxHeight: "560px" },
-  ".cm-lp-drawing:hover": { borderColor: "var(--blue)" },
+  ".cm-lp-drawing:hover::before": { borderColor: "var(--blue)" },
   ".cm-lp-quote": {
     borderLeft: "3px solid var(--rule)",
     paddingLeft: "14px !important",
@@ -153,7 +172,10 @@ export const livePreviewTheme = EditorView.theme({
     flexDirection: "column",
     alignItems: "flex-start",
     gap: "6px",
-    margin: "8px 0 12px",
+    // Padding, not margin: CodeMirror measures a block widget without its margins, so the
+    // height map falls short by the margin per image and Up/Down land on the wrong line.
+    margin: "0px",
+    padding: "8px 0 12px",
   },
   ".cm-lp-image-frame": { position: "relative", maxWidth: "100%", lineHeight: "0" },
   ".cm-lp-image img": {
@@ -249,7 +271,7 @@ export const livePreviewTheme = EditorView.theme({
   },
   ".cm-lp-inline-image img.sized": { height: "auto", verticalAlign: "middle" },
   ".cm-lp-inline-image img[hidden], .cm-lp-inline-image [hidden]": { display: "none" },
-  ".cm-lp-base": { margin: "6px 0 10px", fontFamily: "var(--font-ui)", fontSize: "13px" },
+  ".cm-lp-base": { padding: "6px 0 10px", fontFamily: "var(--font-ui)", fontSize: "13px" },
   ".cm-lp-base-head": {
     display: "flex",
     flexWrap: "wrap",
@@ -365,9 +387,17 @@ export const livePreviewTheme = EditorView.theme({
     fontFamily: "var(--font-ui)",
     fontSize: "13px",
     color: "var(--ink2)",
+    position: "relative",
+    padding: "4px 0 21px",
+  },
+  // The rule under the properties, above what was their bottom margin.
+  ".cm-lp-properties::after": {
+    content: '""',
+    position: "absolute",
+    left: "0",
+    right: "0",
+    bottom: "8px",
     borderBottom: "1px solid var(--rule)",
-    padding: "4px 0 12px",
-    marginBottom: "8px",
   },
   ".cm-lp-properties-title": {
     display: "flex",

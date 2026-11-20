@@ -427,15 +427,25 @@ function inline(el: HTMLElement, line: string) {
 }
 
 const previewTheme = EditorView.baseTheme({
+  // Block widgets keep vertical space in padding, never margin (docs/patterns.md);
+  // the strip and the card are drawn by ::before, inset by what was the margin.
   ".cm-preview-tabs": {
+    position: "relative",
+    isolation: "isolate",
     display: "inline-flex",
     gap: "2px",
-    margin: "6px 0 10px",
-    padding: "3px",
-    borderRadius: "10px",
-    background: "var(--paper)",
+    padding: "9px 3px 13px",
     fontFamily: "var(--font-ui)",
     fontSize: "13px",
+  },
+  ".cm-preview-tabs::before": {
+    content: '""',
+    position: "absolute",
+    inset: "6px 0 10px",
+    zIndex: "-1",
+    borderRadius: "10px",
+    background: "var(--paper)",
+    pointerEvents: "none",
   },
   ".cm-preview-tab": {
     padding: "4px 12px",
@@ -452,11 +462,19 @@ const previewTheme = EditorView.baseTheme({
     boxShadow: "0 1px 2px var(--shadow)",
   },
   ".cm-preview": {
-    margin: "0 0 14px",
-    padding: "14px 18px 12px",
+    position: "relative",
+    isolation: "isolate",
+    padding: "14px 18px 26px 21px",
+  },
+  ".cm-preview::before": {
+    content: '""',
+    position: "absolute",
+    inset: "0 0 14px",
+    zIndex: "-1",
     borderLeft: "3px solid var(--blue)",
     borderRadius: "0 10px 10px 0",
     background: "var(--blue-wash)",
+    pointerEvents: "none",
   },
   ".cm-preview-content p": { margin: "0 0 10px" },
   ".cm-preview-content ul": { margin: "0 0 10px", paddingLeft: "22px" },
