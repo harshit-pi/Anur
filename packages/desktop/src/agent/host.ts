@@ -818,13 +818,24 @@ const signInRequired = (e: unknown) =>
 class CheckFailed extends Error {}
 
 /** The mode and model choices from ACP's session config options. */
-function optionsOf(raw: unknown): SessionOption[] {
+/**
+ * A mode the agent ships, not one of the person's own agents or a hidden
+ * entry: Kiro lists every custom agent as a mode, marked by where it's from.
+ */
+function agentsOwnMode(c: Record<string, unknown>): boolean {
+  if (typeof c.value !== "string" || c.value.startsWith(".")) return false;
+  const source = (c._meta as { kiro?: { source?: unknown } } | undefined)?.kiro?.source;
+  return source === undefined || source === "bundled";
+}
+
+export function optionsOf(raw: unknown): SessionOption[] {
   if (!Array.isArray(raw)) return [];
   return (raw as Record<string, unknown>[]).flatMap((o) => {
     if (o.type !== "select" || (o.category !== "mode" && o.category !== "model")) return [];
     const choices = Array.isArray(o.options)
       ? (o.options as Record<string, unknown>[]).flatMap((c) =>
-          typeof c.value === "string"
+          typeof c.value === "string" &&
+          (o.category !== "mode" || c.value === o.currentValue || agentsOwnMode(c))
             ? [
                 {
                   value: c.value,
