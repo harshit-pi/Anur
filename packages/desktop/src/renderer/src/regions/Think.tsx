@@ -3793,6 +3793,10 @@ function GroupedThreads({
           <ThreadList threads={needs} onOpen={onOpen} />
         </>
       ) : null}
+      {/* The rest under their own heading, so they never read as needing you too. */}
+      {needs.length > 0 && rest.length > 0 ? (
+        <h3 className="think-subhead">Others ({String(rest.length)})</h3>
+      ) : null}
       <ThreadList threads={withBranches(rest)} onOpen={onOpen} />
     </div>
   );
