@@ -2472,11 +2472,32 @@ export function MapView({
             aria-label={`${name}: its text`}
           >
             <div className="map-peek-name">
-              {opt?.kind === "edit"
-                ? `Proposed edit to ${tree.sections[opt.index]?.path.at(-1) ?? ""}`
-                : opt
-                  ? `Option: ${name}`
-                  : name}
+              <span>
+                {opt?.kind === "edit"
+                  ? `Proposed edit to ${tree.sections[opt.index]?.path.at(-1) ?? ""}`
+                  : opt
+                    ? `Option: ${name}`
+                    : name}
+              </span>
+              {/* A new thread on the section hovered (30.37): selected, its box to type in focused. */}
+              {s && writable && docPath !== FOLDER_DOC ? (
+                <button
+                  type="button"
+                  className="map-peek-new"
+                  onPointerDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    clickedAt.current = Date.now();
+                    setPeek(null);
+                    onSelect(s.index);
+                    window.dispatchEvent(new CustomEvent("anur:map-new-thread"));
+                  }}
+                >
+                  Start a new thread
+                </button>
+              ) : null}
             </div>
             {opt ? <p className="map-peek-use quiet">{useSays(opt)}</p> : null}
             {body ? <Markdown text={body} /> : <p className="quiet">No text yet.</p>}

@@ -3082,8 +3082,29 @@ body.resizing * {
 }
 
 .map-peek-name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   margin-bottom: 6px;
   font-weight: 600;
+}
+
+/* Start a new thread, in a section's hover card (30.37): quiet until hovered. */
+.map-peek-new {
+  flex: none;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--blue);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.map-peek-new:hover {
+  text-decoration: underline;
 }
 
 .map-peek p {

@@ -1242,17 +1242,8 @@ export function Think({
     };
     // Again when the section changes or a thread's turn adds lines.
   }, [docPath, sectionKey, threadsSeen]);
-  const lastSection = useRef(sectionKey);
-  useEffect(() => {
-    if (lastSection.current === sectionKey) return;
-    lastSection.current = sectionKey;
-    // Close the thread that was open, but never one opened in the same moment, as when a
-    // click on the map picks a box on another section and opens its thread together.
-    if (thread && section && !samePath(thread.path, section.path) && !thread.busy) {
-      const was = thread.id;
-      setOpen((o) => (o === was ? null : o));
-    }
-  }, [sectionKey, section, thread]);
+  // Picking another box on the map, or moving the cursor on the page, keeps the open
+  // thread: you leave it with ←, or start one from a section's hover card on the map (30.37).
 
   const start = useCallback(
     async (
@@ -1371,6 +1362,19 @@ export function Think({
     },
     [tree, docPath, docText, newAgent, newChoices, setThreads],
   );
+  // Start a new thread pressed in a section's hover card on the map (30.37): the map selected it; its box to type in is ready.
+  useEffect(() => {
+    const on = () => {
+      setOpen(null);
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLTextAreaElement>(".think .think-input")?.focus();
+      });
+    };
+    window.addEventListener("anur:map-new-thread", on);
+    return () => {
+      window.removeEventListener("anur:map-new-thread", on);
+    };
+  }, []);
   // Build or Check pressed on a section's box on the map (30.32): the same as the links here.
   useEffect(() => {
     const on = (e: Event) => {
