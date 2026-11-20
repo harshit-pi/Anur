@@ -38,13 +38,23 @@ export function buildTree(
     return children;
   };
 
+  // Drawings stay out of the tree, as Excalidraw's own files would in Obsidian's list;
+  // a folder emptied only by that goes too, so `Excalidraw/` doesn't show bare.
+  const drawingDirs = new Set<string>();
+  const keep = (p: string) => {
+    if (!isDrawing(p)) return true;
+    for (let d = p; d.includes("/");) drawingDirs.add((d = d.slice(0, d.lastIndexOf("/"))));
+    return false;
+  };
+  const docs = paths.filter(keep);
+  const attachments = files.filter(keep);
   for (const f of folderPaths) folderFor(f);
-  for (const p of paths) {
+  for (const p of docs) {
     const slash = p.lastIndexOf("/");
     const dir = slash < 0 ? "" : p.slice(0, slash);
     folderFor(dir).push({ kind: "doc", name: p.slice(slash + 1).replace(/\.md$/i, ""), path: p });
   }
-  for (const p of files) {
+  for (const p of attachments) {
     const slash = p.lastIndexOf("/");
     const base = p.slice(slash + 1);
     const dot = base.lastIndexOf(".");
@@ -75,8 +85,15 @@ export function buildTree(
     );
     for (const n of nodes) if (n.kind === "folder") order(n.children);
   };
-  order(root);
-  return root;
+  const prune = (nodes: TreeNode[]): TreeNode[] =>
+    nodes.flatMap((n): TreeNode[] => {
+      if (n.kind !== "folder") return [n];
+      n.children = prune(n.children);
+      return n.children.length === 0 && drawingDirs.has(n.path) ? [] : [n];
+    });
+  const kept = drawingDirs.size ? prune(root) : root;
+  order(kept);
+  return kept;
 }
 
 /** How many docs and files a folder holds, at any depth. */
