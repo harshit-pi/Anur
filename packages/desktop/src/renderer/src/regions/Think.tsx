@@ -1242,17 +1242,8 @@ export function Think({
     };
     // Again when the section changes or a thread's turn adds lines.
   }, [docPath, sectionKey, threadsSeen]);
-  const lastSection = useRef(sectionKey);
-  useEffect(() => {
-    if (lastSection.current === sectionKey) return;
-    lastSection.current = sectionKey;
-    // Close the thread that was open, but never one opened in the same moment, as when a
-    // click on the map picks a box on another section and opens its thread together.
-    if (thread && section && !samePath(thread.path, section.path) && !thread.busy) {
-      const was = thread.id;
-      setOpen((o) => (o === was ? null : o));
-    }
-  }, [sectionKey, section, thread]);
+  // Picking another box on the map, or moving the cursor on the page, keeps the open
+  // thread: you leave it with ← or start one on the picked box with + (30.37).
 
   const start = useCallback(
     async (
@@ -1734,6 +1725,28 @@ export function Think({
           </div>
           {writable && docPath && !isDraft ? (
             <span className="think-top-actions">
+              <button
+                type="button"
+                className="think-icon think-new"
+                aria-label="New thread"
+                title={`New thread on ${section.path.at(-1) ?? "this section"}`}
+                onClick={() => {
+                  setOpen(null);
+                  requestAnimationFrame(() => {
+                    document.querySelector<HTMLTextAreaElement>(".think .think-input")?.focus();
+                  });
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M8 3v10M3 8h10"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
               <button
                 type="button"
                 className={thread.closed ? "think-more" : "think-icon"}
