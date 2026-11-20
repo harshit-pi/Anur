@@ -23,6 +23,7 @@ import { SectionEditor } from "../editor/section-editor.tsx";
 import { putOption, renameSection } from "../editor/section-range.ts";
 import type { EditorView } from "@codemirror/view";
 import { inlineRuns } from "../layout/inline-markdown.ts";
+import { actionWaits } from "./action-waits.ts";
 
 /**
  * The Think panel (task 3.5): the section the cursor is in, its text as it
@@ -1331,14 +1332,22 @@ export function Think({
    * ▶ Run on an action a thread proposed (Mock 10): a Build on its section,
    * with what the proposal said to do, in the mode picked for new threads.
    */
+  /** Actions started here: a second Run before the first shows as run doesn't start another. */
+  const started = useRef(new Set<string>());
   const runAction = useCallback(
-    async (from: ThreadView, a: { id: string; what: string; path: readonly string[] | null }) => {
+    async (
+      from: ThreadView,
+      a: { id: string; what: string; path: readonly string[] | null },
+    ): Promise<boolean> => {
       const target = a.path ?? from.path;
       const node = tree?.sections.find((x) => target && samePath(target, x.path));
       if (!docPath || !node) {
         setError("That action's section is gone.");
-        return;
+        return false;
       }
+      const key = `${from.id}:${a.id}`;
+      if (started.current.has(key)) return true;
+      started.current.add(key);
       setError(null);
       const r = await anur.call("thread:start", {
         path: docPath,
@@ -1351,12 +1360,14 @@ export function Think({
         fromAction: { thread: from.id, action: a.id },
       });
       if (r.kind === "refused") {
+        started.current.delete(key);
         setError(r.reason);
-        return;
+        return false;
       }
       // The Build runs beside you: the thread you ran it from stays open, and
       // its action opens the Build when you want it.
       setThreads((ts) => [...ts.filter((t) => t.id !== r.thread.id), r.thread]);
+      return true;
     },
     [tree, docPath, docText, newAgent, newChoices, setThreads],
   );
@@ -1381,11 +1392,28 @@ export function Think({
       const { thread, action } = (e as CustomEvent<{ thread: string; action: string }>).detail;
       const from = threads.find((t) => t.id === thread);
       const a = from?.items.find((x) => x.kind === "proposed-action" && x.id === action);
-      if (from && a?.kind === "proposed-action" && !a.run) void runAction(from, a);
+      if (from && a?.kind === "proposed-action" && !a.run && !actionWaits(threads, from, a.id))
+        void runAction(from, a);
+    };
+    // Run all on a "▶ N planned" group (30.28): each that's still ready, in turn.
+    const onRunAll = (e: Event) => {
+      const list = (e as CustomEvent<{ thread: string; action: string }[]>).detail;
+      void (async () => {
+        for (const { thread, action } of list) {
+          const from = threads.find((t) => t.id === thread);
+          const a = from?.items.find((x) => x.kind === "proposed-action" && x.id === action);
+          if (!from || a?.kind !== "proposed-action" || a.run || actionWaits(threads, from, a.id))
+            continue;
+          // A refusal (the session limit, a gone section) stops the rest; its reason shows.
+          if (!(await runAction(from, a))) return;
+        }
+      })();
     };
     window.addEventListener("anur:run-action", onRun);
+    window.addEventListener("anur:run-actions", onRunAll);
     return () => {
       window.removeEventListener("anur:run-action", onRun);
+      window.removeEventListener("anur:run-actions", onRunAll);
     };
   }, [threads, runAction]);
 
@@ -2255,19 +2283,28 @@ export function Think({
                   <div className="think-offer-text">
                     <Markdown text={item.what} />
                   </div>
-                  {writable && !item.run ? (
-                    <div className="think-offer-actions">
-                      <button
-                        type="button"
-                        className="think-button primary"
-                        onClick={() => {
-                          void runAction(thread, item);
-                        }}
-                      >
-                        ▶ Run
-                      </button>
-                    </div>
-                  ) : null}
+                  {writable && !item.run
+                    ? (() => {
+                        const waits = actionWaits(threads, thread, item.id);
+                        return (
+                          <div className="think-offer-actions">
+                            {waits ? (
+                              <span className="think-action-waits">{waits}</span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="think-button primary"
+                                onClick={() => {
+                                  void runAction(thread, item);
+                                }}
+                              >
+                                ▶ Run
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()
+                    : null}
                 </div>
               ) : (
                 <div key={i} className="think-error" role="alert">

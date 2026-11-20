@@ -30,6 +30,7 @@ import { useMapLayout } from "./map-layout-pref.ts";
 import { useMapStyle } from "./map-style-pref.ts";
 import "../editor/drawings/assets.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
+import { actionWaits } from "./action-waits.ts";
 
 /**
  * The map (task 7; Mock 3): the doc's sections as boxes, the title in the
@@ -78,6 +79,8 @@ type Box = {
     proposal?: { thread: string; action: string };
     /** For a planned one: what it will do, shown on hover. */
     what?: string;
+    /** For a planned one that can't run yet: why (30.26). */
+    waits?: string | null;
   };
   /** For a section: its lane of work, and the lane's height under the box. */
   lane?: LanePill[];
@@ -168,12 +171,22 @@ type LaneItem = {
   proposal?: { thread: string; action: string };
   /** The service the agent said will do it, for its mark before it runs. */
   service?: string | null;
+  /** Planned but not runnable yet: what it waits on (30.26). */
+  waits?: string | null;
 };
 
 /** What the lane draws: one pill per item, or a folded group of planned or done ones. */
 type LanePill =
   | { kind: "item"; item: LaneItem; indent: boolean }
-  | { kind: "group"; state: "planned" | "done"; count: number; key: string; open: boolean };
+  | {
+      kind: "group";
+      state: "planned" | "done";
+      count: number;
+      key: string;
+      open: boolean;
+      /** Planned ones that can run now, for Run all (30.28). */
+      ready: LaneItem[];
+    };
 
 /**
  * The lane's pills: what's under way, waiting or failed, each on its own;
@@ -191,7 +204,8 @@ function lanePills(lane: readonly LaneItem[], section: string, open: ReadonlySet
     else if (these.length > 1) {
       const key = `${section}:${state}`;
       const isOpen = open.has(key);
-      out.push({ kind: "group", state, count: these.length, key, open: isOpen });
+      const ready = state === "planned" ? these.filter((it) => !it.waits) : [];
+      out.push({ kind: "group", state, count: these.length, key, open: isOpen, ready });
       if (isOpen) for (const it of these) out.push({ kind: "item", item: it, indent: true });
     }
   }
@@ -579,6 +593,7 @@ export function MapView({
             ask: null,
             proposal: { thread: t.id, action: it.id },
             service: it.service ?? null,
+            waits: actionWaits(threads, t, it.id),
           });
         }
       for (const t of [...here].sort((a, b) => depth(a) - depth(b))) {
@@ -651,7 +666,9 @@ export function MapView({
           const laneW = Math.max(
             ...pills.map((pl) =>
               pl.kind === "group"
-                ? 110
+                ? pl.ready.length > 0 && writable
+                  ? 190
+                  : 110
                 : Math.min(280, Math.round(pl.item.title.length * 7 + 70)) + (pl.indent ? 16 : 0),
             ),
           );
@@ -2268,36 +2285,66 @@ export function MapView({
             >
               {b.lane.map((pl) =>
                 pl.kind === "group" ? (
-                  <button
-                    key={pl.key}
-                    type="button"
-                    className={`map-pill ${pl.state}`}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                    }}
-                    onClick={() => {
-                      clickedAt.current = Date.now();
-                      setLaneOpen((o) => {
-                        const next = new Set(o);
-                        if (next.has(pl.key)) next.delete(pl.key);
-                        else next.add(pl.key);
-                        return next;
-                      });
-                    }}
-                  >
-                    <span className="map-pill-icon">{PILL_ICON[pl.state]}</span>
-                    {String(pl.count)} {pl.state}
-                    <span className={`map-chevron${pl.open ? " open" : ""}`}>
-                      <ChevronDownIcon />
-                    </span>
-                  </button>
+                  <div key={pl.key} className={`map-pill map-pill-group ${pl.state}`}>
+                    <button
+                      type="button"
+                      className="map-pill-fold"
+                      aria-expanded={pl.open}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                      }}
+                      onClick={() => {
+                        clickedAt.current = Date.now();
+                        setLaneOpen((o) => {
+                          const next = new Set(o);
+                          if (next.has(pl.key)) next.delete(pl.key);
+                          else next.add(pl.key);
+                          return next;
+                        });
+                      }}
+                    >
+                      <span className="map-pill-icon">{PILL_ICON[pl.state]}</span>
+                      {String(pl.count)} {pl.state}
+                      <span className={`map-chevron${pl.open ? " open" : ""}`}>
+                        <ChevronDownIcon />
+                      </span>
+                    </button>
+                    {writable && pl.ready.length > 0 ? (
+                      <button
+                        type="button"
+                        className="map-action-go primary"
+                        title={
+                          pl.ready.length === pl.count
+                            ? `Run all ${String(pl.count)}`
+                            : `Run the ${String(pl.ready.length)} ready; the rest wait`
+                        }
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          clickedAt.current = Date.now();
+                          window.dispatchEvent(
+                            new CustomEvent("anur:run-actions", {
+                              detail: pl.ready.flatMap((it) => (it.proposal ? [it.proposal] : [])),
+                            }),
+                          );
+                          // What's left waits: open the group so each shows why.
+                          if (pl.ready.length < pl.count)
+                            setLaneOpen((o) => new Set([...o, pl.key]));
+                        }}
+                      >
+                        ▶ Run all
+                      </button>
+                    ) : null}
+                  </div>
                 ) : (
                   <div
                     key={pl.item.key}
                     role="button"
                     tabIndex={-1}
-                    className={`map-pill ${pl.item.state}${pl.indent ? " indent" : ""}`}
-                    title={pl.item.detail}
+                    className={`map-pill ${pl.item.state}${pl.indent ? " indent" : ""}${pl.item.waits ? " waits" : ""}`}
+                    title={pl.item.waits ?? pl.item.detail}
                     onPointerDown={(e) => {
                       e.stopPropagation();
                     }}
@@ -2351,6 +2398,7 @@ export function MapView({
                           detail: pl.item.detail,
                           ask: pl.item.ask,
                           ...(pl.item.proposal ? { proposal: pl.item.proposal } : {}),
+                          waits: pl.item.waits ?? null,
                         }}
                         thread={pl.item.thread}
                         docPath={docPath}
@@ -2695,6 +2743,12 @@ function ActionControl({
   );
   switch (act.state) {
     case "planned":
+      if (act.waits)
+        return (
+          <span className="map-action-waits" title={act.waits}>
+            Waits
+          </span>
+        );
       return button(
         "▶ Run",
         () => {
