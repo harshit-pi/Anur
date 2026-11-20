@@ -427,6 +427,7 @@ export function Center({
   docError,
   spaceNotice = null,
   spaceOpening = null,
+  openOnMap = false,
   onOpenFolder,
   onNewFolder,
   onFirstDoc,
@@ -458,6 +459,8 @@ export function Center({
   spaceNotice?: string | null;
   /** The space this window is opening, before it's in: shown in place of the start page. */
   spaceOpening?: string | null;
+  /** Docs open on the map by default: a space opening shows on the map's canvas. */
+  openOnMap?: boolean;
   onOpenFolder: () => void;
   onNewFolder: () => void;
   /** Start the first doc in an empty folder. */
@@ -632,6 +635,14 @@ export function Center({
           <p>
             {`${String(folder.docs.length)} Markdown files in ${folder.name}. Pick one on the left.`}
           </p>
+        </div>
+      ) : spaceOpening && openOnMap ? (
+        // Map first, the space opens on the map's canvas, so no page shows before it.
+        <div className="map blank-map">
+          <div className="space-opening" role="status">
+            <h1>{`Opening ${spaceOpening}…`}</h1>
+            <div className="space-opening-bar" aria-hidden="true" />
+          </div>
         </div>
       ) : spaceOpening ? (
         <div className="page-empty space-opening" role="status">

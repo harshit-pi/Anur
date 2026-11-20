@@ -6725,3 +6725,9 @@ button.file-card-name:hover {
 .blank-page-title::placeholder {
   color: var(--slate);
 }
+
+.blank-map .space-opening h1 {
+  margin: 0;
+  font-family: var(--font-doc);
+  font-size: 22px;
+}

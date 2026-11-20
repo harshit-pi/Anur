@@ -291,6 +291,10 @@ export function App() {
       return next;
     });
   }, [folderPath, selected]);
+  // Each space opens in the view picked in Settings, not the one the last space was left in.
+  useEffect(() => {
+    if (folderPath) setCenterView(loadDocView(window.localStorage));
+  }, [folderPath]);
   const folderDocs = folder?.docs;
   useEffect(() => {
     const loaded =
@@ -1447,6 +1451,7 @@ export function App() {
         docError={docError ?? save.detail}
         spaceNotice={spaceNotice}
         spaceOpening={spaceOpening}
+        openOnMap={docView === "map"}
         onOpenFolder={openFolder}
         onNewFolder={newFolder}
         onFirstDoc={firstDoc}
