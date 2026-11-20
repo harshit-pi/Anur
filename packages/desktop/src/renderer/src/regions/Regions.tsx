@@ -41,6 +41,7 @@ export function Ribbon({
   filesPeek = false,
   onFiles,
   onFilesHover,
+  onRailHover,
   searchOpen,
   onSearch,
   onSettings,
@@ -54,13 +55,20 @@ export function Ribbon({
   filesPeek?: boolean;
   onFiles: () => void;
   onFilesHover?: (over: boolean) => void;
+  /** Anywhere on the rail: keeps the floating files open while the pointer is there. */
+  onRailHover?: (over: boolean) => void;
   searchOpen: boolean;
   onSearch: () => void;
   onSettings: () => void;
   onPlugins: () => void;
 }) {
   return (
-    <nav className="ribbon" aria-label="Ribbon">
+    <nav
+      className="ribbon"
+      aria-label="Ribbon"
+      onMouseEnter={() => onRailHover?.(true)}
+      onMouseLeave={() => onRailHover?.(false)}
+    >
       {files ? (
         <button
           className={`ribbon-button${filesOpen ? " pressed" : filesPeek ? " peeking" : ""}`}
