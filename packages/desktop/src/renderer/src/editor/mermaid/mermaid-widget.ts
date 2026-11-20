@@ -27,6 +27,27 @@ const isDark = () => {
   return forced ? forced === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
 };
 
+/** Each drawn diagram's way to stop following the theme, for when it leaves the page. */
+const unfollow = new WeakMap<HTMLElement, () => void>();
+
+/** Calls `redraw` when the theme flips: Anur's own setting, or the system's. */
+function onThemeChange(redraw: () => void): () => void {
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  let was = isDark();
+  const check = () => {
+    if (isDark() === was) return;
+    was = isDark();
+    redraw();
+  };
+  media.addEventListener("change", check);
+  const watch = new MutationObserver(check);
+  watch.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  return () => {
+    media.removeEventListener("change", check);
+    watch.disconnect();
+  };
+}
+
 export class MermaidWidget extends WidgetType {
   constructor(
     readonly source: string,
@@ -57,22 +78,33 @@ export class MermaidWidget extends WidgetType {
       view.focus();
       view.dispatch({ selection: { anchor: this.at }, scrollIntoView: true });
     });
-    const id = `anur-mermaid-${String(++ids)}`;
-    void mermaid(isDark())
-      .then((m) => m.render(id, this.source))
-      .then(({ svg }) => {
-        wrap.innerHTML = svg;
-        view.requestMeasure();
-      })
-      .catch((e: unknown) => {
-        // The diagram doesn't parse yet: say so, and keep the source a click away.
-        document.getElementById(`d${id}`)?.remove();
-        wrap.classList.add("cm-lp-mermaid-error");
-        const first = (e instanceof Error ? e.message : String(e)).split("\n")[0] ?? "";
-        wrap.textContent = `This diagram doesn't draw yet: ${first}`;
-        view.requestMeasure();
-      });
+    const draw = () => {
+      const id = `anur-mermaid-${String(++ids)}`;
+      void mermaid(isDark())
+        .then((m) => m.render(id, this.source))
+        .then(({ svg }) => {
+          wrap.classList.remove("cm-lp-mermaid-error");
+          wrap.innerHTML = svg;
+          view.requestMeasure();
+        })
+        .catch((e: unknown) => {
+          // The diagram doesn't parse yet: say so, and keep the source a click away.
+          document.getElementById(`d${id}`)?.remove();
+          wrap.classList.add("cm-lp-mermaid-error");
+          const first = (e instanceof Error ? e.message : String(e)).split("\n")[0] ?? "";
+          wrap.textContent = `This diagram doesn't draw yet: ${first}`;
+          view.requestMeasure();
+        });
+    };
+    draw();
+    // A theme switched while the diagram shows draws it again in the new colours.
+    unfollow.set(wrap, onThemeChange(draw));
     return wrap;
+  }
+
+  override destroy(dom: HTMLElement) {
+    unfollow.get(dom)?.();
+    unfollow.delete(dom);
   }
 
   // The widget's own click puts the cursor in the source; CodeMirror mustn't
