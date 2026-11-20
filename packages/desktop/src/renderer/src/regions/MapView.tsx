@@ -1708,6 +1708,23 @@ export function MapView({
   };
 
   const v = view ?? { x: 0, y: 0, z: 1 };
+  /** A soft S from a box's side to a point, as the map's lines run; `inset` stops short of it. */
+  const curveTo = (p: Box, to: Pos, inset: number) => {
+    // Mostly below or above: from the box's bottom or top, as a child's line runs.
+    if (Math.abs(to.y - p.y) > Math.abs(to.x - p.x)) {
+      const dir = to.y >= p.y ? 1 : -1;
+      const y1 = p.y + (dir * p.h) / 2;
+      // The name field is about 36px tall on screen: stop at its near edge.
+      const y2 = to.y - dir * (inset ? 16 / (view?.z ?? 1) : 0);
+      const mid = (y1 + y2) / 2;
+      return `M ${String(p.x)} ${String(y1)} C ${String(p.x)} ${String(mid)}, ${String(to.x)} ${String(mid)}, ${String(to.x)} ${String(y2)}`;
+    }
+    const side = to.x >= p.x ? 1 : -1;
+    const x1 = p.x + (side * p.w) / 2;
+    const x2 = to.x - side * inset;
+    const mid = (x1 + x2) / 2;
+    return `M ${String(x1)} ${String(p.y)} C ${String(mid)} ${String(p.y)}, ${String(mid)} ${String(to.y)}, ${String(x2)} ${String(to.y)}`;
+  };
   /** The thread named by the line under the pointer, and where, in the map's own pixels. */
   const [lineTip, setLineTip] = useState<{ text: string; x: number; y: number } | null>(null);
   const tipAt = (e: React.PointerEvent, text: string) => {
@@ -1829,16 +1846,23 @@ export function MapView({
       >
         <svg className="map-edges">
           {edges}
+          {/* A new section on its way: the same soft line as the rest, dashed until it's named. */}
           {linking
             ? (() => {
                 const a = byId.get(linking.from);
                 return a ? (
-                  <line
-                    className="map-drag-line"
-                    x1={a.x}
-                    y1={a.y + a.h / 2}
-                    x2={linking.to.x}
-                    y2={linking.to.y}
+                  <path className="map-edge thread" d={curveTo(a, linking.to, 0)} />
+                ) : null;
+              })()
+            : null}
+          {adding?.parent !== undefined
+            ? (() => {
+                const a = boxes.find((x) => x.kind === "section" && x.index === adding.parent);
+                // To the near edge of the name field, which is 200px wide on screen.
+                return a ? (
+                  <path
+                    className="map-edge thread"
+                    d={curveTo(a, adding.at, 100 / (view?.z ?? 1))}
                   />
                 ) : null;
               })()

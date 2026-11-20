@@ -2927,13 +2927,6 @@ body.resizing * {
   background: var(--blue);
 }
 
-/* Dragging a box's handle: a dashed line to where its new box will go. */
-.map-drag-line {
-  stroke: var(--blue);
-  stroke-width: 1.5;
-  stroke-dasharray: 5 4;
-}
-
 /* What happened on a box (mock 9), beside its counts. */
 .map-status {
   flex: none;
