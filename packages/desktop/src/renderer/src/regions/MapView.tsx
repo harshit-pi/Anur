@@ -63,6 +63,8 @@ type Box = {
   notPicked?: boolean;
   /** One of a set of parts that all belong: Add, not Use, and nothing to explore. */
   several?: boolean;
+  /** A part the person skipped, shown when its fold is open. */
+  skipped?: boolean;
   /**
    * An action (Mock 10): a Build or Check thread, or one a thread proposed
    * and hasn't run. Its state, a few words, and the thread behind it.
@@ -689,7 +691,7 @@ export function MapView({
         const optionBox = (
           o: Offer["options"][number],
           parentId: string,
-          extra: { notPicked?: boolean; several?: boolean } = {},
+          extra: { notPicked?: boolean; several?: boolean; skipped?: boolean } = {},
         ) => {
           const oid = `o:${o.id}`;
           // Working on it now: in this thread, or in the thread exploring it (30.32).
@@ -709,6 +711,7 @@ export function MapView({
             explored: exploredIds.has(o.id),
             ...(extra.notPicked ? { notPicked: true } : {}),
             ...(extra.several ? { several: true } : {}),
+            ...(extra.skipped ? { skipped: true } : {}),
             heading: o.title,
             parent: parentId,
           });
@@ -752,8 +755,31 @@ export function MapView({
             tid = did;
           }
           if (f.several) {
+            const skipped = f.options.filter(
+              (o) => f.skipped.includes(o.id) && !f.added.includes(o.id),
+            );
             for (const o of f.options)
-              if (!f.added.includes(o.id)) optionBox(o, tid, { several: true });
+              if (!f.added.includes(o.id) && !skipped.includes(o))
+                optionBox(o, tid, { several: true });
+            // Parts the person skipped: folded under one chip, still there to add.
+            if (skipped.length > 0) {
+              const fid = `k:${f.options[0]?.id ?? t.id}`;
+              const label = `${String(skipped.length)} skipped`;
+              const open = unfolded.has(fid);
+              nodes.push({ id: fid, parent: tid, ...boxSize(label, "") });
+              info.set(fid, {
+                id: fid,
+                kind: "option",
+                index: s.index,
+                thread: t,
+                fold: { open, count: skipped.length },
+                sub: open ? "Hide" : "Show",
+                heading: label,
+                parent: tid,
+              });
+              if (open)
+                for (const o of skipped) optionBox(o, fid, { several: true, skipped: true });
+            }
             continue;
           }
           // Picked here, or in a thread exploring one of these options.
@@ -1345,7 +1371,7 @@ export function MapView({
   }, []);
 
   /** Use or Explore on a choice's box: Think does what its card's buttons do (30.32). */
-  const mapChoice = (b: Box, act: "use" | "explore") => {
+  const mapChoice = (b: Box, act: "use" | "explore" | "skip") => {
     clickedAt.current = Date.now();
     if (!b.thread || !b.option) return;
     window.dispatchEvent(
@@ -1876,6 +1902,16 @@ export function MapView({
                               label: "Explore",
                               run: () => {
                                 mapChoice(b, "explore");
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(acts.skip
+                        ? [
+                            {
+                              label: "Skip",
+                              run: () => {
+                                mapChoice(b, "skip");
                               },
                             },
                           ]

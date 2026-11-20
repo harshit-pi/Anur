@@ -2507,6 +2507,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
       return { kind: "failed", reason: e instanceof Error ? e.message : String(e) };
     }
   },
+  "thread:skip-option": async ({ thread, path: rel, text, option, skip }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    const t = folder ? threadsFor(folder) : null;
+    if (!folder || !t || !threadable(folder, rel)) return { ok: false };
+    return { ok: await t.skipOption(rel, text, thread, option, skip) };
+  },
   "thread:explore-option": async ({ thread, path: rel, text, option }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;

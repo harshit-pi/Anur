@@ -6891,3 +6891,9 @@ button.file-card-name:hover {
   padding: 16px 16px 8px;
   background: var(--sheet);
 }
+
+/* A part the person skipped: one quiet line in its set, with Undo. */
+.think-offer-skipped {
+  margin: 6px 0;
+  font-size: 13px;
+}

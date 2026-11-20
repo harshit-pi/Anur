@@ -1481,6 +1481,18 @@ export function Think({
     });
   };
 
+  /** Skip a proposed part, or undo that: the thread remembers, the doc is untouched. */
+  const skipOption = (t: ThreadView, option: string, skip: boolean) => {
+    if (!docPath) return;
+    void anur.call("thread:skip-option", {
+      thread: t.id,
+      path: docPath,
+      text: docText(),
+      option,
+      skip,
+    });
+  };
+
   /** Explore this: its own thread, clean of the other options (30.18). */
   const exploreOption = (t: ThreadView, option: string) => {
     if (!docPath) return;
@@ -1502,7 +1514,7 @@ export function Think({
    * card's buttons here, so the doc and the thread can't tell them apart.
    */
   const onMapChoice = useRef<
-    (d: { thread: string; option: string; act: "use" | "explore" }) => void
+    (d: { thread: string; option: string; act: "use" | "explore" | "skip" }) => void
   >(() => undefined);
   onMapChoice.current = ({ thread: id, option, act }) => {
     const t = threads.find((x) => x.id === id);
@@ -1514,12 +1526,14 @@ export function Think({
     if (!t || !item || !o) return;
     const press = choicePress(item, o.id, act);
     if (press?.kind === "explore") exploreOption(t, o.id);
+    else if (press?.kind === "skip") skipOption(t, o.id, true);
     else if (press) useOption(t, o, press.how, press.heading);
   };
   useEffect(() => {
     const on = (e: Event) => {
       onMapChoice.current(
-        (e as CustomEvent<{ thread: string; option: string; act: "use" | "explore" }>).detail,
+        (e as CustomEvent<{ thread: string; option: string; act: "use" | "explore" | "skip" }>)
+          .detail,
       );
     };
     window.addEventListener("anur:map-choice", on);
@@ -1888,7 +1902,8 @@ export function Think({
                             className="think-more"
                             onClick={() => {
                               for (const o of item.options)
-                                if (!item.added.includes(o.id)) useOption(thread, o, "subsection");
+                                if (!item.added.includes(o.id) && !item.skipped.includes(o.id))
+                                  useOption(thread, o, "subsection");
                             }}
                           >
                             Add all
@@ -1909,102 +1924,132 @@ export function Think({
                         .find((o) => o.id === item.within)?.title ?? "an earlier option"}
                     </p>
                   ) : null}
-                  {item.options.map((o) => (
-                    <div
-                      key={o.id}
-                      data-option={o.id}
-                      className={`think-offer${item.used === o.id || item.added.includes(o.id) ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
-                    >
-                      <div className="think-offer-head">
-                        <strong>{o.title}</strong>
-                        {item.used === o.id || item.added.includes(o.id) ? (
-                          <span className="quiet">In the doc</span>
-                        ) : item.explored.includes(o.id) ? (
-                          <span className="quiet">Explored</span>
-                        ) : null}
-                      </div>
-                      <OfferText
-                        open={openOffers.has(o.id)}
-                        onToggle={() => {
-                          setOpenOffers((cur) => {
-                            const next = new Set(cur);
-                            if (!next.delete(o.id)) next.add(o.id);
-                            return next;
-                          });
-                        }}
-                      >
-                        <Markdown text={o.text} />
-                      </OfferText>
-                      {writable && item.several && !item.added.includes(o.id) ? (
-                        <div className="think-offer-actions">
-                          <button
-                            type="button"
-                            className="think-button primary"
-                            onClick={() => {
-                              useOption(thread, o, "subsection");
-                            }}
-                          >
-                            Add
-                          </button>
-                        </div>
-                      ) : writable &&
-                        !item.several &&
-                        item.used !== o.id &&
-                        !item.added.includes(o.id) ? (
-                        <div className="think-offer-actions">
-                          <button
-                            type="button"
-                            className="think-button primary"
-                            onClick={() => {
-                              useOption(thread, o, "replace", item.heading);
-                            }}
-                          >
-                            {item.used ? "Use instead" : "Use"}
-                          </button>
-                          {item.used ? (
+                  {item.options.map((o) =>
+                    // A part skipped: one quiet line, with Undo.
+                    item.several && item.skipped.includes(o.id) && !item.added.includes(o.id) ? (
+                      <p key={o.id} data-option={o.id} className="think-offer-skipped quiet">
+                        Skipped “{o.title}”
+                        {writable ? (
+                          <>
+                            {" · "}
                             <button
                               type="button"
                               className="think-more"
-                              title="Keep the option already picked and add this one beside it"
                               onClick={() => {
-                                useOption(
-                                  thread,
-                                  o,
-                                  "also",
-                                  item.heading,
-                                  item.options.find((x) => x.id === item.used) ?? null,
-                                );
+                                skipOption(thread, o.id, false);
                               }}
                             >
-                              Also add
+                              Undo
                             </button>
+                          </>
+                        ) : null}
+                      </p>
+                    ) : (
+                      <div
+                        key={o.id}
+                        data-option={o.id}
+                        className={`think-offer${item.used === o.id || item.added.includes(o.id) ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
+                      >
+                        <div className="think-offer-head">
+                          <strong>{o.title}</strong>
+                          {item.used === o.id || item.added.includes(o.id) ? (
+                            <span className="quiet">In the doc</span>
+                          ) : item.explored.includes(o.id) ? (
+                            <span className="quiet">Explored</span>
                           ) : null}
-                          {item.heading || item.used ? null : (
+                        </div>
+                        <OfferText
+                          open={openOffers.has(o.id)}
+                          onToggle={() => {
+                            setOpenOffers((cur) => {
+                              const next = new Set(cur);
+                              if (!next.delete(o.id)) next.add(o.id);
+                              return next;
+                            });
+                          }}
+                        >
+                          <Markdown text={o.text} />
+                        </OfferText>
+                        {writable && item.several && !item.added.includes(o.id) ? (
+                          <div className="think-offer-actions">
                             <button
                               type="button"
-                              className="think-more"
+                              className="think-button primary"
                               onClick={() => {
                                 useOption(thread, o, "subsection");
                               }}
                             >
-                              Add as subsection
+                              Add
                             </button>
-                          )}
-                          {item.explored.includes(o.id) ? null : (
                             <button
                               type="button"
-                              className="think-more"
+                              className="think-button"
                               onClick={() => {
-                                exploreOption(thread, o.id);
+                                skipOption(thread, o.id, true);
                               }}
                             >
-                              Explore this
+                              Skip
                             </button>
-                          )}
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
+                          </div>
+                        ) : writable &&
+                          !item.several &&
+                          item.used !== o.id &&
+                          !item.added.includes(o.id) ? (
+                          <div className="think-offer-actions">
+                            <button
+                              type="button"
+                              className="think-button primary"
+                              onClick={() => {
+                                useOption(thread, o, "replace", item.heading);
+                              }}
+                            >
+                              {item.used ? "Use instead" : "Use"}
+                            </button>
+                            {item.used ? (
+                              <button
+                                type="button"
+                                className="think-more"
+                                title="Keep the option already picked and add this one beside it"
+                                onClick={() => {
+                                  useOption(
+                                    thread,
+                                    o,
+                                    "also",
+                                    item.heading,
+                                    item.options.find((x) => x.id === item.used) ?? null,
+                                  );
+                                }}
+                              >
+                                Also add
+                              </button>
+                            ) : null}
+                            {item.heading || item.used ? null : (
+                              <button
+                                type="button"
+                                className="think-more"
+                                onClick={() => {
+                                  useOption(thread, o, "subsection");
+                                }}
+                              >
+                                Add as subsection
+                              </button>
+                            )}
+                            {item.explored.includes(o.id) ? null : (
+                              <button
+                                type="button"
+                                className="think-more"
+                                onClick={() => {
+                                  exploreOption(thread, o.id);
+                                }}
+                              >
+                                Explore this
+                              </button>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    ),
+                  )}
                 </div>
               ) : item.kind === "auto-used" ? (
                 <div key={i} className="think-changed auto" role="status">

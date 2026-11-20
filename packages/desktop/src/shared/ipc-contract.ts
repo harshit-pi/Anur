@@ -192,6 +192,8 @@ export const ThreadItem = z.discriminatedUnion("kind", [
     several: z.boolean(),
     /** Every option put into the doc from this set. */
     added: z.array(z.string()),
+    /** Parts the person skipped: folded away, each with Undo. */
+    skipped: z.array(z.string()),
   }),
   /** An action the agent proposed and didn't run (Mock 10): ▶ Run starts it. */
   z.object({
@@ -1444,6 +1446,19 @@ export const ipcContract = {
         text: z.string(),
         option: z.string().max(100),
         how: z.enum(["replace", "subsection", "also"]),
+      })
+      .strict(),
+    response: z.object({ ok: z.boolean() }),
+  },
+  /** Skip a proposed part, or undo that: it folds away, and nothing in the doc changes. */
+  "thread:skip-option": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        path: z.string().max(4096),
+        text: z.string(),
+        option: z.string().max(100),
+        skip: z.boolean(),
       })
       .strict(),
     response: z.object({ ok: z.boolean() }),
