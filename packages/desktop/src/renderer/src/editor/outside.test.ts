@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { diffSpan, mergeOutside, putBack } from "./outside.ts";
+import { changeWithin, diffSpan, mergeOutside, putBack } from "./outside.ts";
 
 const BASE = "# Plan\n\nIntro line.\n\n## Retry\n\nThree tries.\n";
 
@@ -69,5 +69,19 @@ describe("putting kept typing back", () => {
     expect(
       putBack("Something else.", { mine: "a", theirs: "b", before: "", after: "" }),
     ).toBeNull();
+  });
+});
+
+describe("changeWithin", () => {
+  it("replaces only the middle, offset into the page", () => {
+    const section = "# A\n1\nBuilt\n2\n3\n";
+    const moved = "# A\n1\n2\n3\nBuilt\n";
+    const c = changeWithin(100, section, moved);
+    expect(c).toEqual({ from: 105, to: 112, insert: "2\n3\nBuilt\n" });
+    if (!c) throw new Error("no change");
+    expect(section.slice(0, c.from - 100) + c.insert + section.slice(c.to - 100)).toBe(moved);
+  });
+  it("is null when nothing differs", () => {
+    expect(changeWithin(5, "same", "same")).toBeNull();
   });
 });
