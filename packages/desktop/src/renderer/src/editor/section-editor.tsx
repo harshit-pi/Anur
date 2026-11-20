@@ -1,5 +1,6 @@
 import { defaultKeymap, redo, undo } from "@codemirror/commands";
 import { markdownKeymap } from "@codemirror/lang-markdown";
+import { insertNewlineContinueNumbering } from "./list-numbering.ts";
 import { Annotation, EditorState, type Transaction } from "@codemirror/state";
 import { EditorView, keymap, placeholder, type ViewUpdate } from "@codemirror/view";
 import type { SectionNode } from "@anur/core";
@@ -99,6 +100,7 @@ export function SectionEditor({
             { key: "Mod-z", run: () => undo(main) },
             { key: "Mod-Shift-z", run: () => redo(main) },
             { key: "Mod-y", run: () => redo(main) },
+            { key: "Enter", run: insertNewlineContinueNumbering },
             ...formattingKeymap,
             ...markdownKeymap,
             ...defaultKeymap,

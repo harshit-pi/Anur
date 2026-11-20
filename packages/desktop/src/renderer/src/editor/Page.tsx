@@ -1,5 +1,6 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdownKeymap } from "@codemirror/lang-markdown";
+import { insertNewlineContinueNumbering } from "./list-numbering.ts";
 import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import {
@@ -494,6 +495,9 @@ export function Page({
           history(),
           keymap.of([
             ...(markdownDoc && editable ? [{ key: "Mod-k", run: editLink }] : []),
+            ...(markdownDoc && editable
+              ? [{ key: "Enter", run: insertNewlineContinueNumbering }]
+              : []),
             ...(markdownDoc ? [...formattingKeymap, ...markdownKeymap] : []),
             ...historyKeymap,
             ...defaultKeymap,
