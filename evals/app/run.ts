@@ -8,10 +8,11 @@
  * Each run spends the person's tokens (a few minutes of agent work per
  * scenario), so it runs on demand, never in CI. Results go to
  * evals/app/results/<time>.json, with screenshots and the folder as left
- * in evals/app/results/<time>/. None of it is committed: a PR says what its run showed.
+ * in evals/app/results/<time>/; the last 10 runs are kept. None of it is
+ * committed: a PR says what its run showed. Temp folders go when it ends.
  */
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { APP_DIR, Session } from "./app.ts";
 import { PLAN, SCENARIOS } from "./scenarios.ts";
@@ -68,6 +69,13 @@ for (const sc of chosen) {
   });
 }
 await writeFile(path.join(dir, `${stamp}.json`), `${JSON.stringify(report, null, 2)}\n`);
+// Only the last few runs stay: each keeps screenshots and a copy of its folder.
+const KEEP_RUNS = 10;
+const runs = (await readdir(dir)).filter((f) => f.endsWith(".json")).sort();
+for (const old of runs.slice(0, -KEEP_RUNS)) {
+  await rm(path.join(dir, old), { force: true });
+  await rm(path.join(dir, old.replace(/\.json$/, "")), { recursive: true, force: true });
+}
 const all = report.scenarios.flatMap((x) => x.results);
 const broke = all.filter((r) => !r.holds && !r.known);
 const known = all.filter((r) => !r.holds && r.known);

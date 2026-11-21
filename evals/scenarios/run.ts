@@ -23,9 +23,8 @@
  * - nothing sent: the agent never tried to send, post or publish.
  */
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import {
@@ -40,6 +39,7 @@ import {
 } from "../../packages/desktop/src/main/threads/anur-socket.ts";
 import { readSection } from "../../packages/desktop/src/main/threads/read-section.ts";
 import { SCENARIOS, type Scenario } from "./scenarios.ts";
+import { tempDir } from "../temp.ts";
 
 type Acp =
   typeof import("../../packages/desktop/node_modules/@agentclientprotocol/sdk/dist/v1/stable/acp.js");
@@ -132,7 +132,7 @@ async function connect(socket: AnurSocket) {
     protocolVersion: acp.PROTOCOL_VERSION,
     clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
   });
-  const cwd = await mkdtemp(path.join(tmpdir(), "anur-scenario-"));
+  const cwd = await tempDir("anur-scenario-");
   return {
     /** A session with Anur's tools, answering from `doc`; the calls it makes land in `calls`. */
     async session(doc: string, file: string, calls: Call[]) {
@@ -329,7 +329,7 @@ const runs = Math.max(1, Number(process.argv[2] ?? 1));
 const only = process.argv[3]?.split(",");
 const scenarios = SCENARIOS.filter((s) => !only || only.includes(s.name));
 
-const socket = new AnurSocket(await mkdtemp(path.join(tmpdir(), "anur-scn-s-")));
+const socket = new AnurSocket(await tempDir("anur-scn-s-"));
 await socket.start();
 const agent = await connect(socket);
 const results: Checked[] = [];

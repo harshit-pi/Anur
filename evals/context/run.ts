@@ -21,9 +21,8 @@
  * All run in an empty folder, so no agent reads the doc from disk.
  */
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { buildBundle, buildSectionTree, type BundleRule } from "../../packages/core/src/index.ts";
@@ -39,6 +38,7 @@ import {
   FILE,
   leaks,
 } from "./scenario.ts";
+import { tempDir } from "../temp.ts";
 
 type Acp =
   typeof import("../../packages/desktop/node_modules/@agentclientprotocol/sdk/dist/v1/stable/acp.js");
@@ -96,7 +96,7 @@ async function connect() {
     protocolVersion: acp.PROTOCOL_VERSION,
     clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
   });
-  const cwd = await mkdtemp(path.join(tmpdir(), "anur-eval-"));
+  const cwd = await tempDir("anur-eval-");
   return {
     async session(mcp: Mcp = null) {
       const s = await conn.agent.request(acp.methods.agent.session.new, {
@@ -186,7 +186,7 @@ const modes = (process.argv[3]?.split(",") ?? [...MODES]).filter((m): m is Mode 
 );
 
 // Anur's tool socket, answering from the scenario's doc as the thread's own doc.
-const socket = new AnurSocket(await mkdtemp(path.join(tmpdir(), "anur-eval-s-")));
+const socket = new AnurSocket(await tempDir("anur-eval-s-"));
 await socket.start();
 const token = socket.issue((_tool, args) => {
   const a = (args ?? {}) as { section?: unknown };
