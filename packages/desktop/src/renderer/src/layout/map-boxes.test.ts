@@ -114,6 +114,27 @@ describe("the doc map's boxes", () => {
     expect(bs.find((b) => b.fold)?.heading).toBe("1 skipped");
   });
 
+  it("lets parts asked again, as a rethink, replace the earlier parts", () => {
+    const rethink = thread("a", PRICING, [
+      options(["p", "q"], { several: true }),
+      options(["r", "s"], { several: true }),
+    ]);
+    expect(ids(boxes({ threads: [rethink] }).filter((b) => b.several))).toEqual(["o:r", "o:s"]);
+  });
+
+  it("keeps parts with different names side by side", () => {
+    const two = thread("a", PRICING, [
+      options(["p", "q"], { several: true, heading: "Channels" }),
+      options(["r", "s"], { several: true, heading: "Partners" }),
+    ]);
+    expect(ids(boxes({ threads: [two] }).filter((b) => b.several))).toEqual([
+      "o:p",
+      "o:q",
+      "o:r",
+      "o:s",
+    ]);
+  });
+
   it("counts a thread with nothing drawn off it on its section instead", () => {
     const bs = boxes({ threads: [thread("a", PRICING, [])] });
     expect(bs.some((b) => b.id === "t:a")).toBe(false);

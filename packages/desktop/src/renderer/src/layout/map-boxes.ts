@@ -411,8 +411,7 @@ export function mapBoxes({
       };
       const firsts = offers.filter((x) => familyOf(x) === x);
       // A choice asked again replaces the earlier ask: by its heading, or the section's own.
-      const keyOf = (x: Offer) =>
-        x.several ? `s:${x.options[0]?.id ?? ""}` : `h:${(x.heading ?? "").toLowerCase()}`;
+      const keyOf = (x: Offer) => `${x.several ? "s" : "h"}:${(x.heading ?? "").toLowerCase()}`;
       const latest = new Map(firsts.map((f) => [keyOf(f), f] as const));
       const exploredIds = new Set(offers.flatMap((x) => x.explored));
       const optionBox = (
@@ -485,6 +484,8 @@ export function mapBoxes({
           tid = did;
         }
         if (f.several) {
+          // Parts asked again, as a rethink, replace the earlier parts with the same name.
+          if (latest.get(keyOf(f)) !== f) continue;
           const skipped = f.options.filter(
             (o) => f.skipped.includes(o.id) && !f.added.includes(o.id),
           );
