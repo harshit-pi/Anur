@@ -311,6 +311,18 @@ export const SCENARIOS: readonly Scenario[] = [
     about:
       "Options on two neighbouring sections, and work in a lane: nothing on the map covers anything else",
     async run(s, check) {
+      await s.win.locator(".map-box.title").first().click();
+      await s.win.waitForTimeout(600);
+      const titleOff = await s.handlesOff(".map-box.title.selected");
+      check(
+        "handles-on-line",
+        titleOff.length === 4 && titleOff.every((d) => d < 0.75),
+        "A selected box's handles sit on the line a person sees, the title's blue ring included",
+        titleOff,
+      );
+      // Off the title, so its hover card doesn't cover Pricing.
+      await s.win.mouse.move(5, 5);
+      await s.win.waitForTimeout(800);
       await s.select("Pricing");
       await s.ask("What should the paid tier be? Give me three options to pick from.");
       const audience = await s.boxAt("Audience");

@@ -25,6 +25,7 @@ interface Page {
   evaluate<R>(fn: () => R | Promise<R>): Promise<R>;
   evaluate<R, A>(fn: (arg: A) => R | Promise<R>, arg: A): Promise<R>;
   keyboard: { press(key: string): Promise<void> };
+  mouse: { move(x: number, y: number): Promise<void> };
   on(event: "console", f: (m: { type(): string; text(): string }) => void): void;
   on(event: "pageerror", f: (e: Error) => void): void;
 }
@@ -233,6 +234,35 @@ export class Session {
       );
       return el ? { x: parseFloat(el.style.left), y: parseFloat(el.style.top) } : null;
     }, section);
+  }
+
+  /**
+   * How far each of a box's handles sits from the middle of the line a person
+   * sees (the blue ring outside a filled title box, else the border), in px.
+   */
+  handlesOff(box: string): Promise<number[]> {
+    return this.win.evaluate((sel) => {
+      const el = document.querySelector<HTMLElement>(sel);
+      if (!el) return [];
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      const ring = Number(/0px 0px 0px (\d+(?:\.\d+)?)px/.exec(cs.boxShadow)?.[1] ?? 0);
+      const inset =
+        el.classList.contains("title") && ring ? -ring / 2 : parseFloat(cs.borderTopWidth) / 2;
+      const want: Record<string, number> = {
+        left: r.left + inset,
+        right: r.right - inset,
+        top: r.top + inset,
+        bottom: r.bottom - inset,
+      };
+      return [...el.querySelectorAll<HTMLElement>(".map-handle")].map((h) => {
+        const c = h.getBoundingClientRect();
+        const side = ["left", "right", "top", "bottom"].find((k) => h.classList.contains(k)) ?? "";
+        const at =
+          side === "left" || side === "right" ? (c.left + c.right) / 2 : (c.top + c.bottom) / 2;
+        return Math.abs(at - (want[side] ?? at));
+      });
+    }, box);
   }
 
   /** Any notice on screen saying what the agent's edit did. */

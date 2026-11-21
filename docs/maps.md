@@ -65,6 +65,7 @@ Thread    italic text on a line, or 💬 N on a box
 
 ## History
 
+- 2026-11-20: a box's handles are 8px and sit on the line a person sees: on a selected title box, its blue ring outside the border, not the border its fill hides. Checked by the app eval's `handles-on-line`.
 - 2026-11-20: neighbours make room. Found by the app eval: a section kept in place had its choices drawn over the next section's choices.
 
 - 2026-11-20 (30.44): a simpler canvas. Found comparing Anur with Living Map on the same brainstorm: the keys strip, legend, rarely used tools (Tidy stayed, as people reach for it) and a link count on every box read as noise.
