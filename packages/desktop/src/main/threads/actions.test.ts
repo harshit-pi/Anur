@@ -14,6 +14,12 @@ describe("actionPrompt build", () => {
     expect(prompt).toContain('move the section\'s "built" line to the end, after the last point');
   });
 
+  it("doesn't call an edit a proposal: the thread's mode decides whether it lands", () => {
+    const prompt = actionPrompt("build", "Findings", "");
+    expect(prompt).not.toMatch(/is a proposal|becomes a proposal/);
+    expect(prompt).toContain("by the thread's mode");
+  });
+
   it("leaves Check read-only, with no earlier-doc rule", () => {
     expect(actionPrompt("check", "Findings", "")).not.toContain("earlier Build");
   });
