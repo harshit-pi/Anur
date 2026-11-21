@@ -16,6 +16,7 @@ Branded core types (IDs) arrive unbranded over IPC: parse them back with the cor
 - Every transaction that changes the doc must carry a `userEvent` from the allowed kinds in `src/renderer/src/editor/editor-filter.ts`: `input…`, `delete…`, `undo`, `redo`, `move…`, `outside`, `apply…`, `restore…`. Anything else is dropped, on purpose.
 - Pick a tag that says what happened: `input.resize`, `input.image`, `apply`, `apply.undo`, `input.restore`.
 - `input.paste` and `input.drop` go through the paste guard, which reshapes multi-line text. Text Anur writes itself, such as an image embed, takes its own `input.…` tag instead.
+- Replacing a section's text (apply, undo, restore) goes through `changeWithin` in `outside.ts`, which dispatches only the span that differs. Replacing the whole section rebuilds every line and the page flashes.
 - A change made outside Anur is tagged `outside` and kept off the undo stack (`Transaction.addToHistory.of(false)`), so ⌘Z never undoes someone else's change.
 
 ## Widgets on the page

@@ -30,7 +30,7 @@ import { knownDocs, livePreview } from "./live-preview/live-preview.ts";
 import { restoreFolds, sectionFolding } from "./fold/section-fold.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { editorFilter } from "./editor-filter.ts";
-import { diffSpan, mergeOutside, putBack } from "./outside.ts";
+import { changeWithin, diffSpan, mergeOutside, putBack } from "./outside.ts";
 import { settled, track } from "./pending-saves.ts";
 import { markdownSupport, sectionsOf } from "./sections.ts";
 import { pageHighlight, pageTheme } from "./theme.ts";
@@ -317,7 +317,7 @@ export function Page({
       }
       const before = editor.state.field(previewState).previews.find((p) => p.thread === thread);
       editor.dispatch({
-        changes: { from: s2.subtreeRange.from, to: s2.subtreeRange.to, insert: again.text },
+        changes: changeWithin(s2.subtreeRange.from, now, again.text) ?? [],
         userEvent: "apply",
       });
       const after = editor.state.doc;
@@ -336,7 +336,7 @@ export function Page({
             const back =
               editor.state.doc === after ? now : merge3(again.text, nowText, now, "ours").text;
             editor.dispatch({
-              changes: { from: s3.subtreeRange.from, to: s3.subtreeRange.to, insert: back },
+              changes: changeWithin(s3.subtreeRange.from, nowText, back) ?? [],
               userEvent: "apply.undo",
             });
           }
@@ -430,7 +430,7 @@ export function Page({
       const insert = version.replace(/\s*$/, "") + tail;
       if (insert === now) return;
       editor.dispatch({
-        changes: { from: s.subtreeRange.from, to: s.subtreeRange.to, insert },
+        changes: changeWithin(s.subtreeRange.from, now, insert) ?? [],
         userEvent: "restore.version",
         scrollIntoView: true,
       });
