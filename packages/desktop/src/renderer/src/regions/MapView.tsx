@@ -21,7 +21,8 @@ import "../editor/drawings/assets.ts";
 import { EditorView } from "@codemirror/view";
 import { SectionEditor } from "../editor/section-editor.tsx";
 import type { ClickedLink } from "../editor/link-click.ts";
-import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
+import { Markdown, bodyOf } from "./Markdown.tsx";
+import { ThreadName } from "./ThreadList.tsx";
 import { queued, usePlanQueue } from "./plan-queue.ts";
 
 /**
