@@ -1582,6 +1582,11 @@ export class Threads {
   /** A prompt waiting on the person in each thread (a plan to approve, a question), for its map box. */
   private readonly asking = new Map<string, { request: string; option: string }>();
 
+  /** Whether any thread is working, or waiting on the person, so nothing should restart under it. */
+  busy(): boolean {
+    return this.asking.size > 0 || [...this.live.values()].some((l) => l.turn !== null);
+  }
+
   /** The person answered a prompt: its thread no longer waits on them. */
   answered(request: string): void {
     for (const [thread, a] of this.asking)

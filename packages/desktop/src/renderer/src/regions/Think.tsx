@@ -34,6 +34,7 @@ import type { EditorView } from "@codemirror/view";
 import { actionWaits } from "./action-waits.ts";
 import { bodyOf, Markdown } from "./Markdown.tsx";
 import { sentWhen } from "./thread-time.ts";
+import { loadOpenThread, saveOpenThread } from "./think-memory.ts";
 import { exploresPath, foldSteps, partParent, runningStep, toolLabel } from "./thread-steps.ts";
 import { countOf, Icon, type Attachment, type Queued, openFile, FileCard } from "./think-parts.tsx";
 import { SectionHistory, ChangeSet } from "./SectionHistory.tsx";
@@ -231,7 +232,19 @@ export function Think({
   /** Closed threads on this section, shown on a click (11.3). */
   const [showClosed, setShowClosed] = useState(false);
   const [openOffers, setOpenOffers] = useState<ReadonlySet<string>>(new Set());
-  const [open, setOpen] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(() =>
+    docPath ? loadOpenThread(window.localStorage, docPath) : null,
+  );
+  // The thread open on each doc is kept on this Mac, so a restart opens it again.
+  const openFor = useRef(docPath);
+  useEffect(() => {
+    if (openFor.current !== docPath) {
+      openFor.current = docPath;
+      setOpen(docPath ? loadOpenThread(window.localStorage, docPath) : null);
+      return;
+    }
+    if (docPath) saveOpenThread(window.localStorage, docPath, open);
+  }, [docPath, open]);
   // A thread deleted from the map: gone from the list, and closed if it was open here.
   useEffect(() => {
     const onDeleted = (e: Event) => {
@@ -1906,6 +1919,8 @@ export function Think({
         ) : null}
         {signedOut(thread.agent) ?? (
           <Composer
+            key={`thread:${thread.id}`}
+            draftKey={`thread:${thread.id}`}
             placeholder="Reply in this thread"
             sendLabel="Send"
             {...composerAttach}
@@ -2455,6 +2470,8 @@ export function Think({
           ? null
           : (signedOut(newAgent) ?? (
               <Composer
+                key={`new:${docPath}#${section.path.join(" › ")}`}
+                draftKey={`new:${docPath}#${section.path.join(" › ")}`}
                 placeholder={
                   !writable
                     ? "Threads need a folder Anur can write to"

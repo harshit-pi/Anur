@@ -126,6 +126,7 @@ import {
   type WindowBounds,
 } from "./folder/open-windows.ts";
 import { windowMemory } from "./folder/window-memory.ts";
+import { AWAY_MS, quietToRestart } from "./quiet-restart.ts";
 import { onGitHub, spacesIn } from "./folder/spaces.ts";
 import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
@@ -3025,6 +3026,7 @@ void app.whenReady().then(async () => {
     showForCheck(process.env.ANUR_CHECK_UPDATE, (state) => {
       for (const win of windows.values()) send(win, "app:update-state", state);
     });
+  if (isRelease || (isCheck && process.env.ANUR_CHECK_UPDATE)) watchForQuietRestart();
   // A built app takes its icon from its bundle; in dev, show the diamond in the Dock too.
   if (!app.isPackaged && process.platform === "darwin") {
     app.dock?.setIcon(path.join(here, "..", "..", "build", "icon.png"));
@@ -3164,6 +3166,52 @@ const openWindowsNow = () => {
 const remembered = windowMemory((open) =>
   restoresWindows ? saveOpenWindows(app.getPath("userData"), open) : Promise.resolve(),
 );
+/**
+ * An update downloaded and nobody could notice a restart (quiet-restart.ts):
+ * restart into it, its windows remembered first, as Restart to update does.
+ */
+function watchForQuietRestart() {
+  // Away is counted from a window losing focus, never from launch, as a login item opens unseen.
+  let awaySince: number | null = null;
+  app.on("browser-window-focus", () => {
+    awaySince = null;
+  });
+  app.on("browser-window-blur", () => {
+    // Moving between Anur's own windows blurs one and focuses the next.
+    setTimeout(() => {
+      if (!BrowserWindow.getFocusedWindow()) awaySince ??= Date.now();
+    }, 0);
+  });
+  const away = (isCheck && Number(process.env.ANUR_CHECK_QUIET_MS)) || AWAY_MS;
+  let restarting = false;
+  setInterval(
+    () => {
+      if (restarting || updateState().kind !== "ready") return;
+      void Promise.all(
+        [...windows.values()].map((w) =>
+          w.webContents
+            .executeJavaScript("window.anurQuiet ? window.anurQuiet() : false")
+            .then(Boolean, () => false),
+        ),
+      ).then(async (quiet) => {
+        const now = {
+          ready: updateState().kind === "ready",
+          auto: appSettings.get().autoUpdate,
+          awayMs: awaySince === null ? null : Date.now() - awaySince,
+          threadsBusy: [...threads.values()].some((t) => t.busy()),
+          windowsQuiet: quiet.every(Boolean),
+        };
+        if (restarting || !quietToRestart(now, away)) return;
+        restarting = true;
+        console.log("Anur: restarting quietly into the update");
+        await remembered.beforeRestart(openWindowsNow()).catch(() => undefined);
+        restartToUpdate();
+      });
+    },
+    isCheck ? 2000 : 60_000,
+  );
+}
+
 app.on("before-quit", () => {
   if (!quitting) {
     const saving = remembered.atQuit(openWindowsNow());

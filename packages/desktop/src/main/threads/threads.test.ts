@@ -419,6 +419,16 @@ describe("Threads", () => {
     });
   });
 
+  it("is busy while a thread works, so a quiet restart waits, and not once it's done", async () => {
+    const { threads: t, reply } = await setup();
+    expect(t.busy()).toBe(false);
+    const r = await t.start("plan.md", DOC, risks, "Is the host a real risk?");
+    if (r.kind !== "started") throw new Error(r.reason);
+    expect(t.busy()).toBe(true);
+    await reply(r.thread.id, "It is.");
+    expect(t.busy()).toBe(false);
+  });
+
   it("removes a page to the Trash and brings it back from the thread (30.43)", async () => {
     const { folder, threads: t } = await setup();
     await writeFile(path.join(folder, "Old plan.md"), "# Old plan\n");
