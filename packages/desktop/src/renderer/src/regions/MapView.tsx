@@ -24,6 +24,7 @@ import type { BoxStatus } from "../layout/box-status.ts";
 import { changeSummary } from "../layout/change-summary.ts";
 import { choiceActs } from "../layout/map-acts.ts";
 import { ownOffsets } from "../layout/map-moves.ts";
+import { type Cluster, type Rect, makeRoom, sizeOf } from "../layout/map-room.ts";
 import { sidesSeen, withNames } from "../layout/map-sides.ts";
 import { mapSkeleton } from "../layout/map-drawing.ts";
 import { BoxSketch, sketchLine } from "./MapSketch.tsx";
@@ -243,6 +244,35 @@ const samePath = (a: readonly string[] | null, b: readonly string[]) =>
   a !== null && a.length === b.length && a.every((x, i) => x === b[i]);
 
 /** One key per section: its heading path, and which of its namesakes it is. */
+/** Each section with what's drawn off it, at the places `keep` holds sections. */
+function clustersOf(boxes: readonly Box[], keep: Readonly<Record<string, Pos>>): Cluster[] {
+  const byId = new Map(boxes.map((b) => [b.id, b]));
+  const sectionOf = (b: Box) => {
+    let at: Box | undefined = b;
+    while (at && at.kind !== "section") at = at.parent ? byId.get(at.parent) : undefined;
+    return at;
+  };
+  const rect = (b: Box, dy: number, below = 0) => ({
+    l: b.x - b.w / 2,
+    t: b.y - b.h / 2 + dy,
+    r: b.x + b.w / 2,
+    b: b.y + b.h / 2 + below + dy,
+  });
+  const out = new Map<string, Cluster & { rects: Rect[] }>();
+  for (const b of boxes) {
+    const s = sectionOf(b);
+    if (!s) continue;
+    const dy = (keep[s.id]?.y ?? s.y) - s.y;
+    let c = out.get(s.id);
+    if (!c) {
+      c = { id: s.id, y: s.y + dy, pinned: s.side === 0, rects: [] };
+      out.set(s.id, c);
+    }
+    c.rects.push(b === s ? rect(b, dy, b.laneH ?? 0) : rect(b, dy));
+  }
+  return [...out.values()];
+}
+
 function keysOf(tree: SectionTree): string[] {
   const seen = new Map<string, number>();
   return tree.sections.map((s) => {
@@ -1079,10 +1109,31 @@ export function MapView({
   // something else changed (a new section, a thread's choices), it's kept in place,
   // and a new one goes to the first free spot below where the layout puts it. Tidy,
   // a drag or an undo re-lays them, and that becomes the place kept.
+  // A section making room slides there over a moment, its cards and lines with it.
+  const gliding = useRef(new Set<string>());
+  const glide = (id: string, from: Pos, to: Pos) => {
+    gliding.current.add(id);
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / 220);
+      const e = 1 - (1 - t) ** 3;
+      const at = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e };
+      setMoved((m) => ({ ...m, [id]: at }));
+      if (t < 1) requestAnimationFrame(step);
+      else {
+        drawnAt.current.set(id, to);
+        gliding.current.delete(id);
+      }
+    };
+    requestAnimationFrame(step);
+  };
+
   const drawnAt = useRef(new Map<string, Pos>());
   /** Re-laid on purpose: what's drawn until this moment is the place kept. */
   const settleUntil = useRef(0);
   const relayout = useRef(true);
+  /** Each section's cluster size when last drawn, to tell when cards arrive. */
+  const sizes = useRef(new Map<string, number>());
   useLayoutEffect(() => {
     if (!loaded || drag) return;
     const sections = boxes.filter((b) => b.kind === "section");
@@ -1094,13 +1145,15 @@ export function MapView({
     }
     if (Date.now() < settleUntil.current) {
       drawnAt.current = new Map(sections.map((b) => [b.id, { x: b.x, y: b.y }]));
+      sizes.current = new Map(clustersOf(boxes, {}).map((c) => [c.id, sizeOf(c)]));
       return;
     }
     const keep: Record<string, Pos> = {};
     const placed: Box[] = [];
     for (const b of sections) {
       const was = drawnAt.current.get(b.id);
-      if (was) {
+      if (was && gliding.current.has(b.id)) placed.push(b);
+      else if (was) {
         if (Math.abs(was.x - b.x) > 0.5 || Math.abs(was.y - b.y) > 0.5) keep[b.id] = was;
         placed.push({ ...b, ...(keep[b.id] ?? {}) });
       }
@@ -1116,11 +1169,21 @@ export function MapView({
       if (y !== b.y) keep[b.id] = { x: b.x, y };
       placed.push({ ...b, y });
     }
-    drawnAt.current = new Map(sections.map((b) => [b.id, keep[b.id] ?? { x: b.x, y: b.y }]));
-    if (Object.keys(keep).length > 0) {
-      setMoved((m) => ({ ...m, ...keep }));
-      save(keep);
+    // Cards arriving on a section: the sections in their way slide apart.
+    const clusters = clustersOf(boxes, keep);
+    const grew = new Set(
+      clusters.filter((c) => (sizes.current.get(c.id) ?? Infinity) < sizeOf(c)).map((c) => c.id),
+    );
+    sizes.current = new Map(clusters.map((c) => [c.id, sizeOf(c)]));
+    const slides: Record<string, Pos> = {};
+    for (const [id, dy] of grew.size > 0 ? makeRoom(clusters, grew) : []) {
+      const b = sections.find((x) => x.id === id);
+      if (b) slides[id] = { x: keep[id]?.x ?? b.x, y: (keep[id]?.y ?? b.y) + dy };
     }
+    drawnAt.current = new Map(sections.map((b) => [b.id, keep[b.id] ?? { x: b.x, y: b.y }]));
+    if (Object.keys(keep).length > 0) setMoved((m) => ({ ...m, ...keep }));
+    if (Object.keys({ ...keep, ...slides }).length > 0) save({ ...keep, ...slides });
+    for (const [id, to] of Object.entries(slides)) glide(id, drawnAt.current.get(id) ?? to, to);
   }, [boxes, loaded, drag]);
 
   // A box's drawn height, by section index: a name that wraps makes it taller than

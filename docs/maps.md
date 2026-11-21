@@ -36,6 +36,7 @@ Thread    italic text on a line, or 💬 N on a box
 - Fit frames the sections and the choices waiting at the top level, never below 60% (`FIT_MIN`), centred on what it frames (30.27). Opening a map centres on the title at 75% or more (`READABLE`).
 - The canvas carries Fit, Tidy and zoom (30.44). Legend, Sketch and Draw live in the doc's ⋯ menu while the map shows; the keys strip shows on a person's first map only, and a section's link count on hover only.
 - A new box appears from Tab, Enter, double-clicking empty space, or dragging a box's handle onto empty space. Moving a box never changes the file.
+- Nothing on the map covers anything else (`layout/map-room.ts`). When choices or work arrive on a section, the sections in their way slide apart just enough, with their own cards, in a short glide; the one that got them stays put. When cards go (a Use, a fold), nothing moves and the gap stays until Tidy.
 - The map holds still under the pointer (30.40): while the pointer is on the map, nothing refits, zooms or pans it; when the layout shifts, as when an edit lands, the selected box keeps its place on screen and the map moves around it. With the pointer elsewhere, a map the person hasn't moved refits to show new boxes, as before.
 
 ## What the doc map leaves out
@@ -63,6 +64,8 @@ Thread    italic text on a line, or 💬 N on a box
 - A map change that adds a mark adds its row here, or it doesn't ship.
 
 ## History
+
+- 2026-11-20: neighbours make room. Found by the app eval: a section kept in place had its choices drawn over the next section's choices.
 
 - 2026-11-20 (30.44): a simpler canvas. Found comparing Anur with Living Map on the same brainstorm: the keys strip, legend, rarely used tools (Tidy stayed, as people reach for it) and a link count on every box read as noise.
 

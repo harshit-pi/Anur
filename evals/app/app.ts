@@ -225,6 +225,16 @@ export class Session {
     );
   }
 
+  /** Where a section's box is on the map, in map units (not moved by Fit or zoom). */
+  boxAt(section: string): Promise<{ x: number; y: number } | null> {
+    return this.win.evaluate((name) => {
+      const el = [...document.querySelectorAll<HTMLElement>(".map-box[data-section]")].find(
+        (e) => e.innerText.trim().split("\n")[0] === name,
+      );
+      return el ? { x: parseFloat(el.style.left), y: parseFloat(el.style.top) } : null;
+    }, section);
+  }
+
   /** Any notice on screen saying what the agent's edit did. */
   toasts(): Promise<string[]> {
     return this.win.evaluate(() =>
