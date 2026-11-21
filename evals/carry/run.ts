@@ -19,9 +19,8 @@
  * Results go to evals/carry/results/, not committed.
  */
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { CARRY_CAP } from "../../packages/core/src/context/bundle.ts";
@@ -40,14 +39,15 @@ import {
   makeWorkspace,
   type Seeded,
 } from "./fixture.ts";
+import { tempDir } from "../temp.ts";
 
 type Acp =
   typeof import("../../packages/desktop/node_modules/@agentclientprotocol/sdk/dist/v1/stable/acp.js");
 
 // ── Part 1: selection ────────────────────────────────────────────────────
 
-const root = await mkdtemp(path.join(tmpdir(), "anur-carry-"));
-const personal = await mkdtemp(path.join(tmpdir(), "anur-carry-me-"));
+const root = await tempDir("anur-carry-");
+const personal = await tempDir("anur-carry-me-");
 const { seeded, stale } = await makeWorkspace(root, personal);
 
 const byKind = (k: Seeded["kind"]) => seeded.filter((s) => s.kind === k);
@@ -79,7 +79,7 @@ const hub = {
 const threads = new Threads({
   folder: root,
   device: "mac-a",
-  appSupport: await mkdtemp(path.join(tmpdir(), "anur-carry-support-")),
+  appSupport: await tempDir("anur-carry-support-"),
   hub,
   hookScript: "/x/hook.js",
   node: "/x/node",
@@ -265,7 +265,7 @@ async function connect() {
     protocolVersion: acp.PROTOCOL_VERSION,
     clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false },
   });
-  const cwd = await mkdtemp(path.join(tmpdir(), "anur-carry-agent-"));
+  const cwd = await tempDir("anur-carry-agent-");
   return {
     async ask(prompt: string): Promise<string> {
       const s = await conn.agent.request(acp.methods.agent.session.new, { cwd, mcpServers: [] });

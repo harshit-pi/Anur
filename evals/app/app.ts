@@ -2,10 +2,10 @@
  * Drives the built Anur Dev app as a person would (Playwright on Electron),
  * in check mode, on a throwaway copy of a folder, with the person's real agent.
  */
-import { cp, mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import path from "node:path";
+import { tempDir } from "../temp.ts";
 
 /** The part of Playwright the eval uses, typed here: its own types sit outside this package. */
 interface Locator {
@@ -72,7 +72,7 @@ export class Session {
 
   /** A fresh folder holding `files`, and the app opened on `doc` in it. */
   static async open(files: Record<string, string>, doc: string, shots: string): Promise<Session> {
-    const root = await mkdtemp(path.join(tmpdir(), "anur-app-eval-"));
+    const root = await tempDir("anur-app-eval-");
     const space = path.join(root, "space");
     await mkdir(space);
     for (const [name, text] of Object.entries(files)) await writeFile(path.join(space, name), text);
