@@ -17,6 +17,7 @@ import path from "node:path";
 import { APP_DIR, Session } from "./app.ts";
 import { PLAN, SCENARIOS } from "./scenarios.ts";
 import { CONTEXT_SCENARIOS } from "./context-scenarios.ts";
+import { MAP_SCENARIOS } from "./map-scenarios.ts";
 
 type Result = {
   id: string;
@@ -31,7 +32,7 @@ if (!existsSync(path.join(APP_DIR, "out", "main", "index.js"))) {
   process.exit(1);
 }
 const wanted = process.argv[2]?.split(",") ?? null;
-const chosen = [...SCENARIOS, ...CONTEXT_SCENARIOS].filter(
+const chosen = [...SCENARIOS, ...CONTEXT_SCENARIOS, ...MAP_SCENARIOS].filter(
   (s) => !wanted || wanted.includes(s.name),
 );
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
