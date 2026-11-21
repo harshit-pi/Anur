@@ -219,7 +219,7 @@ run(
 
 // Past versions: only the newest 5 stay (scripts/prune-releases.mjs).
 step("Prune old versions");
-run("node", ["scripts/prune-releases.mjs", version]);
+run("node", ["packages/desktop/scripts/prune-releases.mjs", version]);
 
 // Plugins changed on main ship with the app: only the ones newer than the live feed go up.
 step("Publish plugins");
