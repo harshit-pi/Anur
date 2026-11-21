@@ -40,6 +40,7 @@ import {
   showPreview,
   type PreviewActions,
 } from "./previews/preview-widget.ts";
+import { holdsWork } from "../quiet.ts";
 
 type KeptEntry = Response<"journal:list">["entries"][number];
 
@@ -750,6 +751,8 @@ export function Page({
       });
     };
     window.addEventListener("beforeunload", beforeUnload);
+    // Unsaved typing holds a quiet restart into an update until it's saved.
+    const dropHold = holdsWork(() => !!saver?.dirty);
     // Back where this tab left this doc: cursor, then scroll once laid out.
     // The key is the one the page opened with: by the time it closes, the
     // app may already have moved on to another tab.
@@ -778,6 +781,7 @@ export function Page({
     onSections(markdownDoc ? sectionsOf(editor.state, fileName) : null);
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
+      dropHold();
       window.removeEventListener("anur:show-preview", onShowPreview);
       window.removeEventListener("anur:use-preview", onUsePreview);
       window.removeEventListener("anur:restore-section", onRestore);

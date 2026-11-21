@@ -2,6 +2,7 @@
  * Think's box for writing to the agent: text, attachments and the queue of messages waiting their turn.
  */
 import { useEffect, useRef, useState } from "react";
+import { loadDraft, saveDraft } from "./think-memory.ts";
 import { anur } from "../bridge.ts";
 import { Icon, type Attachment, type Queued, FileCard } from "./think-parts.tsx";
 
@@ -21,7 +22,10 @@ export function Composer({
   queue = [],
   onQueue,
   onUnqueue,
+  draftKey,
 }: {
+  /** Where unsent text is kept across a restart; give the Composer `key={draftKey}` too. */
+  draftKey?: string;
   /** Messages sent while the agent works, waiting their turn (as in Claude chat). */
   queue?: readonly Queued[];
   /** Given: Enter while busy queues the message instead of doing nothing. */
@@ -44,7 +48,12 @@ export function Composer({
   /** Text to add where the cursor is, as a link dropped on the panel. */
   inserted?: { text: string; n: number } | null;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() =>
+    draftKey ? loadDraft(window.localStorage, draftKey) : "",
+  );
+  useEffect(() => {
+    if (draftKey) saveDraft(window.localStorage, draftKey, text);
+  }, [draftKey, text]);
   const box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (!inserted) return;

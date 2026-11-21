@@ -6,8 +6,9 @@ import { notesFrom } from "../shared/release-notes.ts";
  * Updates for the released app. The feed is checked on launch and every few
  * hours. With automatic installs on (the default), a new version downloads
  * quietly, a card offers Restart, and it installs on quit; off, Anur only
- * says one is available and downloads when asked. Anur never restarts by
- * itself. Anur Dev never updates.
+ * says one is available and downloads when asked. With automatic installs
+ * on, it also restarts into a ready update when nobody could notice
+ * (quiet-restart.ts). Anur Dev never updates.
  */
 export const FEED_URL = "https://spaces.hianur.com/";
 const EVERY_MS = 4 * 60 * 60 * 1000;
