@@ -63,6 +63,7 @@ type Set = {
   heading: string | null;
   within: string | null;
   used: string | null;
+  several?: boolean;
 };
 
 const section = (doc: string, name: string) =>
@@ -118,13 +119,12 @@ export const MAP_SCENARIOS: Scenario[] = [
   {
     name: "map-brainstorm",
     known: {
-      "short-reply": "The agent's reply re-lists every card in bullets (found 2026-11-20)",
-      "rethink-replaces":
-        "A rethink offered as parts doesn't replace the earlier parts set on the map (found 2026-11-20)",
       "explore-1":
         "Brainstorm ideas come back as parts (Add/Skip), which have no Explore (found 2026-11-20)",
       "explore-2": "As explore-1: parts have no Explore (found 2026-11-20)",
       "use-writes": "As explore-1: parts have Add, not Use (found 2026-11-20)",
+      "page-same-3":
+        "In auto mode, a thread exploring an option can land its draft in the page before any pick (found 2026-11-20)",
     },
     about:
       "An open question becomes choices on the map; a constraint sticks; a rethink replaces the set; two levels of explore; Use writes briefly",
@@ -178,12 +178,21 @@ export const MAP_SCENARIOS: Scenario[] = [
         "A rethink brings a fresh set, none repeating the old ones",
         freshTitles,
       );
+      // Only the set the rethink answers: another question asked beside it stays.
+      const same = (x: Set) =>
+        !!fresh &&
+        !!x.several === !!fresh.several &&
+        x.heading === fresh.heading &&
+        x.options[0]?.id !== fresh.options[0]?.id;
+      const replaced = (await sets(s))
+        .filter(same)
+        .flatMap((x) => x.options.map((o) => o.title.toLowerCase()));
       const onMap = await cards(s);
       check(
         "rethink-replaces",
-        before.every((t) => !onMap.some((c) => c.toLowerCase() === t)),
+        replaced.every((t) => !onMap.some((c) => c.toLowerCase() === t)),
         "The fresh set replaces the old cards on the map",
-        onMap,
+        { replaced, onMap },
       );
       check(
         "constraint-followed",
@@ -191,7 +200,16 @@ export const MAP_SCENARIOS: Scenario[] = [
         "No choice after it uses paid ads",
         fresh?.options.map((o) => o.title),
       );
-      await pageSame(s, check, "page-same-2", start);
+      // A constraint may go in the page as a decision; the ideas mustn't.
+      const settled = await s.file();
+      const pageNow = settled.toLowerCase();
+      const titles = (await sets(s)).flatMap((x) => x.options.map((o) => o.title.toLowerCase()));
+      check(
+        "page-no-ideas",
+        titles.every((t) => !pageNow.includes(t)),
+        "No idea is written into the page while nothing is used",
+        titles.filter((t) => pageNow.includes(t)),
+      );
 
       // Two levels of explore, then Use from the deepest.
       await s.click("aside.right-sidebar .think-offer button", /^Explore this$/, 0);
@@ -212,12 +230,13 @@ export const MAP_SCENARIOS: Scenario[] = [
         "Exploring a narrower choice goes a level deeper",
         level2?.options.map((o) => o.title),
       );
-      await pageSame(s, check, "page-same-3", start);
+      await pageSame(s, check, "page-same-3", settled);
+      const beforeUse = await s.file();
       await s.click("aside.right-sidebar .think-offer button", /^Use$/, 0);
       await s.win.waitForTimeout(3000);
       await s.shot("used");
       const now = await s.file();
-      const grew = section(now, "Growth").length - section(start, "Growth").length;
+      const grew = section(now, "Growth").length - section(beforeUse, "Growth").length;
       check("use-writes", grew > 0, "Use writes the pick into Growth");
       check("use-brief", grew <= 600, "…briefly: the page is the record, not the brainstorm", grew);
       check(
@@ -231,10 +250,6 @@ export const MAP_SCENARIOS: Scenario[] = [
   },
   {
     name: "map-two-asks",
-    known: {
-      "two-named": "Two questions come back as one set of combined options (found 2026-11-20)",
-      "two-each": "As two-named (found 2026-11-20)",
-    },
     about: "Two questions in one ask come back as two named choices on the map",
     folder: FOLDER,
     async run(s, check) {
