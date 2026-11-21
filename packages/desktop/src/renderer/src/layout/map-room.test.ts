@@ -54,6 +54,21 @@ describe("making room when cards arrive on a section", () => {
     expect(dy.get("pricing")).toBeGreaterThan(0);
   });
 
+  it("counts a lane growing under a section beside taller cards", () => {
+    // Growth with five cards stacked to its right, then a lane appears under its box.
+    const cards = Array.from({ length: 5 }, (_, k) => box(670, 40 + k * 70, 170, 58));
+    const growth = (lane: number): Cluster => ({
+      id: "growth",
+      y: 180,
+      rects: [{ ...box(360, 160), b: 200 + lane }, ...cards],
+    });
+    expect(sizeOf(growth(36))).toBeGreaterThan(sizeOf(growth(0)));
+    const audience: Cluster = { id: "audience", y: 240, rects: [box(360, 220)] };
+    expect(makeRoom([growth(36), audience], new Set(["growth"])).get("audience")).toBe(
+      200 + 36 + 12 - 220,
+    );
+  });
+
   it("tells growth by the cluster's size", () => {
     expect(sizeOf(audience(2))).toBeGreaterThan(sizeOf(audience(0)));
     expect(sizeOf(audience(2))).toBe(sizeOf(audience(2)));

@@ -146,6 +146,12 @@ export const MAP_SCENARIOS: Scenario[] = [
         "The reply points at the cards rather than restating every one",
         { words: words(said), relisted: relisted.map((o) => o.title) },
       );
+      check(
+        "no-overlap",
+        (await s.overlaps()).length === 0,
+        "Cards and any planned work beside them cover nothing on the map",
+        await s.overlaps(),
+      );
       await pageSame(s, check, "page-same", start);
 
       // A constraint said mid-brainstorm.
