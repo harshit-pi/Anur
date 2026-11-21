@@ -7122,12 +7122,22 @@ button.file-card-name:hover {
 }
 
 .think-offer.compact .think-offer-head {
+  flex: 1;
   min-width: 0;
   margin: 0;
 }
 
+/* A long name ends in …; it opens in full on a click. */
+.think-offer.compact .think-offer-name {
+  overflow: hidden;
+  min-width: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .think-offer.compact .think-offer-actions {
   flex: none;
+  flex-wrap: nowrap;
   margin: 0;
 }
 

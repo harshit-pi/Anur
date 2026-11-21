@@ -19,6 +19,7 @@ import { NoticeBar } from "../regions/NoticeBar.tsx";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { pagePath } from "./bases/base-widget.ts";
 import { pageUpdates } from "./page-updates.ts";
+import { landedUndo } from "./landed-undo.ts";
 import { markdownEditing } from "./editing.ts";
 import type { ClickedLink } from "./link-click.ts";
 import { knownDocs, livePreview } from "./live-preview/live-preview.ts";
@@ -319,22 +320,27 @@ export function Page({
       const remaining = withPart(thread, sectionKey(part.path), null);
       await savePreview(thread, remaining);
       if (quiet) return true;
+      // Back to the text before Apply, keeping any typing since in the section.
+      const takeBack = () => {
+        const s3 = sectionFor(editor.state, part.path);
+        if (!s3) return;
+        const nowText = editor.state.sliceDoc(s3.subtreeRange.from, s3.subtreeRange.to);
+        const back =
+          editor.state.doc === after ? now : merge3(again.text, nowText, now, "ours").text;
+        editor.dispatch({
+          changes: changeWithin(s3.subtreeRange.from, nowText, back) ?? [],
+          userEvent: "apply.undo",
+        });
+      };
+      // Landed on its own: no toast; its row in the thread has the Undo.
+      if (auto) {
+        landedUndo.set(thread, doc.path, part.path, takeBack);
+        return true;
+      }
       flash(
-        auto
-          ? `Used the agent's edit to ${part.path.at(-1) ?? "the section"}.`
-          : `Applied to ${part.path.at(-1) ?? "the section"}.`,
+        `Applied to ${part.path.at(-1) ?? "the section"}.`,
         () => {
-          // Back to the text before Apply, keeping any typing since in the section.
-          const s3 = sectionFor(editor.state, part.path);
-          if (s3) {
-            const nowText = editor.state.sliceDoc(s3.subtreeRange.from, s3.subtreeRange.to);
-            const back =
-              editor.state.doc === after ? now : merge3(again.text, nowText, now, "ours").text;
-            editor.dispatch({
-              changes: changeWithin(s3.subtreeRange.from, nowText, back) ?? [],
-              userEvent: "apply.undo",
-            });
-          }
+          takeBack();
           if (before) {
             void savePreview(thread, before.parts).then(loadPreviews);
           }
@@ -786,6 +792,7 @@ export function Page({
       clearInterval(journalTimer);
       // Switching docs saves what was typed in this one; the next page waits for it.
       closed = true;
+      landedUndo.dropDoc(doc.path);
       if (saver) {
         const s = saver;
         track(
