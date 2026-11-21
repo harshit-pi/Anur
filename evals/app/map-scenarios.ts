@@ -123,8 +123,6 @@ export const MAP_SCENARIOS: Scenario[] = [
         "Brainstorm ideas come back as parts (Add/Skip), which have no Explore (found 2026-11-20)",
       "explore-2": "As explore-1: parts have no Explore (found 2026-11-20)",
       "use-writes": "As explore-1: parts have Add, not Use (found 2026-11-20)",
-      "page-same-3":
-        "In auto mode, a thread exploring an option can land its draft in the page before any pick (found 2026-11-20)",
     },
     about:
       "An open question becomes choices on the map; a constraint sticks; a rethink replaces the set; two levels of explore; Use writes briefly",
