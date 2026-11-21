@@ -18,6 +18,7 @@
     "prepare": "husky",
     "eval:context": "node evals/context/run.ts",
     "eval:carry": "node evals/carry/start.mjs",
+    "eval:app": "node evals/app/run.ts",
     "plugins:feed": "node scripts/plugins.mjs feed",
     "plugins:check": "node scripts/plugins.mjs check",
     "plugins:publish": "node scripts/plugins.mjs publish",
