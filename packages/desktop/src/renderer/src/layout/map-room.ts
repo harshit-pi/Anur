@@ -55,3 +55,53 @@ export function makeRoom(
   }
   return dy;
 }
+
+/** The part of a map box the room-making reads. */
+export type RoomBox = {
+  id: string;
+  kind: string;
+  parent: string | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  side: -1 | 0 | 1;
+  laneH?: number;
+};
+
+/** The section a box hangs from, through its threads and choices. */
+export function sectionOf<B extends { kind: string; parent: string | null }>(
+  b: B,
+  byId: ReadonlyMap<string, B>,
+): B | undefined {
+  let at: B | undefined = b;
+  while (at && at.kind !== "section") at = at.parent ? byId.get(at.parent) : undefined;
+  return at;
+}
+
+/** Each section with what's drawn off it, at the places `keep` holds sections. */
+export function clustersOf(
+  boxes: readonly RoomBox[],
+  keep: Readonly<Record<string, { y: number }>>,
+): Cluster[] {
+  const byId = new Map(boxes.map((b) => [b.id, b]));
+  const rect = (b: RoomBox, dy: number, below = 0): Rect => ({
+    l: b.x - b.w / 2,
+    t: b.y - b.h / 2 + dy,
+    r: b.x + b.w / 2,
+    b: b.y + b.h / 2 + below + dy,
+  });
+  const out = new Map<string, Cluster & { rects: Rect[] }>();
+  for (const b of boxes) {
+    const s = sectionOf(b, byId);
+    if (!s) continue;
+    const dy = (keep[s.id]?.y ?? s.y) - s.y;
+    let c = out.get(s.id);
+    if (!c) {
+      c = { id: s.id, y: s.y + dy, pinned: s.side === 0, rects: [] };
+      out.set(s.id, c);
+    }
+    c.rects.push(b === s ? rect(b, dy, b.laneH ?? 0) : rect(b, dy));
+  }
+  return [...out.values()];
+}

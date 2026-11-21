@@ -1,3 +1,4 @@
+import { samePath } from "../sections/paths.ts";
 import { z } from "zod";
 import { LineEnvelope, compareLines } from "../jsonl/lines.ts";
 import { SectionId, type DocId } from "../sections/section.ts";
@@ -126,7 +127,6 @@ export function canonicalId(state: SectionIdState, id: SectionId): SectionId {
 }
 
 const key = (path: readonly string[]) => path.join("\u0000");
-const samePath = (a: readonly string[], b: readonly string[]) => key(a) === key(b);
 
 export type SectionToSave = {
   path: string[];

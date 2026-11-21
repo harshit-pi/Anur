@@ -4,6 +4,8 @@
  * check states what should hold, so a failure says what broke. Found in a QA
  * pass on 2026-11-20 (Anur PRs 338, 339); `known` marks one not fixed yet.
  */
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import type { Session } from "./app.ts";
 
 export const PLAN = `# Launch Plan
@@ -177,16 +179,12 @@ export const SCENARIOS: readonly Scenario[] = [
           l.kind === "options" ? (l.options as { title: string; text: string }[]) : [],
         )
         .map((o) => `${o.title} ${o.text}`);
-      const said = threads
-        .filter((l) => l.kind === "message" && l.role === "agent")
-        .sort((x, y) => String(x.at).localeCompare(String(y.at)))
-        .map((l) => String(l.text))
-        .at(-1);
+      // Only what's offered counts: a reply often restates the rule it kept, in any words.
       check(
         "decision-followed",
-        !offered.some(offers) && !offers(said ?? ""),
+        !offered.some(offers),
         "A later thread on the doc offers no lifetime deal",
-        { offered, said },
+        offered,
       );
       check(
         "threads-stored",
@@ -245,7 +243,7 @@ export const SCENARIOS: readonly Scenario[] = [
     async run(s, check) {
       await s.newThread("Launch steps");
       await s.ask(
-        "Turn these launch steps into three actions I can run: draft the beta email, write the FAQ, and draft the two community posts. Don't do them yet.",
+        "Turn these launch steps into three actions I can run: draft the beta email, write the FAQ, and draft the two community posts, each as a note in this folder, not in Gmail or any other service. Don't do them yet.",
       );
       check(
         "planned",
@@ -280,7 +278,7 @@ export const SCENARIOS: readonly Scenario[] = [
 
       await s.newThread("Launch steps");
       await s.ask(
-        "Plan two more actions here: a launch-day checklist note and a thank-you email draft for beta flats. Don't do them yet.",
+        "Plan two more actions here: a launch-day checklist note and a thank-you email draft for beta flats, each as a note in this folder, not in Gmail or any other service. Don't do them yet.",
       );
       await s.click("aside.right-sidebar .think-back", /.*/);
       const builds = (await s.threads()).filter((t) => t.purpose === "build").length;
@@ -375,6 +373,39 @@ export const SCENARIOS: readonly Scenario[] = [
         (await s.overlaps()).length === 0,
         "Still nothing covers anything after the Use",
         await s.overlaps(),
+      );
+    },
+  },
+  {
+    name: "think",
+    about:
+      "Think's other parts: the agent pickers, a section's history, and a thread whose section is gone",
+    async run(s, check) {
+      await s.select("Pricing");
+      check(
+        "pickers",
+        (await s.win.locator("aside.right-sidebar .think-option").count()) > 0,
+        "A new thread offers its agent and options pickers",
+      );
+      check(
+        "history",
+        (await s.win.locator("aside.right-sidebar .think-history").count()) > 0,
+        "The section's History shows under it",
+      );
+      await s.newThread("Risks");
+      await s.ask("Reply with the single word: ok.");
+      check("replied", /\bok\b/i.test(await s.think()), "The agent replies in the thread");
+      await writeFile(path.join(s.space, s.doc), PLAN.split("## Risks")[0] ?? PLAN);
+      await s.win.waitForTimeout(5000);
+      await s.click("aside.right-sidebar .think-back", /.*/);
+      const orphaned = await s.win.evaluate(
+        () => document.querySelector<HTMLElement>(".think-orphans summary")?.innerText ?? null,
+      );
+      check(
+        "orphaned",
+        orphaned === "Orphaned (1)",
+        "A thread whose section was deleted outside Anur is kept under Orphaned",
+        orphaned,
       );
     },
   },

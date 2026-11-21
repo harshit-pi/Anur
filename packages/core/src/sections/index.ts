@@ -17,3 +17,4 @@ export {
   type SectionTree,
   type TreeLink,
 } from "./tree.ts";
+export { samePath, withoutHeading } from "./paths.ts";

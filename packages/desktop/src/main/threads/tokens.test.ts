@@ -1,6 +1,6 @@
 import type { KnownThreadLine } from "@anur/core";
 import { describe, expect, it } from "vitest";
-import { tokensOf } from "./threads.ts";
+import { tokensOf } from "./tokens.ts";
 
 const end = (
   usage: { input: number; output: number; cacheRead: number; cacheWrite: number } | null,

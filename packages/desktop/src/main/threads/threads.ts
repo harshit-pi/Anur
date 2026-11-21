@@ -36,8 +36,6 @@ import {
   type PreviewPart,
   type KnownThreadLine,
   type SectionId,
-  type SnapshotHash,
-  type SectionTree,
 } from "@anur/core";
 import type {
   EventPayload,
@@ -74,13 +72,22 @@ import {
   systemReach,
   type SystemShape,
 } from "./system-doc.ts";
+import { DecisionScope, decisionNamed, untilPassed, type CommittedEntry } from "@anur/core";
+import { type Located, indexIn, reachOf, appliesTo, goneFrom, canonIn } from "./scope.ts";
+import { type KeptFinding, markDisputes } from "./findings.ts";
 import {
-  DecisionScope,
-  decisionNamed,
-  sectionScope,
-  untilPassed,
-  type CommittedEntry,
-} from "@anur/core";
+  type Carried,
+  listFiles,
+  addedLine,
+  addedCarried,
+  ATTACH_INLINE,
+  TEXT_EXT,
+  FOLDER_LIMIT,
+  sizeOf,
+  listFolder,
+} from "./attachments.ts";
+import { KNOWN, tokensOf } from "./tokens.ts";
+import { actionOf, landingNote, linksIn } from "./turn-notes.ts";
 
 export { readSection } from "./read-section.ts";
 
@@ -95,94 +102,6 @@ export { readSection } from "./read-section.ts";
  * agent's own changes to the copy are merged onto the doc as it is then,
  * and become the thread's preview, one part per section.
  */
-
-type Located = {
-  doc: DocId;
-  tree: SectionTree;
-  ids: SectionId[];
-  /** IDs joined to another by an alias or a Reattach, to the ID they stand for (11.1). */
-  canon?: ReadonlyMap<SectionId, SectionId>;
-};
-
-/** A section's place in the tree by its ID, following aliases and Reattaches. */
-const indexIn = (at: Located, id: SectionId): number => at.ids.indexOf(at.canon?.get(id) ?? id);
-
-/** How near a committed decision's scope is to a section (18.3); see `KeptFinding.reach`. */
-export function reachOf(scope: string, here: readonly string[]): number {
-  const section = /^section:[^#]+#(.*)$/s.exec(scope);
-  if (section) {
-    const at = section[1] ? section[1].split(" › ") : [];
-    return at.length === 0 ? 2 : at.length === here.length ? 0 : 1;
-  }
-  // A part's sits between the doc and its repo (23.1).
-  if (scope.startsWith("part:")) return 2.5;
-  return scope === "everywhere" ? 4 : 3;
-}
-
-/**
- * Whether a committed decision reaches a doc's section, and what it's on, by
- * name: a section's own scope reaches it and the sections below; a decision
- * for a whole repo or a folder in it, as one made from a terminal session
- * (23.4), reaches every doc inside. Null when it doesn't reach this one.
- */
-export function appliesTo(
-  scope: string,
-  home: string,
-  rel: string,
-  here: readonly string[],
-  /** For a part's decision, its name and the folder it covers; see `CommittedEntry.within`. */
-  part: { on?: string | null | undefined; within?: string | null | undefined } = {},
-): string | null {
-  const section = sectionScope(scope, home);
-  if (section)
-    return section.doc === rel && section.path.every((p, i) => here[i] === p)
-      ? (section.path.at(-1) ?? "this doc")
-      : null;
-  if (scope === "everywhere") return "everywhere";
-  const inside = (dir: string) => !dir || rel.startsWith(`${dir}/`);
-  if (scope === "repo") return inside(home) ? (home ? `all of ${home}` : "the whole folder") : null;
-  const folder = /^folder:(.+)$/.exec(scope)?.[1];
-  if (folder) {
-    const dir = home ? `${home}/${folder}` : folder;
-    return inside(dir) ? `all of ${dir}` : null;
-  }
-  // A part's reaches docs in the folder it covers (23.1); a line's waits for 23.10.
-  if (scope.startsWith("part:") && typeof part.within === "string") {
-    const dir = [home, part.within].filter(Boolean).join("/");
-    return inside(dir) ? (part.on ?? `all of ${dir || "the folder"}`) : null;
-  }
-  return null;
-}
-/**
- * Where a decision was, when that place is gone (18.2): a section of this
- * doc no longer in it, or a part the system no longer has. Null otherwise.
- */
-export function goneFrom(
-  e: {
-    scope: string;
-    home: string;
-    on?: string | null | undefined;
-    within?: string | null | undefined;
-  },
-  rel: string,
-  at: { tree: { sections: readonly { path: readonly string[] }[] } },
-  parts: ReadonlySet<string> | null,
-): string | null {
-  const section = sectionScope(e.scope, e.home);
-  if (section) {
-    if (section.doc !== rel || !section.path.length) return null;
-    const want = section.path.join("\u0000");
-    return at.tree.sections.some((s) => s.path.join("\u0000") === want)
-      ? null
-      : `${section.path.join(" › ")}, which is gone`;
-  }
-  const part = /^part:(.+)$/.exec(e.scope)?.[1];
-  // Only on docs it reached while the part was there.
-  if (part && parts && !parts.has(part) && appliesTo(e.scope, e.home, rel, [], e) !== null)
-    return `${e.on ?? "a part"}, which is gone`;
-  return null;
-}
-const canonIn = (at: Located, id: SectionId) => at.canon?.get(id) ?? id;
 
 export type ThreadDeps = {
   /** The folder's files changed: a doc an agent made, or one taken back. */
@@ -340,98 +259,6 @@ type Live = {
 
 /** How long after a turn its working copies are watched for background edits. */
 const WATCH_AFTER_TURN_MS = 10 * 60_000;
-
-/** An input an earlier thread picked up, carried to a new one (4.4). */
-/** A finding a person kept (16.1), as carried to new threads and listed in Think. */
-export type KeptFinding = {
-  /** The finding line's ID, and the thread that holds it. */
-  id: string;
-  thread: string;
-  claim: string;
-  source: string | null;
-  /** The section it was kept on, by name. */
-  section: string;
-  at: string;
-  /** A person's decision, or a finding from a source. */
-  by: "source" | "person";
-  /** For a decision: the person's words, who said them, what it replaced, until when. */
-  quote: string | null;
-  who: string | null;
-  /** The decision is this person's own: Think shows no name on it. */
-  mine: boolean;
-  instead: string | null;
-  until: string | null;
-  /** "work": how the agent works, never what the doc says (kept apart in the bundle). */
-  concerns?: "work" | "subject";
-  /**
-   * How near it is (18.3), for carrying nearest first within the budget:
-   * 0 this section, 1 a section above, 2 the doc, 2.5 the part of the
-   * system it's in (23.1), 3 its folder or repo, 4 everywhere.
-   */
-  reach: number;
-  /**
-   * Why it needs a look and no longer carries (18.2): its "until" has
-   * passed, or the section or part it's on is gone. Null while it holds.
-   */
-  lapsed: "until" | "gone" | null;
-  /** For a committed one kept outside any thread here: the home it's in, to keep or drop it. */
-  home?: string;
-  /** The decision this one goes against (18.4), by ID; and, for a committed one, the thread finding it came from. */
-  against?: string | null;
-  ref?: string | null;
-  /**
-   * Another decision here that disagrees with this one (18.4): neither
-   * holds until someone picks. Where it lives, so picking this one drops it.
-   */
-  disputed?: {
-    id: string;
-    claim: string;
-    who: string | null;
-    thread: string;
-    home?: string;
-  } | null;
-};
-
-/**
- * Pairs that disagree (18.4): a decision naming another it goes against,
- * while both are still kept, marks both. A pair where one is gone is no
- * longer a disagreement: the one left holds.
- */
-export function markDisputes(list: KeptFinding[]): KeptFinding[] {
-  const byId = new Map<string, KeptFinding>();
-  for (const f of list) {
-    byId.set(f.id, f);
-    if (f.ref) byId.set(f.ref, f);
-  }
-  const of = (f: KeptFinding) => ({
-    id: f.id,
-    claim: f.claim,
-    who: f.who,
-    thread: f.thread,
-    ...(f.home !== undefined ? { home: f.home } : {}),
-  });
-  for (const f of list) {
-    const other = f.against ? byId.get(f.against) : undefined;
-    if (!other || other === f || f.by !== "person" || other.by !== "person") continue;
-    f.disputed = of(other);
-    other.disputed = of(f);
-  }
-  return list;
-}
-
-export type Carried = {
-  id: string;
-  /** The thread that picked it up, or "" for one a person added to the section. */
-  thread: string;
-  source: "file" | "doc" | "command" | "fetch" | "search" | "mcp" | "attachment" | "link";
-  label: string;
-  ref: string;
-  hash: SnapshotHash | null;
-  trust: "trusted" | "untrusted";
-  /** Kept on the device that read it: see InputLine.local. */
-  local: boolean;
-  at: string;
-};
 
 const newThreadId = () => `t${randomBytes(9).toString("hex")}`;
 const newTurnId = () => `u${randomBytes(6).toString("hex")}`;
@@ -4018,237 +3845,4 @@ export class Threads {
     this.turnWatch.close();
     this.tokens.clear();
   }
-}
-
-const KNOWN = new Set([
-  "thread",
-  "session",
-  "turn",
-  "message",
-  "tool",
-  "state",
-  "options",
-  "option-used",
-  "option-explored",
-  "option-skipped",
-  "input",
-  "input-removed",
-  "added-input",
-  "auto-used",
-  "auto-undone",
-  "renamed",
-  "check",
-  "created",
-  "page-gone",
-  "page-back",
-  "proposed",
-  "used-all",
-  "finding",
-  "finding-decided",
-  "action-proposed",
-  "action-run",
-]);
-
-/**
- * A thread's tokens from its turns' usage reports (4.10): everything it has
- * used, and its context on the last reported turn, which the next turn
- * starts from.
- */
-export function tokensOf(lines: readonly KnownThreadLine[]) {
-  let used = 0;
-  let cached = 0;
-  let context = 0;
-  let first: number | null = null;
-  let window: number | null = null;
-  let any = false;
-  for (const l of lines) {
-    if (l.kind !== "turn" || l.event !== "end" || !l.usage) continue;
-    const u = l.usage;
-    any = true;
-    used += u.input + u.output + u.cacheRead + u.cacheWrite;
-    cached += u.cacheRead;
-    // The agent's own measure of its context when it gave one; else the usage report's.
-    context = l.context?.used ?? u.input + u.cacheRead + u.cacheWrite + u.output;
-    first ??= context;
-    if (l.context) window = l.context.size;
-  }
-  return any ? { used, cached, context, first: first ?? context, window } : null;
-}
-
-/** Every file under `dir`, relative to it, with forward slashes. */
-async function listFiles(dir: string, prefix = ""): Promise<string[]> {
-  let entries;
-  try {
-    entries = await readdir(path.join(dir, prefix), { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const out: string[] = [];
-  for (const e of entries) {
-    const rel = prefix ? `${prefix}/${e.name}` : e.name;
-    if (e.isDirectory()) out.push(...(await listFiles(dir, rel)));
-    else if (e.isFile()) out.push(rel);
-  }
-  return out;
-}
-
-/** A line for an input a person added (10.1). */
-function addedLine(
-  section: SectionId,
-  thread: string | null,
-  source: "attachment" | "file" | "link",
-  ref: string,
-): Record<string, unknown> {
-  return {
-    kind: "added-input",
-    section,
-    thread,
-    source,
-    label: source === "link" ? ref.replace(/^https?:\/\//, "") : ref,
-    ref,
-    hash: null,
-    // A link is text from the web; what the person attached is theirs.
-    trust: source === "link" ? "untrusted" : "trusted",
-  };
-}
-
-/** An added input as it is carried to a thread. */
-function addedCarried(l: Extract<KnownThreadLine, { kind: "added-input" }>): Carried {
-  return {
-    id: l.id,
-    thread: l.thread ?? "",
-    source: l.source,
-    label: l.label,
-    ref: l.ref,
-    hash: l.hash,
-    trust: l.trust,
-    local: false,
-    at: l.at,
-  };
-}
-
-/** A text file attached to a message goes into the prompt whole up to this size. */
-const ATTACH_INLINE = 200 * 1024;
-const TEXT_EXT =
-  /^\.(md|markdown|txt|text|html?|csv|tsv|json|ya?ml|xml|toml|ini|log|js|jsx|ts|tsx|py|rb|go|rs|java|kt|swift|c|h|cpp|cs|php|sh|sql|css|scss)$/;
-
-/** A folder copied in from outside stays under this; a bigger one isn't copied. */
-const FOLDER_LIMIT = 50 * 1024 * 1024;
-
-/** A folder's size on disk, its hidden files left out. */
-async function sizeOf(dir: string): Promise<number> {
-  let total = 0;
-  for (const e of await readdir(dir, { withFileTypes: true })) {
-    if (e.name.startsWith(".")) continue;
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) total += await sizeOf(full);
-    else if (e.isFile()) total += (await lstat(full)).size;
-    if (total > FOLDER_LIMIT) return total;
-  }
-  return total;
-}
-
-/** A folder's files, relative to it, up to 200; null when it isn't a folder. */
-async function listFolder(dir: string): Promise<string[] | null> {
-  const kind = await lstat(dir).catch(() => null);
-  if (!kind?.isDirectory()) return null;
-  const out: string[] = [];
-  const walk = async (d: string) => {
-    for (const e of await readdir(d, { withFileTypes: true })) {
-      if (e.name.startsWith(".") || out.length >= 200) continue;
-      const full = path.join(d, e.name);
-      if (e.isDirectory()) await walk(full);
-      else out.push(`- ${path.relative(dir, full)}`);
-    }
-  };
-  await walk(dir);
-  return out;
-}
-
-/** The web addresses in what a person wrote, without trailing punctuation. */
-export function linksIn(text: string): string[] {
-  const found = text.match(/https?:\/\/[^\s<>()"'`]+/gi) ?? [];
-  return [...new Set(found.map((u) => u.replace(/[.,;:!?)\]]+$/, "")))];
-}
-
-/**
- * A Build or Check as its map box shows it (Mock 10): running, waiting on the
- * person, or how its last turn ended, with a few words on what it did.
- */
-function actionOf(
-  lines: readonly ThreadLine[],
-  busy: boolean,
-  ask: { request: string; option: string } | undefined,
-  items: readonly ThreadItem[],
-): {
-  state: "running" | "needs" | "done" | "failed" | "stopped";
-  detail: string;
-  ask: { request: string; option: string } | null;
-} {
-  const tools = items.filter((i): i is Extract<ThreadItem, { kind: "tool" }> => i.kind === "tool");
-  const made = items.filter((i) => i.kind === "created" && !i.undone).length;
-  const services = tools.filter(
-    (t) => /^mcp__(?!anur__)/.test(t.title) && t.status === "completed",
-  ).length;
-  const did = [
-    made ? `${String(made)} doc${made === 1 ? "" : "s"}` : "",
-    services ? `${String(services)} in services` : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  if (ask) return { state: "needs", detail: "Plan waiting", ask };
-  if (busy) {
-    const step = tools.at(-1);
-    return {
-      state: "running",
-      detail: step && !/^(completed|failed)$/.test(step.status) ? stepName(step.title) : "Working…",
-      ask: null,
-    };
-  }
-  const end = [...lines].reverse().find((l) => l.kind === "turn" && l.event === "end");
-  const reason = (end as { stopReason?: unknown } | undefined)?.stopReason;
-  const why = typeof reason === "string" ? reason : "";
-  if (why === "cancelled")
-    return { state: "stopped", detail: `At step ${String(tools.length)}`, ask: null };
-  if (why.startsWith("error:"))
-    return { state: "failed", detail: why.slice(6).trim().slice(0, 40) || "It failed", ask: null };
-  // A choice it ends on is no warning (30.33): its options already hang off it on the
-  // map, and one picked while exploring them lives in another thread, so "!" would stay.
-  // It ended saying it couldn't do the work: a ✓ would claim what isn't there.
-  const last = [...items].reverse().find((i) => i.kind === "message" && i.role === "agent");
-  if (last?.kind === "message" && COULD_NOT.test(last.text))
-    return { state: "needs", detail: "Didn't finish", ask: null };
-  return { state: "done", detail: did || `${String(tools.length)} steps`, ask: null };
-}
-
-/** An agent's closing reply that opens by saying the work wasn't done ("I couldn't build the funnel…"). */
-const COULD_NOT =
-  /^\W*(?:I\s+)?(?:couldn['’]t|could not|can['’]t|cannot|wasn['’]t able|was unable|haven['’]t|have not|didn['’]t|did not)\b/i;
-
-/** A step as a person reads it on a box: "PostHog: exec", not "mcp__claude_ai_PostHog__exec". */
-function stepName(title: string): string {
-  // Anur's own tools read as what they did.
-  const own = /^mcp__anur__anur_(\w+)/.exec(title)?.[1];
-  if (own) {
-    const words = own.replace(/_/g, " ");
-    return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
-  }
-  const m = /^mcp__(?:claude_ai_)?([A-Za-z0-9-]+?)__([A-Za-z0-9_-]+)/.exec(title);
-  if (m)
-    return `${(m[1] ?? "").replace(/_/g, " ")}: ${(m[2] ?? "").replace(/_/g, " ")}`.slice(0, 40);
-  // A tool's own title reads as a step ("Read Plan.md"); a shell command is
-  // just its text, which means nothing on a map pill.
-  if (/^[A-Z][a-z]+(?:\s|$)/.test(title)) return title.slice(0, 40);
-  return "Running a command";
-}
-
-/**
- * What the agent is told about how its edits reach the doc, so its reply
- * matches what the person sees: in a mode that acts without asking they land
- * at once, so it never says one "is ready to use" (30.38).
- */
-export function landingNote(lands: boolean): string {
-  return lands
-    ? "In the person's mode your edits land in the doc as you make them, and ⌘Z on the page takes one back. Say what you changed in the doc; never that an edit is ready for them to use."
-    : "In the person's mode your edits wait as proposals on their sections, and the doc changes only when the person uses one. Say your edit is ready for them to use; never that you've updated the doc.";
 }

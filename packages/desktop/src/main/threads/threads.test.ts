@@ -8,7 +8,10 @@ import { SectionVersions } from "../folder/versions.ts";
 import { HomeVersions } from "../folder/home-versions.ts";
 import { execFileSync } from "node:child_process";
 import type { AgentHub } from "./hub.ts";
-import { Threads, appliesTo, landingNote, linksIn, markDisputes, reachOf } from "./threads.ts";
+import { markDisputes } from "./findings.ts";
+import { appliesTo, reachOf } from "./scope.ts";
+import { Threads } from "./threads.ts";
+import { landingNote, linksIn } from "./turn-notes.ts";
 import { FOLDER_DOC_ID, SYSTEM_DOC_ID, folderLocated, systemLocated } from "./system-doc.ts";
 import { shape as sysShape, boxes as sysBoxes } from "./system-doc.fixture.ts";
 import {

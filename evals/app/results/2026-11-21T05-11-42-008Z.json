@@ -1,0 +1,37 @@
+{
+  "at": "2026-11-21T05:11:42.009Z",
+  "scenarios": [
+    {
+      "name": "think",
+      "about": "Think's other parts: the agent pickers, a section's history, and a thread whose section is gone",
+      "secs": 29,
+      "results": [
+        {
+          "id": "pickers",
+          "holds": true,
+          "says": "A new thread offers its agent and options pickers",
+          "known": null
+        },
+        {
+          "id": "history",
+          "holds": true,
+          "says": "The section's History shows under it",
+          "known": null
+        },
+        {
+          "id": "replied",
+          "holds": true,
+          "says": "The agent replies in the thread",
+          "known": null
+        },
+        {
+          "id": "orphaned",
+          "holds": true,
+          "says": "A thread whose section was deleted outside Anur is kept under Orphaned",
+          "known": null
+        }
+      ],
+      "errors": []
+    }
+  ]
+}
