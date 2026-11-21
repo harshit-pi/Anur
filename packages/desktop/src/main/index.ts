@@ -125,6 +125,7 @@ import {
   type OpenWindow,
   type WindowBounds,
 } from "./folder/open-windows.ts";
+import { windowMemory } from "./folder/window-memory.ts";
 import { onGitHub, spacesIn } from "./folder/spaces.ts";
 import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
@@ -2413,9 +2414,12 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (seen) await rm(file, { force: true });
     return { version: saved.version, notes: saved.notes };
   },
-  "update:restart": () => {
+  "update:restart": async () => {
+    if (updateState().kind !== "ready") return { ok: false };
+    // The updater closes every window before quitting: remember them first.
+    await remembered.beforeRestart(openWindowsNow()).catch(() => undefined);
     restartToUpdate();
-    return { ok: updateState().kind === "ready" };
+    return { ok: true };
   },
   "tour:status": async () => {
     // Checks don't see it unless they ask, so other checks' screenshots stay clean.
@@ -3147,17 +3151,23 @@ const quitNotes = new Set<Promise<void>>();
 // A window with unsaved typing holds its close until the save lands
 // (the page's beforeunload), then closes itself; a quit carries on after it.
 let quitting = false;
+/** Every window's space, the front one first, so the next launch opens them all again. */
+const openWindowsNow = () => {
+  const front = BrowserWindow.getFocusedWindow();
+  const order = [...windows.values()].sort((a, b) => Number(b === front) - Number(a === front));
+  return order.flatMap((w) => {
+    const folder = folders.current(w.webContents.id)?.path;
+    // Where it sits when not full screen or maximized, as macOS restores a window.
+    return folder ? [{ folder, bounds: w.getNormalBounds() }] : [];
+  });
+};
+const remembered = windowMemory((open) =>
+  restoresWindows ? saveOpenWindows(app.getPath("userData"), open) : Promise.resolve(),
+);
 app.on("before-quit", () => {
-  if (!quitting && restoresWindows) {
-    // Every window's space, the front one first, so the next launch opens them all again.
-    const front = BrowserWindow.getFocusedWindow();
-    const order = [...windows.values()].sort((a, b) => Number(b === front) - Number(a === front));
-    const open = order.flatMap((w) => {
-      const folder = folders.current(w.webContents.id)?.path;
-      // Where it sits when not full screen or maximized, as macOS restores a window.
-      return folder ? [{ folder, bounds: w.getNormalBounds() }] : [];
-    });
-    quitNotes.add(saveOpenWindows(app.getPath("userData"), open).catch(() => undefined));
+  if (!quitting) {
+    const saving = remembered.atQuit(openWindowsNow());
+    if (saving) quitNotes.add(saving.catch(() => undefined));
   }
   quitting = true;
 });
