@@ -27,6 +27,8 @@ a thread's agent
 - Kept decisions and findings carried nearest first, capped (see "What counts as a decision" in `docs/decisions.md`).
 - Inputs the person added, and the sections the section links to.
 - Never another thread's chat. Decided text is the doc, so it isn't pollution; discussion is.
+- The standard plugins on in the folder, such as Git: what each does, its status, and the actions `anur_plugin_action` may run (`main/threads/plugin-actions.ts`). An agent gets a plugin's declared actions only, never a choice that's the person's, such as Git's Continue anyway in iCloud Drive.
+- With Git on, an agent pushes through it, since `.anur/` is off limits to the agent and Git commits it. A turn that pushed, through Git or by hand (`git push`, `gh repo create --push`), ends with a Git sync, so `.anur/` and the turn's own last lines follow. Nothing is refused: a push by hand still works.
 
 ## How it's held
 
@@ -66,5 +68,6 @@ The hook reads commands as text, so a determined agent can reach around it. Each
 
 ## History
 
+- 2026-11-20: agents see the folder's standard plugins and run their actions; Git syncs after a turn that pushed. Found when an agent asked to push a folder to GitHub did it with `gh` and reported `.anur/` left out, while the Git plugin would have committed it.
 - 2026-11-19 (30.14): the shell and MCP arguments can no longer read another thread's working copy. Found when a run's agent searched the app's support folder with `find`; live-tested with `cat "$HOME/…"`, refused.
 - Group 3: the hook, `.anur/` off limits, docs redirected to working copies, other copies refused to file tools.

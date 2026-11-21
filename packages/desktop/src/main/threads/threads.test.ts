@@ -306,6 +306,119 @@ describe("Threads", () => {
     ).rejects.toThrow();
   });
 
+  describe("a folder's standard plugins (Git)", () => {
+    const git = {
+      id: "git",
+      name: "Git",
+      what: "Put this folder on GitHub and keep it in sync.",
+      status: "Synced 3m ago",
+      actions: [
+        { id: "createRepo", label: "Create private repo on GitHub" },
+        { id: "syncNow", label: "Sync now" },
+      ],
+    };
+    const withGit = (on: boolean) => {
+      const ran: string[] = [];
+      return {
+        ran,
+        plugins: {
+          ids: () => [],
+          context: () => Promise.resolve([]),
+          standard: () => Promise.resolve(on ? [git] : []),
+          act: (id: string, action: string) => {
+            ran.push(`${id}:${action}`);
+            return Promise.resolve("Synced with GitHub.");
+          },
+        },
+      };
+    };
+    const pushTurn = async (
+      t: Threads,
+      tell: (th: string, m: ToMain) => Promise<void>,
+      reply: (th: string, text: string) => Promise<void>,
+      sent: ToHost[],
+      command: string,
+    ) => {
+      const r = await t.start("plan.md", DOC, risks, "Push this to my GitHub.");
+      if (r.kind !== "started") throw new Error(r.reason);
+      const prompt = sent.filter((m) => m.type === "prompt").at(-1);
+      if (prompt?.type !== "prompt") throw new Error("nothing was asked");
+      await tell(r.thread.id, {
+        type: "tool",
+        thread: r.thread.id,
+        turn: prompt.turn,
+        toolUse: "u1",
+        title: command,
+        kind: "execute",
+        status: "completed",
+        input: { command },
+        name: "Bash",
+      });
+      await reply(r.thread.id, "Pushed.");
+      await new Promise((ok) => setTimeout(ok, 30));
+      return { r, prompt };
+    };
+
+    it("tells the agent the plugin is on, its status and the actions it may run", async () => {
+      const { plugins } = withGit(true);
+      const { threads: t, sent } = await setup({ plugins });
+      await t.start("plan.md", DOC, risks, "Push this to my GitHub.");
+      const prompt = sent.filter((m) => m.type === "prompt").at(-1);
+      const text = prompt?.type === "prompt" ? prompt.text : "";
+      expect(text).toContain("Plugins on in this folder");
+      expect(text).toContain("syncNow (Sync now)");
+      expect(text).toContain(".anur/ included");
+    });
+
+    it("runs a plugin's action for the agent, and refuses one it doesn't offer", async () => {
+      const { plugins, ran } = withGit(true);
+      const { threads: t } = await setup({ plugins });
+      const tool = (
+        t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+      ).tool.bind(t);
+      const r = await t.start("plan.md", DOC, risks, "Sync it.");
+      if (r.kind !== "started") throw new Error(r.reason);
+      expect(
+        await tool(r.thread.id, "anur_plugin_action", { plugin: "git", action: "syncNow" }),
+      ).toEqual({
+        text: "Git: Sync now. Synced with GitHub.",
+      });
+      expect(
+        await tool(r.thread.id, "anur_plugin_action", {
+          plugin: "git",
+          action: "continueInICloud",
+        }),
+      ).toHaveProperty("error");
+      expect(ran).toEqual(["git:syncNow"]);
+    });
+
+    it("syncs through Git when a turn pushed by hand, so .anur/ follows", async () => {
+      const { plugins, ran } = withGit(true);
+      const { threads: t, tell, reply, sent } = await setup({ plugins });
+      await pushTurn(
+        t,
+        tell,
+        reply,
+        sent,
+        "git add -A && git commit -m x && git push -u origin main",
+      );
+      expect(ran).toEqual(["git:syncNow"]);
+    });
+
+    it("doesn't sync after a turn that didn't push, or with Git off", async () => {
+      const on = withGit(true);
+      const a = await setup({ plugins: on.plugins });
+      await pushTurn(a.threads, a.tell, a.reply, a.sent, "git status");
+      expect(on.ran).toEqual([]);
+      await a.threads.close();
+      const off = withGit(false);
+      const b = await setup({ plugins: off.plugins });
+      await pushTurn(b.threads, b.tell, b.reply, b.sent, "git push");
+      expect(off.ran).toEqual([]);
+      expect(b.sent.filter((m) => m.type === "prompt").at(-1)).toBeDefined();
+    });
+  });
+
   it("removes a page to the Trash and brings it back from the thread (30.43)", async () => {
     const { folder, threads: t } = await setup();
     await writeFile(path.join(folder, "Old plan.md"), "# Old plan\n");

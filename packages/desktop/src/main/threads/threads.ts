@@ -62,6 +62,13 @@ import { PreviewStore, previewIdOf } from "./previews.ts";
 import { denyRulesOf, type DenyRule } from "../../agent/deny-rules.ts";
 import type { AnurSocket, ToolAnswer } from "./anur-socket.ts";
 import { TurnWatch, type DocChange } from "./turn-watch.ts";
+import {
+  GIT,
+  checkAction,
+  pluginContext,
+  turnPushed,
+  type StandardPlugin,
+} from "./plugin-actions.ts";
 import { readSection } from "./read-section.ts";
 import { readFile } from "../../vault/anur-copy.ts";
 import type { CommittedDecisions, KeptEntry } from "../committed-decisions.ts";
@@ -141,6 +148,10 @@ export type ThreadDeps = {
   plugins?: {
     ids: () => string[];
     context: (rel: string, section: string[]) => Promise<{ label: string; lines: string[] }[]>;
+    /** Standard plugins running in this folder, such as Git, with the actions an agent may run. */
+    standard?: () => Promise<StandardPlugin[]>;
+    /** Runs one of a standard plugin's actions; its message back, if any. */
+    act?: (id: string, action: string) => Promise<string | null>;
   };
   /** The folder as a window shows it: its docs and what's still in iCloud, for section search. */
   folderState?: () => FolderState | null;
@@ -1080,10 +1091,13 @@ export class Threads {
     live.carried = await this.carriedFor(at, start.section, thread);
     // One that needs a look doesn't carry until someone keeps it (18.2).
     live.findings = (await this.findingsFor(at, start.section, rel)).filter((f) => !f.lapsed);
-    live.pluginLines =
-      (await this.d.plugins
+    const standard = pluginContext((await this.d.plugins?.standard?.().catch(() => [])) ?? []);
+    live.pluginLines = [
+      ...((await this.d.plugins
         ?.context(rel, at.tree.sections[indexIn(at, start.section)]?.path ?? [])
-        .catch(() => [])) ?? [];
+        .catch(() => [])) ?? []),
+      ...(standard ? [standard] : []),
+    ];
     live.linked = await this.linkedFor(at, start.section, rel, text);
     // An embedded base reaches the agent as its table, not as the embed line (4.11).
     live.embeds = new Map();
@@ -1368,6 +1382,7 @@ export class Threads {
     // The reply is on disk; the thread stays busy until its edits are a preview,
     // so nothing reads it finished with its preview still missing.
     live.text = "";
+    const pushed = turnPushed(live.tools.values());
     live.tools = new Map();
     this.turnWatch.stop(thread);
     await this.mergeCopies(thread, live).catch((e: unknown) => {
@@ -1380,6 +1395,15 @@ export class Threads {
     live.pending = null;
     this.watchCopies(thread, live);
     await this.refresh(live.rel, live.docText, thread);
+    // A push, by hand or through Git, leaves this turn's last lines (and by hand, .anur/) behind.
+    if (pushed) void this.syncAfterPush();
+  }
+
+  private async syncAfterPush(): Promise<void> {
+    const on = (await this.d.plugins?.standard?.().catch(() => [])) ?? [];
+    if (!on.some((p) => p.id === GIT)) return;
+    const said = await this.d.plugins?.act?.(GIT, "syncNow").catch((e: unknown) => String(e));
+    if (said) console.log(`Anur: Git sync after a push by hand: ${said}`);
   }
 
   /** Where each part's section is in the doc, by section ID. */
@@ -3270,6 +3294,18 @@ export class Threads {
    * the Trash, and the thread notes it with a way to bring it back. Never the
    * thread's own doc, Anur's data, or a file that isn't a page.
    */
+  private async pluginActionTool(args: unknown): Promise<ToolAnswer> {
+    const on = (await this.d.plugins?.standard?.().catch(() => [])) ?? [];
+    const checked = checkAction(on, args);
+    if ("error" in checked) return checked;
+    const act = this.d.plugins?.act;
+    if (!act) return { error: "Plugins can't run from here." };
+    const said = await act(checked.plugin.id, checked.action).catch((e: unknown) => String(e));
+    const label =
+      checked.plugin.actions.find((a) => a.id === checked.action)?.label ?? checked.action;
+    return { text: `${checked.plugin.name}: ${label}. ${said ?? "Done."}` };
+  }
+
   private async removeDocTool(thread: string, args: unknown): Promise<ToolAnswer> {
     const live = this.live.get(thread);
     if (!live?.turn) return { error: "Pages can only be removed during a turn." };
@@ -3712,6 +3748,7 @@ export class Threads {
     if (tool === "anur_list_inputs") return this.listInputsTool(thread);
     if (tool === "anur_name_thread") return this.nameThreadTool(thread, args);
     if (tool === "anur_remove_doc") return this.removeDocTool(thread, args);
+    if (tool === "anur_plugin_action") return this.pluginActionTool(args);
     if (tool === "anur_report_check") return this.reportCheckTool(thread, args);
     if (tool === "anur_read_input") return this.readInputTool(thread, args);
     if (tool === "anur_links") return this.linksTool(thread, args);

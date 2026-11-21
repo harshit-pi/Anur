@@ -882,6 +882,17 @@ function threadsFor(folder: FolderState): Threads | null {
             })),
           );
         },
+        standard: async () => {
+          const installed = await plugins.installed();
+          const on = await plugins.onIn(folder.path);
+          return on.flatMap((id) => {
+            const p = installed[id];
+            if (!p || !plugins.isRunning(folder.path, id)) return [];
+            const status = pluginStatuses.get(folder.path)?.get(id)?.text ?? null;
+            return [{ id, name: p.name, what: p.what, status, actions: p.actions }];
+          });
+        },
+        act: (id, action) => plugins.action(folder.path, id, action),
       },
       people: async () => ({
         me: await personName(folder.path, appSettings.get().name),
