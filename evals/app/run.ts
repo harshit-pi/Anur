@@ -16,6 +16,7 @@ import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { APP_DIR, Session } from "./app.ts";
 import { PLAN, SCENARIOS } from "./scenarios.ts";
+import { CONTEXT_SCENARIOS } from "./context-scenarios.ts";
 
 type Result = {
   id: string;
@@ -30,7 +31,9 @@ if (!existsSync(path.join(APP_DIR, "out", "main", "index.js"))) {
   process.exit(1);
 }
 const wanted = process.argv[2]?.split(",") ?? null;
-const chosen = SCENARIOS.filter((s) => !wanted || wanted.includes(s.name));
+const chosen = [...SCENARIOS, ...CONTEXT_SCENARIOS].filter(
+  (s) => !wanted || wanted.includes(s.name),
+);
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const dir = path.join(import.meta.dirname, "results");
 const runDir = path.join(dir, stamp);
@@ -45,7 +48,8 @@ for (const sc of chosen) {
   const results: Result[] = [];
   const shots = path.join(runDir, sc.name);
   console.log(`\n${sc.name}: ${sc.about}`);
-  const s = await Session.open({ "Launch Plan.md": PLAN }, "Launch Plan.md", shots);
+  const start = sc.folder ?? { files: { "Launch Plan.md": PLAN }, open: "Launch Plan.md" };
+  const s = await Session.open(start.files, start.open, shots);
   const check = (id: string, holds: boolean, says: string, seen?: unknown) => {
     const known = sc.known?.[id] ?? null;
     results.push({ id, holds, says, known, ...(holds ? {} : { seen }) });

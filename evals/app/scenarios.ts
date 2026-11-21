@@ -39,6 +39,8 @@ export type Scenario = {
   about: string;
   /** A check here is a known open issue: reported, not counted as a regression. */
   known?: Record<string, string>;
+  /** The folder it starts on, by path, and the doc opened; PLAN as Launch Plan.md when left out. */
+  folder?: { files: Record<string, string>; open: string };
   run: (s: Session, check: Check) => Promise<void>;
 };
 
