@@ -1,3 +1,4 @@
+import { mapLegend } from "./layout/map-legend-pref.ts";
 import { EditorView } from "@codemirror/view";
 import { loadPlace, savePlace, sectionIndexOf } from "./layout/doc-place.ts";
 import { FOLDER_DOC, buildSectionTree, folderDocText, type SectionTree } from "@anur/core";
@@ -798,9 +799,22 @@ export function App() {
           { id: "copy-doc-link", label: "Copy Link to Doc" },
           { separator: true },
           { id: "source", label: "Show Source (⌘E)", checked: source },
+          // The map's less used tools live here, off the canvas (30.44).
+          ...(centerView === "map"
+            ? [
+                { separator: true as const },
+                { id: "map:legend", label: "Show Legend", checked: mapLegend() },
+                { id: "map:sketch", label: "Sketch on a Copy" },
+                { id: "map:pen", label: "Draw on the Map" },
+              ]
+            : []),
         ],
       })
       .then(({ id }) => {
+        if (id?.startsWith("map:")) {
+          window.dispatchEvent(new CustomEvent("anur:map-tool", { detail: { tool: id.slice(4) } }));
+          return;
+        }
         if (id === "finder" || id === "default-app") {
           void anur.call("doc:reveal", { path: selected, how: id });
         } else if (id === "copy-path") {
@@ -809,7 +823,7 @@ export function App() {
           void anur.call("clipboard:write", { text: wikiLinkTo(folder.docs, selected, null) });
         } else if (id === "source") setSource((s) => !s);
       });
-  }, [folder, selected, source]);
+  }, [folder, selected, source, centerView]);
   const listTabs = useCallback(() => {
     void anur
       .call("menu:popup", {
