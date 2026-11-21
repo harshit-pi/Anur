@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { LinkIndex } from "./link-index.ts";
 
 async function folder(files: Record<string, string>) {
@@ -77,5 +77,30 @@ describe("LinkIndex", () => {
     const typed = PLAN.replace("Nothing.", "See [[Pricing]].");
     const out = await index.linksOut("Plan.md", ["Plan", "Risks"], typed);
     expect(out.map((l) => l.doc)).toEqual(["docs/Pricing.md"]);
+  });
+
+  it("lets other calls in between docs while a first scan parses the folder", async () => {
+    const files: Record<string, string> = {};
+    for (let i = 0; i < 120; i++) files[`d${String(i)}.md`] = PLAN;
+    const index = new LinkIndex(await folder(files));
+    // Most docs parsed with no turn of the event loop between them.
+    let run = 0;
+    let most = 0;
+    type Parse = { parse: (rel: string, text: string) => unknown };
+    const real = (index as unknown as Parse).parse.bind(index);
+    const parse = vi.spyOn(index as unknown as Parse, "parse").mockImplementation((rel, text) => {
+      most = Math.max(most, ++run);
+      return real(rel, text);
+    });
+    let done = false;
+    const tick = () => {
+      run = 0;
+      if (!done) setImmediate(tick);
+    };
+    setImmediate(tick);
+    await index.allDocs();
+    done = true;
+    expect(parse).toHaveBeenCalledTimes(120);
+    expect(most).toBe(1);
   });
 });
