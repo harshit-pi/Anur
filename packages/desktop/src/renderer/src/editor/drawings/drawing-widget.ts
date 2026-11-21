@@ -2,6 +2,7 @@ import { type EditorView, WidgetType } from "@codemirror/view";
 import { pagePath } from "../bases/base-widget.ts";
 
 import "./assets.ts";
+import { anur } from "../../bridge.ts";
 /**
  * An embedded Excalidraw drawing, `![[Flow.excalidraw]]`, drawn as the
  * picture itself. A click opens it in its own tab, full size and editable
@@ -59,7 +60,6 @@ export class DrawingWidget extends WidgetType {
     });
     const draw = () => {
       void (async () => {
-        const { anur } = await import("../../bridge.ts");
         const r = await anur.call("drawing:read", {
           target: this.target,
           from: view.state.facet(pagePath),

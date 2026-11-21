@@ -3,6 +3,7 @@ import { EditorView, ViewPlugin, WidgetType } from "@codemirror/view";
 import type { Response } from "../../../../shared/ipc-contract.ts";
 import { pagePath } from "../bases/base-widget.ts";
 import { EmbedWidget, openPathEditor } from "../chips/chip-widgets.ts";
+import { anur } from "../../bridge.ts";
 
 /**
  * An image a doc embeds, alone on its line, drawn as the image (task 2.27):
@@ -45,12 +46,10 @@ function watchImage(view: EditorView, target: string, draw: (r: Read) => void): 
   const from = view.state.facet(pagePath);
   const key = `${from}\0${target}`;
   const load = () => {
-    void import("../../bridge.ts")
-      .then(({ anur }) => anur.call("image:read", { target, from }))
-      .then((r) => {
-        cache.set(key, r);
-        draw(r);
-      });
+    void anur.call("image:read", { target, from }).then((r) => {
+      cache.set(key, r);
+      draw(r);
+    });
   };
   const known = cache.get(key);
   if (known) draw(known);
@@ -291,7 +290,6 @@ async function keepImages(
   pos: number,
   notify: (m: string) => void,
 ) {
-  const { anur } = await import("../../bridge.ts");
   const from = view.state.facet(pagePath);
   const embeds: string[] = [];
   for (const file of files) {

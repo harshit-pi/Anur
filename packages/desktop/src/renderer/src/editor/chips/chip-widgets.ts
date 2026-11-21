@@ -11,6 +11,7 @@ import {
   languageName,
   replace,
 } from "./chips.ts";
+import { anur } from "../../bridge.ts";
 
 /** Keep the editor's cursor and focus where they are when a chip is pressed. */
 function chip(view: EditorView, cls: string, label: string, onPress: (dom: HTMLElement) => void) {
@@ -201,17 +202,15 @@ export class CopyCodeWidget extends WidgetType {
       e.preventDefault();
       const code = codeAt(view, view.posAtDOM(b));
       if (code === null) return;
-      void import("../../bridge.ts")
-        .then(({ anur }) => anur.call("clipboard:write", { text: code }))
-        .then(() => {
-          b.innerHTML = CHECK_ICON;
-          b.title = "Copied";
-          clearTimeout(timer);
-          timer = setTimeout(() => {
-            b.innerHTML = COPY_ICON;
-            b.title = "Copy code";
-          }, 1500);
-        });
+      void anur.call("clipboard:write", { text: code }).then(() => {
+        b.innerHTML = CHECK_ICON;
+        b.title = "Copied";
+        clearTimeout(timer);
+        timer = setTimeout(() => {
+          b.innerHTML = COPY_ICON;
+          b.title = "Copy code";
+        }, 1500);
+      });
     });
     return b;
   }

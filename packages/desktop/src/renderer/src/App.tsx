@@ -85,6 +85,7 @@ import { MapView } from "./regions/MapView.tsx";
 import { Offers } from "./regions/Offers.tsx";
 import { keepSame } from "./layout/keep-same.ts";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
+import { loadAhead } from "./editor/drawings/drawing-widget.ts";
 
 export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -259,9 +260,7 @@ export function App() {
     if (!hasDrawings) return;
     const t = window.setTimeout(() => {
       window.requestIdleCallback(() => {
-        void import("./editor/drawings/drawing-widget.ts").then((m) => {
-          m.loadAhead();
-        });
+        loadAhead();
       });
     }, 3000);
     return () => {
