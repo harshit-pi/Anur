@@ -1,6 +1,6 @@
 import { ServiceIcon, serviceOf } from "../icons/services/index.tsx";
 import { editsLand } from "../../../shared/edits-land.ts";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { choicePress } from "../layout/map-acts.ts";
 import { FOLDER_DOC, diffLines, type SectionNode, type SectionTree } from "@anur/core";
 import { RecentThreads, ScopeChip, type ScopeChoice } from "./ThinkScope.tsx";
@@ -35,6 +35,45 @@ import { actionWaits } from "./action-waits.ts";
  */
 
 type Prompt = EventPayload<"thread:event"> & { kind: "permission" };
+
+/**
+ * A page a thread changed, in one line: its name opens it, then the sections
+ * touched and whether it is waiting or was taken back, then its button.
+ */
+function ChangeRow({
+  doc,
+  sections,
+  state,
+  children,
+}: {
+  doc: string;
+  sections: readonly (readonly string[])[];
+  state: "waiting" | "taken back" | null;
+  children: ReactNode;
+}) {
+  const name = (doc.split("/").pop() ?? doc).replace(/\.md$/i, "");
+  // A change with no section found is named by its file alone.
+  const where = sections.map((p) => p.at(-1) ?? "").filter((x) => x && x !== doc);
+  return (
+    <div className="think-changed auto compact" role="status" title={doc}>
+      <span>
+        <button
+          type="button"
+          className="think-link"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent("anur:open-path", { detail: { path: doc } }));
+          }}
+        >
+          {name}
+        </button>
+        <span className="quiet">
+          {[where.join(", "), state].filter(Boolean).map((x) => ` · ${String(x)}`)}
+        </span>
+      </span>
+      {children}
+    </div>
+  );
+}
 
 const countOf = (n: number, noun: string) => `${String(n)} ${noun}${n === 1 ? "" : "s"}`;
 
@@ -2118,16 +2157,13 @@ export function Think({
                   )}
                 </div>
               ) : item.kind === "auto-used" ? (
-                <div key={i} className="think-changed auto" role="status">
-                  <span>
-                    {item.undone ? "Taken back: " : "Used as it landed: "}
-                    {item.sections.length > 1 ? "the edits to " : "the edit to "}
-                    <strong>{item.sections.map((p) => p.at(-1) ?? "").join(", ")}</strong>
-                    {item.doc !== docPath ? ` in ${item.doc}` : ""}.
-                    {!item.undone && !item.undoable && item.doc === docPath
-                      ? ` ⌘Z on the page takes ${item.sections.length > 1 ? "them" : "it"} back.`
-                      : ""}
-                  </span>
+                // One line per page changed: the reply already says what changed.
+                <ChangeRow
+                  key={i}
+                  doc={item.doc}
+                  sections={item.sections}
+                  state={item.undone ? "taken back" : null}
+                >
                   {item.undoable ? (
                     <button
                       type="button"
@@ -2142,8 +2178,12 @@ export function Think({
                     >
                       Undo
                     </button>
+                  ) : !item.undone && item.doc === docPath ? (
+                    <span className="quiet" title="⌘Z on the page takes it back">
+                      ⌘Z
+                    </span>
                   ) : null}
-                </div>
+                </ChangeRow>
               ) : item.kind === "check" ? (
                 <CheckCard
                   key={i}
@@ -2222,12 +2262,7 @@ export function Think({
                   ) : null}
                 </div>
               ) : item.kind === "proposed" ? (
-                <div key={i} className="think-changed auto" role="status">
-                  <span>
-                    Proposed an edit to{" "}
-                    <strong>{item.sections.map((p) => p.at(-1) ?? "").join(", ")}</strong> in{" "}
-                    {item.doc}, shown on its page.
-                  </span>
+                <ChangeRow key={i} doc={item.doc} sections={item.sections} state="waiting">
                   <button
                     type="button"
                     className="think-button"
@@ -2239,7 +2274,7 @@ export function Think({
                   >
                     Open
                   </button>
-                </div>
+                </ChangeRow>
               ) : item.kind === "created" ? (
                 <div key={i} className="think-changed auto" role="status">
                   <span>
