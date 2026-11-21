@@ -15,3 +15,13 @@ export function startupMark(name: string, version: string, where = "main"): void
   seen.add(key);
   logLine("info", "startup", `${name}: ${String(ms)} ms (${where}, ${version})`);
 }
+
+/** A window's call to main that took long during launch, by its channel. */
+export function slowCall(channel: string, ms: number, version: string, where: string): void {
+  if (ms < 300 || process.uptime() * 1000 > WINDOW_MS) return;
+  logLine(
+    "info",
+    "startup",
+    `slow call ${channel}: ${String(Math.round(ms))} ms (${where}, ${version})`,
+  );
+}

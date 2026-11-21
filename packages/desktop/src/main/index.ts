@@ -127,7 +127,7 @@ import {
 } from "./folder/open-windows.ts";
 import { windowMemory } from "./folder/window-memory.ts";
 import { AWAY_MS, quietToRestart } from "./quiet-restart.ts";
-import { startupMark } from "./startup-marks.ts";
+import { slowCall, startupMark } from "./startup-marks.ts";
 import { onGitHub, spacesIn } from "./folder/spaces.ts";
 import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
@@ -2587,9 +2587,15 @@ function registerIpc() {
     const run = guarded(channel, handlers[channel] as Handler<typeof channel>, (s) =>
       senders.isTrusted(s),
     );
-    ipcMain.handle(channel, (event, raw) =>
-      run({ webContentsId: event.sender.id, frameUrl: event.senderFrame?.url ?? null }, raw),
-    );
+    ipcMain.handle(channel, (event, raw) => {
+      const start = performance.now();
+      const id = event.sender.id;
+      return Promise.resolve(
+        run({ webContentsId: id, frameUrl: event.senderFrame?.url ?? null }, raw),
+      ).finally(() => {
+        slowCall(channel, performance.now() - start, app.getVersion(), `window ${String(id)}`);
+      });
+    });
   }
 }
 

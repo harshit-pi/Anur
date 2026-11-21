@@ -86,11 +86,12 @@ import { Offers } from "./regions/Offers.tsx";
 import { keepSame } from "./layout/keep-same.ts";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 import { loadAhead } from "./editor/drawings/drawing-widget.ts";
-import { startupMark } from "./startup.ts";
+import { startupMark, watchLongTasks } from "./startup.ts";
 
 export function App() {
   useEffect(() => {
     startupMark("window ready");
+    watchLongTasks();
   }, []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   /** Docs opened lately in this folder, the latest first, for the palette's ranking. */

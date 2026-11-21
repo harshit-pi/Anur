@@ -313,7 +313,9 @@ export function MapView({
   useEffect(() => {
     let current = true;
     const keys = keysOf(tree);
+    startupMark("map asked for its IDs");
     void anur.call("map:read", { path: docPath, text: textNow.current() }).then((r) => {
+      startupMark("map got its IDs");
       if (!current) return;
       setIds(new Map(r.ids.map((id, i) => [keys[i] ?? id, id])));
       setMoved(r.positions);
