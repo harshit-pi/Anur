@@ -1,6 +1,4 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { markdownKeymap } from "@codemirror/lang-markdown";
-import { insertNewlineContinueNumbering } from "./list-numbering.ts";
 import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import {
@@ -21,19 +19,16 @@ import { NoticeBar } from "../regions/NoticeBar.tsx";
 import { Autosaver, type SaveStatus } from "./autosave.ts";
 import { pagePath } from "./bases/base-widget.ts";
 import { pageUpdates } from "./page-updates.ts";
-import { imagePasteDrop, imageSelection } from "./images/image-widget.ts";
-import { formattingKeymap } from "./commands.ts";
-import { insertMenu } from "./insert-menu.ts";
-import { type ClickedLink, linkClicks } from "./link-click.ts";
-import { editLink, linkEditor } from "./link-editor.ts";
+import { markdownEditing } from "./editing.ts";
+import type { ClickedLink } from "./link-click.ts";
 import { knownDocs, livePreview } from "./live-preview/live-preview.ts";
 import { restoreFolds, sectionFolding } from "./fold/section-fold.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { editorFilter } from "./editor-filter.ts";
 import { changeWithin, diffSpan, mergeOutside, putBack } from "./outside.ts";
 import { settled, track } from "./pending-saves.ts";
-import { markdownSupport, sectionsOf } from "./sections.ts";
-import { pageHighlight, pageTheme } from "./theme.ts";
+import { sectionsOf } from "./sections.ts";
+import { pageTheme } from "./theme.ts";
 import {
   previewActions,
   previewExtension,
@@ -512,25 +507,11 @@ export function Page({
           editorFilter,
           EditorView.lineWrapping,
           history(),
-          keymap.of([
-            ...(markdownDoc && editable ? [{ key: "Mod-k", run: editLink }] : []),
-            ...(markdownDoc && editable
-              ? [{ key: "Enter", run: insertNewlineContinueNumbering }]
-              : []),
-            ...(markdownDoc ? [...formattingKeymap, ...markdownKeymap] : []),
-            ...historyKeymap,
-            ...defaultKeymap,
-          ]),
-          pageTheme,
           ...(markdownDoc
-            ? [
-                markdownSupport(),
-                pageHighlight,
-                sectionFolding(doc.path),
-                preview.current.of(previewFor(sourceNow.current)),
-                known.current.of(knownDocs.of({ docs: docsNow.current, path: doc.path })),
-                ...(editable ? [insertMenu(docsNow.current), linkEditor] : []),
-                linkClicks((link, inNewTab) => {
+            ? markdownEditing({
+                editable,
+                docs: docsNow.current,
+                onOpenLink: (link, inNewTab) => {
                   const problem = openLinkNow.current(link, inNewTab);
                   if (problem) {
                     setNotice({ text: problem, undo: null });
@@ -539,23 +520,23 @@ export function Page({
                       setNotice(null);
                     }, 6000);
                   }
-                }),
+                },
+                notify: (message) => {
+                  flash(message, null, 6000);
+                },
+              })
+            : []),
+          keymap.of([...historyKeymap, ...defaultKeymap]),
+          pageTheme,
+          ...(markdownDoc
+            ? [
+                sectionFolding(doc.path),
+                preview.current.of(previewFor(sourceNow.current)),
+                known.current.of(knownDocs.of({ docs: docsNow.current, path: doc.path })),
               ]
             : []),
           pagePath.of(doc.path),
           ...(threadsOn ? [previewExtension, previewActions.of(actions)] : []),
-          ...(markdownDoc
-            ? [
-                imageSelection,
-                ...(editable
-                  ? [
-                      imagePasteDrop((message) => {
-                        flash(message, null, 6000);
-                      }),
-                    ]
-                  : []),
-              ]
-            : []),
           EditorView.contentAttributes.of({ "aria-label": `Page: ${fileName}` }),
           EditorView.updateListener.of((u) => {
             for (const listen of pageUpdates) listen(u);

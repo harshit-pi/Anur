@@ -755,6 +755,14 @@ export function App() {
     },
     [folder, selected, openDoc],
   );
+  /** A link clicked in a section's text off the page (Think, the map's hover card): opened as on the page. */
+  const openLinkInSection = useCallback(
+    (link: ClickedLink, inNewTab: boolean) => {
+      const problem = openLink(link, inNewTab);
+      if (problem) tell(problem);
+    },
+    [openLink, tell],
+  );
 
   /** A breadcrumb: what the folder it names holds; picking a doc opens it here. */
   const showFolder = useCallback(
@@ -1515,6 +1523,9 @@ export function App() {
               onAddSection={addSection}
               onDelete={deleteSection}
               onRename={renameSection}
+              page={pageView}
+              onOpenLink={openLinkInSection}
+              notify={tell}
               onUndo={undoOnPage}
               onRedo={redoOnPage}
               writable={folder?.mode === "writable" && doc.mode === "editable"}
@@ -1584,6 +1595,8 @@ export function App() {
               request={threadRequest}
               onJump={jumpTo}
               page={wholeFolder ? () => null : pageView}
+              onOpenLink={openLinkInSection}
+              notify={tell}
               noun={wholeFolder ? "space" : scope === "doc" ? "doc" : "section"}
               scope={
                 folder

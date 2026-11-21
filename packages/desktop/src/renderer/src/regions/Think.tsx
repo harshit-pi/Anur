@@ -21,6 +21,7 @@ import { AGENT_SHORT, AgentMark } from "./AgentMark.tsx";
 import { useFeatures } from "../features.ts";
 import { formatTokens } from "../layout/tokens.ts";
 import { SectionEditor } from "../editor/section-editor.tsx";
+import type { ClickedLink } from "../editor/link-click.ts";
 import { putOption, renameSection } from "../editor/section-range.ts";
 import type { EditorView } from "@codemirror/view";
 import { inlineRuns } from "../layout/inline-markdown.ts";
@@ -766,6 +767,8 @@ export function Think({
   request,
   onJump,
   page,
+  onOpenLink,
+  notify,
   noun = "section",
   extra = null,
   scope = null,
@@ -778,6 +781,10 @@ export function Think({
   scope?: ScopeChoice | null;
   /** The page's own view: the section's text is edited here through it. */
   page: () => EditorView | null;
+  /** Opens a link clicked in the section's text, as on the page. */
+  onOpenLink: (link: ClickedLink, inNewTab: boolean) => void;
+  /** Says a problem with an edit there, such as an image that couldn't be added. */
+  notify: (message: string) => void;
   /** What a section is called here: a doc's section, or a repo or part on the system map (29.1). */
   noun?: string;
   /** More of this section's context, under Context and history, such as a box's calls (29.8). */
@@ -2571,6 +2578,8 @@ export function Think({
               <SectionEditor
                 key={`${section.path.join("\u0000")}#${String(section.ordinal)}`}
                 page={page}
+                onOpenLink={onOpenLink}
+                notify={notify}
                 docPath={docPath}
                 section={section}
                 editable={writable}
