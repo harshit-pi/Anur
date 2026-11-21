@@ -1707,6 +1707,11 @@ const handlers: { [C in Channel]: Handler<C> } = {
     const t = folder ? threadsFor(folder) : null;
     return t ? t.autoUndoFor(thread, id) : { kind: "refused", reason: "No folder is open." };
   },
+  "thread:auto-taken-back": async ({ thread, doc, sections }, { webContentsId }) => {
+    const folder = folders.current(webContentsId);
+    await (folder ? threadsFor(folder) : null)?.noteTakenBack(thread, doc, sections);
+    return {};
+  },
   "thread:auto-used": async ({ thread, path: rel, text, section }, { webContentsId }) => {
     const folder = folders.current(webContentsId);
     const t = folder ? threadsFor(folder) : null;

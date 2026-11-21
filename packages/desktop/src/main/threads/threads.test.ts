@@ -146,6 +146,23 @@ describe("Threads", () => {
     expect(kinds).toEqual(["thread", "turn", "message", "session", "message", "turn"]);
   });
 
+  it("notes edits the page took back as taken back, only on the sections it names", async () => {
+    const { threads: t, reply } = await setup();
+    const r = await t.start("plan.md", DOC, risks, "Tighten both.");
+    if (r.kind !== "started") throw new Error(r.reason);
+    await reply(r.thread.id, "Done.");
+    await t.noteAutoUsed("plan.md", DOC, r.thread.id, ["Plan", "Risks"]);
+    await t.noteAutoUsed("plan.md", DOC, r.thread.id, ["Plan", "Budget"]);
+    await t.noteTakenBack(r.thread.id, "plan.md", [["Plan", "Risks"]]);
+    const notes = (await t.list("plan.md", DOC))
+      .find((x) => x.id === r.thread.id)
+      ?.items.flatMap((i) => (i.kind === "auto-used" ? [[i.sections[0]?.at(-1), i.undone]] : []));
+    expect(notes).toEqual([
+      ["Risks", true],
+      ["Budget", false],
+    ]);
+  });
+
   it("resumes the thread's own session, and sends only the message when nothing changed", async () => {
     const { threads: t, sent, reply } = await setup();
     const r = await t.start("plan.md", DOC, risks, "First?");

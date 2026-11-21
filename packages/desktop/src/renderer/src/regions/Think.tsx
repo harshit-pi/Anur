@@ -16,6 +16,15 @@ import type {
 import { AGENTS, runsThreads, type AgentId } from "../../../shared/agents.ts";
 import { anur } from "../bridge.ts";
 import { mergeLanded } from "../layout/landed-notes.ts";
+import {
+  advance,
+  planQueue,
+  plannedOn,
+  queued as inPlan,
+  usePlanQueue,
+  type Step,
+} from "./plan-queue.ts";
+import { landedUndo } from "../editor/landed-undo.ts";
 import { doingOf, listOf, ownToolName, stepOf } from "./step-label.ts";
 import { AGENT_SHORT, AgentMark } from "./AgentMark.tsx";
 import { useFeatures } from "../features.ts";
@@ -421,7 +430,7 @@ function proposedBody(part: { proposed: string }): string {
  */
 /**
  * A choice card's text, cut short with a fade. It opens when clicked, never on hover:
- * hovering used to open it and push Use, Add as subsection and Explore this down from
+ * hovering used to open it and push Use and Explore this down from
  * under the pointer, so the first click missed (30.30).
  */
 function OfferText({
@@ -1409,6 +1418,33 @@ export function Think({
     },
     [tree, docPath, docText, newAgent, newChoices, setThreads],
   );
+  // A plan run in order: each next action starts once the one before is done.
+  const queue = usePlanQueue();
+  useEffect(() => {
+    if (queue.length === 0) return;
+    const next = advance(queue, threads);
+    if (next.queue !== queue) planQueue.set(next.queue);
+    const step = next.run;
+    if (!step) return;
+    const from = threads.find((t) => t.id === step.thread);
+    const a = from?.items.find((x) => x.kind === "proposed-action" && x.id === step.action);
+    if (!from || a?.kind !== "proposed-action") return;
+    // A refusal (the session limit, a gone section) ends the plan; its reason shows.
+    void runAction(from, a).then((ok) => {
+      if (!ok) planQueue.set([]);
+    });
+  }, [queue, threads, runAction]);
+  /** Build this section: a section with planned actions runs them in order; else a Build as before. */
+  const build = useCallback(
+    (on?: { index: number; path: string[] }) => {
+      const at = on ?? section;
+      const plan = at ? plannedOn(threads, at.path) : [];
+      if (plan.length > 0) planQueue.set(plan);
+      else void start("-", "build", undefined, on);
+    },
+    [section, threads, start],
+  );
+
   // Start a new thread pressed in a section's hover card on the map (30.37): the map selected it; its box to type in is ready.
   useEffect(() => {
     const on = () => {
@@ -1429,13 +1465,15 @@ export function Think({
         .detail;
       const node = tree?.sections[d.index];
       if (!node || !samePath(node.path, d.path)) return;
-      void start("-", d.purpose, undefined, { index: node.index, path: node.path });
+      const at = { index: node.index, path: node.path };
+      if (d.purpose === "build") build(at);
+      else void start("-", d.purpose, undefined, at);
     };
     window.addEventListener("anur:map-section-action", on);
     return () => {
       window.removeEventListener("anur:map-section-action", on);
     };
-  }, [tree, start]);
+  }, [tree, start, build]);
 
   // ▶ Run pressed on a planned box on the map.
   useEffect(() => {
@@ -1446,19 +1484,9 @@ export function Think({
       if (from && a?.kind === "proposed-action" && !a.run && !actionWaits(threads, from, a.id))
         void runAction(from, a);
     };
-    // Run all on a "▶ N planned" group (30.28): each that's still ready, in turn.
+    // Run all on a "▶ N planned" group: the whole plan, in order (plan-queue.ts).
     const onRunAll = (e: Event) => {
-      const list = (e as CustomEvent<{ thread: string; action: string }[]>).detail;
-      void (async () => {
-        for (const { thread, action } of list) {
-          const from = threads.find((t) => t.id === thread);
-          const a = from?.items.find((x) => x.kind === "proposed-action" && x.id === action);
-          if (!from || a?.kind !== "proposed-action" || a.run || actionWaits(threads, from, a.id))
-            continue;
-          // A refusal (the session limit, a gone section) stops the rest; its reason shows.
-          if (!(await runAction(from, a))) return;
-        }
-      })();
+      planQueue.set((e as CustomEvent<Step[]>).detail);
     };
     window.addEventListener("anur:run-action", onRun);
     window.addEventListener("anur:run-actions", onRunAll);
@@ -2110,35 +2138,6 @@ export function Think({
                             >
                               {item.used ? "Use instead" : "Use"}
                             </button>
-                            {item.used ? (
-                              <button
-                                type="button"
-                                className="think-more"
-                                title="Keep the option already picked and add this one beside it"
-                                onClick={() => {
-                                  useOption(
-                                    thread,
-                                    o,
-                                    "also",
-                                    item.heading,
-                                    item.options.find((x) => x.id === item.used) ?? null,
-                                  );
-                                }}
-                              >
-                                Also add
-                              </button>
-                            ) : null}
-                            {item.heading || item.used ? null : (
-                              <button
-                                type="button"
-                                className="think-more"
-                                onClick={() => {
-                                  useOption(thread, o, "subsection");
-                                }}
-                              >
-                                Add as subsection
-                              </button>
-                            )}
                             {item.explored.includes(o.id) ? null : (
                               <button
                                 type="button"
@@ -2174,6 +2173,23 @@ export function Think({
                           .then((r) => {
                             if (r.kind === "refused") setError(r.reason);
                           });
+                      }}
+                    >
+                      Undo
+                    </button>
+                  ) : !item.undone &&
+                    item.doc === docPath &&
+                    landedUndo.has(thread.id, item.doc, item.sections) ? (
+                    <button
+                      type="button"
+                      className="think-button"
+                      onClick={() => {
+                        if (!landedUndo.run(thread.id, item.doc, item.sections)) return;
+                        void anur.call("thread:auto-taken-back", {
+                          thread: thread.id,
+                          doc: item.doc,
+                          sections: item.sections,
+                        });
                       }}
                     >
                       Undo
@@ -2349,7 +2365,9 @@ export function Think({
                   </div>
                   {writable && !item.run
                     ? (() => {
-                        const waits = actionWaits(threads, thread, item.id);
+                        const waits = inPlan(queue, { thread: thread.id, action: item.id })
+                          ? "Next: runs when the one before is done"
+                          : actionWaits(threads, thread, item.id);
                         return (
                           <div className="think-offer-actions">
                             {waits ? (
@@ -3016,7 +3034,7 @@ export function Think({
               className="think-more"
               title={`The agent does what this ${noun} describes, with its own tools, in the mode picked below${buildMode ? ` (${buildMode})` : ""}: Plan shows its plan first, Auto acts at once`}
               onClick={() => {
-                void start("-", "build");
+                build();
               }}
             >
               Build this {noun}

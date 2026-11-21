@@ -916,6 +916,17 @@ export const ipcContract = {
       z.object({ kind: z.literal("refused"), reason: z.string() }),
     ]),
   },
+  /** The page took back edits that landed on it by themselves: the thread notes them as taken back. */
+  "thread:auto-taken-back": {
+    request: z
+      .object({
+        thread: z.string().max(200),
+        doc: z.string().max(4096),
+        sections: z.array(z.array(z.string()).max(50)).max(200),
+      })
+      .strict(),
+    response: z.object({}),
+  },
   /** The page used an agent's edit by itself, as Settings asks: the thread notes it. */
   "thread:auto-used": {
     request: z

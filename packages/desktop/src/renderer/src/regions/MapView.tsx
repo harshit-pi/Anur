@@ -34,6 +34,7 @@ import { SectionEditor } from "../editor/section-editor.tsx";
 import type { ClickedLink } from "../editor/link-click.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
 import { actionWaits } from "./action-waits.ts";
+import { queued, usePlanQueue } from "./plan-queue.ts";
 
 /**
  * The map (task 7; Mock 3): the doc's sections as boxes, the title in the
@@ -185,8 +186,10 @@ type LanePill =
       count: number;
       key: string;
       open: boolean;
-      /** Planned ones that can run now, for Run all (30.28). */
+      /** Planned ones that can run now: Run all shows while there are any (30.28). */
       ready: LaneItem[];
+      /** Every planned one, in order: Run all runs them all, each after the one before. */
+      planned: LaneItem[];
     };
 
 /**
@@ -206,7 +209,8 @@ function lanePills(lane: readonly LaneItem[], section: string, open: ReadonlySet
       const key = `${section}:${state}`;
       const isOpen = open.has(key);
       const ready = state === "planned" ? these.filter((it) => !it.waits) : [];
-      out.push({ kind: "group", state, count: these.length, key, open: isOpen, ready });
+      const planned = state === "planned" ? these : [];
+      out.push({ kind: "group", state, count: these.length, key, open: isOpen, ready, planned });
       if (isOpen) for (const it of these) out.push({ kind: "item", item: it, indent: true });
     }
   }
@@ -2357,11 +2361,7 @@ export function MapView({
                       <button
                         type="button"
                         className="map-action-go primary"
-                        title={
-                          pl.ready.length === pl.count
-                            ? `Run all ${String(pl.count)}`
-                            : `Run the ${String(pl.ready.length)} ready; the rest wait`
-                        }
+                        title={`Run all ${String(pl.count)}, each after the one before`}
                         onPointerDown={(e) => {
                           e.stopPropagation();
                         }}
@@ -2370,12 +2370,13 @@ export function MapView({
                           clickedAt.current = Date.now();
                           window.dispatchEvent(
                             new CustomEvent("anur:run-actions", {
-                              detail: pl.ready.flatMap((it) => (it.proposal ? [it.proposal] : [])),
+                              detail: pl.planned.flatMap((it) =>
+                                it.proposal ? [it.proposal] : [],
+                              ),
                             }),
                           );
-                          // What's left waits: open the group so each shows why.
-                          if (pl.ready.length < pl.count)
-                            setLaneOpen((o) => new Set([...o, pl.key]));
+                          // Open the group, so each shows as it runs.
+                          setLaneOpen((o) => new Set([...o, pl.key]));
                         }}
                       >
                         ▶ Run all
@@ -2848,6 +2849,7 @@ function ActionControl({
   docPath: string;
   docText: () => string;
 }) {
+  const queue = usePlanQueue();
   const say = (message: string) => {
     void anur.call("thread:send", { thread: thread.id, path: docPath, text: docText(), message });
   };
@@ -2868,6 +2870,13 @@ function ActionControl({
   );
   switch (act.state) {
     case "planned":
+      // Part of a plan running in order: it starts when the one before is done.
+      if (act.proposal && queued(queue, act.proposal))
+        return (
+          <span className="map-action-waits" title="Runs when the one before is done">
+            Next
+          </span>
+        );
       if (act.waits)
         return (
           <span className="map-action-waits" title={act.waits}>

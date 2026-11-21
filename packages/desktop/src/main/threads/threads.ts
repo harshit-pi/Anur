@@ -3759,6 +3759,26 @@ export class Threads {
     await this.refresh(rel, text, thread);
   }
 
+  /** The page took back edits that landed on it by themselves: each such note on those sections reads as taken back. */
+  async noteTakenBack(thread: string, doc: string, sections: string[][]): Promise<void> {
+    const own = await this.docOfThread(thread);
+    if (!own) return;
+    const lines = await this.linesOf(own, thread);
+    const undone = new Set(lines.flatMap((l) => (l.kind === "auto-undone" ? [l.used] : [])));
+    const keys = new Set(sections.map((s) => s.join("\u0000")));
+    for (const l of lines)
+      if (
+        l.kind === "auto-used" &&
+        l.undo === null &&
+        l.doc === doc &&
+        !undone.has(l.id) &&
+        l.sections.some((s) => keys.has(s.join("\u0000")))
+      )
+        await this.append(own, thread, { kind: "auto-undone", used: l.id });
+    const live = this.live.get(thread);
+    if (live) await this.refresh(live.rel, live.docText, thread);
+  }
+
   /** Undo from an auto-used note: the earlier text, while the file is still as the edit left it. */
   async autoUndoFor(
     thread: string,
