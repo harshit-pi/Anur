@@ -1204,6 +1204,11 @@ export const ipcContract = {
     response: z.object({ auto: z.boolean() }),
   },
   /** Quit and put the downloaded update in place, then open again. */
+  /** A step of launch the window reached, for the startup timings in Anur's log. */
+  "app:startup-mark": {
+    request: z.object({ name: z.string().max(80) }).strict(),
+    response: z.object({}),
+  },
   "update:restart": {
     request: z.object({}).strict(),
     response: z.object({ ok: z.boolean() }),

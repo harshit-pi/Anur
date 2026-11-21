@@ -127,6 +127,7 @@ import {
 } from "./folder/open-windows.ts";
 import { windowMemory } from "./folder/window-memory.ts";
 import { AWAY_MS, quietToRestart } from "./quiet-restart.ts";
+import { startupMark } from "./startup-marks.ts";
 import { onGitHub, spacesIn } from "./folder/spaces.ts";
 import { makeStartFolder } from "./folder/new-folder.ts";
 import { guarded, trustedSenders, type Handler } from "./ipc.ts";
@@ -2415,6 +2416,10 @@ const handlers: { [C in Channel]: Handler<C> } = {
     if (seen) await rm(file, { force: true });
     return { version: saved.version, notes: saved.notes };
   },
+  "app:startup-mark": ({ name }, { webContentsId }) => {
+    startupMark(name, app.getVersion(), `window ${String(webContentsId)}`);
+    return {};
+  },
   "update:restart": async () => {
     if (updateState().kind !== "ready") return { ok: false };
     // The updater closes every window before quitting: remember them first.
@@ -2948,6 +2953,7 @@ app.on("child-process-gone", (_e, d) => {
 Menu.setApplicationMenu(null);
 
 void app.whenReady().then(async () => {
+  startupMark("ready", app.getVersion());
   // Checks can set ANUR_CHECK_HOME, so a sample folder can stand in for one in iCloud.
   journal = new Journal(app.getPath("userData"));
   appSettings = new AppSettingsStore(app.getPath("userData"));
@@ -3062,6 +3068,7 @@ void app.whenReady().then(async () => {
   );
 
   const win = createWindow();
+  startupMark("first window", app.getVersion());
   const shot = process.env.ANUR_SCREENSHOT;
   if (shot) screenshotThenQuit(win, shot);
 
@@ -3095,6 +3102,7 @@ void app.whenReady().then(async () => {
           if (at && w.bounds && onSomeScreen(w.bounds)) at.setBounds(w.bounds);
         }
         if (reopenAll.length > 1 && !win.isDestroyed()) win.focus();
+        startupMark(`${String(reopenAll.length)} folders reopened`, app.getVersion());
       })();
     });
   }

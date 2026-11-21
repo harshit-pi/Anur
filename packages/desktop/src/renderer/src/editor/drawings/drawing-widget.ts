@@ -3,6 +3,7 @@ import { pagePath } from "../bases/base-widget.ts";
 
 import "./assets.ts";
 import { anur } from "../../bridge.ts";
+import { startupMark } from "../../startup.ts";
 /**
  * An embedded Excalidraw drawing, `![[Flow.excalidraw]]`, drawn as the
  * picture itself. A click opens it in its own tab, full size and editable
@@ -27,7 +28,13 @@ const listeners = new WeakMap<HTMLElement, () => void>();
 
 /** Excalidraw loaded ahead, while Anur is idle, so the first drawing doesn't wait for it. */
 export function loadAhead() {
-  void import("@excalidraw/excalidraw").catch(() => undefined);
+  startupMark("Excalidraw loading ahead");
+  void import("@excalidraw/excalidraw").then(
+    () => {
+      startupMark("Excalidraw loaded ahead");
+    },
+    () => undefined,
+  );
 }
 
 export class DrawingWidget extends WidgetType {

@@ -86,8 +86,12 @@ import { Offers } from "./regions/Offers.tsx";
 import { keepSame } from "./layout/keep-same.ts";
 import { redo as redoEdit, undo as undoEdit } from "@codemirror/commands";
 import { loadAhead } from "./editor/drawings/drawing-widget.ts";
+import { startupMark } from "./startup.ts";
 
 export function App() {
+  useEffect(() => {
+    startupMark("window ready");
+  }, []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   /** Docs opened lately in this folder, the latest first, for the palette's ranking. */
   const [recentDocs, setRecentDocs] = useState<string[]>([]);
@@ -255,7 +259,11 @@ export function App() {
   const folderPath = folder?.path ?? null;
   // A folder with drawings: Excalidraw loads a few seconds after it opens,
   // while Anur is idle, so the first drawing shown doesn't wait for it.
-  const hasDrawings = folder?.docs.some((d) => isDrawing(d)) ?? false;
+  // An Obsidian .excalidraw.md is one of the folder's docs; a plain .excalidraw isn't listed,
+  // so a drawing in any open tab counts too.
+  const hasDrawings =
+    (folder?.docs.some((d) => isDrawing(d)) ?? false) ||
+    tabs.tabs.some((t) => isDrawing(t.history[t.index] ?? ""));
   useEffect(() => {
     if (!hasDrawings) return;
     const t = window.setTimeout(() => {

@@ -24,6 +24,7 @@ import type { ClickedLink } from "../editor/link-click.ts";
 import { Markdown, bodyOf } from "./Markdown.tsx";
 import { ThreadName } from "./ThreadList.tsx";
 import { queued, usePlanQueue } from "./plan-queue.ts";
+import { startupMark } from "../startup.ts";
 
 /**
  * The map (task 7; Mock 3): the doc's sections as boxes, the title in the
@@ -419,6 +420,9 @@ export function MapView({
   );
 
   const byId = useMemo(() => new Map(boxes.map((b) => [b.id, b])), [boxes]);
+  useEffect(() => {
+    if (loaded && boxes.length > 0) startupMark("map drawn");
+  }, [loaded, boxes.length]);
 
   // Sections stay where they were drawn: when the layout would move one only because
   // something else changed (a new section, a thread's choices), it's kept in place,
