@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import {
   buildSectionTree,
   resolveHeading,
@@ -59,19 +60,30 @@ export class LinkIndex {
       const skip = this.offloaded();
       const live = new Set(docs);
       for (const rel of this.entries.keys()) if (!live.has(rel)) this.entries.delete(rel);
-      for (let i = 0; i < docs.length; i += 64)
-        await Promise.all(
+      for (let i = 0; i < docs.length; i += 64) {
+        const read = await Promise.all(
           docs.slice(i, i + 64).map(async (rel) => {
-            if (skip.has(rel)) return;
+            if (skip.has(rel)) return null;
             const s = await stat(path.join(this.folder, rel)).catch(() => null);
-            if (!s) return;
+            if (!s) return null;
             const had = this.entries.get(rel);
-            if (had && had.mtime === s.mtimeMs && had.size === s.size) return;
+            if (had && had.mtime === s.mtimeMs && had.size === s.size) return null;
             const text = await readFile(path.join(this.folder, rel), "utf8").catch(() => null);
-            if (text === null) return;
-            this.entries.set(rel, { mtime: s.mtimeMs, size: s.size, ...this.parse(rel, text) });
+            return text === null ? null : { rel, s, text };
           }),
         );
+        // One doc per turn: a first scan parses every doc, and parsing them
+        // in one go held up every other call at launch, the map's included.
+        for (const r of read) {
+          if (!r) continue;
+          this.entries.set(r.rel, {
+            mtime: r.s.mtimeMs,
+            size: r.s.size,
+            ...this.parse(r.rel, r.text),
+          });
+          await nextTurn();
+        }
+      }
       this.scanned = Date.now();
     })().finally(() => {
       this.scanning = null;
