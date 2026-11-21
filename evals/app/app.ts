@@ -53,7 +53,7 @@ type ThreadLite = {
   busy: boolean;
   purpose: string | null;
   action?: { state: string } | null;
-  items: { kind: string }[];
+  items: { kind: string; role?: string; text?: string; title?: string }[];
 };
 
 export class Session {
@@ -76,7 +76,10 @@ export class Session {
     const root = await tempDir("anur-app-eval-");
     const space = path.join(root, "space");
     await mkdir(space);
-    for (const [name, text] of Object.entries(files)) await writeFile(path.join(space, name), text);
+    for (const [name, text] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(space, name)), { recursive: true });
+      await writeFile(path.join(space, name), text);
+    }
     await mkdir(shots, { recursive: true });
     const s = new Session(space, doc, shots);
     s.app = await _electron.launch({
@@ -138,6 +141,87 @@ export class Session {
     await box.fill(text);
     await box.press("Enter");
     await this.idle();
+  }
+
+  /** Index and path of a section by its heading, in the doc as the page has it. */
+  private async sectionRef(
+    heading: string,
+  ): Promise<{ index: number; path: string[]; text: string }> {
+    return this.win.evaluate((h) => {
+      const w = window as unknown as { anurView?: { state: { doc: { toString(): string } } } };
+      const text = w.anurView?.state.doc.toString() ?? "";
+      const heads = [...text.matchAll(/^(#{1,6})[ \t]+(.+)$/gm)].map((m) => ({
+        depth: (m[1] ?? "").length,
+        name: (m[2] ?? "").trim(),
+      }));
+      const stack: string[] = [];
+      for (const [index, x] of heads.entries()) {
+        stack.length = x.depth - 1;
+        stack[x.depth - 1] = x.name;
+        if (x.name === h) return { index, path: stack.filter(Boolean), text };
+      }
+      throw new Error(`no heading ${h}`);
+    }, heading);
+  }
+
+  /**
+   * Start a thread on a section with files attached, as the composer's paperclip
+   * sends it (a file picker can't be driven), then wait for the reply.
+   */
+  async startWith(heading: string, message: string, files: string[] = []): Promise<string> {
+    const at = await this.sectionRef(heading);
+    const r = await this.win.evaluate(
+      (a) =>
+        (
+          window as unknown as {
+            anur: {
+              call(c: string, x: unknown): Promise<{ kind: string; thread?: { id: string } }>;
+            };
+          }
+        ).anur.call("thread:start", a),
+      {
+        path: this.doc,
+        text: at.text,
+        section: { index: at.index, path: at.path },
+        message,
+        files,
+      },
+    );
+    if (r.kind !== "started" || !r.thread) throw new Error(`thread:start ${r.kind}`);
+    await this.idle();
+    return r.thread.id;
+  }
+
+  /** Add files as a section's inputs, as Add input does, for the threads that start there. */
+  async addInputs(heading: string, files: string[]): Promise<unknown> {
+    const at = await this.sectionRef(heading);
+    return this.win.evaluate(
+      (a) =>
+        (
+          window as unknown as { anur: { call(c: string, x: unknown): Promise<unknown> } }
+        ).anur.call("inputs:add", a),
+      {
+        path: this.doc,
+        text: at.text,
+        section: { index: at.index, path: at.path },
+        thread: null,
+        files,
+        links: [],
+      },
+    );
+  }
+
+  /** A thread's last reply, and the tools its agent called. */
+  async replyOf(thread: string): Promise<{ text: string; tools: string[] }> {
+    const t = (await this.threads()).find((x) => x.id === thread);
+    const items = t?.items ?? [];
+    return {
+      text: items
+        .filter((i) => i.kind === "message" && i.role === "agent")
+        .map((i) => i.text ?? "")
+        .join("\n"),
+      tools: items.filter((i) => i.kind === "tool").map((i) => i.title ?? ""),
+    };
   }
 
   async click(selector: string, text: string | RegExp, nth = 0): Promise<boolean> {
