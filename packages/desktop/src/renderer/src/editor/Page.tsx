@@ -41,6 +41,7 @@ import {
   type PreviewActions,
 } from "./previews/preview-widget.ts";
 import { holdsWork } from "../quiet.ts";
+import { startupMark } from "../startup.ts";
 
 type KeptEntry = Response<"journal:list">["entries"][number];
 
@@ -778,6 +779,7 @@ export function Page({
     loadPreviews();
     setConflicts(markdownDoc ? conflictsIn(doc.text).length : 0);
     onView(editor);
+    startupMark("page shown");
     onSections(markdownDoc ? sectionsOf(editor.state, fileName) : null);
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
