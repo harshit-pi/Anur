@@ -167,10 +167,10 @@ export const SCENARIOS: readonly Scenario[] = [
         "Our first 100 users want something special. What could we offer them? One short paragraph.",
       );
       const threads = await s.lines("docs");
-      // Naming the rule to say it's kept is fine ("no lifetime deal"); offering one isn't.
+      // Naming the rule to say it's kept is fine ("without being a lifetime deal"); offering one isn't.
       const offers = (t: string) =>
         /lifetime/i.test(
-          t.replace(/\b(no|not an?|never an?|isn't an?|without an?)\s+lifetime/gi, ""),
+          t.replace(/\b(no|not|never|without|isn't|rather than)\b(\W+\w+){0,3}?\W+lifetime/gi, ""),
         );
       const offered = threads
         .flatMap((l) =>
@@ -312,16 +312,44 @@ export const SCENARIOS: readonly Scenario[] = [
     name: "layout",
     about:
       "Options on two neighbouring sections, and work in a lane: nothing on the map covers anything else",
-    known: {
-      "no-overlap":
-        "Choice cards and lane pills of neighbouring sections overlap (found 2026-11-20)",
-    },
     async run(s, check) {
       await s.select("Pricing");
       await s.ask("What should the paid tier be? Give me three options to pick from.");
+      const audience = await s.boxAt("Audience");
+      // Pricing's every position while Audience's cards arrive, to see it glide.
+      await s.win.evaluate(() => {
+        const w = window as unknown as { pricingYs: number[] };
+        w.pricingYs = [];
+        const tick = () => {
+          const el = [...document.querySelectorAll<HTMLElement>(".map-box[data-section]")].find(
+            (e) => e.innerText.trim().startsWith("Pricing"),
+          );
+          const y = el ? parseFloat(el.style.top) : NaN;
+          if (w.pricingYs.at(-1) !== y) w.pricingYs.push(y);
+          requestAnimationFrame(tick);
+        };
+        tick();
+      });
       await s.newThread("Audience");
       await s.ask(
         "Should students in university halls be part of the audience? Give me two options.",
+      );
+      const same = (a: { x: number; y: number } | null, b: typeof a) =>
+        !!a && !!b && Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1;
+      check(
+        "grower-stays",
+        same(audience, await s.boxAt("Audience")),
+        "The section that got cards stays where it was; its neighbours make room",
+        { before: audience, after: await s.boxAt("Audience") },
+      );
+      const ys = await s.win.evaluate(
+        () => (window as unknown as { pricingYs: number[] }).pricingYs,
+      );
+      check(
+        "slides",
+        ys.length >= 4,
+        "Pricing glides out of the way rather than jumping",
+        ys.map(Math.round),
       );
       await s.win.locator(".map-tool, button", { hasText: /^Fit$/ }).first().click();
       await s.win.waitForTimeout(1500);
@@ -332,6 +360,21 @@ export const SCENARIOS: readonly Scenario[] = [
         hit.length === 0,
         "No box, choice card, fold or pill covers another",
         hit,
+      );
+      const pricing = await s.boxAt("Pricing");
+      await s.click("aside.right-sidebar .think-offer button", /^Use$/);
+      await s.shot("used");
+      check(
+        "use-holds-still",
+        same(pricing, await s.boxAt("Pricing")),
+        "When cards go (a Use), nothing else on the map moves",
+        { before: pricing, after: await s.boxAt("Pricing") },
+      );
+      check(
+        "no-overlap-after-use",
+        (await s.overlaps()).length === 0,
+        "Still nothing covers anything after the Use",
+        await s.overlaps(),
       );
     },
   },
