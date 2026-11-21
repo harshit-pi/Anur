@@ -2,6 +2,7 @@ import { Facet } from "@codemirror/state";
 import { type EditorView, WidgetType } from "@codemirror/view";
 import type { Response } from "../../../../shared/ipc-contract.ts";
 import { followLinkIn } from "../link-click.ts";
+import { anur } from "../../bridge.ts";
 
 /**
  * An embedded Obsidian base, `![[Ideas.base]]`, drawn as its table: a tab
@@ -45,10 +46,8 @@ export class BaseWidget extends WidgetType {
     });
     const key = `${view.state.facet(pagePath)}\0${this.target}`;
     const load = () => {
-      void import("../../bridge.ts")
-        .then(({ anur }) =>
-          anur.call("base:read", { target: this.target, from: view.state.facet(pagePath) }),
-        )
+      void anur
+        .call("base:read", { target: this.target, from: view.state.facet(pagePath) })
         .then((read) => {
           draw(wrap, read, key);
           view.requestMeasure();

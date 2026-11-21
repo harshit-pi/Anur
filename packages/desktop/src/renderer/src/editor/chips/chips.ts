@@ -1,6 +1,7 @@
 import { syntaxTree } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
+import { anur } from "../../bridge.ts";
 
 /**
  * Chips for what the page keeps hidden (task 2.14): a callout's type, a code
@@ -82,11 +83,10 @@ export function embedPathRange(state: EditorState, from: number) {
   return null;
 }
 
-/** A native menu at the pointer; the bridge loads on use, so this module loads outside a browser. */
+/** A native menu at the pointer. */
 export async function chooseFrom(
   items: { id: string; label: string; checked?: boolean }[],
 ): Promise<string | null> {
-  const { anur } = await import("../../bridge.ts");
   const { id } = await anur.call("menu:popup", { items });
   return id;
 }

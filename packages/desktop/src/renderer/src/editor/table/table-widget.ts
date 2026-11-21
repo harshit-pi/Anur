@@ -18,6 +18,7 @@ import {
   setCell,
   width,
 } from "./table-model.ts";
+import { anur } from "../../bridge.ts";
 
 /**
  * A table edited in place (task 2.9). Each cell is typed into directly, as
@@ -381,26 +382,23 @@ function wire(wrap: HTMLElement, view: EditorView, addRow: HTMLElement, addCol: 
     e.preventDefault();
     const { row, col } = position(cell);
     const a = t.align[col];
-    // The bridge is loaded when a menu opens, so this module loads outside a browser too.
-    void import("../../bridge.ts")
-      .then(({ anur }) =>
-        anur.call("menu:popup", {
-          items: [
-            { id: "row-above", label: "Insert row above", enabled: row > 0 },
-            { id: "row-below", label: "Insert row below" },
-            { id: "col-left", label: "Insert column left" },
-            { id: "col-right", label: "Insert column right" },
-            { separator: true },
-            { id: "align-left", label: "Align column left", checked: a === "left" },
-            { id: "align-center", label: "Align column centre", checked: a === "center" },
-            { id: "align-right", label: "Align column right", checked: a === "right" },
-            { separator: true },
-            { id: "delete-row", label: "Delete row", enabled: row > 0 },
-            { id: "delete-col", label: "Delete column", enabled: width(t) > 1 },
-            { id: "delete-table", label: "Delete table" },
-          ],
-        }),
-      )
+    void anur
+      .call("menu:popup", {
+        items: [
+          { id: "row-above", label: "Insert row above", enabled: row > 0 },
+          { id: "row-below", label: "Insert row below" },
+          { id: "col-left", label: "Insert column left" },
+          { id: "col-right", label: "Insert column right" },
+          { separator: true },
+          { id: "align-left", label: "Align column left", checked: a === "left" },
+          { id: "align-center", label: "Align column centre", checked: a === "center" },
+          { id: "align-right", label: "Align column right", checked: a === "right" },
+          { separator: true },
+          { id: "delete-row", label: "Delete row", enabled: row > 0 },
+          { id: "delete-col", label: "Delete column", enabled: width(t) > 1 },
+          { id: "delete-table", label: "Delete table" },
+        ],
+      })
       .then(({ id }) => {
         if (id) apply(wrap, id as Action, row, col);
       });
