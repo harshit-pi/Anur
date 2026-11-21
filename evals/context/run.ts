@@ -8,7 +8,7 @@
  * modes, comma-separated, from: one-chat, outline, full, fetch (default all).
  * It runs the person's own Claude Code, so each run spends their tokens:
  * about four short prompts per mode. Each run writes its results to
- * evals/context/results/.
+ * evals/context/results/, not committed.
  *
  * - one-chat: one chat that sees the whole doc, then every discussion in
  *   turn, as a person brainstorming in one long chat would.

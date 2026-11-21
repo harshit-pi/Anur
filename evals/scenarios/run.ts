@@ -8,7 +8,7 @@
  * It runs the person's own Claude Code, so each run spends their tokens:
  * five short sessions per scenario. Any tool outside Anur's is declined and
  * logged, so nothing reaches a real service. Results go to
- * evals/scenarios/results/.
+ * evals/scenarios/results/, not committed.
  *
  * Rules:
  * - options: the choice comes back through anur_offer_options;
