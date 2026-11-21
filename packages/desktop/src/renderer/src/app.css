@@ -2928,8 +2928,8 @@ body.resizing * {
 
 .map-handle {
   position: absolute;
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border: 1px solid var(--blue);
   /* Centred on its point by its own size, whatever that is. */
   transform: translate(-50%, -50%);
@@ -2941,23 +2941,23 @@ body.resizing * {
 
 /* Each dot centred on the middle of the box's border, whatever its width (--bw). */
 .map-handle.left {
-  left: calc(var(--bw, 1px) / -2);
+  left: calc(var(--bw, 1px) / -2 - var(--ring, 0px));
   top: 50%;
 }
 
 .map-handle.right {
-  left: calc(100% + var(--bw, 1px) / 2);
+  left: calc(100% + var(--bw, 1px) / 2 + var(--ring, 0px));
   top: 50%;
 }
 
 .map-handle.top {
   left: 50%;
-  top: calc(var(--bw, 1px) / -2);
+  top: calc(var(--bw, 1px) / -2 - var(--ring, 0px));
 }
 
 .map-handle.bottom {
   left: 50%;
-  top: calc(100% + var(--bw, 1px) / 2);
+  top: calc(100% + var(--bw, 1px) / 2 + var(--ring, 0px));
 }
 
 .map-box:hover .map-handle,
@@ -7062,6 +7062,11 @@ button.file-card-name:hover {
 .map .map-box.title,
 .map .map-box.selected {
   --bw: 2px;
+}
+
+/* The selected title's blue is a 3px ring outside its border: the dots sit on its middle. */
+.map .map-box.title.selected {
+  --ring: 2.5px;
 }
 
 @media (prefers-reduced-motion: reduce) {
