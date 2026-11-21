@@ -7127,6 +7127,12 @@ button.file-card-name:hover {
   margin: 0;
 }
 
+/* "In the doc" or "Explored" beside a name stays on one line; the name gives way. */
+.think-offer.compact .think-offer-head > .quiet {
+  flex: none;
+  white-space: nowrap;
+}
+
 /* A long name ends in …; it opens in full on a click. */
 .think-offer.compact .think-offer-name {
   overflow: hidden;
