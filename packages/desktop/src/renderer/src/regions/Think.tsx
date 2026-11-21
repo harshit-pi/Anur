@@ -34,7 +34,7 @@ import type { EditorView } from "@codemirror/view";
 import { actionWaits } from "./action-waits.ts";
 import { bodyOf, Markdown } from "./Markdown.tsx";
 import { sentWhen } from "./thread-time.ts";
-import { exploresPath, foldSteps, runningStep, toolLabel } from "./thread-steps.ts";
+import { exploresPath, foldSteps, partParent, runningStep, toolLabel } from "./thread-steps.ts";
 import { countOf, Icon, type Attachment, type Queued, openFile, FileCard } from "./think-parts.tsx";
 import { SectionHistory, ChangeSet } from "./SectionHistory.tsx";
 import { CheckCard, FindingCard, PlanCard } from "./ThinkCards.tsx";
@@ -903,6 +903,41 @@ export function Think({
     // into the one already there, nearest first at any depth, else a new one.
     let node = section;
     let put = option;
+    // A narrower part, found exploring a part: under that part, which comes with it if new.
+    const parent = partParent(threads, t, option.id);
+    if (parent) {
+      const own = tree?.sections.find(
+        (x) =>
+          x.path.length === section.path.length + 1 &&
+          samePath(x.path.slice(0, section.path.length), section.path) &&
+          x.path.at(-1)?.trim().toLowerCase() === parent.title.trim().toLowerCase(),
+      );
+      const nested = "#".repeat(Math.min(6, section.path.length + 2));
+      const ok = own
+        ? putOption(main, docPath.split("/").pop() ?? docPath, own, option, "subsection")
+        : putOption(
+            main,
+            docPath.split("/").pop() ?? docPath,
+            section,
+            {
+              title: parent.title,
+              text: `${parent.text.trim()}\n\n${nested} ${option.title}\n\n${option.text.trim()}`,
+            },
+            "subsection",
+          );
+      if (!ok) {
+        setError("This thread's section is gone, so the option has nowhere to go.");
+        return;
+      }
+      void anur.call("thread:use-option", {
+        thread: t.id,
+        path: docPath,
+        text: main.state.doc.toString(),
+        option: option.id,
+        how: "subsection",
+      });
+      return;
+    }
     // "Also": beside the option already picked, as its own subsection.
     let mode: "replace" | "subsection" | "beside" = how === "also" ? "beside" : how;
     if (heading) {
@@ -1457,14 +1492,28 @@ export function Think({
                             >
                               Add
                             </button>
+                            {item.explored.includes(o.id) ? null : (
+                              <button
+                                type="button"
+                                className="think-more"
+                                onClick={() => {
+                                  exploreOption(thread, o.id);
+                                }}
+                              >
+                                Explore this
+                              </button>
+                            )}
+                            {/* Passed over far more than dismissed: Skip is the × on hover. */}
                             <button
                               type="button"
-                              className="think-button"
+                              className="think-skip"
+                              aria-label={`Skip ${o.title}`}
+                              title="Skip"
                               onClick={() => {
                                 skipOption(thread, o.id, true);
                               }}
                             >
-                              Skip
+                              ×
                             </button>
                           </div>
                         ) : writable &&

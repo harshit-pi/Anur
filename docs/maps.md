@@ -65,6 +65,7 @@ Thread    italic text on a line, or 💬 N on a box
 
 ## History
 
+- 2026-11-20: a part can be explored, as a choice can: Add · Explore this on its card, Skip as the × on hover. Narrower parts hang under it, and Add on one puts it under the part, which comes with it if new. Found by the app eval's `map-brainstorm`: brainstorm ideas come back as parts, which couldn't be explored.
 - 2026-11-20: parts asked again, as a rethink, replace the earlier parts with the same name; parts with different names stay side by side. Found by the app eval's `map-brainstorm`: "None of these" left ten cards on the map.
 - 2026-11-20: a box's handles are 8px and sit on the line a person sees: on a selected title box, its blue ring outside the border, not the border its fill hides. Checked by the app eval's `handles-on-line`.
 - 2026-11-20: neighbours make room. Found by the app eval: a section kept in place had its choices drawn over the next section's choices.

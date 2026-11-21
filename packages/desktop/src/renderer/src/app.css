@@ -7152,6 +7152,34 @@ button.file-card-name:hover {
   margin: 0;
 }
 
+/* A part's Skip: an × in the row's corner, on the row the pointer is over or by keyboard; it takes no room. */
+.think-offer:has(.think-skip) {
+  position: relative;
+}
+
+.think-skip {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 16px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--graphite);
+  font: 14px/16px var(--font-ui);
+  cursor: pointer;
+  visibility: hidden;
+}
+
+.think-offer:hover .think-skip,
+.think-skip:focus-visible {
+  visibility: visible;
+}
+
+.think-skip:hover {
+  color: var(--ink);
+}
+
 .think-offer-name {
   padding: 0;
   border: 0;

@@ -1038,7 +1038,9 @@ export class Threads {
     live.docText = text;
     this.live.set(thread, live);
 
-    if (exploring) this.exploring.set(thread, exploring);
+    // A thread started to explore an option explores it every turn: what it offers goes within it.
+    const within = exploring ?? start.explores?.option;
+    if (within) this.exploring.set(thread, within);
     else this.exploring.delete(thread);
     const turn = newTurnId();
     live.turn = turn;
@@ -2943,7 +2945,9 @@ export class Threads {
       "",
       "Nothing you write reaches the doc until the person picks this option: an edit you make waits as a proposal under it. So don't write the doc as if it were chosen.",
       "",
-      `Work it through: what it would take, what could go wrong, and what it costs. If it splits into narrower choices, offer those as options${heading ? ` with the heading "${heading}"` : "; each is still the section's whole text"}.`,
+      set.several
+        ? "It's one of several parts that can all belong, not a pick among them. Work it through: what it would take and what could go wrong. If it splits into narrower ways to do it, offer those as parts (`several`): each the person adds goes in under this one."
+        : `Work it through: what it would take, what could go wrong, and what it costs. If it splits into narrower choices, offer those as options${heading ? ` with the heading "${heading}"` : "; each is still the section's whole text"}.`,
     ].join("\n");
     return this.start(
       rel,

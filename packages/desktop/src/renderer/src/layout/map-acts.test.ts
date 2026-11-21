@@ -15,9 +15,10 @@ describe("a choice's buttons on the map (30.32)", () => {
     expect(choiceActs({})).toEqual({ use: "Use", explore: true, skip: false });
   });
 
-  it("says Use instead on one passed over, Add on a part, and no Explore once explored", () => {
+  it("says Use instead on one passed over, Add on a part, and Explore until explored", () => {
     expect(choiceActs({ notPicked: true })).toMatchObject({ use: "Use instead", explore: true });
-    expect(choiceActs({ several: true })).toEqual({ use: "Add", explore: false, skip: true });
+    expect(choiceActs({ several: true })).toEqual({ use: "Add", explore: true, skip: true });
+    expect(choiceActs({ several: true, explored: true })).toMatchObject({ explore: false });
     expect(choiceActs({ explored: true })).toMatchObject({ use: "Use", explore: false });
   });
 
