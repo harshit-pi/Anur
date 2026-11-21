@@ -92,6 +92,7 @@ ANUR_SCREENSHOT=/tmp/shot.png ANUR_OPEN_FOLDER=/path/to/folder ANUR_SCREENSHOT_C
 ## Gotchas found the hard way
 
 - Enter in a numbered list is `insertNewlineContinueNumbering` (`editor/list-numbering.ts`), not Markdown's own command: it also renumbers a later list that picks up where this one ended (a paragraph splits a list in Markdown, so the stock command left those numbers behind and 9 and 10 showed twice). It is one undo step. A later list that starts anywhere else, or at 1, is left alone.
+- Up and Down with the cursor scrolled off screen go through `offscreenArrowKeymap` (`editor/offscreen-arrows.ts`), before the default keymap. CodeMirror still draws the cursor's line but not the lines between it and the screen, and its vertical move skips every undrawn line as if it were padding, landing on the last drawn line (Up from item 10 went to item 4). Off screen, the move is one line in the text, past block lines such as images, then scrolls to the cursor; on screen, CodeMirror's own command runs. Checked with CodeMirror view 6.43.15; drop it if a later version fixes `posAtCoords` for undrawn lines.
 
 - macOS's temp folder is a symlink (`/var` → `/private/var`). The hook resolves real paths, so anything compared with what it sees must be real too (`realpathSync`).
 - A Unix socket path must stay under about 104 bytes. Anur's lives in a fresh folder in the system temp folder, not in app support.

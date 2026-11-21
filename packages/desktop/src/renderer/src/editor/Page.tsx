@@ -1,6 +1,7 @@
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { markdownKeymap } from "@codemirror/lang-markdown";
 import { insertNewlineContinueNumbering } from "./list-numbering.ts";
+import { offscreenArrowKeymap } from "./offscreen-arrows.ts";
 import { Compartment, EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import {
@@ -519,6 +520,7 @@ export function Page({
               : []),
             ...(markdownDoc ? [...formattingKeymap, ...markdownKeymap] : []),
             ...historyKeymap,
+            ...offscreenArrowKeymap,
             ...defaultKeymap,
           ]),
           pageTheme,
