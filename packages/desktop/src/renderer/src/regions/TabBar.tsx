@@ -360,7 +360,14 @@ export function TabBar({
         ) : null}
       </div>
       {space ? (
-        <div className="segmented" role="radiogroup" aria-label="View">
+        // A file with no map or page (a drawing, an image) hides the toggle, keeping its room so nothing beside it moves.
+        <div
+          className="segmented"
+          role="radiogroup"
+          aria-label="View"
+          aria-hidden={view === null}
+          style={view === null ? { visibility: "hidden" } : undefined}
+        >
           {(["map", "page"] as const).map((v) => (
             <button
               key={v}
