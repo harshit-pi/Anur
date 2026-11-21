@@ -426,7 +426,7 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 ## The system is a map, opened like a doc
 
 - No ribbon icon for the system. With Engineering on, the files panel's first row is "System", and ⌘K has "Open the system map"; it opens in a tab like a doc.
-- The system has no page, so its tab is map only: the Page / Map switch shows Map on and Page greyed, saying why.
+- The system has no page, so its tab is map only: the Map / Page switch shows Map on and Page greyed, saying why.
 - What a doc's tab shows in Think, the system shows in the right sidebar: recent tasks, the calls of a line clicked on the map with their files and lines, and Choose repos. The map has the whole centre.
 - The lines are drawn on the map, so no list repeats them: a click on a line opens a card beside it with its calls or links, each with where it was found and Hide. Recent task reports sit under System in the files panel.
 - The right sidebar is kept for the agent on the map, which comes next.

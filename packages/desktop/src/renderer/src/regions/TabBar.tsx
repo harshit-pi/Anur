@@ -55,7 +55,8 @@ type Drag = {
 };
 
 /**
- * 3. Tab bar: the files toggle, tabs, then Page and Map, and the section
+ * 3. Tab bar: the files toggle, tabs, then Map and Page (Map first, as docs open
+ * in it by default), and the section
  * panel toggle. Tabs drag to move, pin to the left, and gather in groups.
  */
 export function TabBar({
@@ -360,7 +361,7 @@ export function TabBar({
       </div>
       {space ? (
         <div className="segmented" role="radiogroup" aria-label="View">
-          {(["page", "map"] as const).map((v) => (
+          {(["map", "page"] as const).map((v) => (
             <button
               key={v}
               type="button"
