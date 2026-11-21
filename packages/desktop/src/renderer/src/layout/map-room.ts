@@ -5,11 +5,9 @@ export type Rect = { l: number; t: number; r: number; b: number };
 export type Cluster = { id: string; y: number; pinned?: boolean; rects: readonly Rect[] };
 
 /** A cluster's size, to tell when something new hangs off it. */
-export const sizeOf = (c: Cluster): number => {
-  const t = Math.min(...c.rects.map((r) => r.t));
-  const b = Math.max(...c.rects.map((r) => r.b));
-  return c.rects.length * 100_000 + Math.round(b - t);
-};
+export const sizeOf = (c: Cluster): number =>
+  // Each piece's own height, so a lane growing under a section counts though cards beside it are taller.
+  c.rects.length * 100_000 + Math.round(c.rects.reduce((n, r) => n + (r.b - r.t), 0));
 
 /**
  * How far to slide each section so the clusters that grew cover nothing: a

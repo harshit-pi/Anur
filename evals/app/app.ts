@@ -128,6 +128,9 @@ export class Session {
 
   /** Start a new thread from a section's hover card, as a person does (30.37). */
   async newThread(section: string): Promise<void> {
+    // Off any hover card first, so it can't cover the box.
+    await this.win.mouse.move(5, 5);
+    await this.win.waitForTimeout(400);
     await this.win.locator(".map-box", { hasText: section }).first().hover();
     await this.win.waitForTimeout(1200);
     await this.win.locator(".map-peek-new").click();

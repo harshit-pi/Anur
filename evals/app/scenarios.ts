@@ -388,6 +388,19 @@ export const SCENARIOS: readonly Scenario[] = [
         "Still nothing covers anything after the Use",
         await s.overlaps(),
       );
+      // A lane appearing under a section whose cards already stand taller beside it.
+      await s.select("Audience");
+      await s.ask(
+        "Set up drafting an email to university halls offices as an action I can run later, as a note in this folder. Don't draft it now.",
+      );
+      await s.win.waitForTimeout(1500);
+      await s.shot("lane");
+      check(
+        "lane-room",
+        (await s.pills()).length > 0 && (await s.overlaps()).length === 0,
+        "A lane under a section with cards beside it makes room too",
+        { pills: await s.pills(), overlaps: await s.overlaps() },
+      );
     },
   },
   {
