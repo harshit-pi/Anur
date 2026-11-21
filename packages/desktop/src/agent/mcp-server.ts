@@ -250,6 +250,20 @@ const TOOLS = [
     },
   },
   {
+    name: "anur_plugin_action",
+    description:
+      "Run an action of a plugin that's on in this folder, as its button in Anur's status bar does: the Git plugin's createRepo (Create private repo on GitHub) or syncNow (Sync now). Your context lists the plugins on here and their actions. Use Git's for anything that puts this folder on GitHub or pushes it: it commits everything, .anur/ included. Tell the person what it answers.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        plugin: { type: "string", description: 'The plugin, such as "git".' },
+        action: { type: "string", description: 'The action, such as "syncNow".' },
+      },
+      required: ["plugin", "action"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "anur_name_thread",
     description:
       'Name this thread, once, as you first reply: two to five words for what it is about, such as "Pricing per flat". The person sees it in Anur\'s thread list and on the map. A name the person gave is kept.',
