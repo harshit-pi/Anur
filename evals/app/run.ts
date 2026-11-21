@@ -8,7 +8,7 @@
  * Each run spends the person's tokens (a few minutes of agent work per
  * scenario), so it runs on demand, never in CI. Results go to
  * evals/app/results/<time>.json, with screenshots and the folder as left
- * in evals/app/results/<time>/ (not committed).
+ * in evals/app/results/<time>/. None of it is committed: a PR says what its run showed.
  */
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
