@@ -140,3 +140,23 @@ export function exploresPath(thread: ThreadView, threads: ThreadView[]): string[
   }
   return out;
 }
+
+/** The part a narrower part was found exploring, when its set is parts within one. */
+export function partParent(
+  threads: readonly ThreadView[],
+  t: ThreadView,
+  option: string,
+): { title: string; text: string } | null {
+  const set = t.items.find(
+    (x): x is Extract<ThreadView["items"][number], { kind: "options" }> =>
+      x.kind === "options" && x.options.some((o) => o.id === option),
+  );
+  if (!set?.several || !set.within) return null;
+  for (const th of threads)
+    for (const x of th.items)
+      if (x.kind === "options" && x.several) {
+        const p = x.options.find((o) => o.id === set.within);
+        if (p) return p;
+      }
+  return null;
+}

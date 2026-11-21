@@ -118,12 +118,6 @@ const kept = (t: string) =>
 export const MAP_SCENARIOS: Scenario[] = [
   {
     name: "map-brainstorm",
-    known: {
-      "explore-1":
-        "Brainstorm ideas come back as parts (Add/Skip), which have no Explore (found 2026-11-20)",
-      "explore-2": "As explore-1: parts have no Explore (found 2026-11-20)",
-      "use-writes": "As explore-1: parts have Add, not Use (found 2026-11-20)",
-    },
     about:
       "An open question becomes choices on the map; a constraint sticks; a rethink replaces the set; two levels of explore; Use writes briefly",
     folder: FOLDER,
@@ -230,13 +224,22 @@ export const MAP_SCENARIOS: Scenario[] = [
       );
       await pageSame(s, check, "page-same-3", settled);
       const beforeUse = await s.file();
-      await s.click("aside.right-sidebar .think-offer button", /^Use$/, 0);
+      // Use for a choice, Add for a part: the card's primary button either way.
+      await s.click("aside.right-sidebar .think-offer button", /^(Use|Add)$/, 0);
       await s.win.waitForTimeout(3000);
       await s.shot("used");
       const now = await s.file();
       const grew = section(now, "Growth").length - section(beforeUse, "Growth").length;
       check("use-writes", grew > 0, "Use writes the pick into Growth");
-      check("use-brief", grew <= 600, "…briefly: the page is the record, not the brainstorm", grew);
+      // A narrower part comes with the part it narrows: brief per idea, not in total.
+      const heads = (t: string) => (section(t, "Growth").match(/^#{3,6} /gm) ?? []).length;
+      const added = Math.max(1, heads(now) - heads(beforeUse));
+      check(
+        "use-brief",
+        grew <= 600 * added,
+        "…briefly: the page is the record, not the brainstorm",
+        { grew, added },
+      );
       check(
         "others-untouched",
         ["Audience", "Pricing", "Launch steps", "Risks"].every(

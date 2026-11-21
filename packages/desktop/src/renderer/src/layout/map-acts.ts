@@ -14,7 +14,7 @@ export function choiceActs(b: {
   if (b.exploring) return null;
   return {
     use: b.several ? "Add" : b.notPicked ? "Use instead" : "Use",
-    explore: !b.several && !b.explored,
+    explore: !b.explored,
     // A part can be passed over; one already skipped is only added, from its fold.
     skip: !!b.several && !b.skipped,
   };

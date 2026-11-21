@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadItem, ThreadView } from "../../../shared/ipc-contract.ts";
 import { withEvent } from "./thread-events.ts";
-import { exploresPath, foldSteps, runningStep, withBranches } from "./thread-steps.ts";
+import { exploresPath, foldSteps, partParent, runningStep, withBranches } from "./thread-steps.ts";
 
 const person = (turn: string, text = "Q"): ThreadItem => ({
   kind: "message",
@@ -142,5 +142,30 @@ describe("threads in order", () => {
       "Option c",
     ]);
     expect(exploresPath(root, [root])).toEqual([]);
+  });
+});
+
+describe("a narrower part's parent", () => {
+  type Options = Extract<ThreadItem, { kind: "options" }>;
+  const parts = (within: string | null = null, ids = ["p", "q"]): ThreadItem => ({
+    ...(offer("1", ids) as Options),
+    several: true,
+    within,
+  });
+  it("is the part it was found exploring", () => {
+    const root = thread("root", { items: [parts(null, ["p", "q"])] });
+    const deep = thread("deep", { items: [parts("p", ["r", "s"])] });
+    expect(partParent([root, deep], deep, "r")).toMatchObject({ title: "Option p" });
+  });
+  it("is none for a first set, a choice explored, or narrower choices of one", () => {
+    const root = thread("root", { items: [parts(null, ["p", "q"])] });
+    expect(partParent([root], root, "p")).toBeNull();
+    const pick = thread("pick", { items: [offer("1", ["c", "d"])] });
+    const deep = thread("deep", { items: [parts("c", ["r", "s"])] });
+    expect(partParent([pick, deep], deep, "r")).toBeNull();
+    const narrowChoice = thread("nc", {
+      items: [{ ...(offer("1", ["r"]) as Options), within: "p" }],
+    });
+    expect(partParent([root, narrowChoice], narrowChoice, "r")).toBeNull();
   });
 });

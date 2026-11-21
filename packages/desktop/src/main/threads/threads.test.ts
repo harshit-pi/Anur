@@ -645,6 +645,44 @@ describe("Threads", () => {
     expect(view?.action?.state).toBe("done");
   });
 
+  it("explores a part as a part: narrower ways come back as parts, nothing reaches the doc", async () => {
+    const { threads: t, reply, sent } = await setup();
+    const tool = (
+      t as unknown as { tool: (th: string, n: string, args: unknown) => Promise<unknown> }
+    ).tool.bind(t);
+    const a = await t.start("plan.md", DOC, risks, "What could we do about risks?");
+    if (a.kind !== "started") throw new Error(a.reason);
+    await tool(a.thread.id, "anur_offer_options", {
+      several: true,
+      options: [
+        { title: "Load test", text: "Load test the host.", why: "Finds limits early" },
+        { title: "Backups", text: "Nightly backups.", why: "Cheap safety net" },
+      ],
+    });
+    await reply(a.thread.id, "Two parts.");
+    const part = (await t.list("plan.md", DOC))
+      .find((x) => x.id === a.thread.id)
+      ?.items.flatMap((i) => (i.kind === "options" ? i.options : []))[0];
+    if (!part) throw new Error("no parts");
+    const e = await t.exploreOption("plan.md", DOC, a.thread.id, part.id);
+    if (e.kind !== "started") throw new Error(e.reason);
+    const asked = sent.filter((m) => m.type === "prompt").at(-1);
+    const text = asked?.type === "prompt" ? asked.text : "";
+    expect(text).toContain("several parts that can all belong");
+    expect(text).toContain("Nothing you write reaches the doc");
+    await tool(e.thread.id, "anur_offer_options", {
+      several: true,
+      options: [
+        { title: "k6 script", text: "A k6 script.", why: "Repeatable" },
+        { title: "Staging soak", text: "A day on staging.", why: "Real traffic shape" },
+      ],
+    });
+    const narrower = (await t.list("plan.md", DOC))
+      .find((x) => x.id === e.thread.id)
+      ?.items.find((i) => i.kind === "options");
+    expect(narrower?.kind === "options" && narrower.within).toBe(part.id);
+  });
+
   it("keeps an explored option's edits as a proposal in Auto, where a plain thread's land (30.31)", async () => {
     const auto = [
       {
