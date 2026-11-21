@@ -17,7 +17,7 @@ Thread    italic text on a line, or 💬 N on a box
 - Colour carries state only on work (needs you, running, done, failed). A section is just its name.
 - Anything else stays off the map, in the thread panel or the page. The map is read at a glance; every extra mark costs that.
 
-## The doc map (`renderer/src/regions/MapView.tsx`)
+## The doc map (`renderer/src/regions/MapView.tsx`; its boxes from `layout/map-boxes.ts`)
 
 | Piece                     | What it is                                                                                                                       | Click                                                          |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
