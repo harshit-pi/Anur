@@ -3111,6 +3111,23 @@ body.resizing * {
   margin: 0 0 6px;
 }
 
+/* A section's text in its hover card: a faint tint says it can be typed in; a ring while it is. */
+.map-peek-edit {
+  margin: 0 -6px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: text;
+}
+
+.map-peek-edit:hover {
+  background: var(--paper);
+}
+
+.map-peek-edit:focus-within {
+  background: none;
+  box-shadow: 0 0 0 1.5px var(--blue);
+}
+
 /* Tables in Think and the map's hover text. */
 .think-table-wrap {
   margin: 0 0 8px;

@@ -1,18 +1,15 @@
 import { defaultKeymap, redo, undo } from "@codemirror/commands";
-import { markdownKeymap } from "@codemirror/lang-markdown";
-import { insertNewlineContinueNumbering } from "./list-numbering.ts";
 import { Annotation, EditorState, type Transaction } from "@codemirror/state";
 import { EditorView, keymap, placeholder, type ViewUpdate } from "@codemirror/view";
 import type { SectionNode } from "@anur/core";
 import { useEffect, useRef } from "react";
 import { pagePath } from "./bases/base-widget.ts";
-import { formattingKeymap } from "./commands.ts";
+import { markdownEditing } from "./editing.ts";
+import type { ClickedLink } from "./link-click.ts";
 import { knownDocs, livePreview } from "./live-preview/live-preview.ts";
 import { livePreviewTheme } from "./live-preview/style.ts";
 import { pageUpdates } from "./page-updates.ts";
-import { markdownSupport } from "./sections.ts";
 import { bodyRange, type Range } from "./section-range.ts";
-import { pageHighlight } from "./theme.ts";
 
 /**
  * One section's text, editable where Think shows it. It is a second view of
@@ -44,18 +41,28 @@ export function SectionEditor({
   docPath,
   section,
   editable,
+  onOpenLink,
+  notify,
 }: {
   /** The page's own view. */
   page: () => EditorView | null;
   docPath: string;
   section: SectionNode;
   editable: boolean;
+  /** Opens a clicked link, as on the page; ⌘-click opens it in a new tab. */
+  onOpenLink: (link: ClickedLink, inNewTab: boolean) => void;
+  /** Says a problem, such as an image that couldn't be added. */
+  notify: (message: string) => void;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
   const range = useRef<Range | null>(null);
   const fileName = docPath.split("/").pop() ?? docPath;
   const sectionNow = useRef(section);
+  const openLinkNow = useRef(onOpenLink);
+  openLinkNow.current = onOpenLink;
+  const notifyNow = useRef(notify);
+  notifyNow.current = notify;
 
   // Make this view's text match the page's, changing only what differs so the caret stays.
   const sync = () => {
@@ -100,13 +107,19 @@ export function SectionEditor({
             { key: "Mod-z", run: () => undo(main) },
             { key: "Mod-Shift-z", run: () => redo(main) },
             { key: "Mod-y", run: () => redo(main) },
-            { key: "Enter", run: insertNewlineContinueNumbering },
-            ...formattingKeymap,
-            ...markdownKeymap,
-            ...defaultKeymap,
           ]),
-          markdownSupport(),
-          pageHighlight,
+          // Typed and clicked as on the page (editing.ts).
+          ...markdownEditing({
+            editable,
+            docs: known?.docs ?? [],
+            onOpenLink: (link, inNewTab) => {
+              openLinkNow.current(link, inNewTab);
+            },
+            notify: (message) => {
+              notifyNow.current(message);
+            },
+          }),
+          keymap.of(defaultKeymap),
           livePreview,
           livePreviewTheme,
           ...(known ? [knownDocs.of(known)] : []),

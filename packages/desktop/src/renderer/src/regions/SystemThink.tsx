@@ -65,6 +65,9 @@ export function SystemThink({
       request={null}
       onJump={() => undefined}
       page={() => null}
+      // No page here, so no section editor: nothing to open or say.
+      onOpenLink={() => undefined}
+      notify={() => undefined}
       noun={noun}
       extra={
         count ? (

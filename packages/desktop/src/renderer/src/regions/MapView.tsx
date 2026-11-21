@@ -13,6 +13,7 @@ import {
   mindLayout,
   resolveWiki,
   type MapNode,
+  type SectionNode,
   type SectionTree,
 } from "@anur/core";
 import type { InkStroke, PreviewView, ThreadView } from "../../../shared/ipc-contract.ts";
@@ -27,6 +28,9 @@ import { mapSkeleton } from "../layout/map-drawing.ts";
 import { BoxSketch, sketchLine } from "./MapSketch.tsx";
 import { useMapStyle } from "./map-style-pref.ts";
 import "../editor/drawings/assets.ts";
+import { EditorView } from "@codemirror/view";
+import { SectionEditor } from "../editor/section-editor.tsx";
+import type { ClickedLink } from "../editor/link-click.ts";
 import { Markdown, ThreadName, bodyOf } from "./Think.tsx";
 import { actionWaits } from "./action-waits.ts";
 
@@ -253,6 +257,9 @@ export function MapView({
   onAddSection,
   onDelete,
   onRename,
+  page,
+  onOpenLink,
+  notify,
   onUndo,
   onRedo,
   writable,
@@ -271,6 +278,12 @@ export function MapView({
   onDelete: (index: number) => boolean;
   /** Rename the section at `index`: its heading in the doc changes, so the page follows. */
   onRename: (index: number, name: string) => void;
+  /** The page's editor: a section's text typed in its hover card is typed there. */
+  page: () => EditorView | null;
+  /** Opens a link clicked in a hover card's text; ⌘-click opens it in a new tab. */
+  onOpenLink: (link: ClickedLink, inNewTab: boolean) => void;
+  /** Says a problem with an edit in a hover card. */
+  notify: (message: string) => void;
   /** Undo and redo the page's last edit. */
   onUndo: () => void;
   onRedo: () => void;
@@ -405,9 +418,14 @@ export function MapView({
   const peekTimer = useRef(0);
   const peekWant = useRef<string | null>(null);
   const peekClose = useRef(0);
+  /** The section whose text is being typed in its hover card, by keyOf: the card stays put. */
+  const [editing, setEditing] = useState<string | null>(null);
+  const editingNow = useRef(editing);
+  editingNow.current = editing;
   /** Pointer on a box opens its text after a moment; the text stays while the pointer is on it. */
   const onHover = (e: React.PointerEvent) => {
     const target = e.target as HTMLElement;
+    if (editingNow.current) return;
     if (target.closest(".map-peek")) {
       window.clearTimeout(peekClose.current);
       return;
@@ -1882,6 +1900,7 @@ export function MapView({
       }}
       onPointerLeave={() => {
         pointerIn.current = false;
+        if (editingNow.current) return;
         peekWant.current = null;
         window.clearTimeout(peekTimer.current);
         setPeek(null);
@@ -2478,7 +2497,12 @@ export function MapView({
           );
         }
         const opt = peek?.startsWith("o:") || peek?.startsWith("p:") ? byId.get(peek) : undefined;
-        const s = peek?.startsWith("s:") ? tree.sections[Number(peek.slice(2))] : undefined;
+        const s = editing
+          ? tree.sections.find((x) => keyOf(x) === editing)
+          : peek?.startsWith("s:")
+            ? tree.sections[Number(peek.slice(2))]
+            : undefined;
+        const canEdit = !!s && writable && docPath !== FOLDER_DOC;
         const b = opt ?? (s ? byId.get(idOf(s.index)) : undefined);
         if (!b || drag || linking || (!s && !opt?.option)) return null;
         const name = opt?.option ? opt.option.title : (s?.path.at(-1) ?? "");
@@ -2524,7 +2548,30 @@ export function MapView({
               ) : null}
             </div>
             {opt ? <p className="map-peek-use quiet">{useSays(opt)}</p> : null}
-            {body ? <Markdown text={body} /> : <p className="quiet">No text yet.</p>}
+            {s && canEdit ? (
+              // The page's own editor, reading and typing alike: a click puts the caret there.
+              <PeekEditor
+                key={keyOf(s)}
+                page={page}
+                docPath={docPath}
+                section={s}
+                onOpenLink={onOpenLink}
+                notify={notify}
+                onStart={() => {
+                  clickedAt.current = Date.now();
+                  onSelect(s.index);
+                  setEditing(keyOf(s));
+                }}
+                onDone={(away) => {
+                  setEditing(null);
+                  if (away) setPeek(null);
+                }}
+              />
+            ) : body ? (
+              <Markdown text={body} />
+            ) : (
+              <p className="quiet">No text yet.</p>
+            )}
           </div>
         );
       })()}
@@ -2654,6 +2701,65 @@ const KEYS_SEEN = "anur.map.keysSeen";
  * The map's keys (mock 8): in full the first time, then only the keys,
  * spelled out again on hover.
  */
+/** A section, told apart from one of the same name by its place among them. */
+const keyOf = (s: SectionNode) => `${s.path.join("\u0000")}#${String(s.ordinal)}`;
+
+/**
+ * A section's text in its hover card, in the page's own editor as Think shows
+ * it: each keystroke is an edit to the page. Escape or clicking away closes it.
+ */
+function PeekEditor({
+  page,
+  docPath,
+  section,
+  onOpenLink,
+  notify,
+  onStart,
+  onDone,
+}: {
+  page: () => EditorView | null;
+  docPath: string;
+  section: SectionNode;
+  onOpenLink: (link: ClickedLink, inNewTab: boolean) => void;
+  notify: (message: string) => void;
+  /** Typing starts: the card stays put while it has focus. */
+  onStart: () => void;
+  /** `away`: focus left the card, so the card closes too. */
+  onDone: (away: boolean) => void;
+}) {
+  return (
+    <div
+      className="map-peek-edit"
+      onPointerDown={(e) => {
+        e.stopPropagation();
+      }}
+      onFocus={onStart}
+      onKeyDown={(e) => {
+        // The map's keys (Tab, Enter, Delete) are for boxes, not this text.
+        e.stopPropagation();
+        if (e.key === "Escape") {
+          e.preventDefault();
+          (document.activeElement as HTMLElement | null)?.blur();
+        }
+      }}
+      onBlur={(e) => {
+        const to = e.relatedTarget as HTMLElement | null;
+        if (to && e.currentTarget.contains(to)) return;
+        onDone(!to?.closest(".map-peek"));
+      }}
+    >
+      <SectionEditor
+        page={page}
+        docPath={docPath}
+        section={section}
+        editable
+        onOpenLink={onOpenLink}
+        notify={notify}
+      />
+    </div>
+  );
+}
+
 function KeyBar() {
   const [first] = useState(() => {
     try {
