@@ -16,7 +16,7 @@
  *   replaced one, a stale line in the doc, a lapsed one), both sides of a
  *   disagreement named, and the decision named as what it relied on.
  *
- * Results go to evals/carry/results/.
+ * Results go to evals/carry/results/, not committed.
  */
 import { spawn } from "node:child_process";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";

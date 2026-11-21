@@ -2,4 +2,4 @@ pnpm-lock.yaml
 brand/*.png
 corpora/
 evals/*/.build/
-evals/app/results/
+evals/*/results/

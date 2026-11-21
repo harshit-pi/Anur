@@ -54,12 +54,12 @@ any Claude Code session, any folder
 
 ## The context eval's first result (2026-11-17)
 
-- Three runs each way, Anur's threads against one long chat (`evals/context/results/2026-11-17T23-05-11-236Z.json`).
+- Three runs each way, Anur's threads against one long chat ([`evals/context/results/2026-11-17T23-05-11-236Z.json`](https://github.com/harshit-pi/Anur/blob/793592ca0aeb7b69b72b96de82ea8097612bd5be/evals/context/results/2026-11-17T23-05-11-236Z.json)).
 - An option rejected in one section's thread reached a sibling's draft in the long chat once ("never WhatsApp") and never in Anur's threads.
 - Constraints in the title's own text and in a further section's first line were kept every time, both ways.
 - A constraint past a further section's first line was kept every time in the long chat and never in Anur's threads: the outline carries first lines only, and the eval gives the agent no tools to fetch more.
 - What to change in the bundle in answer is open; see the decision that follows this result.
-- Second result, five runs each way (`evals/context/results/2026-11-17T23-24-06-575Z.json`): the deep rule was kept 5/5 with the rest of the doc in full (`doc-full`) and 5/5 with the outline plus a hint to fetch (`fetch-hint`, with `anur_read_section`; 3 to 4 reads a run), against 0/5 with the outline alone. No way leaked the rejected option this time, so the eval needs harder pollution cases to tell the ways apart there.
+- Second result, five runs each way ([`evals/context/results/2026-11-17T23-24-06-575Z.json`](https://github.com/harshit-pi/Anur/blob/793592ca0aeb7b69b72b96de82ea8097612bd5be/evals/context/results/2026-11-17T23-24-06-575Z.json)): the deep rule was kept 5/5 with the rest of the doc in full (`doc-full`) and 5/5 with the outline plus a hint to fetch (`fetch-hint`, with `anur_read_section`; 3 to 4 reads a run), against 0/5 with the outline alone. No way leaked the rejected option this time, so the eval needs harder pollution cases to tell the ways apart there.
 
 ## Agents sit behind an adapter (2026-11-17)
 
@@ -298,7 +298,7 @@ From a first-run walkthrough on real Claude (Ask, Check and Build on a launch pl
 ## The carry eval (18.7)
 
 - `pnpm eval:carry [runs] [--no-model]` (`evals/carry/`): a workspace with two repos and 200 committed decisions and findings, and a thread on `docs/plan.md › Pricing`. 100 reach that section; the other 100 are on other sections, docs, folders and repos, lapsed, dropped, replaced, on a section that's gone, or lines that aren't decisions. It runs Anur's own reader and bundle, then twelve questions through Claude Code, scored by script.
-- Selection, first run (2026-11-19, `evals/carry/results/2026-11-19T19-08-15-507Z.json`): none of the 100 wrong ones reached the thread; the 30 nearest decisions and 10 findings were listed in order, disputes marked, and the other 60 counted ("And 60 more decided further from here, not listed").
+- Selection, first run (2026-11-19, [`evals/carry/results/2026-11-19T19-08-15-507Z.json`](https://github.com/harshit-pi/Anur/blob/793592ca0aeb7b69b72b96de82ea8097612bd5be/evals/carry/results/2026-11-19T19-08-15-507Z.json)): none of the 100 wrong ones reached the thread; the 30 nearest decisions and 10 findings were listed in order, disputes marked, and the other 60 counted ("And 60 more decided further from here, not listed").
 - Following: every question whose decision was listed was answered right (7 of 7): a replaced decision over the old one, both sides of a disagreement with no pick, a decision over a stale line in the doc, and "can't tell" for a lapsed one.
 - The cap is where it fails: all 5 questions answered by a decision past the 30 failed, and the agent said it couldn't tell. With 30 on the section itself, nothing from the doc, the repo, a folder or everywhere is listed, and the agent has no way to read the rest. Within a reach the oldest come first, so 6 of 8 newer decisions that replace older ones were cut while the decisions they replaced were dropped.
 

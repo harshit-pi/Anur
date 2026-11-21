@@ -16,7 +16,7 @@ setups: anur, cc-fresh, cc-long (default all)
   whose own rules contradict this one's: the long-chat pollution case.
 
 Each run spends the person's own Claude usage. Results go to
-evals/head-to-head/results/<time>.json.
+evals/head-to-head/results/<time>.json, not committed.
 """
 
 import datetime
