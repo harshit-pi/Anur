@@ -59,6 +59,24 @@ describe("the JSONL writer", () => {
     expect(lines.map((l) => l.seq)).toEqual(Array.from({ length: 50 }, (_, i) => i));
   });
 
+  it("writes many lines at once, in order, numbered on from single appends", async () => {
+    const w = await JsonlWriter.open(file, "dev1", { now });
+    await w.append({ text: "a" });
+    const many = await w.appendMany([{ text: "b" }, { text: "c" }, { text: "d" }]);
+    await w.append({ text: "e" });
+    expect(await w.appendMany([])).toEqual([]);
+    await w.close();
+    const { lines } = await read();
+    expect(lines.map((l) => [l.text, l.seq])).toEqual([
+      ["a", 0],
+      ["b", 1],
+      ["c", 2],
+      ["d", 3],
+      ["e", 4],
+    ]);
+    expect(many.map((l) => l.seq)).toEqual([1, 2, 3]);
+  });
+
   it("allows one writer per file", async () => {
     const w = await JsonlWriter.open(file, "dev1", { now });
     await expect(JsonlWriter.open(file, "dev1", { now })).rejects.toThrow(/already has a writer/);

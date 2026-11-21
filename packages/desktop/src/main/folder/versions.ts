@@ -105,11 +105,11 @@ export class SectionVersions {
       if (before)
         await this.record(doc, before, now, "outside", "Changed while the doc was closed");
       await this.settleApplies(doc, now);
-      for (const [i, id] of now.ids.entries()) {
-        if (!(await this.hasHistory(doc, id))) {
+      // Each section has its own file, so a big doc's first versions are written side by side.
+      await eachLimit([...now.ids.entries()], 16, async ([i, id]) => {
+        if (!(await this.hasHistory(doc, id)))
           await this.write(doc, id, now, i, "start", "The text when Anur first opened the doc");
-        }
-      }
+      });
       await this.memory?.write(rel, text);
     });
   }
@@ -590,19 +590,39 @@ export class SectionVersions {
       this.device,
     );
     try {
-      await w.append({
-        kind: "version",
-        cause,
-        text: subtreeOf(from, i),
-        path: section.path.length > 0 ? section.path : [path.basename(doc)],
-        summary,
-        preview: null,
-        thread: null,
-      });
+      // A first version is written again on the next open if a crash loses it: no wait for the disk.
+      await w.append(
+        {
+          kind: "version",
+          cause,
+          text: subtreeOf(from, i),
+          path: section.path.length > 0 ? section.path : [path.basename(doc)],
+          summary,
+          preview: null,
+          thread: null,
+        },
+        { sync: cause !== "start" },
+      );
     } finally {
       await w.close();
     }
   }
+}
+
+/** `fn` on every item, at most `limit` at a time. */
+export async function eachLimit<T>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const lane = async () => {
+    while (next < items.length) {
+      const item = items[next++] as T;
+      await fn(item);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, lane));
 }
 
 const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);

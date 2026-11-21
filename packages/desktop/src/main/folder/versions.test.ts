@@ -1,9 +1,9 @@
 import { mkdtempSync } from "node:fs";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { SectionVersions } from "./versions.ts";
+import { SectionVersions, eachLimit } from "./versions.ts";
 
 const DOC = "# Plan\n\nWe ship Monday.\n\n## Risks\n\nThe host is untested.\n";
 
@@ -43,6 +43,28 @@ describe("section versions", () => {
     await v.opened("Plan.md", DOC);
     const all = await versionsIn(f);
     expect(all.map(([p, c]) => `${p}:${c}`)).toEqual(["Plan > Risks:start", "Plan:start"]);
+  });
+
+  it("write a starting version again on the next open when one was lost, as a crash could", async () => {
+    const f = folder();
+    const v = new SectionVersions(f, "dev1");
+    await v.opened("Plan.md", DOC);
+    // A first version isn't waited onto disk: lose the Risks one, as a crash right after could.
+    const docs = path.join(f, ".anur", "docs");
+    const [doc] = await readdir(docs);
+    const history = path.join(docs, doc ?? "", "history");
+    for (const s of await readdir(history)) {
+      const text = await readFile(path.join(history, s, "dev1.jsonl"), "utf8");
+      const { path: at } = JSON.parse(text.split("\n")[0] ?? "{}") as { path: string[] };
+      if (at.at(-1) === "Risks") await rm(path.join(history, s), { recursive: true });
+    }
+    expect((await versionsIn(f)).map(([p]) => p)).toEqual(["Plan"]);
+    const again = new SectionVersions(f, "dev1");
+    await again.opened("Plan.md", DOC);
+    expect((await versionsIn(f)).map(([p, c]) => `${p}:${c}`)).toEqual([
+      "Plan > Risks:start",
+      "Plan:start",
+    ]);
   });
 
   it("store a version of each section an outside change touched, and no other", async () => {
@@ -220,5 +242,31 @@ describe("section versions", () => {
     const after = await fresh.locate("Ideas/Plan.md", DOC);
     expect(after?.doc).toBe(before?.doc);
     expect(after?.ids).toEqual(before?.ids);
+  });
+});
+
+describe("eachLimit", () => {
+  it("does every item, never more than the limit at once", async () => {
+    let now = 0;
+    let most = 0;
+    const done: number[] = [];
+    await eachLimit([1, 2, 3, 4, 5, 6, 7], 3, async (n) => {
+      now++;
+      most = Math.max(most, now);
+      await new Promise((r) => setTimeout(r, 5));
+      done.push(n);
+      now--;
+    });
+    expect(done.sort()).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(most).toBe(3);
+  });
+
+  it("does nothing for no items", async () => {
+    let ran = false;
+    await eachLimit([], 4, () => {
+      ran = true;
+      return Promise.resolve();
+    });
+    expect(ran).toBe(false);
   });
 });

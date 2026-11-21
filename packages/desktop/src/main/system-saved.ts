@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { FolderRead } from "./index-process/protocol.ts";
 
@@ -11,21 +11,25 @@ import type { FolderRead } from "./index-process/protocol.ts";
 const VERSION = 1;
 const file = (folder: string) => path.join(folder, ".anur", "system", "last-read.json");
 
-export function saveRead(folder: string, plugins: string, read: FolderRead): void {
+/** Without blocking the main process: a system's read can run to megabytes. */
+export async function saveRead(folder: string, plugins: string, read: FolderRead): Promise<void> {
   try {
     const f = file(folder);
-    mkdirSync(path.dirname(f), { recursive: true });
+    await mkdir(path.dirname(f), { recursive: true });
     // Written beside, then renamed, so a crash never leaves half a file.
-    writeFileSync(`${f}.tmp`, JSON.stringify({ version: VERSION, plugins, at: Date.now(), read }));
-    renameSync(`${f}.tmp`, f);
+    await writeFile(
+      `${f}.tmp`,
+      JSON.stringify({ version: VERSION, plugins, at: Date.now(), read }),
+    );
+    await rename(`${f}.tmp`, f);
   } catch {
     // A read-only folder: the next launch reads afresh.
   }
 }
 
-export function loadRead(folder: string, plugins: string): FolderRead | null {
+export async function loadRead(folder: string, plugins: string): Promise<FolderRead | null> {
   try {
-    const j = JSON.parse(readFileSync(file(folder), "utf8")) as {
+    const j = JSON.parse(await readFile(file(folder), "utf8")) as {
       version?: unknown;
       plugins?: unknown;
       read?: FolderRead;

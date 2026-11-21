@@ -3,8 +3,8 @@ import type { UpdateState } from "../shared/ipc-contract.ts";
 import { notesFrom } from "../shared/release-notes.ts";
 
 /**
- * Updates for the released app. The feed is checked on launch and every few
- * hours. With automatic installs on (the default), a new version downloads
+ * Updates for the released app. The feed is checked half a minute after
+ * launch and every few hours. With automatic installs on (the default), a new version downloads
  * quietly, a card offers Restart, and it installs on quit; off, Anur only
  * says one is available and downloads when asked. With automatic installs
  * on, it also restarts into a ready update when nobody could notice
@@ -12,6 +12,7 @@ import { notesFrom } from "../shared/release-notes.ts";
  */
 export const FEED_URL = "https://spaces.hianur.com/";
 const EVERY_MS = 4 * 60 * 60 * 1000;
+const FIRST_CHECK_MS = 30_000;
 
 const { autoUpdater } = electronUpdater;
 let state: UpdateState = { kind: "off" };
@@ -76,7 +77,8 @@ export function startUpdates(
     // A failed background check stays quiet once a version is waiting.
     if (state.kind !== "ready") set({ kind: "error", reason: reasonOf(e) });
   });
-  checkNow();
+  // Not in launch's way: the first check waits until the app has settled.
+  setTimeout(checkNow, FIRST_CHECK_MS);
   setInterval(checkNow, EVERY_MS);
 }
 

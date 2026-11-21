@@ -58,7 +58,7 @@ export class SectionIds {
       this.device,
     );
     try {
-      for (const e of events) await w.append(e);
+      await w.appendMany(events);
     } finally {
       await w.close();
     }

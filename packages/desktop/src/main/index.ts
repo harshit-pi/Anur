@@ -1476,13 +1476,13 @@ const handlers: { [C in Channel]: Handler<C> } = {
         const where = folder.path;
         fresh.then(
           (r) => {
-            saveRead(where, key, r);
+            void saveRead(where, key, r);
           },
           // A failed read is read again next time, not kept.
           () => systemReads.delete(where),
         );
         // On launch, the last saved read draws at once; the fresh one follows.
-        const saved = loadRead(folder.path, key);
+        const saved = await loadRead(folder.path, key);
         if (saved) {
           updating = true;
           read = saved;
@@ -2943,6 +2943,9 @@ app.enableSandbox();
 app.on("child-process-gone", (_e, d) => {
   logLine("error", "app", `${d.type} process gone: ${d.reason}, exit code ${String(d.exitCode)}`);
 });
+
+// Anur sets its own menu once ready: Electron needn't build its default first.
+Menu.setApplicationMenu(null);
 
 void app.whenReady().then(async () => {
   // Checks can set ANUR_CHECK_HOME, so a sample folder can stand in for one in iCloud.

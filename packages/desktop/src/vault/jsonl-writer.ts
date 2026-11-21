@@ -63,14 +63,42 @@ export class JsonlWriter {
     }
   }
 
-  /** Append one line; resolves with the line as written, once it is on disk. */
-  append<P extends Payload>(payload: P): Promise<LineEnvelope & P> {
+  /**
+   * Append several lines at once, each whole, with one sync to disk for all:
+   * a big doc's first IDs are hundreds of lines. Resolves once they're on disk.
+   */
+  appendMany<P extends Payload>(payloads: readonly P[]): Promise<(LineEnvelope & P)[]> {
+    const run = async () => {
+      if (this.closed) throw new Error(`${this.file} is closed`);
+      // Stamps advance only once the lines are on disk, as a single append's do.
+      let last = this.last;
+      const lines = payloads.map((payload) => {
+        last = nextStamp(last, this.now());
+        return { id: this.newId(), at: last.at, dev: this.device, seq: last.seq, ...payload };
+      });
+      if (lines.length === 0) return lines;
+      await this.handle.appendFile(lines.map(encodeLine).join(""), "utf8");
+      await this.handle.datasync();
+      anurWritten(this.file);
+      this.last = last;
+      return lines;
+    };
+    const result = this.queue.then(run, run);
+    this.queue = result.catch(() => undefined);
+    return result;
+  }
+
+  /**
+   * Append one line; resolves with the line as written, once it is on disk.
+   * `sync: false` skips waiting for the disk, for a line Anur writes again if lost.
+   */
+  append<P extends Payload>(payload: P, opts: { sync?: boolean } = {}): Promise<LineEnvelope & P> {
     const run = async () => {
       if (this.closed) throw new Error(`${this.file} is closed`);
       const stamp = nextStamp(this.last, this.now());
       const line = { id: this.newId(), at: stamp.at, dev: this.device, seq: stamp.seq, ...payload };
       await this.handle.appendFile(encodeLine(line), "utf8");
-      await this.handle.datasync();
+      if (opts.sync !== false) await this.handle.datasync();
       anurWritten(this.file);
       this.last = stamp;
       return line;
