@@ -1,3 +1,4 @@
+import { mapLegend, setMapLegend } from "../layout/map-legend-pref.ts";
 import {
   ServiceIcon,
   serviceByKey,
@@ -302,6 +303,23 @@ export function MapView({
   const [focusBox, setFocusBox] = useState<string | null>(null);
   /** The list opens upward from a box low in the view, so it stays on screen. */
   const [linksUp, setLinksUp] = useState(false);
+  // An open list of links closes on any click outside it, a box's included, and on Esc (30.44).
+  useEffect(() => {
+    if (!openLinks) return;
+    const down = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t?.closest(".map-linklist, .map-linkcount")) setOpenLinks(null);
+    };
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenLinks(null);
+    };
+    document.addEventListener("pointerdown", down, true);
+    document.addEventListener("keydown", key, true);
+    return () => {
+      document.removeEventListener("pointerdown", down, true);
+      document.removeEventListener("keydown", key, true);
+    };
+  }, [openLinks]);
   /** Section IDs by heading path, so a heading added above can't hand a box another's ID. */
   const [ids, setIds] = useState<Map<string, string>>(new Map());
   const [moved, setMoved] = useState<Record<string, Pos>>({});
@@ -1369,6 +1387,30 @@ export function MapView({
     });
   };
 
+  // The map's less used tools, from the doc's ⋯ menu (30.44).
+  const [legendOn, setLegendOn] = useState(mapLegend);
+  const toolRef = useRef<(tool: string) => void>(() => undefined);
+  toolRef.current = (tool: string) => {
+    if (tool === "legend") {
+      setMapLegend(!legendOn);
+      setLegendOn(!legendOn);
+    } else if (tool === "sketch" && writable && !makingDrawing) {
+      setMakingDrawing(true);
+      void openAsDrawing(false).finally(() => {
+        setMakingDrawing(false);
+      });
+    } else if (tool === "pen" && writable) setPen((p) => (p === "draw" ? "off" : "draw"));
+  };
+  useEffect(() => {
+    const on = (e: Event) => {
+      toolRef.current((e as CustomEvent<{ tool: string }>).detail.tool);
+    };
+    window.addEventListener("anur:map-tool", on);
+    return () => {
+      window.removeEventListener("anur:map-tool", on);
+    };
+  }, []);
+
   const save = useCallback(
     (positions: Record<string, Pos | null>) => {
       void anur.call("map:save", { path: docPath, text: textNow.current(), positions });
@@ -1680,11 +1722,6 @@ export function MapView({
         freshNew.current = { path, armed: true };
         setNote(`Added a heading under ${under?.path.at(-1) ?? "the title"} in the doc`);
       }
-      return;
-    }
-    if (e.key === "F2" && writable && tree.sections[selected]) {
-      e.preventDefault();
-      setRenaming(selected);
       return;
     }
     // Backspace or Delete: only an empty section goes from the map; one with
@@ -2115,7 +2152,7 @@ export function MapView({
               aria-pressed={b.index === selected}
               data-section={b.index}
               data-peek={`s:${String(b.index)}`}
-              className={`map-box${b.side === 0 ? " title" : ""}${b.index === selected ? " selected" : ""}${drag?.id === b.id ? " dragging" : ""}`}
+              className={`map-box${b.side === 0 ? " title" : ""}${b.index === selected ? " selected" : ""}${drag?.id === b.id ? " dragging" : ""}${openLinks === b.id ? " links-open" : ""}`}
               // Centred on its slot at its own height: the layout's height is an estimate.
               style={{ left: b.x - b.w / 2, top: b.y, width: b.w, transform: "translateY(-50%)" }}
               onPointerDown={(e) => {
@@ -2588,12 +2625,14 @@ export function MapView({
             on: has("thread") || boxes.some((b) => b.chats?.length),
           },
         ].filter((k) => k.on);
+        // The legend shows only when turned on from ⋯ (30.44); the first hint still shows.
         if (!has("thread") && !boxes.some((b) => b.chats?.length || b.lane?.length))
           return (
             <div className="map-legend map-hint">
               Ask on a section and its thread appears here, under it.
             </div>
           );
+        if (!legendOn) return null;
         return (
           // Just the marks; hovered, each says what it is, as the key bar does.
           <div className="map-legend" aria-label="Legend">
@@ -2641,33 +2680,19 @@ export function MapView({
         >
           Tidy
         </button>
-        <button
-          type="button"
-          className="map-tool"
-          title="Sketch on a copy of this map in Excalidraw (⌘-click: open it in a new tab)"
-          disabled={!writable || makingDrawing}
-          onClick={(e) => {
-            const newTab = e.metaKey || e.ctrlKey;
-            setMakingDrawing(true);
-            void openAsDrawing(newTab).finally(() => {
-              setMakingDrawing(false);
-            });
-          }}
-        >
-          Sketch
-        </button>
-        <button
-          type="button"
-          className={`map-tool${pen === "draw" ? " on" : ""}`}
-          title="Draw on the map; strokes stay with the box they're nearest (Esc to stop)"
-          aria-pressed={pen === "draw"}
-          disabled={!writable}
-          onClick={() => {
-            setPen((p) => (p === "draw" ? "off" : "draw"));
-          }}
-        >
-          Pen
-        </button>
+        {pen === "draw" ? (
+          <button
+            type="button"
+            className="map-tool on"
+            title="Stop drawing (Esc)"
+            aria-pressed
+            onClick={() => {
+              setPen("off");
+            }}
+          >
+            Pen
+          </button>
+        ) : null}
         {ink.length > 0 ? (
           <button
             type="button"
@@ -2691,7 +2716,7 @@ export function MapView({
 const KEYS: readonly (readonly [string, string])[] = [
   ["Tab", "a section under it"],
   ["Enter", "one beside it"],
-  ["F2", "rename"],
+  ["Double-click", "rename"],
   ["⌫", "remove an empty one"],
   ["← → ↑ ↓", "move"],
 ];
@@ -2760,6 +2785,7 @@ function PeekEditor({
   );
 }
 
+/** The map's keys, shown on a person's first map only; the keys work either way (30.44). */
 function KeyBar() {
   const [first] = useState(() => {
     try {
@@ -2775,8 +2801,9 @@ function KeyBar() {
       // Without storage it shows in full each time; nothing breaks.
     }
   }, []);
+  if (!first) return null;
   return (
-    <div className={`map-keys${first ? " open" : ""}`} aria-label="Map keys">
+    <div className="map-keys open" aria-label="Map keys">
       {KEYS.map(([k, what]) => (
         <span key={k}>
           <kbd>{k}</kbd>

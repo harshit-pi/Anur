@@ -7108,3 +7108,55 @@ button.file-card-name:hover {
   color: var(--graphite);
   font: 500 12.5px var(--font-ui);
 }
+
+/*
+ * An option in a thread, closed (30.44): one line, its name and then Use and
+ * Explore this. Its name opens its text; the map's box and hover card show it too.
+ */
+.think-offer.compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+}
+
+.think-offer.compact .think-offer-head {
+  min-width: 0;
+  margin: 0;
+}
+
+.think-offer.compact .think-offer-actions {
+  flex: none;
+  margin: 0;
+}
+
+.think-offer-name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.think-offer-name:hover {
+  text-decoration: underline;
+}
+
+/* A section's link count shows on hover only, never on every box at once (30.44). */
+.map .map-box .map-linkcount {
+  visibility: hidden;
+}
+
+.map .map-box:hover .map-linkcount,
+.map .map-linkcount.open {
+  visibility: visible;
+}
+
+/* A box whose list of links is open sits above its neighbours, so the list isn't covered (30.44). */
+.map .map-box.links-open {
+  z-index: 30;
+}

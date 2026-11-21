@@ -34,6 +34,7 @@ Thread    italic text on a line, or 💬 N on a box
 - Each choice hangs off the subsection of its name when the doc has one, else under a label of its name.
 - A choice raised by a running action hangs under its own label, never loose round the section.
 - Fit frames the sections and the choices waiting at the top level, never below 60% (`FIT_MIN`), centred on what it frames (30.27). Opening a map centres on the title at 75% or more (`READABLE`).
+- The canvas carries Fit, Tidy and zoom (30.44). Legend, Sketch and Draw live in the doc's ⋯ menu while the map shows; the keys strip shows on a person's first map only, and a section's link count on hover only.
 - A new box appears from Tab, Enter, double-clicking empty space, or dragging a box's handle onto empty space. Moving a box never changes the file.
 - The map holds still under the pointer (30.40): while the pointer is on the map, nothing refits, zooms or pans it; when the layout shifts, as when an edit lands, the selected box keeps its place on screen and the map moves around it. With the pointer elsewhere, a map the person hasn't moved refits to show new boxes, as before.
 
@@ -62,6 +63,8 @@ Thread    italic text on a line, or 💬 N on a box
 - A map change that adds a mark adds its row here, or it doesn't ship.
 
 ## History
+
+- 2026-11-20 (30.44): a simpler canvas. Found comparing Anur with Living Map on the same brainstorm: the keys strip, legend, rarely used tools (Tidy stayed, as people reach for it) and a link count on every box read as noise.
 
 - 2026-11-20 (30.40): the map holds still when edits land. Found replaying a brainstorm: an edit landed as the person clicked ▶ Run, the map re-laid out and zoomed from 89% to 76%, and the click hit empty space.
 

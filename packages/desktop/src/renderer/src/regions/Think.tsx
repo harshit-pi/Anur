@@ -1997,28 +1997,45 @@ export function Think({
                       <div
                         key={o.id}
                         data-option={o.id}
-                        className={`think-offer${item.used === o.id || item.added.includes(o.id) ? " used" : item.explored.includes(o.id) ? " explored" : ""}`}
+                        className={`think-offer${item.used === o.id || item.added.includes(o.id) ? " used" : item.explored.includes(o.id) ? " explored" : ""}${openOffers.has(o.id) ? "" : " compact"}`}
                       >
                         <div className="think-offer-head">
-                          <strong>{o.title}</strong>
+                          {/* One line until its name is clicked: the full text is on its map box too (30.44). */}
+                          <button
+                            type="button"
+                            className="think-offer-name"
+                            aria-expanded={openOffers.has(o.id)}
+                            title={openOffers.has(o.id) ? "Show less" : "Show all"}
+                            onClick={() => {
+                              setOpenOffers((cur) => {
+                                const next = new Set(cur);
+                                if (!next.delete(o.id)) next.add(o.id);
+                                return next;
+                              });
+                            }}
+                          >
+                            {o.title}
+                          </button>
                           {item.used === o.id || item.added.includes(o.id) ? (
                             <span className="quiet">In the doc</span>
                           ) : item.explored.includes(o.id) ? (
                             <span className="quiet">Explored</span>
                           ) : null}
                         </div>
-                        <OfferText
-                          open={openOffers.has(o.id)}
-                          onToggle={() => {
-                            setOpenOffers((cur) => {
-                              const next = new Set(cur);
-                              if (!next.delete(o.id)) next.add(o.id);
-                              return next;
-                            });
-                          }}
-                        >
-                          <Markdown text={o.text} />
-                        </OfferText>
+                        {openOffers.has(o.id) ? (
+                          <OfferText
+                            open
+                            onToggle={() => {
+                              setOpenOffers((cur) => {
+                                const next = new Set(cur);
+                                next.delete(o.id);
+                                return next;
+                              });
+                            }}
+                          >
+                            <Markdown text={o.text} />
+                          </OfferText>
+                        ) : null}
                         {writable && item.several && !item.added.includes(o.id) ? (
                           <div className="think-offer-actions">
                             <button
