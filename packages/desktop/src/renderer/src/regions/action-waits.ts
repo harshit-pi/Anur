@@ -1,3 +1,4 @@
+import { samePath } from "@anur/core";
 import type { ThreadView } from "../../../shared/ipc-contract.ts";
 
 /**
@@ -6,9 +7,6 @@ import type { ThreadView } from "../../../shared/ipc-contract.ts";
  */
 
 type Offer = Extract<ThreadView["items"][number], { kind: "options" }>;
-
-const samePath = (a: readonly string[] | null, b: readonly string[] | null) =>
-  !!a && !!b && a.length === b.length && a.every((x, i) => x === b[i]);
 
 /** A single pick still to make; parts left unadded are optional, so they don't hold work up. */
 function isOpen(o: Offer, all: readonly Offer[]): boolean {

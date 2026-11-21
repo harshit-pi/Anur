@@ -2,7 +2,14 @@ import { ServiceIcon, serviceOf } from "../icons/services/index.tsx";
 import { editsLand } from "../../../shared/edits-land.ts";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { choicePress } from "../layout/map-acts.ts";
-import { FOLDER_DOC, diffLines, type SectionNode, type SectionTree } from "@anur/core";
+import {
+  FOLDER_DOC,
+  diffLines,
+  samePath,
+  withoutHeading,
+  type SectionNode,
+  type SectionTree,
+} from "@anur/core";
 import { RecentThreads, ScopeChip, type ScopeChoice } from "./ThinkScope.tsx";
 import type {
   AgentSignIn,
@@ -88,9 +95,6 @@ const countOf = (n: number, noun: string) => `${String(n)} ${noun}${n === 1 ? ""
 
 /** The last open-thread request acted on: Think remounts with the tab, and a request opens once. */
 let handledRequest = 0;
-
-const samePath = (a: readonly string[] | null, b: readonly string[]) =>
-  a !== null && a.length === b.length && a.every((x, i) => x === b[i]);
 
 /** The doc's threads, kept current from main's events. */
 function useThreads(docPath: string | null, docText: () => string) {
@@ -421,7 +425,7 @@ function ContextRing({ tokens }: { tokens: { context: number; window: number | n
 
 /** The text of a proposed edit, without its section's own heading line. */
 function proposedBody(part: { proposed: string }): string {
-  return part.proposed.replace(/^#{1,6}[ \t].*\n?/, "").trim();
+  return withoutHeading(part.proposed).trim();
 }
 
 /**

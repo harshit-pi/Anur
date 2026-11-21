@@ -25,6 +25,8 @@ export {
   type SectionNode,
   type SectionTree,
   type TreeLink,
+  samePath,
+  withoutHeading,
 } from "./sections/index.ts";
 export {
   ANUR_DIR,

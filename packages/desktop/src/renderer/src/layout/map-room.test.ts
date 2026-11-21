@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type Cluster, makeRoom, sizeOf } from "./map-room.ts";
+import { type Cluster, type RoomBox, clustersOf, makeRoom, sectionOf, sizeOf } from "./map-room.ts";
 
 const box = (l: number, t: number, w = 150, h = 40) => ({ l, t, r: l + w, b: t + h });
 // The eval's map: Audience over Pricing, Pricing's three choices out to the right.
@@ -57,5 +57,41 @@ describe("making room when cards arrive on a section", () => {
   it("tells growth by the cluster's size", () => {
     expect(sizeOf(audience(2))).toBeGreaterThan(sizeOf(audience(0)));
     expect(sizeOf(audience(2))).toBe(sizeOf(audience(2)));
+  });
+});
+
+describe("clusters: a section with what hangs off it", () => {
+  const b = (id: string, kind: string, parent: string | null, y: number, side: -1 | 0 | 1 = 1) =>
+    ({ id, kind, parent, x: 100, y, w: 100, h: 20, side }) as RoomBox;
+  const boxes = [
+    b("title", "section", null, 0, 0),
+    { ...b("pricing", "section", "title", 100), laneH: 30 },
+    b("t:ask", "thread", "pricing", 100),
+    b("o:a", "option", "t:ask", 120),
+    b("t:explore", "thread", "o:a", 140),
+    b("risks", "section", "title", 300),
+  ];
+  const byId = new Map(boxes.map((x) => [x.id, x]));
+
+  it("finds the section through threads and choices", () => {
+    expect(sectionOf(byId.get("t:explore") as RoomBox, byId)?.id).toBe("pricing");
+    expect(sectionOf(byId.get("risks") as RoomBox, byId)?.id).toBe("risks");
+    const loose = b("t:lost", "thread", "gone", 0);
+    expect(sectionOf(loose, byId)).toBeUndefined();
+  });
+
+  it("groups each box under its section, the lane under the section's box", () => {
+    const cs = clustersOf(boxes, {});
+    const pricing = cs.find((c) => c.id === "pricing");
+    expect(pricing?.rects).toHaveLength(4);
+    expect(pricing?.rects[0]).toEqual({ l: 50, t: 90, r: 150, b: 140 });
+    expect(cs.find((c) => c.id === "title")?.pinned).toBe(true);
+    expect(cs.find((c) => c.id === "risks")?.pinned).toBe(false);
+  });
+
+  it("moves a held section's cluster to where it's held", () => {
+    const pricing = clustersOf(boxes, { pricing: { y: 160 } }).find((c) => c.id === "pricing");
+    expect(pricing?.y).toBe(160);
+    expect(pricing?.rects[1]?.t).toBe(90 + 60);
   });
 });
